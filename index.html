@@ -127,14 +127,111 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .qty-her{color:var(--her-mid);font-weight:600;font-size:12px}
 .qty-tot{color:#374151;font-weight:700;font-size:12px}
 .qty-sep{color:var(--gray);font-size:11px}
+
+.week-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.week-select{flex:1;padding:6px 10px;border-radius:var(--radius-sm);border:1.5px solid var(--border);
+  font-size:13px;font-weight:500;background:var(--gray-light);cursor:pointer;color:#111827;
+  appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+.week-btn{padding:6px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);
+  font-size:12px;font-weight:600;cursor:pointer;background:white;color:var(--gray);white-space:nowrap;transition:all .15s}
+.week-btn:hover{background:var(--gray-light)}
+.week-btn.save{border-color:var(--his-light);color:var(--his-mid)}
+.week-btn.save:hover{background:var(--his-light)}
+.week-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;display:flex;align-items:center;justify-content:center}
+.week-modal{background:white;border-radius:var(--radius);padding:20px;width:min(340px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.18)}
+.week-modal h3{font-size:16px;font-weight:700;margin-bottom:12px}
+.week-modal input{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:14px;margin-bottom:12px}
+.week-modal input:focus{outline:none;border-color:var(--his-mid)}
+.week-modal-btns{display:flex;gap:8px;justify-content:flex-end}
+.week-modal-btns button{padding:8px 18px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;border:none}
+.wm-cancel{background:var(--gray-light);color:var(--gray)}
+.wm-save{background:var(--his);color:white}
+.wm-delete{background:#FEE2E2;color:var(--red-c);margin-right:auto}
+
+/* Sync panel */
+.sync-panel{background:white;border-radius:var(--radius);border:1px solid var(--border);
+  margin:0 14px 12px;padding:14px;box-shadow:var(--shadow)}
+.sync-title{font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.sync-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+.sync-input{flex:1;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+  font-size:13px;font-family:monospace;letter-spacing:.04em}
+.sync-input:focus{outline:none;border-color:var(--shop)}
+.sync-btn{padding:7px 14px;border-radius:var(--radius-sm);border:none;font-size:12px;font-weight:600;
+  cursor:pointer;white-space:nowrap;transition:all .15s}
+.sync-btn.primary{background:var(--shop);color:white}
+.sync-btn.secondary{background:var(--gray-light);color:var(--gray);border:1px solid var(--border)}
+.sync-btn:disabled{opacity:.5;cursor:not-allowed}
+.sync-status{font-size:11px;margin-top:4px;min-height:16px}
+.sync-status.ok{color:#16A34A}.sync-status.err{color:var(--red-c)}.sync-status.loading{color:var(--gray)}
+.sync-divider{border:none;border-top:1px solid var(--border);margin:10px 0}
+.sync-id-display{font-size:11px;font-family:monospace;background:var(--gray-light);
+  padding:4px 8px;border-radius:4px;color:var(--gray);word-break:break-all;cursor:pointer}
+.sync-id-display:hover{background:var(--his-light)}
+/* Export/import */
+.exim-row{display:flex;gap:8px}
+
+.top-tab.on-sync{color:var(--shop);border-bottom-color:var(--shop)}
+
+.top-tab.on-recipes{color:#B45309;border-bottom-color:#92400E}
+/* Recipe manager */
+.recipe-list-item{background:white;border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;box-shadow:var(--shadow)}
+.recipe-list-item .rli-label{flex:1;font-size:14px;font-weight:600}
+.recipe-list-item .rli-meta{font-size:11px;color:var(--gray)}
+.rli-btn{padding:5px 10px;border-radius:6px;border:1px solid var(--border);font-size:12px;
+  font-weight:600;cursor:pointer;background:white;color:var(--gray)}
+.rli-btn.edit{color:var(--shop);border-color:var(--shop)}
+.rli-btn.del{color:var(--red-c);border-color:#FECACA}
+.recipe-form{background:white;border-radius:var(--radius);border:1px solid var(--border);
+  padding:16px;margin:0 0 12px;box-shadow:var(--shadow)}
+.rf-section{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--gray);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+.rf-row{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start}
+.rf-label{font-size:12px;font-weight:600;color:#374151;min-width:52px;padding-top:8px}
+.rf-input{flex:1;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+  font-size:13px;background:white}
+.rf-input:focus{outline:none;border-color:var(--shop)}
+.rf-ta{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+  font-size:13px;resize:vertical;min-height:80px;font-family:inherit}
+.rf-ta:focus{outline:none;border-color:var(--shop)}
+.rf-macro-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px}
+.rf-macro-cell{display:flex;flex-direction:column;gap:2px}
+.rf-macro-cell label{font-size:10px;font-weight:600;color:var(--gray);text-transform:uppercase}
+.rf-macro-cell input{padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;
+  font-size:13px;text-align:center;width:100%}
+.rf-macro-cell input:focus{outline:none;border-color:var(--shop)}
+.rf-person-col{flex:1;padding:10px;border-radius:var(--radius-sm);margin-bottom:8px}
+.rf-person-col.him-col{background:var(--his-light);border:1px solid var(--his-light)}
+.rf-person-col.her-col{background:var(--her-light);border:1px solid var(--her-light)}
+.rf-person-title{font-size:12px;font-weight:700;margin-bottom:8px}
+.rf-hint{font-size:11px;color:var(--gray);margin:-4px 0 8px;font-style:italic}
+.rf-actions{display:flex;gap:8px;margin-top:14px}
+.rf-save{flex:1;padding:10px;border:none;border-radius:var(--radius-sm);background:var(--shop);
+  color:white;font-size:14px;font-weight:700;cursor:pointer}
+.rf-cancel{padding:10px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:white;color:var(--gray);font-size:13px;font-weight:600;cursor:pointer}
+.rf-slot-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.rf-slot-chip{padding:5px 10px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;
+  font-weight:600;cursor:pointer;background:white;color:var(--gray)}
+.rf-slot-chip.on{background:var(--shop);color:white;border-color:var(--shop)}
+.rf-scale-btn{padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;
+  cursor:pointer;background:var(--gray-light);color:var(--gray)}
+.rf-custom-tag{display:inline-block;font-size:10px;background:#FEF3C7;color:#92400E;
+  border-radius:4px;padding:1px 5px;margin-left:4px;font-weight:600;vertical-align:middle}
 </style>
 </head>
 <body>
 <div class="hdr">
-  <div class="hdr-title">🥗 Family Meal Planner</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div class="hdr-title">🥗 Family Meal Planner</div>
+    <div id="weekBar" class="week-bar" style="flex:1;margin-left:12px;max-width:260px"></div>
+  </div>
   <div class="top-tabs">
     <div class="top-tab on-meals" id="ttMeals" onclick="setTopTab('meals')">Meals</div>
     <div class="top-tab" id="ttShop" onclick="setTopTab('shop')">🛒 Shopping</div>
+    <div class="top-tab" id="ttSync" onclick="setTopTab('sync')">☁️ Sync</div>
+    <div class="top-tab" id="ttRecipes" onclick="setTopTab('recipes')">✚ Recipes</div>
   </div>
   <div id="mealHdrExtra">
     <div class="ptabs">
@@ -147,6 +244,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 <div id="mealView" class="content"></div>
 <div id="shopView" class="shop-view" style="display:none"></div>
+<div id="syncView" class="content" style="display:none"></div>
+<div id="recipesView" class="content" style="display:none"></div>
 <script>
 
 // shopping rows: [name, category, hisQty, herQty]
@@ -784,10 +883,16 @@ function setTopTab(t){
   topTab=t;
   document.getElementById('ttMeals').className='top-tab'+(t==='meals'?' on-meals':'');
   document.getElementById('ttShop').className='top-tab'+(t==='shop'?' on-shop':'');
+  document.getElementById('ttSync').className='top-tab'+(t==='sync'?' on-sync':'');
+  document.getElementById('ttRecipes').className='top-tab'+(t==='recipes'?' on-recipes':'');
   document.getElementById('mealHdrExtra').style.display=t==='meals'?'':'none';
   document.getElementById('mealView').style.display=t==='meals'?'':'none';
   document.getElementById('shopView').style.display=t==='shop'?'':'none';
+  document.getElementById('syncView').style.display=t==='sync'?'':'none';
+  document.getElementById('recipesView').style.display=t==='recipes'?'':'none';
   if(t==='shop') renderShop();
+  if(t==='sync') renderSyncView();
+  if(t==='recipes') renderRecipesView();
 }
 function setPerson(p){
   person=p;
@@ -921,7 +1026,8 @@ function renderMeals(){
     var isOpen=openCards[k]||false;
 
     var opts=slotMeals.map(function(m){
-      return'<option value="'+m.id+'"'+(m.id===activeId?' selected':'')+'>'+m.label+'</option>';
+      var prefix=m._custom?'★ ':'';
+      return'<option value="'+m.id+'"'+(m.id===activeId?' selected':'')+'>'+prefix+m.label+'</option>';
     }).join('');
 
     // Check if this slot matches the other person — show shared badge
@@ -1086,9 +1192,649 @@ function renderShop(){
   document.getElementById('shopView').innerHTML=html;
 }
 
+
+// ── WEEK MANAGEMENT ──────────────────────────────────────────
+var weeks={};
+var activeWeekId=null;
+
+function getWeekId(dateStr){return 'week_'+dateStr.replace(/-/g,'');}
+function getMondayStr(d){
+  var dt=new Date(d);
+  var diff=dt.getDay()===0?-6:1-dt.getDay();
+  dt.setDate(dt.getDate()+diff);
+  return dt.toISOString().slice(0,10);
+}
+function fmtWeekLabel(mondayStr){
+  var d=new Date(mondayStr+'T12:00:00');
+  var end=new Date(d); end.setDate(d.getDate()+6);
+  var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return mo[d.getMonth()]+' '+d.getDate()+' – '+mo[end.getMonth()]+' '+end.getDate()+', '+end.getFullYear();
+}
+function todayMonday(){return getMondayStr(new Date().toISOString().slice(0,10));}
+
+function loadWeeks(){
+  try{var raw=localStorage.getItem('mealPlannerWeeks');weeks=raw?JSON.parse(raw):{};}catch(e){weeks={};}
+}
+function saveWeeks(){
+  try{localStorage.setItem('mealPlannerWeeks',JSON.stringify(weeks));}catch(e){}
+}
+function saveCurrentWeek(label,weekId){
+  weeks[weekId]={label:label,sel:JSON.parse(JSON.stringify(SEL))};
+  saveWeeks();activeWeekId=weekId;renderWeekBar();
+}
+function loadWeek(weekId){
+  if(!weekId||!weeks[weekId])return;
+  Object.keys(SEL).forEach(function(k){delete SEL[k];});
+  var saved=weeks[weekId].sel||{};
+  Object.keys(saved).forEach(function(k){SEL[k]=saved[k];});
+  activeWeekId=weekId;renderWeekBar();renderMeals();
+  if(topTab==='shop')renderShop();
+}
+function deleteWeek(weekId){
+  delete weeks[weekId];saveWeeks();
+  if(activeWeekId===weekId)activeWeekId=null;
+  renderWeekBar();
+}
+function renderWeekBar(){
+  var bar=document.getElementById('weekBar');if(!bar)return;
+  var ids=Object.keys(weeks).sort().reverse();
+  var opts=ids.map(function(id){
+    var w=weeks[id];
+    return '<option value="'+id+'"'+(id===activeWeekId?' selected':'')+'>'+w.label+'</option>';
+  });
+  bar.innerHTML='<select class="week-select" onchange="onWeekSelect(this.value)">'
+    +(opts.length?opts.join(''):'<option value="">No saved weeks</option>')
+    +'</select>'
+    +'<button class="week-btn save" onclick="showSaveModal()">＋ Save</button>';
+}
+function onWeekSelect(id){if(id)loadWeek(id);}
+function showSaveModal(){
+  var monday=todayMonday();
+  var weekId=activeWeekId||getWeekId(monday);
+  var existing=weeks[weekId];
+  var suggested=existing?existing.label:fmtWeekLabel(monday);
+  var backdrop=document.createElement('div');
+  backdrop.className='week-modal-backdrop';backdrop.id='weekModalBackdrop';
+  backdrop.innerHTML='<div class="week-modal">'
+    +'<h3>'+(existing?'Update week':'Save week')+'</h3>'
+    +'<input id="weekLabelInput" type="text" value="'+suggested+'" placeholder="e.g. Jan 6–12, 2025">'
+    +'<div class="week-modal-btns">'
+    +(existing?'<button class="week-btn wm-delete" onclick="confirmDeleteWeek(\''+weekId+'\')">✕ Delete</button>':'')
+    +'<button class="wm-cancel week-btn" onclick="closeModal()">Cancel</button>'
+    +'<button class="wm-save" onclick="doSaveWeek(\''+weekId+'\')">Save</button>'
+    +'</div></div>';
+  document.body.appendChild(backdrop);
+  setTimeout(function(){var el=document.getElementById('weekLabelInput');if(el)el.select();},50);
+}
+function doSaveWeek(weekId){
+  var el=document.getElementById('weekLabelInput');
+  var label=el?el.value.trim():'';
+  if(!label)return;
+  saveCurrentWeek(label,weekId);closeModal();
+}
+function confirmDeleteWeek(weekId){
+  if(confirm('Delete this saved week?')){deleteWeek(weekId);closeModal();}
+}
+function closeModal(){
+  var b=document.getElementById('weekModalBackdrop');if(b)b.remove();
+}
+document.addEventListener('click',function(e){
+  if(e.target&&e.target.id==='weekModalBackdrop')closeModal();
+});
+
+// ── CLOUD SYNC & EXPORT/IMPORT ────────────────────────────────
+var JSONBLOB_BASE='https://jsonblob.com/api/jsonBlob';
+var syncId=null;   // the jsonblob ID
+var syncStatus=''; // last status message
+
+function loadSyncId(){
+  try{syncId=localStorage.getItem('mealPlannerSyncId')||null;}catch(e){}
+}
+function saveSyncIdLocal(id){
+  syncId=id;
+  try{localStorage.setItem('mealPlannerSyncId',id);}catch(e){}
+}
+
+// Create a new shared blob
+function createSync(){
+  setSyncStatus('Creating shared sync...','loading');
+  var payload={weeks:weeks,version:1};
+  fetch(JSONBLOB_BASE,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Jsonblob-Create-If-Not-Exists':'true'},
+    body:JSON.stringify(payload)
+  }).then(function(r){
+    var loc=r.headers.get('Location')||'';
+    var id=loc.split('/').pop();
+    if(!id){setSyncStatus('Failed to create sync.','err');return;}
+    saveSyncIdLocal(id);
+    setSyncStatus('Sync created! Share your Sync ID with your partner.','ok');
+    renderSyncView();
+  }).catch(function(){setSyncStatus('Network error. Check connection.','err');});
+}
+
+// Push local weeks to cloud
+function pushSync(){
+  if(!syncId){setSyncStatus('No Sync ID set.','err');return;}
+  setSyncStatus('Pushing to cloud...','loading');
+  fetch(JSONBLOB_BASE+'/'+syncId,{
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({weeks:weeks,version:1,updated:new Date().toISOString()})
+  }).then(function(r){
+    if(r.ok){setSyncStatus('Pushed successfully \u2713  '+new Date().toLocaleTimeString(),'ok');}
+    else{setSyncStatus('Push failed ('+r.status+').','err');}
+  }).catch(function(){setSyncStatus('Network error. Check connection.','err');});
+}
+
+// Pull weeks from cloud and merge
+function pullSync(){
+  if(!syncId){setSyncStatus('No Sync ID set.','err');return;}
+  setSyncStatus('Pulling from cloud...','loading');
+  fetch(JSONBLOB_BASE+'/'+syncId)
+  .then(function(r){return r.json();})
+  .then(function(data){
+    var cloudWeeks=data.weeks||data||{};
+    var added=0,updated=0;
+    Object.keys(cloudWeeks).forEach(function(id){
+      if(!weeks[id]){weeks[id]=cloudWeeks[id];added++;}
+      else if(JSON.stringify(weeks[id])!==JSON.stringify(cloudWeeks[id])){
+        weeks[id]=cloudWeeks[id];updated++;
+      }
+    });
+    saveWeeks();
+    renderWeekBar();
+    setSyncStatus('Pulled \u2713  '+added+' new, '+updated+' updated  '+new Date().toLocaleTimeString(),'ok');
+    renderSyncView();
+  }).catch(function(){setSyncStatus('Pull failed. Check Sync ID or network.','err');});
+}
+
+function setSyncStatus(msg,type){
+  syncStatus=msg;
+  var el=document.getElementById('syncStatusMsg');
+  if(el){el.textContent=msg;el.className='sync-status '+(type||'');}
+}
+
+function connectSyncId(){
+  var el=document.getElementById('syncIdInput');
+  var val=el?el.value.trim():'';
+  if(!val){setSyncStatus('Enter a Sync ID first.','err');return;}
+  saveSyncIdLocal(val);
+  setSyncStatus('Sync ID saved. Pulling now...','loading');
+  renderSyncView();
+  pullSync();
+}
+
+function copyId(){
+  if(!syncId) return;
+  navigator.clipboard.writeText(syncId).then(function(){
+    setSyncStatus('Sync ID copied to clipboard!','ok');
+  }).catch(function(){
+    // Fallback
+    var ta=document.createElement('textarea');ta.value=syncId;
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');
+    document.body.removeChild(ta);
+    setSyncStatus('Sync ID copied!','ok');
+  });
+}
+function clearSyncId(){
+  if(!confirm('Disconnect from cloud sync?')) return;
+  syncId=null;
+  try{localStorage.removeItem('mealPlannerSyncId');}catch(e){}
+  renderSyncView();
+}
+
+// Export: base64-encode weeks JSON, copy to clipboard
+function exportWeeks(){
+  var json=JSON.stringify(weeks,null,2);
+  var b64=btoa(unescape(encodeURIComponent(json)));
+  navigator.clipboard.writeText(b64).then(function(){
+    setSyncStatus('Export copied to clipboard! Paste it on your other device.','ok');
+  }).catch(function(){
+    // Show in a textarea for manual copy
+    var ta=document.getElementById('exportTA');
+    if(ta){ta.value=b64;ta.style.display='block';ta.select();
+      setSyncStatus('Copy the text below and paste it on your other device.','ok');}
+  });
+}
+// Import: parse base64 string, merge
+function importWeeks(){
+  var ta=document.getElementById('importTA');
+  var val=ta?ta.value.trim():'';
+  if(!val){setSyncStatus('Paste your export code first.','err');return;}
+  try{
+    var json=decodeURIComponent(escape(atob(val)));
+    var imported=JSON.parse(json);
+    var added=0,updated=0;
+    Object.keys(imported).forEach(function(id){
+      if(!weeks[id]){weeks[id]=imported[id];added++;}
+      else{weeks[id]=imported[id];updated++;}
+    });
+    saveWeeks();renderWeekBar();
+    setSyncStatus('Imported: '+added+' new, '+updated+' updated.','ok');
+    if(ta) ta.value='';
+    renderSyncView();
+  }catch(e){setSyncStatus('Invalid import code.','err');}
+}
+
+function renderSyncView(){
+  var el=document.getElementById('syncView');
+  if(!el) return;
+
+  var html='<div style="padding:0 0 80px">';
+
+  // Cloud sync panel
+  html+='<div class="sync-panel">';
+  html+='<div class="sync-title">☁️ Cloud Sync</div>';
+  html+='<p style="font-size:13px;color:var(--gray);margin-bottom:10px">Create a shared sync ID once, share it with your partner, then push/pull to keep both devices in sync.</p>';
+
+  if(syncId){
+    html+='<div style="font-size:12px;color:var(--gray);margin-bottom:4px">Your Sync ID (tap to copy):</div>';
+    html+='<div class="sync-id-display" onclick="copyId()">'+syncId+'</div>';
+    html+='<div style="display:flex;gap:8px;margin-top:10px">';
+    html+='<button class="sync-btn primary" onclick="pushSync()">⬆ Push to cloud</button>';
+    html+='<button class="sync-btn primary" onclick="pullSync()">⬇ Pull from cloud</button>';
+    html+='<button class="sync-btn secondary" onclick="clearSyncId()">Disconnect</button>';
+    html+='</div>';
+  } else {
+    html+='<div class="sync-row"><button class="sync-btn primary" onclick="createSync()">✦ Create new Sync ID</button></div>';
+    html+='<hr class="sync-divider">';
+    html+='<div style="font-size:12px;color:var(--gray);margin-bottom:6px">Have a Sync ID from your partner? Enter it:</div>';
+    html+='<div class="sync-row"><input class="sync-input" id="syncIdInput" placeholder="Paste Sync ID here">';
+    html+='<button class="sync-btn primary" onclick="connectSyncId()">Connect</button></div>';
+  }
+
+  html+='<div id="syncStatusMsg" class="sync-status">'+syncStatus+'</div>';
+  html+='</div>';
+
+  // Export/Import panel
+  html+='<div class="sync-panel">';
+  html+='<div class="sync-title">📤 Export / Import</div>';
+  html+='<p style="font-size:13px;color:var(--gray);margin-bottom:10px">Copy your saved weeks as a code to paste on another device.</p>';
+  html+='<div class="exim-row" style="margin-bottom:10px">';
+  html+='<button class="sync-btn primary" onclick="exportWeeks()" style="flex:1">Copy export code</button>';
+  html+='</div>';
+  html+='<textarea id="exportTA" style="display:none;width:100%;height:80px;font-family:monospace;font-size:11px;padding:6px;border:1.5px solid var(--border);border-radius:var(--radius-sm);resize:none" placeholder="Export code will appear here"></textarea>';
+  html+='<div style="font-size:12px;color:var(--gray);margin:8px 0 6px">Import from another device:</div>';
+  html+='<textarea id="importTA" style="width:100%;height:80px;font-family:monospace;font-size:11px;padding:6px;border:1.5px solid var(--border);border-radius:var(--radius-sm);resize:none" placeholder="Paste export code here"></textarea>';
+  html+='<button class="sync-btn primary" style="margin-top:6px;width:100%" onclick="importWeeks()">Import weeks</button>';
+  html+='</div>';
+
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+// Update setTopTab to handle sync
+
+loadSyncId();
+loadWeeks();renderWeekBar();
+
+// ── CUSTOM RECIPE MANAGER ─────────────────────────────────────
+var customMeals = {};   // {id: mealObject}
+var editingRecipeId = null;
+var selectedSlots = [];
+
+var SLOT_NAMES = {
+  pre:'Pre-workout shake', post:'Post-workout breakfast',
+  lunch:'Lunch', snack:'Snack', dinner:'Dinner', evening:'Evening snack'
+};
+var CAT_OPTIONS = ['Meat','Seafood','Dairy','Dairy alt','Refrigerated','Produce',
+  'Frozen','Bread','Pantry','Grab & go','Pantry — if low'];
+
+function loadCustomMeals(){
+  try{
+    var raw=localStorage.getItem('mealPlannerCustom');
+    customMeals=raw?JSON.parse(raw):{};
+  }catch(e){customMeals={};}
+  // Inject into MEALS array
+  injectCustomMeals();
+}
+function saveCustomMeals(){
+  try{localStorage.setItem('mealPlannerCustom',JSON.stringify(customMeals));}catch(e){}
+}
+function injectCustomMeals(){
+  // Remove any previously injected custom meals
+  for(var i=MEALS.length-1;i>=0;i--){
+    if(MEALS[i]._custom) MEALS.splice(i,1);
+  }
+  // Add current custom meals
+  Object.keys(customMeals).forEach(function(id){
+    var m=Object.assign({},customMeals[id],{_custom:true});
+    MEALS.push(m);
+  });
+}
+
+function customMealId(label){
+  return 'custom_'+label.toLowerCase().replace(/[^a-z0-9]+/g,'_').slice(0,40)+'_'+Date.now();
+}
+
+// Parse shopping text: each line = "Item name | Category | hisQty | herQty"
+function parseShoppingLines(text){
+  if(!text||!text.trim()) return [];
+  return text.trim().split('\n').map(function(line){
+    var parts=line.split('|').map(function(s){return s.trim();});
+    return [
+      parts[0]||'',
+      parts[1]||'Pantry',
+      parts[2]||'—',
+      parts[3]||'—'
+    ];
+  }).filter(function(r){return r[0];});
+}
+
+// Parse steps text: each non-empty line is a step
+function parseStepsLines(text){
+  if(!text||!text.trim()) return [];
+  return text.trim().split('\n').filter(function(l){return l.trim();}).map(function(l){return l.trim();});
+}
+
+// Scale macros proportionally given base and target serving size (oz)
+function scaleMacros(baseMacros, baseOz, targetOz){
+  if(!baseOz||baseOz<=0) return baseMacros;
+  var ratio=targetOz/baseOz;
+  return {
+    kcal:Math.round((baseMacros.kcal||0)*ratio),
+    pro:Math.round((baseMacros.pro||0)*ratio),
+    fat:Math.round((baseMacros.fat||0)*ratio),
+    carb:Math.round((baseMacros.carb||0)*ratio),
+    fv:baseMacros.fv||''
+  };
+}
+
+function buildCustomMeal(){
+  var label=document.getElementById('rf_label').value.trim();
+  if(!label){alert('Please enter a recipe name.');return null;}
+  if(!selectedSlots.length){alert('Please select at least one slot.');return null;}
+
+  var url=document.getElementById('rf_url').value.trim();
+
+  // Him macros
+  var hKcal=parseInt(document.getElementById('rf_h_kcal').value)||0;
+  var hPro=parseInt(document.getElementById('rf_h_pro').value)||0;
+  var hFat=parseInt(document.getElementById('rf_h_fat').value)||0;
+  var hCarb=parseInt(document.getElementById('rf_h_carb').value)||0;
+  var hIngr=document.getElementById('rf_h_ingr').value.trim().split('\n').filter(function(l){return l.trim();});
+  var hShop=parseShoppingLines(document.getElementById('rf_h_shop').value);
+  var hSteps=parseStepsLines(document.getElementById('rf_h_steps').value);
+
+  // Her macros
+  var rKcal=parseInt(document.getElementById('rf_r_kcal').value)||0;
+  var rPro=parseInt(document.getElementById('rf_r_pro').value)||0;
+  var rFat=parseInt(document.getElementById('rf_r_fat').value)||0;
+  var rCarb=parseInt(document.getElementById('rf_r_carb').value)||0;
+  var rIngr=document.getElementById('rf_r_ingr').value.trim().split('\n').filter(function(l){return l.trim();});
+  var rShop=parseShoppingLines(document.getElementById('rf_r_shop').value);
+  var rSteps=parseStepsLines(document.getElementById('rf_r_steps').value);
+
+  var him=null,her=null;
+  var himOn=document.getElementById('rf_him_on').checked;
+  var herOn=document.getElementById('rf_her_on').checked;
+
+  if(himOn && hIngr.length){
+    him={
+      macros:{kcal:hKcal,pro:hPro,fat:hFat,carb:hCarb,fv:''},
+      ingredients:hIngr,
+      shopping:hShop,
+      steps:hSteps
+    };
+  }
+  if(herOn && rIngr.length){
+    her={
+      macros:{kcal:rKcal,pro:rPro,fat:rFat,carb:rCarb,fv:''},
+      ingredients:rIngr,
+      shopping:rShop,
+      steps:rSteps
+    };
+  }
+
+  if(!him&&!her){alert('Please fill in at least Him or Her details.');return null;}
+
+  var meal={
+    id:editingRecipeId||customMealId(label),
+    label:label,
+    slots:selectedSlots.slice(),
+    him:him,
+    her:her,
+    _custom:true
+  };
+  if(url) meal.sourceUrl=url;
+  return meal;
+}
+
+function saveRecipe(){
+  var meal=buildCustomMeal();
+  if(!meal) return;
+  customMeals[meal.id]=meal;
+  saveCustomMeals();
+  injectCustomMeals();
+  closeRecipeForm();
+  renderRecipesView();
+}
+
+function editRecipe(id){
+  editingRecipeId=id;
+  var m=customMeals[id];
+  if(!m) return;
+  showRecipeForm(m);
+}
+
+function deleteRecipe(id){
+  if(!confirm('Delete "'+customMeals[id].label+'"?')) return;
+  delete customMeals[id];
+  saveCustomMeals();
+  injectCustomMeals();
+  renderRecipesView();
+}
+
+function closeRecipeForm(){
+  editingRecipeId=null;
+  selectedSlots=[];
+  document.getElementById('recipeFormWrap').style.display='none';
+  document.getElementById('recipesListWrap').style.display='';
+}
+
+function showRecipeForm(existing){
+  document.getElementById('recipesListWrap').style.display='none';
+  document.getElementById('recipeFormWrap').style.display='';
+
+  // Populate slots
+  selectedSlots=existing?existing.slots.slice():[];
+  renderSlotChips();
+
+  document.getElementById('rf_label').value=existing?existing.label:'';
+  document.getElementById('rf_url').value=existing?(existing.sourceUrl||''):'';
+
+  // Him
+  var himOn=existing&&!!existing.him;
+  document.getElementById('rf_him_on').checked=himOn;
+  togglePersonFields('him',himOn);
+  if(existing&&existing.him){
+    var hm=existing.him.macros||{};
+    document.getElementById('rf_h_kcal').value=hm.kcal||'';
+    document.getElementById('rf_h_pro').value=hm.pro||'';
+    document.getElementById('rf_h_fat').value=hm.fat||'';
+    document.getElementById('rf_h_carb').value=hm.carb||'';
+    document.getElementById('rf_h_ingr').value=(existing.him.ingredients||[]).join('\n');
+    document.getElementById('rf_h_shop').value=(existing.him.shopping||[]).map(function(r){return r.join(' | ');}).join('\n');
+    document.getElementById('rf_h_steps').value=(existing.him.steps||[]).join('\n');
+  } else {
+    ['rf_h_kcal','rf_h_pro','rf_h_fat','rf_h_carb','rf_h_ingr','rf_h_shop','rf_h_steps'].forEach(function(id){
+      document.getElementById(id).value='';
+    });
+  }
+
+  // Her
+  var herOn=existing&&!!existing.her;
+  document.getElementById('rf_her_on').checked=herOn;
+  togglePersonFields('her',herOn);
+  if(existing&&existing.her){
+    var rm=existing.her.macros||{};
+    document.getElementById('rf_r_kcal').value=rm.kcal||'';
+    document.getElementById('rf_r_pro').value=rm.pro||'';
+    document.getElementById('rf_r_fat').value=rm.fat||'';
+    document.getElementById('rf_r_carb').value=rm.carb||'';
+    document.getElementById('rf_r_ingr').value=(existing.her.ingredients||[]).join('\n');
+    document.getElementById('rf_r_shop').value=(existing.her.shopping||[]).map(function(r){return r.join(' | ');}).join('\n');
+    document.getElementById('rf_r_steps').value=(existing.her.steps||[]).join('\n');
+  } else {
+    ['rf_r_kcal','rf_r_pro','rf_r_fat','rf_r_carb','rf_r_ingr','rf_r_shop','rf_r_steps'].forEach(function(id){
+      document.getElementById(id).value='';
+    });
+  }
+}
+
+function togglePersonFields(person,on){
+  var suffix=person==='him'?'h':'r';
+  var ids=['kcal','pro','fat','carb','ingr','shop','steps'];
+  ids.forEach(function(f){
+    var el=document.getElementById('rf_'+suffix+'_'+f);
+    if(el) el.disabled=!on;
+  });
+  var col=document.getElementById('rf_'+person+'_col');
+  if(col) col.style.opacity=on?'1':'0.4';
+}
+
+function renderSlotChips(){
+  var container=document.getElementById('rf_slots');
+  if(!container) return;
+  container.innerHTML=Object.keys(SLOT_NAMES).map(function(s){
+    var on=selectedSlots.indexOf(s)>=0;
+    return '<button class="rf-slot-chip'+(on?' on':'')+'" onclick="toggleSlot(\''+s+'\')">'
+      +SLOT_NAMES[s]+'</button>';
+  }).join('');
+}
+function toggleSlot(s){
+  var idx=selectedSlots.indexOf(s);
+  if(idx>=0) selectedSlots.splice(idx,1);
+  else selectedSlots.push(s);
+  renderSlotChips();
+}
+
+// Auto-scale her macros from him's when user tabs out of him fields
+function autoScaleHer(){
+  var hKcal=parseFloat(document.getElementById('rf_h_kcal').value)||0;
+  var hPro=parseFloat(document.getElementById('rf_h_pro').value)||0;
+  var hFat=parseFloat(document.getElementById('rf_h_fat').value)||0;
+  var hCarb=parseFloat(document.getElementById('rf_h_carb').value)||0;
+  // Default her = ~75% of his (typical female/male calorie ratio)
+  var ratio=0.75;
+  var rKcal=document.getElementById('rf_r_kcal');
+  if(rKcal&&!rKcal.value){rKcal.value=Math.round(hKcal*ratio)||'';}
+  var rPro=document.getElementById('rf_r_pro');
+  if(rPro&&!rPro.value){rPro.value=Math.round(hPro*ratio)||'';}
+  var rFat=document.getElementById('rf_r_fat');
+  if(rFat&&!rFat.value){rFat.value=Math.round(hFat*ratio)||'';}
+  var rCarb=document.getElementById('rf_r_carb');
+  if(rCarb&&!rCarb.value){rCarb.value=Math.round(hCarb*ratio)||'';}
+}
+
+function renderRecipesView(){
+  var el=document.getElementById('recipesView');
+  if(!el) return;
+
+  var listIds=Object.keys(customMeals);
+
+  el.innerHTML='<div style="padding:0 0 80px">'
+    +'<div id="recipesListWrap">'
+    +'<div style="padding:14px 14px 0;display:flex;align-items:center;justify-content:space-between">'
+    +'<div style="font-size:16px;font-weight:700">Custom Recipes</div>'
+    +'<button style="padding:8px 16px;background:#92400E;color:white;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:700;cursor:pointer" onclick="editingRecipeId=null;showRecipeForm(null)">+ Add Recipe</button>'
+    +'</div>'
+    +(listIds.length===0
+      ?'<div style="text-align:center;padding:40px 20px;color:var(--gray);font-size:14px">No custom recipes yet.<br>Tap <b>+ Add Recipe</b> to create one.</div>'
+      :'<div style="padding:10px 14px">'
+        +listIds.map(function(id){
+          var m=customMeals[id];
+          var slotNames=m.slots.map(function(s){return SLOT_NAMES[s]||s;}).join(', ');
+          var macroSum=(m.him&&m.him.macros)?m.him.macros.kcal+' kcal · '+m.him.macros.pro+'g protein':'';
+          return '<div class="recipe-list-item">'
+            +'<div style="flex:1">'
+            +'<div class="rli-label">'+m.label+'</div>'
+            +'<div class="rli-meta">'+slotNames+(macroSum?' · '+macroSum:'')+'</div>'
+            +(m.sourceUrl?'<a href="'+m.sourceUrl+'" target="_blank" style="font-size:11px;color:var(--shop)">View source ↗</a>':'')
+            +'</div>'
+            +'<button class="rli-btn edit" onclick="editRecipe(\''+id+'\')">Edit</button>'
+            +'<button class="rli-btn del" onclick="deleteRecipe(\''+id+'\')">Delete</button>'
+            +'</div>';
+        }).join('')
+        +'</div>'
+    )
+    +'</div>'
+
+    // The form (hidden by default)
+    +'<div id="recipeFormWrap" style="display:none;padding:12px 14px">'
+    +'<div class="recipe-form">'
+    +'<div style="font-size:15px;font-weight:700;margin-bottom:12px">'+
+      (editingRecipeId?'Edit Recipe':'New Recipe')+'</div>'
+
+    // Basic info
+    +'<div class="rf-section">Basic Info</div>'
+    +'<div class="rf-row"><div class="rf-label">Name</div><input class="rf-input" id="rf_label" placeholder="e.g. Teriyaki Salmon Bowl"></div>'
+    +'<div class="rf-row"><div class="rf-label">Source</div><input class="rf-input" id="rf_url" type="url" placeholder="https://allrecipes.com/...  (optional)"></div>'
+
+    // Slots
+    +'<div class="rf-section">Meal Slot</div>'
+    +'<div class="rf-hint">Which slot(s) should this appear in?</div>'
+    +'<div id="rf_slots" class="rf-slot-grid"></div>'
+
+    // Him column
+    +'<div class="rf-section">Him <label style="font-weight:400;font-size:11px"><input type="checkbox" id="rf_him_on" checked onchange="togglePersonFields(\'him\',this.checked)"> Include</label></div>'
+    +'<div id="rf_him_col" class="rf-person-col him-col">'
+    +'<div class="rf-person-title" style="color:var(--his-mid)">His macros</div>'
+    +'<div class="rf-macro-row">'
+    +'<div class="rf-macro-cell"><label>Calories</label><input id="rf_h_kcal" type="number" placeholder="0" onblur="autoScaleHer()"></div>'
+    +'<div class="rf-macro-cell"><label>Protein g</label><input id="rf_h_pro" type="number" placeholder="0" onblur="autoScaleHer()"></div>'
+    +'<div class="rf-macro-cell"><label>Fat g</label><input id="rf_h_fat" type="number" placeholder="0" onblur="autoScaleHer()"></div>'
+    +'<div class="rf-macro-cell"><label>Carbs g</label><input id="rf_h_carb" type="number" placeholder="0" onblur="autoScaleHer()"></div>'
+    +'</div>'
+    +'<div class="rf-person-title" style="color:var(--his-mid);margin-top:8px">His ingredients <span style="font-weight:400;font-size:11px">(one per line)</span></div>'
+    +'<textarea class="rf-ta" id="rf_h_ingr" placeholder="6 oz salmon fillet&#10;1 cup brown rice&#10;1 cup broccoli"></textarea>'
+    +'<div class="rf-person-title" style="color:var(--his-mid);margin-top:8px">His shopping list <span style="font-weight:400;font-size:11px">(Item | Category | His qty | Her qty)</span></div>'
+    +'<div class="rf-hint">Categories: Meat, Seafood, Dairy, Produce, Pantry, Frozen, Bread, Grab & go, Pantry — if low</div>'
+    +'<textarea class="rf-ta" id="rf_h_shop" placeholder="Salmon fillet | Seafood | 6 oz | 4 oz&#10;Brown rice | Pantry | ¾ cup | ½ cup&#10;Broccoli | Produce | 1 cup | ¾ cup"></textarea>'
+    +'<div class="rf-person-title" style="color:var(--his-mid);margin-top:8px">Steps <span style="font-weight:400;font-size:11px">(one per line)</span></div>'
+    +'<textarea class="rf-ta" id="rf_h_steps" placeholder="Preheat oven to 400°F.&#10;Season salmon and bake 12–15 min.&#10;Cook rice and steam broccoli."></textarea>'
+    +'</div>'
+
+    // Her column
+    +'<div class="rf-section">Her <label style="font-weight:400;font-size:11px"><input type="checkbox" id="rf_her_on" checked onchange="togglePersonFields(\'her\',this.checked)"> Include</label></div>'
+    +'<div id="rf_her_col" class="rf-person-col her-col">'
+    +'<div class="rf-person-title" style="color:var(--her-mid)">Her macros <span style="font-size:11px;font-weight:400;color:var(--gray)">(auto-filled at 75% of his — adjust as needed)</span></div>'
+    +'<div class="rf-macro-row">'
+    +'<div class="rf-macro-cell"><label>Calories</label><input id="rf_r_kcal" type="number" placeholder="0"></div>'
+    +'<div class="rf-macro-cell"><label>Protein g</label><input id="rf_r_pro" type="number" placeholder="0"></div>'
+    +'<div class="rf-macro-cell"><label>Fat g</label><input id="rf_r_fat" type="number" placeholder="0"></div>'
+    +'<div class="rf-macro-cell"><label>Carbs g</label><input id="rf_r_carb" type="number" placeholder="0"></div>'
+    +'</div>'
+    +'<div class="rf-person-title" style="color:var(--her-mid);margin-top:8px">Her ingredients <span style="font-weight:400;font-size:11px">(one per line — leave blank to copy his)</span></div>'
+    +'<textarea class="rf-ta" id="rf_r_ingr" placeholder="4 oz salmon fillet&#10;½ cup brown rice&#10;¾ cup broccoli"></textarea>'
+    +'<div class="rf-person-title" style="color:var(--her-mid);margin-top:8px">Her shopping qty <span style="font-weight:400;font-size:11px">(same format — her qty in 4th column)</span></div>'
+    +'<textarea class="rf-ta" id="rf_r_shop" placeholder="(leave blank — his shopping rows already include her qty in the 4th column)"></textarea>'
+    +'<div class="rf-person-title" style="color:var(--her-mid);margin-top:8px">Her steps <span style="font-weight:400;font-size:11px">(leave blank to use his steps)</span></div>'
+    +'<textarea class="rf-ta" id="rf_r_steps" placeholder="(leave blank to use same steps as him)"></textarea>'
+    +'</div>'
+
+    +'<div class="rf-actions">'
+    +'<button class="rf-cancel" onclick="closeRecipeForm()">Cancel</button>'
+    +'<button class="rf-save" onclick="saveRecipe()">Save Recipe</button>'
+    +'</div>'
+    +'</div>'
+    +'</div>'
+    +'</div>';
+
+  // After render, init slot chips
+  renderSlotChips();
+
+  // If showing form for existing, populate
+  if(editingRecipeId && customMeals[editingRecipeId]){
+    document.getElementById('recipesListWrap').style.display='none';
+    document.getElementById('recipeFormWrap').style.display='';
+  }
+}
+
+loadCustomMeals();
 renderDayTabs();
 renderMeals();
-
 </script>
 </body>
 </html>
