@@ -112,6 +112,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .ptab.shared.on{background:var(--shared);color:white;border-color:var(--shared)}
 .shared-intro{font-size:13px;color:var(--gray);background:var(--shared-light);border:1px solid var(--shared);
   border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:12px;text-align:center}
+
+.meal-img-row{display:flex;align-items:center;gap:10px;padding:0 14px 8px}
+.meal-img{width:72px;height:72px;border-radius:var(--radius-sm);object-fit:cover;
+  flex-shrink:0;border:1px solid var(--border);background:var(--gray-light)}
+.meal-img-placeholder{width:72px;height:72px;border-radius:var(--radius-sm);
+  flex-shrink:0;border:1px solid var(--border);background:var(--gray-light);
+  display:flex;align-items:center;justify-content:center;font-size:28px}
+.meal-links{display:flex;flex-direction:column;gap:4px}
+.meal-link{font-size:12px;color:var(--shop);text-decoration:none;display:flex;align-items:center;gap:4px}
+.meal-link:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -152,12 +162,12 @@ const MEALS=[
 
  {id:'egg_scramble',label:'Egg white scramble & toast',slots:['post'],
   him:{macros:{kcal:500,pro:40,fat:22,carb:30,fv:'1c veg'},
-   ingredients:['6 egg whites + 1 whole egg','1 cup baby spinach','¼ cup diced bell pepper','2 slices whole-wheat toast','¼ avocado','1 tsp olive oil'],
-   shopping:[['Eggs (large)','Dairy','6w+1','—'],['Baby spinach','Produce','1 cup','—'],['Bell peppers','Produce','¼ cup','—'],['Avocado','Produce','¼','—'],['Whole-wheat bread','Bread','2 slices','—']],
+   ingredients:['6 egg whites + 1 whole egg','1 cup baby spinach','¼ cup diced bell pepper','2 slices whole-wheat toast','¼ avocado','1 tsp olive oil','Garlic powder and black pepper to taste'],
+   shopping:[['Eggs (large)','Dairy','6w+1','—'],['Baby spinach','Produce','1 cup','—'],['Bell peppers','Produce','¼ cup','—'],['Avocado','Produce','¼','—']],
    steps:['Heat olive oil in a non-stick pan over medium heat.','Add diced bell pepper and cook 2 min, stirring occasionally.','Add spinach and stir until just wilted, about 1 min.','Whisk egg whites and whole egg together with a pinch of garlic powder and black pepper.','Pour eggs over the veg. Let set 10 sec, then gently fold and scramble until just cooked, 3–4 min. Remove from heat while still slightly glossy — they carry-over cook.','Toast bread. Slice avocado. Plate everything together.']},
   her:{macros:{kcal:300,pro:18,fat:12,carb:20,fv:'1c veg'},
-   ingredients:['3 egg whites + 1 whole egg','1 cup baby spinach','¼ cup diced bell pepper','1 slice whole-wheat toast','1 tsp olive oil'],
-   shopping:[['Eggs (large)','Dairy','—','3w+1'],['Baby spinach','Produce','—','1 cup'],['Bell peppers','Produce','—','¼ cup'],['Whole-wheat bread','Bread','—','1 slice']],
+   ingredients:['3 egg whites + 1 whole egg','1 cup baby spinach','¼ cup diced bell pepper','1 slice whole-wheat toast','1 tsp olive oil','Garlic powder and black pepper to taste'],
+   shopping:[['Eggs (large)','Dairy','—','3w+1'],['Baby spinach','Produce','—','1 cup'],['Bell peppers','Produce','—','¼ cup']],
    steps:['Heat olive oil in a non-stick pan over medium heat.','Add diced bell pepper and cook 2 min, stirring occasionally.','Add spinach and stir until just wilted, about 1 min.','Whisk egg whites and whole egg together with garlic powder and black pepper.','Pour eggs over the veg. Scramble gently until just set, 3–4 min.','Toast bread. Plate.']}},
 
  {id:'yogurt_bowl_post',label:'Greek yogurt power bowl',slots:['post'],
@@ -188,147 +198,147 @@ const MEALS=[
   her:{macros:{kcal:340,pro:24,fat:8,carb:44,fv:'0.5c fruit'},
    ingredients:['¼ cup oat flour','1 scoop protein powder','1 egg white','¼ cup water','¼ cup mixed berries','1 tsp maple syrup','1 tsp almond butter','¼ tsp baking powder'],
    shopping:[['Oat flour','Pantry','—','¼ cup'],['Eggs (large)','Dairy','—','1'],['Frozen mixed berries','Frozen','—','¼ cup']],
-   steps:['Whisk oat flour, protein powder, and baking powder together.','Add egg white and water. Whisk until smooth. Rest 2 min.','Cook small ¼-cup portions in a non-stick pan over medium heat, 2 min per side until cooked through.','Top with berries, almond butter, and maple syrup.']}},
+   steps:['Mix oat flour, protein, baking powder.','Whisk in egg white and water. Rest 2 min.','Cook small portions 2 min per side.','Top with berries, almond butter, maple syrup.']}},
 
  {id:'tuna_scramble',label:'Tuna scramble & toast',slots:['post'],
   him:{macros:{kcal:500,pro:48,fat:12,carb:34,fv:'1c veg'},
    ingredients:['1 can (5 oz) light tuna (low sodium), drained','3 egg whites + 1 whole egg','¼ cup diced bell pepper','1 cup baby kale','2 slices whole-wheat toast','1 tsp olive oil'],
-   shopping:[['Canned tuna in water (low sodium)','Pantry','1 can','—'],['Eggs (large)','Dairy','3w+1','—'],['Bell peppers','Produce','¼ cup','—'],['Baby kale','Produce','1 cup','—'],['Whole-wheat bread','Bread','2 slices','—']],
+   shopping:[['Canned tuna in water (low sodium)','Pantry','1 can','—'],['Eggs (large)','Dairy','3w+1','—'],['Bell peppers','Produce','¼ cup','—'],['Baby kale','Produce','1 cup','—']],
    steps:['Drain tuna thoroughly and break into flakes with a fork.','Heat olive oil in a non-stick pan over medium heat. Add diced bell pepper, cook 2 min.','Add kale and stir until wilted, about 1 min.','Whisk egg whites and whole egg together. Pour over the veg.','Add flaked tuna. Fold and scramble gently 3–4 min until just set — don\'t overcook or tuna turns rubbery.','Season with garlic powder and black pepper. Serve with toast.']},
   her:{macros:{kcal:290,pro:22,fat:8,carb:20,fv:'1c veg'},
-   ingredients:['½ can light tuna (low sodium), drained','2 egg whites + 1 whole egg','¼ cup diced bell pepper','1 cup baby kale','1 slice whole-wheat toast','1 tsp olive oil'],
-   shopping:[['Canned tuna in water (low sodium)','Pantry','—','½ can'],['Eggs (large)','Dairy','—','2w+1'],['Bell peppers','Produce','—','¼ cup'],['Baby kale','Produce','—','1 cup'],['Whole-wheat bread','Bread','—','1 slice']],
+   ingredients:['½ can light tuna (low sodium), drained','2 egg whites + 1 whole egg','¼ cup diced bell pepper','1 cup baby kale','1 slice whole-wheat toast','1 tsp olive oil','Garlic powder and black pepper to taste'],
+   shopping:[['Canned tuna in water (low sodium)','Pantry','—','½ can'],['Eggs (large)','Dairy','—','2w+1'],['Bell peppers','Produce','—','¼ cup'],['Baby kale','Produce','—','1 cup']],
    steps:['Drain tuna and flake. Heat olive oil. Cook bell pepper 2 min, add kale until wilted.','Whisk eggs, pour in. Add tuna. Scramble gently 3–4 min until just set.','Season with garlic powder and black pepper. Serve with toast.']}},
 
  {id:'egg_omelet',label:'Egg & kale omelet with toast',slots:['post'],
   him:{macros:{kcal:490,pro:34,fat:20,carb:28,fv:'1c veg'},
-   ingredients:['2 whole eggs + 3 egg whites','1 cup baby kale','¼ cup diced bell pepper','2 slices whole-wheat toast','1 tsp olive oil'],
-   shopping:[['Eggs (large)','Dairy','2+3w','—'],['Baby kale','Produce','1 cup','—'],['Bell peppers','Produce','¼ cup','—'],['Whole-wheat bread','Bread','2 slices','—']],
+   ingredients:['2 whole eggs + 3 egg whites','1 cup baby kale','¼ cup diced bell pepper','2 slices whole-wheat toast','1 tsp olive oil','Garlic powder and black pepper to taste'],
+   shopping:[['Eggs (large)','Dairy','2+3w','—'],['Baby kale','Produce','1 cup','—'],['Bell peppers','Produce','¼ cup','—']],
    steps:['Whisk eggs together with garlic powder, black pepper, and a tiny pinch of salt.','Heat olive oil in a non-stick pan over medium heat. Add diced bell pepper and cook 2 min.','Add kale and stir until wilted, about 1 min. Spread veg evenly across the pan.','Pour egg mixture over the veg. Let cook undisturbed 1–2 min until edges are set.','When the center is almost set but still slightly jiggly, fold omelet in half with a spatula.','Slide onto plate. Serve immediately with toast.']},
   her:{macros:{kcal:280,pro:16,fat:12,carb:18,fv:'1c veg'},
-   ingredients:['1 whole egg + 2 egg whites','1 cup baby kale','¼ cup diced bell pepper','1 slice whole-wheat toast','1 tsp olive oil'],
-   shopping:[['Eggs (large)','Dairy','—','1+2w'],['Baby kale','Produce','—','1 cup'],['Bell peppers','Produce','—','¼ cup'],['Whole-wheat bread','Bread','—','1 slice']],
+   ingredients:['1 whole egg + 2 egg whites','1 cup baby kale','¼ cup diced bell pepper','1 slice whole-wheat toast','1 tsp olive oil','Garlic powder and black pepper to taste'],
+   shopping:[['Eggs (large)','Dairy','—','1+2w'],['Baby kale','Produce','—','1 cup'],['Bell peppers','Produce','—','¼ cup']],
    steps:['Whisk egg with garlic powder and black pepper.','Heat olive oil. Cook bell pepper 2 min, add kale until wilted.','Pour egg over veg. Let cook 1–2 min until edges set, then fold in half. Serve with toast.']}},
 
  {id:'korean_egg_bowl',label:'Korean-style egg & veggie rice bowl',slots:['post'],
   him:{macros:{kcal:440,pro:28,fat:14,carb:52,fv:'1c veg'},
-   ingredients:['2 whole eggs + 2 egg whites','1 cup baby spinach','¼ cup shredded carrots','½ cup cooked brown rice','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp gochujang (optional)','1 tsp sesame seeds'],
-   shopping:[['Eggs (large)','Dairy','2+2w','—'],['Baby spinach','Produce','1 cup + ¼ cup','—'],['Brown rice (dry)','Pantry','½ cup','—'],['Gochujang','Pantry — optional','1 tsp','—']],
+   ingredients:['2 whole eggs + 2 egg whites','1 cup baby spinach','¼ cup shredded carrots','½ cup cooked brown rice','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp gochujang (optional)','1 tsp sesame seeds','1 tsp rice vinegar'],
+   shopping:[['Eggs (large)','Dairy','2+2w','—'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Baby spinach','Produce','1 cup + ¼ cup','—'],['Brown rice (dry)','Pantry','½ cup','—'],['Gochujang','Pantry — optional','1 tsp','—']],
    steps:['Cook rice: rinse, then add to 1.5x water by volume. Bring to boil, cover, reduce to low. Simmer 18–20 min. Fluff with fork. Or use pre-cooked rice — microwave 90 sec.','Fry eggs: heat a small pan over medium heat with a drop of sesame oil. Crack eggs in, cover with a lid for 2 min for runny yolk or 3 min for set yolk. Alternatively poach: simmer water, swirl, crack egg in, cook 3 min.','In the same pan, sauté spinach and shredded carrots in sesame oil for 1–2 min until just softened.','Assemble the bowl: rice base, veg on top, eggs on top of that.','Drizzle with soy sauce and a small amount of rice vinegar. Add gochujang to taste — it\'s spicy, start with ½ tsp. Sprinkle sesame seeds. Mix it all together before eating.']},
   her:{macros:{kcal:330,pro:14,fat:12,carb:46,fv:'1c veg'},
-   ingredients:['2 whole eggs','1 cup baby spinach','¼ cup shredded carrots','½ cup cooked brown rice','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp gochujang (optional)','1 tsp sesame seeds'],
-   shopping:[['Eggs (large)','Dairy','—','2'],['Baby spinach','Produce','—','1 cup + ¼ cup'],['Brown rice (dry)','Pantry','—','½ cup'],['Gochujang','Pantry — optional','—','1 tsp']],
+   ingredients:['2 whole eggs','1 cup baby spinach','¼ cup shredded carrots','½ cup cooked brown rice','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp gochujang (optional)','1 tsp sesame seeds','1 tsp rice vinegar'],
+   shopping:[['Eggs (large)','Dairy','—','2'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Baby spinach','Produce','—','1 cup + ¼ cup'],['Brown rice (dry)','Pantry','—','½ cup'],['Gochujang','Pantry — optional','—','1 tsp']],
    steps:['Cook or reheat rice. Fry or poach eggs to your liking.','Sauté spinach and carrots in sesame oil 1–2 min until softened.','Assemble: rice, veg, eggs on top. Drizzle soy sauce, a little rice vinegar, gochujang to taste. Finish with sesame seeds.']}},
 
  {id:'thai_tofu_scramble',label:'Thai peanut tofu scramble',slots:['post'],
   him:{macros:{kcal:480,pro:34,fat:22,carb:34,fv:'1c veg'},
-   ingredients:['½ block firm tofu (7 oz), pressed + crumbled','1 cup baby spinach','¼ cup shredded carrots','2 eggs','1 tbsp peanut butter','1 tsp low-sodium soy sauce','½ tsp sesame oil','2 slices whole-wheat toast'],
-   shopping:[['Firm tofu (½ block)','Refrigerated','½ block','—'],['Baby spinach','Produce','1 cup + ¼ cup','—'],['Peanut butter (no salt added)','Pantry','1 tbsp','—'],['Whole-wheat bread','Bread','2 slices','—']],
+   ingredients:['½ block firm tofu (7 oz), pressed + crumbled','1 cup baby spinach','¼ cup shredded carrots','2 eggs','1 tbsp peanut butter','1 tsp low-sodium soy sauce','½ tsp sesame oil','2 slices whole-wheat toast','½ tsp rice vinegar','Pinch of red pepper flakes','Black pepper to taste'],
+   shopping:[['Rice vinegar','Pantry — if low','½ tsp','½ tsp'],['Baby spinach','Produce','1 cup + ¼ cup','—'],['Peanut butter (no salt added)','Pantry','1 tbsp','—'],['Red pepper flakes','Pantry — if low','pinch','—']],
    steps:['Press tofu: wrap in a clean towel or paper towels and press for 5 min to remove excess moisture. Then crumble into rough bite-size pieces.','Make the PB sauce: in a small bowl whisk together 1 tbsp peanut butter, 1 tsp low-sodium soy sauce, ½ tsp rice vinegar, a pinch of red pepper flakes, and 2 tbsp warm water until smooth. Set aside.','Heat sesame oil in a pan over medium-high heat. Add crumbled tofu in a single layer. Cook undisturbed 2–3 min until golden on the bottom, then stir and cook another 2 min.','Push tofu to the side. Crack eggs into the empty space and scramble gently 1–2 min.','Add spinach and shredded carrots. Toss everything together and cook 1 min until spinach is wilted.','Remove from heat and drizzle the PB sauce over everything. Serve immediately with toast.']},
   her:{macros:{kcal:340,pro:16,fat:14,carb:30,fv:'1c veg'},
-   ingredients:['½ block firm tofu (7 oz), pressed + crumbled','1 cup baby spinach','¼ cup shredded carrots','1 egg','1 tbsp peanut butter','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 slice whole-wheat toast'],
-   shopping:[['Firm tofu (½ block)','Refrigerated','—','½ block'],['Baby spinach','Produce','—','1 cup + ¼ cup'],['Peanut butter (no salt added)','Pantry','—','1 tbsp'],['Whole-wheat bread','Bread','—','1 slice']],
-   steps:['Press tofu 5 min, then crumble.','Make PB sauce: whisk 1 tbsp peanut butter + 1 tsp soy sauce + ½ tsp rice vinegar + pinch of chili flakes + 2 tbsp warm water until smooth.','Cook tofu in sesame oil until golden, 4–5 min. Push aside, scramble 1 egg. Add spinach + carrots until wilted.','Drizzle PB sauce over everything. Serve with toast.']}},
+   ingredients:['½ block firm tofu (7 oz), pressed + crumbled','1 cup baby spinach','¼ cup shredded carrots','1 egg','1 tbsp peanut butter','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 slice whole-wheat toast','½ tsp rice vinegar','Pinch of red pepper flakes'],
+   shopping:[['Rice vinegar','Pantry — if low','½ tsp','½ tsp'],['Baby spinach','Produce','—','1 cup + ¼ cup'],['Peanut butter (no salt added)','Pantry','—','1 tbsp'],['Red pepper flakes','Pantry — if low','—','pinch']],
+   steps:['Press tofu 5 min. Crumble.','Cook tofu in sesame oil until golden, 4–5 min.','Push aside, scramble egg. Add spinach + carrots until wilted.','Drizzle PB sauce. Serve with toast.']}},
 
  {id:'viet_noodle_bowl',label:'Vietnamese-style egg & noodle bowl',slots:['post'],
   him:{macros:{kcal:440,pro:26,fat:12,carb:64,fv:'1c veg'},
    ingredients:['2 whole eggs + 1 egg white, soft-boiled','¾ cup rice vermicelli, cooked','1 cup baby spinach','½ cup shredded carrots','1 tbsp low-sodium soy sauce','1 tsp sesame oil','1 tsp rice vinegar','Pinch chili flakes'],
-   shopping:[['Eggs (large)','Dairy','2+1w','—'],['Rice vermicelli','Pantry','¾ cup','—'],['Baby spinach','Produce','1 cup + ½ cup','—']],
+   shopping:[['Eggs (large)','Dairy','2+1w','—'],['Rice vermicelli','Pantry','¾ cup','—'],['Baby spinach','Produce','1 cup + ½ cup','—'],['Red pepper flakes','Pantry — if low','pinch','—']],
    steps:['Soft-boil eggs: bring a small saucepan of water to a boil. Lower eggs in gently. Cook exactly 6–7 min for a jammy yolk. Transfer immediately to an ice bath for 2 min, then peel.','Soak rice vermicelli in a bowl of just-boiled hot water for 5 min. Drain and rinse with cold water to stop cooking and prevent clumping.','Heat sesame oil in a pan over medium heat. Add spinach and shredded carrots, stirring until just wilted, 1–2 min.','Assemble the bowl: vermicelli noodles as the base, wilted veg alongside, and halved soft-boiled eggs on top.','Drizzle with soy sauce and rice vinegar. Add a pinch of chili flakes. Toss lightly before eating.']},
   her:{macros:{kcal:330,pro:14,fat:10,carb:54,fv:'1c veg'},
    ingredients:['2 whole eggs, soft-boiled','½ cup rice vermicelli, cooked','1 cup baby spinach','½ cup shredded carrots','1 tbsp low-sodium soy sauce','1 tsp sesame oil','1 tsp rice vinegar','Pinch chili flakes'],
-   shopping:[['Eggs (large)','Dairy','—','2'],['Rice vermicelli','Pantry','—','½ cup'],['Baby spinach','Produce','—','1 cup + ½ cup']],
-   steps:['Soft-boil eggs: boil 6–7 min, ice bath 2 min, peel. Halve.','Soak vermicelli in hot water 5 min. Drain and rinse cold.','Wilt spinach + carrots in sesame oil 1–2 min.','Assemble: noodles, veg, eggs on top. Drizzle soy sauce, rice vinegar, chili flakes.']}},
+   shopping:[['Eggs (large)','Dairy','—','2'],['Rice vermicelli','Pantry','—','½ cup'],['Baby spinach','Produce','—','1 cup + ½ cup'],['Red pepper flakes','Pantry — if low','—','pinch']],
+   steps:['Soft-boil eggs: simmer 6–7 min, ice bath, peel.','Soak vermicelli in hot water 5 min. Drain.','Wilt spinach + carrots in sesame oil 1–2 min.','Assemble: noodles, veg, halved eggs on top. Drizzle soy, vinegar, chili.']}},
 
  {id:'korean_juk',label:'Korean egg & rice porridge (Juk)',slots:['post'],
   him:{macros:{kcal:440,pro:28,fat:10,carb:64,fv:'1c veg'},
    ingredients:['½ cup dry rice','2 cups water or low-sodium broth','1 whole egg + 2 egg whites','1 cup baby kale, chopped','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp sesame seeds'],
-   shopping:[['Rice','Pantry','½ cup','—'],['Baby kale','Produce','1 cup','—']],
+   shopping:[['Brown rice (dry)','Pantry','½ cup','—'],['Baby kale','Produce','1 cup','—']],
    steps:['Rinse rice once. Combine rinsed rice and water or low-sodium broth in a medium saucepan (2 cups liquid per ½ cup rice).','Bring to a boil over medium-high, then reduce to medium-low. Cook uncovered, stirring occasionally, 20–25 min until the rice has broken down and the porridge is thick and creamy. Add more liquid if it gets too thick.','Stir in chopped kale and cook 2 min until tender.','Reduce heat to low. Whisk eggs together, then slowly stir into the hot porridge in a steady stream while stirring constantly — this creates silky egg ribbons rather than chunks. Cook 1 min until just set.','Season with soy sauce and a drizzle of sesame oil. Top with sesame seeds and sliced green onion if using.']},
   her:{macros:{kcal:340,pro:16,fat:8,carb:60,fv:'1c veg'},
    ingredients:['½ cup dry rice','1.5 cups water or low-sodium broth','1 whole egg + 2 egg whites','1 cup baby kale, chopped','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp sesame seeds'],
-   shopping:[['Rice','Pantry','—','½ cup'],['Baby kale','Produce','—','1 cup']],
-   steps:['Rinse rice. Simmer in 1.5 cups water or broth over medium-low, stirring, 20–25 min until porridge-like.','Stir in kale, cook 2 min.','Whisk eggs, stir slowly into porridge over low heat until just set, about 1 min.','Season with soy sauce and sesame oil. Top with sesame seeds.']}},
+   shopping:[['Brown rice (dry)','Pantry','—','½ cup'],['Baby kale','Produce','—','1 cup']],
+   steps:['Simmer rice in water/broth 20–25 min stirring until porridge-like.','Stir in kale 2 min.','Whisk eggs, stir in over low heat until just set.','Season with soy + sesame oil. Top with sesame seeds.']}},
 
  // LUNCH
  {id:'quinoa_bowl',label:'Grilled chicken & quinoa bowl',slots:['lunch'],
   him:{macros:{kcal:670,pro:52,fat:20,carb:68,fv:'1.5c veg'},
-   ingredients:['6 oz boneless skinless chicken breast','¾ cup dry quinoa','1 cup broccoli florets','½ cup shredded carrots','2 tbsp olive oil','1 tbsp red wine vinegar'],
+   ingredients:['6 oz boneless skinless chicken breast','¾ cup dry quinoa','1 cup broccoli florets','½ cup shredded carrots','2 tbsp olive oil','1 tbsp red wine vinegar','Garlic powder, onion powder, black pepper to taste'],
    shopping:[['Chicken breast','Meat','6 oz','—'],['Dry quinoa','Pantry','¾ cup','—'],['Broccoli florets','Produce','1 cup','—'],['Carrots','Produce','½ cup','—']],
    steps:['Rinse quinoa in a fine mesh strainer under cold water for 30 sec (removes bitterness). Combine with 1.5x water in a saucepan. Bring to boil, cover, reduce to low. Simmer 13–15 min until water is absorbed. Fluff with a fork, leave lid off 2 min to dry out.','Season chicken with garlic powder, onion powder, black pepper, and a pinch of dried herbs. Grill or pan-sear over medium-high heat 5–6 min per side until internal temp reaches 165°F. Rest 3 min before slicing.','Toss broccoli florets with ½ tsp olive oil. Spread on a baking sheet and roast at 400°F for 18–20 min until crispy at the edges.','Make dressing: whisk 2 tbsp olive oil with 1 tbsp red wine vinegar, salt, and pepper.','Assemble: quinoa base, sliced chicken, roasted broccoli, shredded carrots. Drizzle dressing over top.']},
   her:{macros:{kcal:400,pro:26,fat:10,carb:58,fv:'1.5c veg'},
-   ingredients:['4 oz boneless skinless chicken breast','½ cup dry quinoa','1 cup broccoli florets','½ cup shredded carrots','1 tbsp olive oil','1 tbsp red wine vinegar'],
+   ingredients:['4 oz boneless skinless chicken breast','½ cup dry quinoa','1 cup broccoli florets','½ cup shredded carrots','1 tbsp olive oil','1 tbsp red wine vinegar','Garlic powder and black pepper to taste'],
    shopping:[['Chicken breast','Meat','—','4 oz'],['Dry quinoa','Pantry','—','½ cup'],['Broccoli florets','Produce','—','1 cup'],['Carrots','Produce','—','½ cup']],
-   steps:['Rinse quinoa. Simmer in 1 cup water, covered, 13–15 min. Fluff.','Season chicken and grill or pan-sear 5–6 min per side until 165°F. Rest 3 min, slice.','Roast broccoli at 400°F 18–20 min.','Whisk olive oil + red wine vinegar for dressing. Assemble bowl.']}},
+   steps:['Rinse quinoa. Simmer in 1 cup water, covered, 13–15 min. Fluff.','Grill chicken 5–6 min per side until 165°F. Rest 3 min, slice.','Roast broccoli at 400°F 18–20 min.','Whisk oil + vinegar. Assemble bowl.']}},
 
  {id:'hummus_wrap',label:'Grilled chicken & hummus wrap',slots:['lunch'],
   him:{macros:{kcal:650,pro:48,fat:14,carb:72,fv:'1c veg'},
    ingredients:['5 oz grilled chicken (batch cook)','1 large whole-wheat tortilla','3 tbsp hummus','1 cup baby spinach','¼ cup sliced bell pepper','¼ cup shredded carrots'],
-   shopping:[['Chicken breast','Meat','5 oz','—'],['Whole-wheat tortilla (large)','Bread','1','—'],['Hummus','Pantry','3 tbsp','—'],['Baby spinach','Produce','1c + ½c','—']],
+   shopping:[['Chicken breast','Meat','5 oz','—'],['Hummus','Pantry','3 tbsp','—'],['Baby spinach','Produce','1c + ½c','—']],
    steps:['If using batch-cooked chicken, slice or shred while cold — it holds together better.','Lay tortilla flat on a cutting board. Spread hummus across the center third, leaving 2 inches at top and bottom.','Layer spinach, sliced bell pepper, shredded carrots, and chicken on top of the hummus.','Fold the sides in first, then roll from the bottom up tightly like a burrito. Slice in half diagonally.','Tip: wrap tightly in foil if packing for later — it keeps its shape much better.']},
   her:{macros:{kcal:390,pro:24,fat:10,carb:58,fv:'1c veg'},
    ingredients:['3 oz grilled chicken (batch cook)','1 large whole-wheat tortilla','2 tbsp hummus','1 cup baby spinach','¼ cup sliced bell pepper','¼ cup shredded carrots'],
-   shopping:[['Chicken breast','Meat','—','3 oz'],['Whole-wheat tortilla (large)','Bread','—','1'],['Hummus','Pantry','—','2 tbsp'],['Baby spinach','Produce','—','1c + ½c']],
+   shopping:[['Chicken breast','Meat','—','3 oz'],['Hummus','Pantry','—','2 tbsp'],['Baby spinach','Produce','—','1c + ½c']],
    steps:['Slice or shred batch-cooked chicken.','Spread hummus across the center of the tortilla. Layer spinach, bell pepper, carrots, and chicken.','Fold sides in and roll tightly from bottom. Slice in half.']}},
 
  {id:'shrimp_bowl',label:'Shrimp, black bean & rice bowl',slots:['lunch'],
   him:{macros:{kcal:670,pro:52,fat:12,carb:78,fv:'1c veg'},
-   ingredients:['6 oz raw shrimp, peeled','½ cup canned black beans (no salt)','1 cup cooked brown rice','1 cup broccoli & bell pepper, chopped','¼ avocado','2 tbsp salsa'],
-   shopping:[['Raw shrimp','Seafood','6 oz','—'],['Black beans (no salt added)','Pantry','½ cup','—'],['Avocado','Produce','¼','—'],['Broccoli florets','Produce','1 cup','—']],
+   ingredients:['6 oz raw shrimp, peeled','½ cup canned black beans (no salt)','1 cup cooked brown rice','1 cup broccoli & bell pepper, chopped','¼ avocado','2 tbsp salsa','1 tbsp olive oil','½ tsp cumin','Garlic powder and black pepper to taste'],
+   shopping:[['Raw shrimp','Seafood','6 oz','—'],['Olive oil','Pantry — if low','1 tbsp','—'],['Black beans (no salt added)','Pantry','½ cup','—'],['Avocado','Produce','¼','—'],['Broccoli florets','Produce','1 cup','—'],['Garlic (fresh)','Produce','1 clove','—']],
    steps:['Cook brown rice ahead of time (batch on Sunday is best — refrigerates well 4 days).','Pat shrimp dry with paper towels — this is important for getting a good sear. Season with cumin, garlic powder, and black pepper.','Heat olive oil in a pan over medium-high heat. Add shrimp in a single layer — don\'t crowd the pan. Cook 1–2 min per side until pink and just opaque. Remove immediately.','In the same pan, stir-fry broccoli and bell pepper 3–4 min until tender-crisp.','Warm black beans in a small saucepan or microwave 60 sec.','Assemble: rice base, beans, stir-fried veg, shrimp on top. Add avocado slices, a spoonful of salsa, and a squeeze of fresh lime.']},
   her:{macros:{kcal:400,pro:26,fat:8,carb:62,fv:'1c veg'},
-   ingredients:['4 oz raw shrimp, peeled','½ cup canned black beans (no salt)','½ cup cooked brown rice','1 cup broccoli & bell pepper, chopped','¼ avocado','2 tbsp salsa'],
-   shopping:[['Raw shrimp','Seafood','—','4 oz'],['Black beans (no salt added)','Pantry','—','½ cup'],['Avocado','Produce','—','¼'],['Broccoli florets','Produce','—','1 cup']],
-   steps:['Cook rice ahead. Pat shrimp dry. Season with cumin + garlic powder.','Cook shrimp in olive oil over medium-high heat, 1–2 min per side until pink. Remove immediately.','Stir-fry broccoli + bell pepper 3–4 min. Warm beans 60 sec.','Assemble: rice, beans, veg, shrimp, avocado, salsa, squeeze of lime.']}},
+   ingredients:['4 oz raw shrimp, peeled','½ cup canned black beans (no salt)','½ cup cooked brown rice','1 cup broccoli & bell pepper, chopped','¼ avocado','2 tbsp salsa','1 tbsp olive oil','½ tsp cumin','Garlic powder to taste','½ lime, juiced'],
+   shopping:[['Raw shrimp','Seafood','—','4 oz'],['Lime','Produce','—','1'],['Black beans (no salt added)','Pantry','—','½ cup'],['Avocado','Produce','—','¼'],['Broccoli florets','Produce','—','1 cup']],
+   steps:['Cook rice ahead. Pat shrimp dry. Season with cumin + garlic powder.','Cook shrimp in olive oil over medium-high heat, 1–2 min per side until pink. Remove immediately.','Stir-fry broccoli + bell pepper 3–4 min. Warm beans.','Assemble: rice, beans, veg, shrimp, avocado, salsa, squeeze of lime.']}},
 
  {id:'tuna_white_bean',label:'Tuna & white bean salad bowl',slots:['lunch'],
   him:{macros:{kcal:660,pro:50,fat:22,carb:60,fv:'2c veg'},
-   ingredients:['5 oz canned tuna (low sodium), drained','½ cup cannellini beans (no salt)','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','2 tbsp olive oil','1 tbsp red wine vinegar','1 whole-wheat roll'],
-   shopping:[['Canned tuna in water (low sodium)','Pantry','1 can','—'],['Cannellini beans (no salt added)','Pantry','½ cup','—'],['Baby kale','Produce','2c + 1c','—'],['Whole-wheat roll','Bread','1','—']],
+   ingredients:['5 oz canned tuna (low sodium), drained','½ cup cannellini beans (no salt)','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','2 tbsp olive oil','1 tbsp red wine vinegar','1 whole-wheat roll','1 clove garlic, minced or ¼ tsp garlic powder','Black pepper to taste'],
+   shopping:[['Canned tuna in water (low sodium)','Pantry','1 can','—'],['Cannellini beans (no salt added)','Pantry','½ cup','—'],['Baby kale','Produce','2c + 1c','—']],
    steps:['Drain tuna and break apart with a fork into rough flakes — not too fine.','Drain and rinse cannellini beans.','Combine tuna, beans, baby kale, shredded zucchini, and shredded carrots in a large bowl.','Make the dressing: whisk 2 tbsp olive oil, 1 tbsp red wine vinegar, black pepper, and a pinch of garlic powder until emulsified.','Pour dressing over salad and toss well. Taste and adjust vinegar or seasoning.','Serve with a whole-wheat roll on the side.']},
   her:{macros:{kcal:380,pro:26,fat:12,carb:46,fv:'2c veg'},
-   ingredients:['3 oz canned tuna (low sodium), drained','½ cup cannellini beans (no salt)','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','1 tbsp olive oil','1 tbsp red wine vinegar'],
+   ingredients:['3 oz canned tuna (low sodium), drained','½ cup cannellini beans (no salt)','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','1 tbsp olive oil','1 tbsp red wine vinegar','Black pepper to taste'],
    shopping:[['Canned tuna in water (low sodium)','Pantry','—','½ can'],['Cannellini beans (no salt added)','Pantry','—','½ cup'],['Baby kale','Produce','—','2c + 1c']],
    steps:['Drain tuna and flake. Drain and rinse beans.','Combine tuna, beans, kale, zucchini, and carrots in a bowl.','Whisk 1 tbsp olive oil + 1 tbsp red wine vinegar + black pepper. Pour over and toss well.']}},
 
  {id:'white_bean_soup',label:'Chicken & white bean soup',slots:['lunch'],
   him:{macros:{kcal:640,pro:56,fat:10,carb:68,fv:'1.5c veg'},
-   ingredients:['6 oz shredded chicken (batch cook)','½ cup cannellini beans (no salt)','1 cup baby kale','½ cup diced carrots','1 stalk celery','2 cups low-sodium chicken broth','1 whole-wheat roll'],
-   shopping:[['Chicken breast','Meat','6 oz','—'],['Cannellini beans (no salt added)','Pantry','½ cup','—'],['Kale','Produce','1c + 1c + 1','—'],['Low-sodium chicken or veg broth','Pantry','2 cups','—'],['Whole-wheat roll','Bread','1','—']],
+   ingredients:['6 oz shredded chicken (batch cook)','½ cup cannellini beans (no salt)','1 cup baby kale','½ cup diced carrots','1 stalk celery','2 cups low-sodium chicken broth','1 whole-wheat roll','2 cloves garlic, minced','1 tsp Italian seasoning','Black pepper to taste'],
+   shopping:[['Chicken breast','Meat','6 oz','—'],['Cannellini beans (no salt added)','Pantry','½ cup','—'],['Kale','Produce','1c + 1c + 1','—'],['Low-sodium chicken or veg broth','Pantry','2 cups','—'],['Garlic (fresh)','Produce','2 cloves','—']],
    steps:['Sauté minced garlic, diced carrots, and diced celery in a splash of the chicken broth over medium heat for 3–4 min until beginning to soften.','Add the remaining broth, drained cannellini beans, and a generous pinch of Italian seasoning (oregano, basil, thyme). Bring to a simmer.','Add shredded chicken and kale. Simmer 5–8 min until kale is tender and chicken is warmed through.','Taste and season with black pepper. The broth should be lightly seasoned — it\'ll concentrate as it reduces.','Serve with a whole-wheat roll for dipping.']},
   her:{macros:{kcal:360,pro:26,fat:8,carb:52,fv:'1.5c veg'},
-   ingredients:['4 oz shredded chicken (batch cook)','½ cup cannellini beans (no salt)','1 cup baby kale','½ cup diced carrots','1.5 cups low-sodium chicken broth'],
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Cannellini beans (no salt added)','Pantry','—','½ cup'],['Kale','Produce','—','1c + ½c'],['Low-sodium chicken or veg broth','Pantry','—','1.5 cups']],
-   steps:['Sauté garlic, carrots, and celery in a splash of broth 3–4 min.','Add broth, beans, and Italian seasoning. Bring to a simmer.','Add chicken and kale. Simmer 5–8 min until kale is tender.','Season with black pepper. Serve.']}},
+   ingredients:['4 oz shredded chicken (batch cook)','½ cup cannellini beans (no salt)','1 cup baby kale','½ cup diced carrots','1.5 cups low-sodium chicken broth','1 clove garlic, minced','1 tsp Italian seasoning','Black pepper to taste'],
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Cannellini beans (no salt added)','Pantry','—','½ cup'],['Kale','Produce','—','1c + ½c'],['Low-sodium chicken or veg broth','Pantry','—','1.5 cups'],['Garlic (fresh)','Produce','—','1 clove']],
+   steps:['Sauté garlic, carrots in broth 3 min.','Add broth, beans, seasoning. Simmer.','Add chicken + kale. Simmer 5–8 min.']}},
 
  {id:'burrito_bowl',label:'Chicken burrito bowl',slots:['lunch'],
   him:{macros:{kcal:700,pro:56,fat:16,carb:76,fv:'1.5c veg'},
-   ingredients:['6 oz grilled chicken (batch cook)','½ cup black beans (no salt)','¾ cup cooked brown rice','1 cup shredded kale','¼ cup salsa','2 tbsp 0% Greek yogurt','¼ avocado'],
-   shopping:[['Chicken breast','Meat','6 oz','—'],['Black beans (no salt added)','Pantry','½ cup','—'],['Kale','Produce','1 cup','—'],['Avocado','Produce','¼','—']],
+   ingredients:['6 oz grilled chicken (batch cook)','½ cup black beans (no salt)','¾ cup cooked brown rice','1 cup shredded kale','¼ cup salsa','2 tbsp 0% Greek yogurt','¼ avocado','½ lime, juiced','Cumin and hot sauce to taste'],
+   shopping:[['Chicken breast','Meat','6 oz','—'],['Lime','Produce','1','—'],['Black beans (no salt added)','Pantry','½ cup','—'],['Kale','Produce','1 cup','—'],['Avocado','Produce','¼','—']],
    steps:['Warm pre-cooked rice, black beans, and chicken together — either in a pan with a splash of water, or separately in the microwave.','Massage shredded kale with a squeeze of lime juice and a tiny pinch of salt for 30 sec — this softens it and removes bitterness.','Assemble: rice as the base, beans and chicken on top, massaged kale on the side.','Add salsa, sliced avocado, and a dollop of Greek yogurt (this replaces sour cream — you won\'t miss it).','Season with cumin and any hot sauce if desired.']},
   her:{macros:{kcal:410,pro:28,fat:10,carb:60,fv:'1.5c veg'},
-   ingredients:['4 oz grilled chicken (batch cook)','½ cup black beans (no salt)','½ cup cooked brown rice','1 cup shredded kale','2 tbsp salsa','1 tbsp 0% Greek yogurt','¼ avocado'],
+   ingredients:['4 oz grilled chicken (batch cook)','½ cup black beans (no salt)','½ cup cooked brown rice','1 cup shredded kale','2 tbsp salsa','1 tbsp 0% Greek yogurt','¼ avocado','½ lime, juiced','Cumin to taste'],
    shopping:[['Chicken breast','Meat','—','4 oz'],['Black beans (no salt added)','Pantry','—','½ cup'],['Kale','Produce','—','1 cup'],['Avocado','Produce','—','¼']],
    steps:['Warm rice, beans, and chicken.','Massage kale with lime juice + pinch of salt 30 sec to soften.','Assemble: rice, beans, chicken, kale, salsa, avocado. Top with Greek yogurt.']}},
 
  {id:'viet_vermicelli',label:'Vietnamese chicken & vermicelli salad',slots:['lunch'],
   him:{macros:{kcal:550,pro:44,fat:8,carb:72,fv:'1.5c veg'},
-   ingredients:['5 oz grilled chicken (batch), sliced','1 cup rice vermicelli, cooked','1 cup baby spinach','½ cup shredded carrots','¼ cup sliced bell pepper','2 tbsp low-sodium fish sauce or soy sauce','1 tbsp lime juice','1 tsp honey','Pinch red pepper flakes'],
-   shopping:[['Chicken breast','Meat','5 oz','—'],['Rice vermicelli','Pantry','1 cup','—'],['Baby spinach','Produce','1c + ¾c','—'],['Fish sauce (low sodium)','Pantry','2 tbsp','—']],
+   ingredients:['5 oz grilled chicken (batch), sliced','1 cup rice vermicelli, cooked','1 cup baby spinach','½ cup shredded carrots','¼ cup sliced bell pepper','2 tbsp low-sodium fish sauce or soy sauce','1 tbsp lime juice','1 tsp honey','Pinch red pepper flakes','1 clove garlic, minced'],
+   shopping:[['Chicken breast','Meat','5 oz','—'],['Rice vermicelli','Pantry','1 cup','—'],['Baby spinach','Produce','1c + ¾c','—'],['Fish sauce (low sodium)','Pantry','2 tbsp','—'],['Garlic (fresh)','Produce','1 clove','—']],
    steps:['Soak rice vermicelli in a large bowl of just-boiled hot water for 5 min. Drain and rinse thoroughly under cold water. Shake off excess water.','Make the dressing: whisk 2 tbsp fish sauce (or low-sodium soy sauce), 1 tbsp fresh lime juice, 1 tsp honey, 1 minced garlic clove, and a pinch of red pepper flakes. Taste — it should be salty, tangy, and slightly sweet.','Thinly slice or shred the batch-cooked chicken.','Combine noodles, spinach, shredded carrots, and sliced bell pepper in a large bowl.','Arrange chicken on top. Pour dressing over and toss gently. Eat immediately — the noodles absorb the dressing and soften further if left to sit.']},
   her:{macros:{kcal:390,pro:26,fat:6,carb:60,fv:'1.5c veg'},
-   ingredients:['4 oz grilled chicken (batch), sliced','1 cup rice vermicelli, cooked','1 cup baby spinach','½ cup shredded carrots','¼ cup sliced bell pepper','2 tbsp low-sodium fish sauce or soy sauce','1 tbsp lime juice','1 tsp honey'],
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Rice vermicelli','Pantry','—','1 cup'],['Baby spinach','Produce','—','1c + ¾c'],['Fish sauce (low sodium)','Pantry','—','2 tbsp']],
-   steps:['Soak vermicelli in hot water 5 min. Drain and rinse cold.','Make dressing: whisk fish sauce (or soy sauce), lime juice, honey, minced garlic, and pepper flakes. Taste and adjust.','Slice or shred chicken. Combine noodles, spinach, carrots, bell pepper.','Top with chicken. Drizzle dressing. Toss and eat immediately.']}},
+   ingredients:['4 oz grilled chicken (batch), sliced','1 cup rice vermicelli, cooked','1 cup baby spinach','½ cup shredded carrots','¼ cup sliced bell pepper','2 tbsp low-sodium fish sauce or soy sauce','1 tbsp lime juice','1 tsp honey','1 clove garlic, minced','Pinch of red pepper flakes'],
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Rice vermicelli','Pantry','—','1 cup'],['Baby spinach','Produce','—','1c + ¾c'],['Fish sauce (low sodium)','Pantry','—','2 tbsp'],['Red pepper flakes','Pantry — if low','—','pinch'],['Garlic (fresh)','Produce','—','1 clove']],
+   steps:['Soak vermicelli in hot water 5 min. Drain and rinse cold.','Make dressing: fish sauce (or soy sauce), lime juice, honey, minced garlic, and pepper flakes. Taste and adjust.','Combine noodles, spinach, carrots, bell pepper.','Top with chicken. Drizzle dressing. Toss and eat immediately.']}},
 
  {id:'korean_rice_bowl',label:'Korean-inspired chicken & rice bowl',slots:['lunch'],
   him:{macros:{kcal:580,pro:48,fat:10,carb:68,fv:'1.5c veg'},
-   ingredients:['5 oz grilled chicken (batch), sliced','¾ cup cooked brown rice','1 cup shredded bell pepper & carrots','½ cup shelled edamame','2 tbsp low-sodium soy sauce','1 tsp sesame oil','1 tsp gochujang (optional)','1 tsp sesame seeds'],
-   shopping:[['Chicken breast','Meat','5 oz','—'],['Bell peppers','Produce','1 cup','—'],['Frozen shelled edamame','Frozen','½ cup','—'],['Gochujang','Pantry — optional','1 tsp','—']],
+   ingredients:['5 oz grilled chicken (batch), sliced','¾ cup cooked brown rice','1 cup shredded bell pepper & carrots','½ cup shelled edamame','2 tbsp low-sodium soy sauce','1 tsp sesame oil','1 tsp gochujang (optional)','1 tsp sesame seeds','1 tsp rice vinegar','1 tsp honey'],
+   shopping:[['Chicken breast','Meat','5 oz','—'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Bell peppers','Produce','1 cup','—'],['Frozen shelled edamame','Frozen','½ cup','—'],['Gochujang','Pantry — optional','1 tsp','—']],
    steps:['Make the sauce: in a small bowl whisk together 2 tbsp low-sodium soy sauce, 1 tsp sesame oil, 1 tsp gochujang (add more for extra heat), 1 tsp honey, and 1 tsp rice vinegar until smooth.','Warm pre-cooked rice in the microwave. Microwave frozen edamame 2 min.','Slice or shred batch-cooked chicken.','Assemble the bowl: rice base, shredded bell pepper and carrots, chicken, and edamame.','Drizzle the sauce generously over everything. Top with sesame seeds. Mix it all up before eating — bibimbap style.']},
   her:{macros:{kcal:390,pro:28,fat:8,carb:52,fv:'1.5c veg'},
-   ingredients:['4 oz grilled chicken (batch), sliced','½ cup cooked brown rice','1 cup shredded bell pepper & carrots','½ cup shelled edamame','2 tbsp low-sodium soy sauce','1 tsp sesame oil','1 tsp gochujang (optional)','1 tsp sesame seeds'],
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Bell peppers','Produce','—','1 cup'],['Frozen shelled edamame','Frozen','—','½ cup']],
+   ingredients:['4 oz grilled chicken (batch), sliced','½ cup cooked brown rice','1 cup shredded bell pepper & carrots','½ cup shelled edamame','2 tbsp low-sodium soy sauce','1 tsp sesame oil','1 tsp gochujang (optional)','1 tsp sesame seeds','1 tsp rice vinegar','1 tsp honey'],
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Bell peppers','Produce','—','1 cup'],['Frozen shelled edamame','Frozen','—','½ cup']],
    steps:['Make sauce: whisk soy sauce, sesame oil, gochujang, honey, and rice vinegar together.','Warm rice and edamame. Slice chicken.','Assemble: rice, chicken, peppers, carrots, edamame. Drizzle sauce. Top with sesame seeds.']}},
 
  {id:'thai_peanut_noodle',label:'Thai peanut chicken noodle salad',slots:['lunch'],
@@ -337,29 +347,29 @@ const MEALS=[
    shopping:[['Chicken breast','Meat','5 oz','—'],['Soba noodles','Pantry','1 cup','—'],['Kale','Produce','1c + ½c','—'],['Peanut butter (no salt added)','Pantry','2 tbsp','—']],
    steps:['Bring a pot of water to boil. Cook soba noodles 4–5 min per package — don\'t overcook, they get mushy. Drain and rinse immediately under cold water to stop cooking and remove excess starch.','Make the PB sauce: whisk 2 tbsp peanut butter, 1 tbsp low-sodium soy sauce, 1 tbsp fresh lime juice, 1 tsp honey, 1 tsp sesame oil, and 2–3 tbsp warm water until completely smooth. It should be pourable — add more water if too thick.','Massage shredded kale with a small pinch of salt for 30 sec to soften.','Shred batch-cooked chicken.','Combine cold noodles, massaged kale, shredded carrots, and chicken in a large bowl.','Pour PB sauce over everything and toss well until evenly coated. Top with sesame seeds.']},
   her:{macros:{kcal:400,pro:26,fat:12,carb:56,fv:'1.5c veg'},
-   ingredients:['4 oz grilled chicken (batch), shredded','1 cup soba noodles, cooked','1 cup shredded kale','½ cup shredded carrots','2 tbsp peanut butter (no salt)','1 tbsp low-sodium soy sauce','1 tbsp lime juice','1 tsp honey'],
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Soba noodles','Pantry','—','1 cup'],['Kale','Produce','—','1c + ½c'],['Peanut butter (no salt added)','Pantry','—','2 tbsp']],
-   steps:['Cook soba 4–5 min. Drain and rinse cold immediately.','Make PB sauce: whisk peanut butter + soy sauce + lime juice + honey + sesame oil + 2–3 tbsp warm water until smooth and pourable.','Massage kale with a pinch of salt 30 sec. Shred chicken.','Combine noodles, kale, carrots, chicken. Pour sauce over and toss well.']}},
+   ingredients:['4 oz grilled chicken (batch), shredded','1 cup soba noodles, cooked','1 cup shredded kale','½ cup shredded carrots','2 tbsp peanut butter (no salt)','1 tbsp low-sodium soy sauce','1 tbsp lime juice','1 tsp honey','1 tsp sesame oil'],
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Sesame oil','Pantry — if low','—','1 tsp'],['Soba noodles','Pantry','—','1 cup'],['Kale','Produce','—','1c + ½c'],['Peanut butter (no salt added)','Pantry','—','2 tbsp']],
+   steps:['Cook soba 4–5 min. Drain and rinse cold immediately.','Make PB sauce: whisk peanut butter + soy sauce + lime juice + honey + 2–3 tbsp warm water until smooth and pourable.','Massage kale. Combine noodles, kale, carrots, chicken. Pour sauce over and toss well.']}},
 
  {id:'lemongrass_salad',label:'Vietnamese lemongrass chicken salad',slots:['lunch'],
   him:{macros:{kcal:480,pro:44,fat:14,carb:34,fv:'2c veg'},
-   ingredients:['5 oz grilled chicken (batch), sliced','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','2 tbsp low-sodium fish sauce','1 tbsp lime juice','1 tsp honey','½ tsp lemongrass paste (optional)','Pinch chili flakes','1 tbsp crushed roasted peanuts'],
-   shopping:[['Chicken breast','Meat','5 oz','—'],['Baby kale','Produce','2c + 1c','—'],['Lemongrass paste','Pantry — optional','½ tsp','—'],['Roasted peanuts (unsalted)','Pantry','1 tbsp','—']],
+   ingredients:['5 oz grilled chicken (batch), sliced','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','2 tbsp low-sodium fish sauce','1 tbsp lime juice','1 tsp honey','½ tsp lemongrass paste (optional)','Pinch chili flakes','1 tbsp crushed roasted peanuts','1 clove garlic, minced'],
+   shopping:[['Chicken breast','Meat','5 oz','—'],['Baby kale','Produce','2c + 1c','—'],['Lemongrass paste','Pantry — optional','½ tsp','—'],['Roasted peanuts (unsalted)','Pantry','1 tbsp','—'],['Garlic (fresh)','Produce','1 clove','—']],
    steps:['Make the dressing: whisk 2 tbsp fish sauce, 1 tbsp fresh lime juice, 1 tsp honey, 1 minced garlic clove, ½ tsp lemongrass paste (if using), and a pinch of chili flakes. Taste — adjust lime or honey to balance.','Slice batch-cooked chicken thinly against the grain.','Combine baby kale, shredded zucchini, and shredded carrots in a large bowl.','Add sliced chicken on top. Drizzle dressing over and toss well.','Finish with crushed roasted peanuts for crunch. Serve immediately.']},
   her:{macros:{kcal:360,pro:26,fat:10,carb:28,fv:'2c veg'},
-   ingredients:['4 oz grilled chicken (batch), sliced','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','2 tbsp low-sodium fish sauce','1 tbsp lime juice','1 tsp honey','1 tbsp crushed roasted peanuts'],
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Baby kale','Produce','—','2c + 1c'],['Roasted peanuts (unsalted)','Pantry','—','1 tbsp']],
+   ingredients:['4 oz grilled chicken (batch), sliced','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','2 tbsp low-sodium fish sauce','1 tbsp lime juice','1 tsp honey','1 tbsp crushed roasted peanuts','1 clove garlic, minced','Pinch of chili flakes','½ tsp lemongrass paste (optional)'],
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Lemongrass paste','Pantry — optional','—','½ tsp'],['Baby kale','Produce','—','2c + 1c'],['Roasted peanuts (unsalted)','Pantry','—','1 tbsp'],['Garlic (fresh)','Produce','—','1 clove']],
    steps:['Make dressing: whisk fish sauce, lime juice, honey, minced garlic, lemongrass paste, and chili flakes. Taste and adjust.','Slice chicken thinly. Combine kale, zucchini, carrots.','Top with chicken. Drizzle dressing. Toss and top with crushed peanuts.']}},
 
  {id:'bibimbap',label:'Korean bibimbap-style bowl',slots:['lunch'],
   him:{macros:{kcal:540,pro:44,fat:12,carb:64,fv:'1.5c veg'},
-   ingredients:['5 oz grilled chicken (batch), sliced','¾ cup cooked brown rice','1 cup baby kale','½ cup shredded carrots','¼ cup diced zucchini','1 egg, fried','1 tsp sesame oil','1 tbsp low-sodium soy sauce','1 tsp gochujang','1 tsp sesame seeds'],
-   shopping:[['Chicken breast','Meat','5 oz','—'],['Baby kale','Produce','1c + ¾c','—'],['Gochujang','Pantry','1 tsp','—']],
+   ingredients:['5 oz grilled chicken (batch), sliced','¾ cup cooked brown rice','1 cup baby kale','½ cup shredded carrots','¼ cup diced zucchini','1 egg, fried','1 tsp sesame oil','1 tbsp low-sodium soy sauce','1 tsp gochujang','1 tsp sesame seeds','1 tsp rice vinegar (for sauce)','1 tsp honey (for sauce)'],
+   shopping:[['Chicken breast','Meat','5 oz','—'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Baby kale','Produce','1c + ¾c','—'],['Gochujang','Pantry','1 tsp','—']],
    steps:['Warm pre-cooked rice in the microwave.','Heat sesame oil in a pan over medium heat. Sauté kale, shredded carrots, and diced zucchini 2–3 min, stirring often, until just tender. Season with a little soy sauce. Set aside.','In the same pan, fry an egg sunny-side up: crack egg in, cover with a lid, cook 2–3 min until white is set but yolk is still runny.','Make the bibimbap sauce: stir together 1 tbsp soy sauce, 1 tsp gochujang, 1 tsp honey, and 1 tsp rice vinegar.','Assemble: rice in the center of the bowl, arrange the sautéed veg and sliced chicken around it in sections. Place egg on top.','Drizzle sauce over everything. Sprinkle sesame seeds. Mix vigorously before eating — that\'s the whole point of bibimbap.']},
   her:{macros:{kcal:390,pro:26,fat:10,carb:54,fv:'1.5c veg'},
-   ingredients:['4 oz grilled chicken (batch), sliced','½ cup cooked brown rice','1 cup baby kale','½ cup shredded carrots','¼ cup diced zucchini','1 egg, fried','1 tsp sesame oil','1 tbsp low-sodium soy sauce','1 tsp gochujang'],
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Baby kale','Produce','—','1c + ¾c'],['Gochujang','Pantry','—','1 tsp']],
-   steps:['Warm rice. Sauté kale, carrots, zucchini in sesame oil 2–3 min. Season with a little soy sauce.','Fry egg sunny-side up in the same pan, 2–3 min.','Make sauce: stir together soy sauce, gochujang, honey, and rice vinegar.','Assemble: rice, veg, sliced chicken, egg on top. Drizzle sauce. Mix together before eating.']}},
+   ingredients:['4 oz grilled chicken (batch), sliced','½ cup cooked brown rice','1 cup baby kale','½ cup shredded carrots','¼ cup diced zucchini','1 egg, fried','1 tsp sesame oil','1 tbsp low-sodium soy sauce','1 tsp gochujang','1 tsp rice vinegar (for sauce)','1 tsp honey (for sauce)'],
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Baby kale','Produce','—','1c + ¾c'],['Gochujang','Pantry','—','1 tsp']],
+   steps:['Warm rice. Sauté kale, carrots, zucchini in sesame oil 2–3 min.','Fry egg sunny-side up.','Make sauce: soy sauce, gochujang, honey, rice vinegar.','Assemble: rice, veg, sliced chicken, egg on top. Drizzle sauce. Mix before eating.']}},
 
  {id:'red_curry',label:'Thai red curry chicken & rice',slots:['lunch'],
   him:{macros:{kcal:550,pro:46,fat:14,carb:62,fv:'1.5c veg'},
@@ -367,18 +377,18 @@ const MEALS=[
    shopping:[['Chicken breast','Meat','5 oz','—'],['Kale','Produce','1c + ½c','—'],['Light coconut milk','Pantry','¼ cup','—'],['Thai red curry paste','Pantry','1 tsp','—']],
    steps:['Heat sesame oil in a pan or wok over medium-high heat. Add sliced chicken and cook 4–5 min, stirring occasionally, until cooked through and lightly golden.','Push chicken to the side. Add red curry paste to the empty space and stir-fry for 30 sec until fragrant — this blooms the spices in the paste.','Add coconut milk and soy sauce. Stir everything together. Bring to a gentle simmer.','Add shredded kale and sliced zucchini. Simmer 3–4 min until veg is tender-crisp and the sauce has thickened slightly.','Taste — adjust with more soy sauce for salt or lime juice for brightness.','Serve over warm brown rice. Squeeze fresh lime over the top and add fresh basil or cilantro.']},
   her:{macros:{kcal:390,pro:28,fat:10,carb:52,fv:'1.5c veg'},
-   ingredients:['4 oz chicken breast, sliced thin','½ cup cooked brown rice','1 cup shredded kale','½ cup zucchini, sliced','¼ cup light coconut milk','1 tsp Thai red curry paste','1 tsp low-sodium soy sauce','Lime, basil or cilantro'],
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Kale','Produce','—','1c + ½c'],['Light coconut milk','Pantry','—','¼ cup'],['Thai red curry paste','Pantry','—','1 tsp']],
+   ingredients:['4 oz chicken breast, sliced thin','½ cup cooked brown rice','1 cup shredded kale','½ cup zucchini, sliced','¼ cup light coconut milk','1 tsp Thai red curry paste','1 tsp low-sodium soy sauce','Lime, basil or cilantro','½ tsp sesame oil'],
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Sesame oil','Pantry — if low','—','1 tsp'],['Kale','Produce','—','1c + ½c'],['Light coconut milk','Pantry','—','¼ cup'],['Thai red curry paste','Pantry','—','1 tsp']],
    steps:['Heat sesame oil over medium-high. Cook sliced chicken 3–4 min until done.','Push chicken aside. Add curry paste, stir 30 sec until fragrant.','Add coconut milk and soy sauce. Stir together and bring to a simmer.','Add kale + zucchini. Simmer 3–4 min until veg is tender.','Serve over rice. Squeeze lime, add herbs.']}},
 
  {id:'viet_tofu_soup',label:'Vietnamese tofu & lentil soup',slots:['lunch'],
   him:{macros:{kcal:500,pro:34,fat:16,carb:58,fv:'1.5c veg'},
    ingredients:['½ block firm tofu (7 oz), cubed','½ cup dry green lentils','1 cup baby kale','½ cup diced carrots','½ cup diced zucchini','1.5 cups low-sodium broth','1 tbsp low-sodium soy sauce','1 tsp sesame oil','1 clove garlic, 1 tsp ginger','1 tbsp lime juice','1 slice whole-wheat toast'],
-   shopping:[['Firm tofu (½ block)','Refrigerated','½ block','—'],['Dry green lentils','Pantry','½ cup','—'],['Baby kale','Produce','1c + 1c','—'],['Low-sodium chicken or veg broth','Pantry','1.5 cups','—'],['Whole-wheat bread','Bread','1 slice','—']],
+   shopping:[['Firm tofu (½ block)','Refrigerated','½ block','—'],['Dry green lentils','Pantry','½ cup','—'],['Baby kale','Produce','1c + 1c','—'],['Low-sodium chicken or veg broth','Pantry','1.5 cups','—'],['Garlic (fresh)','Produce','1 clove','—']],
    steps:['Drain tofu, press with a clean towel 5 min, then cut into 1-inch cubes.','Heat sesame oil in a pan or pot over medium-high heat. Add tofu cubes in a single layer and cook undisturbed 2–3 min until golden on the bottom. Flip and cook another 2 min. Remove and set aside.','In the same pot, add a little more broth. Sauté minced garlic and grated ginger for 1 min until fragrant.','Add lentils and remaining broth. Bring to a boil, then reduce to a simmer. Cook 20 min until lentils are soft but not mushy.','Add kale, diced carrots, and diced zucchini. Simmer 8–10 min until vegetables are tender.','Return tofu to the pot. Add soy sauce and a squeeze of lime juice. Stir gently so tofu doesn\'t break up.','Taste and adjust seasoning. Serve with a slice of whole-wheat toast for dipping.']},
   her:{macros:{kcal:390,pro:24,fat:12,carb:54,fv:'1.5c veg'},
-   ingredients:['½ block firm tofu (7 oz), cubed','½ cup dry green lentils','1 cup baby kale','½ cup diced carrots','½ cup diced zucchini','1.5 cups low-sodium broth','1 tbsp low-sodium soy sauce','1 tbsp lime juice','1 slice whole-wheat toast'],
-   shopping:[['Firm tofu (½ block)','Refrigerated','—','½ block'],['Dry green lentils','Pantry','—','½ cup'],['Baby kale','Produce','—','1c + 1c'],['Low-sodium chicken or veg broth','Pantry','—','1.5 cups']],
+   ingredients:['½ block firm tofu (7 oz), cubed','½ cup dry green lentils','1 cup baby kale','½ cup diced carrots','½ cup diced zucchini','1.5 cups low-sodium broth','1 tbsp low-sodium soy sauce','1 tbsp lime juice','1 slice whole-wheat toast','1 clove garlic, minced','1 tsp ginger','1 tsp sesame oil'],
+   shopping:[['Firm tofu (½ block)','Refrigerated','—','½ block'],['Sesame oil','Pantry — if low','—','1 tsp'],['Dry green lentils','Pantry','—','½ cup'],['Baby kale','Produce','—','1c + 1c'],['Low-sodium chicken or veg broth','Pantry','—','1.5 cups'],['Garlic (fresh)','Produce','—','1 clove']],
    steps:['Drain and press tofu 5 min. Cube.','Pan-fry tofu in sesame oil until golden, 4–5 min per side. Set aside.','Sauté garlic + ginger in the same pot 1 min. Add lentils and broth. Simmer 20 min.','Add kale, carrots, zucchini. Simmer 8–10 min until tender.','Return tofu to pot. Add soy sauce and lime juice. Stir gently. Serve with toast.']}},
 
  // SNACK
@@ -398,8 +408,8 @@ const MEALS=[
   him:{macros:{kcal:280,pro:20,fat:4,carb:38,fv:'1 fruit'},ingredients:['1 Starkist tuna pouch (low sodium)','10 reduced-sodium Triscuits','1 medium apple'],shopping:[['Tuna pouch (low sodium)','Grab & go','1','—'],['Triscuits (reduced sodium)','Pantry','10','—'],['Apple','Produce','1','—']],steps:['Tear open the tuna pouch. The tuna is fully cooked and ready to eat straight from the pack — no draining needed.','Arrange Triscuits on a plate or eat straight from the box. Eat the tuna with the crackers and apple.']},
   her:{macros:{kcal:280,pro:20,fat:4,carb:38,fv:'1 fruit'},ingredients:['1 Starkist tuna pouch (low sodium)','10 reduced-sodium Triscuits','1 medium apple'],shopping:[['Tuna pouch (low sodium)','Grab & go','—','1'],['Triscuits (reduced sodium)','Pantry','—','10'],['Apple','Produce','—','1']],steps:['Open tuna pouch. Eat with crackers and apple.']}},
  {id:'tuna_crackers_orange',label:'Tuna pouch + crackers + orange',slots:['snack'],
-  him:{macros:{kcal:260,pro:20,fat:3,carb:36,fv:'1 fruit'},ingredients:['1 Starkist tuna pouch (low sodium)','10 reduced-sodium Triscuits','1 medium orange'],shopping:[['Tuna pouch (low sodium)','Grab & go','1','—'],['Triscuits','Pantry','10','—'],['Orange','Produce','1','—']],steps:['Open pouch. Eat with crackers and orange.']},
-  her:{macros:{kcal:260,pro:20,fat:3,carb:36,fv:'1 fruit'},ingredients:['1 Starkist tuna pouch (low sodium)','10 reduced-sodium Triscuits','1 medium orange'],shopping:[['Tuna pouch (low sodium)','Grab & go','—','1'],['Triscuits','Pantry','—','10'],['Orange','Produce','—','1']],steps:['Open pouch. Eat with crackers and orange.']}},
+  him:{macros:{kcal:260,pro:20,fat:3,carb:36,fv:'1 fruit'},ingredients:['1 Starkist tuna pouch (low sodium)','10 reduced-sodium Triscuits','1 medium orange'],shopping:[['Tuna pouch (low sodium)','Grab & go','1','—'],['Triscuits (reduced sodium)','Pantry','10','—'],['Orange','Produce','1','—']],steps:['Open pouch. Eat with crackers and orange.']},
+  her:{macros:{kcal:260,pro:20,fat:3,carb:36,fv:'1 fruit'},ingredients:['1 Starkist tuna pouch (low sodium)','10 reduced-sodium Triscuits','1 medium orange'],shopping:[['Tuna pouch (low sodium)','Grab & go','—','1'],['Triscuits (reduced sodium)','Pantry','—','10'],['Orange','Produce','—','1']],steps:['Open pouch. Eat with crackers and orange.']}},
  {id:'eggs_chickpeas',label:'2 eggs + roasted chickpeas + orange',slots:['snack'],
   him:{macros:{kcal:270,pro:16,fat:10,carb:24,fv:'1 fruit'},ingredients:['2 hard-boiled eggs (batch)','¼ cup roasted chickpeas (Good Bean)','1 medium orange'],shopping:[['Roasted chickpeas (Good Bean)','Pantry','¼ cup','—'],['Orange','Produce','1','—']],steps:['Use batch-cooked eggs (refrigerated from Sunday or Wednesday batch).','Pour roasted chickpeas straight from the bag — Good Bean are lightly seasoned and ready to eat.','Peel and segment the orange. No other prep needed.']},
   her:{macros:{kcal:270,pro:16,fat:10,carb:24,fv:'1 fruit'},ingredients:['2 hard-boiled eggs (batch)','¼ cup roasted chickpeas (Good Bean)','1 medium orange'],shopping:[['Roasted chickpeas (Good Bean)','Pantry','—','¼ cup'],['Orange','Produce','—','1']],steps:['Use batch eggs. Chickpeas straight from the bag. Peel orange.']}},
@@ -413,11 +423,11 @@ const MEALS=[
  // DINNER (all shared)
  {id:'salmon_lentils',label:'Baked salmon, lentils & sautéed spinach',slots:['dinner'],shared:true,
   him:{macros:{kcal:760,pro:57,fat:22,carb:72,fv:'1.5c veg'},
-   ingredients:['6 oz salmon fillet (his)','¾ cup dry green lentils — shared pot','1.5 cups baby spinach — shared','¾ cup dry brown rice (his)','1 tsp olive oil','Lemon juice, dill, black pepper'],
-   shopping:[['Salmon fillet','Seafood','6 oz','4 oz'],['Dry green lentils','Pantry','shared','—'],['Brown rice (dry)','Pantry','¾ cup dry','—'],['Baby spinach','Produce','shared','—']],
+   ingredients:['6 oz salmon fillet (his)','¾ cup dry green lentils — shared pot','1.5 cups baby spinach — shared','¾ cup dry brown rice (his)','1 tsp olive oil','Lemon juice, dill, black pepper','1 clove garlic (for spinach)'],
+   shopping:[['Salmon fillet','Seafood','6 oz','4 oz'],['Dry green lentils','Pantry','shared','—'],['Brown rice (dry)','Pantry','¾ cup dry','—'],['Baby spinach','Produce','shared','—'],['Garlic (fresh)','Produce','1 clove','1 clove']],
    steps:['Cook rice: rinse rice, combine with 1.5x cold water in a saucepan. Bring to a boil, cover tightly, reduce to the lowest heat. Simmer 40–45 min. Remove from heat and let steam covered 5 min. Fluff with a fork.','Cook lentils: rinse lentils and pick out any debris. Combine with 2 cups cold water in a saucepan. Bring to a boil, skim any foam, then reduce to a gentle simmer. Cook 20–25 min until tender but not mushy. Drain any excess water. Season with black pepper.','Preheat oven to 400°F. Pat both salmon fillets dry with paper towels — this helps them roast rather than steam. Season generously with fresh lemon juice, dried dill, and black pepper. Place on a lined baking sheet.','Roast 12–15 min. Salmon is done when it flakes easily with a fork and the thickest part is just opaque. His 6 oz piece may need a minute longer than her 4 oz piece.','While salmon roasts, heat olive oil in a pan over medium heat. Add spinach and a minced garlic clove. Sauté 2–3 min until wilted. Season with black pepper.','Plate together: his larger rice + lentil portion, hers smaller. Salmon on top, spinach alongside.']},
   her:{macros:{kcal:420,pro:28,fat:14,carb:48,fv:'1.5c veg'},
-   ingredients:['Salmon fillet','½ cup lentils — shared','1 cup spinach — shared','½ cup cooked brown rice (her)','Lemon, dill, pepper'],
+   ingredients:['Salmon fillet','½ cup lentils — shared','1 cup spinach — shared','½ cup cooked brown rice (her)','Lemon, dill, pepper','1 clove garlic (shared)'],
    shopping:[['Salmon fillet','Seafood','6 oz','4 oz']],
    steps:['Her salmon is 4 oz (vs his 6 oz). Roast alongside his at 400°F 12–14 min.','Her rice and lentil portions are smaller — see combined cook instructions above.','Everything cooks on the same sheet and in the same pots.']},
   both:{macros:{kcal:1180,pro:85,fat:36,carb:120,fv:'combined'},
@@ -437,11 +447,11 @@ const MEALS=[
 
  {id:'chicken_thigh_din',label:'Chicken thigh, sweet potato & roasted carrots',slots:['dinner'],shared:true,
   him:{macros:{kcal:750,pro:56,fat:16,carb:78,fv:'1.5c veg'},
-   ingredients:['7 oz skinless chicken thigh (his)','1 large sweet potato, cubed — shared','1 cup carrots, sliced — shared','1½ tsp olive oil','Lemon, rosemary, thyme, garlic, pepper'],
+   ingredients:['7 oz skinless chicken thigh (his)','1 large sweet potato, cubed — shared','1 cup carrots, sliced — shared','1½ tsp olive oil','Lemon, rosemary, thyme, garlic, pepper','Garlic powder, onion powder to taste'],
    shopping:[['Chicken thighs','Meat — Sun shop','7 oz','5 oz'],['Sweet potato (large)','Produce','1 shared','—'],['Carrots','Produce','shared','—']],
    steps:['Preheat oven to 425°F. Remove chicken thighs from fridge 15 min early to take off the chill.','Cut sweet potato into 1-inch cubes and slice carrots into ½-inch rounds. Toss both with olive oil, dried rosemary, dried thyme, garlic powder, and black pepper. Spread in a single layer on a large rimmed baking sheet.','Roast veg 15 min until starting to soften and brown at the edges.','Season chicken thighs on both sides with lemon juice, garlic powder, rosemary, thyme, and pepper. Push the veg to the sides and place chicken thighs skin-side up in the center of the pan.','Roast everything together 20–22 min until chicken reaches 165°F internal temp and the skin is golden. If skin isn\'t crispy, broil on high for the last 2–3 min.','Rest chicken 3 min before serving. His 7 oz portion, her 5 oz portion.']},
   her:{macros:{kcal:390,pro:28,fat:10,carb:46,fv:'1.5c veg'},
-   ingredients:['Chicken thighs','½ cup sweet potato — shared pan','½ cup carrots — shared pan','Olive oil, lemon, rosemary, thyme'],
+   ingredients:['Chicken thighs','½ cup sweet potato — shared pan','½ cup carrots — shared pan','Olive oil, lemon, rosemary, thyme','Garlic powder to taste'],
    shopping:[['Chicken thighs','Meat — Sun shop','7 oz','5 oz']],
    steps:['Her thigh is 5 oz. Cook on the same sheet pan as his.','Her sweet potato and carrot portions are smaller. Everything cooks together.']},
   both:{macros:{kcal:1140,pro:84,fat:26,carb:124,fv:'combined'},
@@ -449,11 +459,11 @@ const MEALS=[
 
  {id:'turkey_meatballs_din',label:'Turkey meatballs, zucchini noodles & pasta',slots:['dinner'],shared:true,
   him:{macros:{kcal:740,pro:58,fat:16,carb:80,fv:'2c veg'},
-   ingredients:['6 oz 93% lean ground turkey (his meatballs)','¾ cup whole-wheat pasta (his)','1.5c zucchini noodles — shared','½ cup low-sodium marinara — shared','1 cup baby kale','Egg white, oat flour, Italian seasoning'],
-   shopping:[['Ground turkey (93% lean)','Meat','6 oz','4 oz'],['Whole-wheat pasta','Pantry','¾ cup','½ cup'],['Zucchini','Produce','shared noodles','—'],["Low-sodium marinara (Rao's)",'Pantry','shared','—'],['Baby kale','Produce','shared','—']],
+   ingredients:['6 oz 93% lean ground turkey (his meatballs)','¾ cup whole-wheat pasta (his)','1.5c zucchini noodles — shared','½ cup low-sodium marinara — shared','1 cup baby kale','Egg white, oat flour, Italian seasoning','½ tsp garlic powder','Black pepper to taste'],
+   shopping:[['Ground turkey (93% lean)','Meat','6 oz','4 oz'],['Zucchini','Produce','shared noodles','—'],['Baby kale','Produce','shared','—']],
    steps:['Preheat oven to 400°F. Line a baking sheet with parchment.','Make meatballs: combine ground turkey, 1 egg white, 2 tbsp oat flour, ½ tsp Italian seasoning, ½ tsp garlic powder, and black pepper in a bowl. Mix gently — don\'t overwork the meat. Roll into golf ball-sized balls (~12 total). Place on baking sheet.','Bake meatballs 18–20 min until internal temp reaches 165°F and outsides are lightly browned.','While meatballs bake, cook whole-wheat pasta per package. In the last 2 min, add zucchini noodles to the boiling pasta water. Drain both together.','In a pan, heat marinara sauce over low heat 3–4 min. Add cooked meatballs and toss to coat.','In a separate pan, sauté kale in a little olive oil 2 min until wilted.','Plate: his larger pasta portion with more meatballs, her pasta with extra zucchini noodles. Spoon marinara and meatballs over. Kale alongside.']},
   her:{macros:{kcal:430,pro:28,fat:12,carb:56,fv:'2c veg'},
-   ingredients:['4 oz 93% lean ground turkey (her meatballs)','½ cup whole-wheat pasta (her) + extra zucchini noodles','Marinara + kale — shared'],
+   ingredients:['4 oz 93% lean ground turkey (her meatballs)','½ cup whole-wheat pasta (her) + extra zucchini noodles','Marinara + kale — shared','½ tsp garlic powder','Black pepper to taste'],
    shopping:[['Ground turkey (93% lean)','Meat','6 oz','4 oz']],
    steps:['Her meatballs are from 4 oz turkey (vs his 6 oz). Make all meatballs together.','Her pasta is ½ cup, with extra zucchini noodles for volume.','Everything cooks together — just portion differently at the end.']},
   both:{macros:{kcal:1170,pro:86,fat:28,carb:136,fv:'combined'},
@@ -461,11 +471,11 @@ const MEALS=[
 
  {id:'cod_farro_din',label:'Baked cod, farro & roasted asparagus',slots:['dinner'],shared:true,
   him:{macros:{kcal:730,pro:58,fat:14,carb:88,fv:'2c veg'},
-   ingredients:['7 oz cod fillet (his)','1 cup dry farro — shared','1 cup asparagus — shared','1 cup zucchini — shared','1½ tbsp olive oil','Lemon, garlic, dill, pepper'],
+   ingredients:['7 oz cod fillet (his)','1 cup dry farro — shared','1 cup asparagus — shared','1 cup zucchini — shared','1½ tbsp olive oil','Lemon, garlic, dill, pepper','Garlic powder to taste'],
    shopping:[['Cod fillet','Seafood','7 oz','5 oz'],['Dry farro','Pantry','1 cup shared','—'],['Asparagus','Produce','shared','—']],
    steps:['Cook farro: rinse and drain. Combine with 2.5 cups water in a saucepan. Bring to a boil, then reduce to a simmer. Cook uncovered 25–30 min until tender but still slightly chewy. Drain any excess water. Season with black pepper.','Preheat oven to 425°F. Toss asparagus and zucchini with olive oil, minced garlic, and black pepper. Spread on a large rimmed baking sheet.','Pat both cod fillets completely dry — moisture is the enemy of good roasted fish. Place directly on top of the veg or on a separate section of the sheet.','Season cod with lemon juice, dried dill, garlic powder, and black pepper.','Roast 12–15 min until cod is opaque throughout and flakes easily with a fork. His 7 oz piece may need 1–2 min more than her 5 oz piece.','Serve cod over farro with roasted veg alongside. A squeeze of fresh lemon finishes it nicely.']},
   her:{macros:{kcal:420,pro:30,fat:10,carb:58,fv:'2c veg'},
-   ingredients:['5 oz cod fillet (hers)','½ cup cooked farro — shared','Asparagus + zucchini — shared'],
+   ingredients:['Cod fillet','½ cup cooked farro — shared','Asparagus + zucchini — shared','Garlic powder to taste'],
    shopping:[['Cod fillet','Seafood','7 oz','5 oz']],
    steps:['Her cod is 5 oz (vs his 7 oz). Roast alongside his — check hers first at 12 min.','Her farro portion is half of his. Everything cooks in the same pots and pan.']},
   both:{macros:{kcal:1150,pro:88,fat:24,carb:146,fv:'combined'},
@@ -485,11 +495,11 @@ const MEALS=[
 
  {id:'roast_chicken_din',label:'Herb-roasted chicken, farro & Brussels sprouts',slots:['dinner'],shared:true,
   him:{macros:{kcal:750,pro:58,fat:16,carb:82,fv:'1.5c veg'},
-   ingredients:['7 oz chicken breast (his)','1 cup dry farro — shared','1.5 cups Brussels sprouts, halved — shared','½ cup carrots — shared','1½ tsp olive oil','Lemon, rosemary, thyme, garlic, pepper'],
+   ingredients:['7 oz chicken breast (his)','1 cup dry farro — shared','1.5 cups Brussels sprouts, halved — shared','½ cup carrots — shared','1½ tsp olive oil','Lemon, rosemary, thyme, garlic, pepper','2 cloves garlic, minced','Black pepper to taste'],
    shopping:[['Chicken breast','Meat — batch cook extra!','7 oz','5 oz'],['Dry farro','Pantry','1 cup shared','—'],['Brussels sprouts','Produce','shared','—']],
    steps:['Cook farro: rinse and drain. Simmer in 2.5 cups water 25–30 min until tender. Drain excess water.','Preheat oven to 425°F. Halve Brussels sprouts and slice carrots. Toss both with olive oil, garlic powder, dried thyme, and black pepper. Spread on a large rimmed baking sheet.','Rub both chicken breasts with olive oil, fresh lemon juice, dried rosemary, dried thyme, minced garlic, and black pepper. Place on top of the veg.','Roast 20–25 min until chicken reaches 165°F internal temp. Chicken is done when juices run clear when pierced. Let rest 3–5 min before slicing.','Plate: farro base, roasted veg alongside, sliced chicken on top. His larger farro portion, hers smaller.','Tip: roast 2 extra chicken breasts tonight. Slice and refrigerate — they\'re Monday and Tuesday lunches for the week.']},
   her:{macros:{kcal:420,pro:30,fat:10,carb:52,fv:'1.5c veg'},
-   ingredients:['5 oz chicken breast (hers)','½ cup cooked farro — shared','Brussels sprouts + carrots — shared'],
+   ingredients:['Chicken breast','½ cup cooked farro — shared','Brussels sprouts + carrots — shared','1 clove garlic, minced'],
    shopping:[['Chicken breast','Meat — batch cook extra!','7 oz','5 oz']],
    steps:['Her chicken is 5 oz (vs his 7 oz). Roast alongside his on the same sheet.','Her farro is half his portion. Everything cooks together.']},
   both:{macros:{kcal:1170,pro:88,fat:26,carb:134,fv:'combined'},
@@ -503,16 +513,10 @@ const MEALS=[
   him:{macros:{kcal:290,pro:20,fat:4,carb:46,fv:'1 fruit'},ingredients:['0% Greek yogurt','¼ cup low-fat granola','1 medium orange, segmented','1 tbsp honey'],shopping:[['0% Greek yogurt','Dairy','1 cup','—'],['Orange','Produce','1','—']],steps:['Peel and segment the orange.','Spoon Greek yogurt into a bowl. Add granola, then orange segments.','Drizzle honey over the top.']},
   her:{macros:{kcal:190,pro:14,fat:2,carb:30,fv:'1 fruit'},ingredients:['0% Greek yogurt','2 tbsp low-fat granola','1 medium orange, segmented','1 tsp honey'],shopping:[['0% Greek yogurt','Dairy','—','¾ cup'],['Orange','Produce','—','1']],steps:['Segment orange. Top yogurt with granola, orange, honey.']}},
  {id:'miso_edamame',label:'Miso soup & edamame',slots:['evening'],
-  him:{macros:{kcal:200,pro:16,fat:8,carb:18,fv:''},ingredients:['1 tsp white miso paste (low sodium)','1 cup hot water','¼ block silken tofu, cubed','1 tsp low-sodium soy sauce','½ cup shelled edamame (frozen)','1 tsp sesame seeds'],shopping:[['White miso paste','Pantry','1 tsp','—'],['Silken tofu','Refrigerated','¼ block','—'],['Frozen shelled edamame','Frozen','½ cup','—']],steps:['In a mug or small bowl, dissolve 1 tsp white miso paste in 1 cup of just-boiled hot water — do not boil the miso directly, as high heat destroys the beneficial probiotics. Whisk until fully dissolved.','Cut silken tofu into small cubes and add to the miso broth along with a few drops of low-sodium soy sauce.','Microwave frozen edamame in a bowl with a splash of water on high for 2 min. Drain and toss with a pinch of sea salt.','Sprinkle sesame seeds over both the miso soup and edamame. Serve together.']},
-  her:{macros:{kcal:180,pro:14,fat:6,carb:16,fv:''},ingredients:['1 tsp white miso paste (low sodium)','1 cup hot water','¼ block silken tofu, cubed','½ cup shelled edamame (frozen)','1 tsp sesame seeds'],shopping:[['White miso paste','Pantry','—','1 tsp'],['Silken tofu','Refrigerated','—','¼ block'],['Frozen shelled edamame','Frozen','—','½ cup']],steps:['Dissolve miso paste in hot water (not boiling). Add silken tofu cubes and soy sauce.','Microwave edamame 2 min, drain, and season with a pinch of salt.','Sprinkle sesame seeds over both. Serve together.']}},
- {id:'miso_tofu',label:'Miso soup with tofu',slots:['evening'],
-  him:{macros:{kcal:150,pro:10,fat:6,carb:10,fv:''},ingredients:['White miso paste','1 cup hot water','¼ block silken tofu, cubed','1 tsp low-sodium soy sauce','1 tsp sesame seeds'],shopping:[['White miso paste','Pantry','1 tsp','—'],['Silken tofu','Refrigerated','¼ block','—']],steps:['Dissolve miso paste in hot water — use water that\'s just off the boil, not actively boiling.','Add cubed silken tofu and a small splash of soy sauce.','Top with sesame seeds. Serve as a light evening snack.']},
+  him:{macros:{kcal:200,pro:16,fat:8,carb:18,fv:''},ingredients:['White miso paste','1 cup hot water','¼ block silken tofu, cubed','1 tsp low-sodium soy sauce','1 tsp sesame seeds'],shopping:[['White miso paste','Pantry','1 tsp','—'],['Silken tofu','Refrigerated','¼ block','—']],steps:['Dissolve miso paste in hot water — use water that\'s just off the boil, not actively boiling.','Add cubed silken tofu and a small splash of soy sauce.','Top with sesame seeds. Serve as a light evening snack.']},
   her:{macros:{kcal:130,pro:8,fat:4,carb:8,fv:''},ingredients:['White miso paste','1 cup hot water','¼ block silken tofu, cubed','1 tsp sesame seeds'],shopping:[['White miso paste','Pantry','—','1 tsp'],['Silken tofu','Refrigerated','—','¼ block']],steps:['Dissolve miso in hot water. Add tofu. Top with seeds.']}},
  {id:'edamame_orange_eve',label:'Edamame & sliced orange',slots:['evening'],
-  him:{macros:{kcal:170,pro:10,fat:4,carb:24,fv:'1 fruit'},ingredients:['½ cup shelled edamame (frozen)','1 medium orange, sliced','Pinch of sea salt'],shopping:[['Frozen shelled edamame','Frozen','½ cup','—'],['Orange','Produce','1','—']],steps:['Microwave frozen shelled edamame with a splash of water for 2 min on high. Drain.','Season edamame with a pinch of sea salt.','Slice orange into rounds or segments.','Serve edamame and orange together.']},
-  her:{macros:{kcal:170,pro:10,fat:4,carb:24,fv:'1 fruit'},ingredients:['½ cup shelled edamame (frozen)','1 medium orange, sliced','Pinch of sea salt'],shopping:[['Frozen shelled edamame','Frozen','—','½ cup'],['Orange','Produce','—','1']],steps:['Microwave edamame 2 min. Season. Slice orange. Serve together.']}},
- {id:'edamame_berries_eve',label:'Edamame & mixed berries',slots:['evening'],
-  him:{macros:{kcal:160,pro:10,fat:4,carb:20,fv:'0.5c fruit'},ingredients:['½ cup shelled edamame (frozen)','½ cup mixed berries','Pinch of sea salt'],shopping:[['Frozen shelled edamame','Frozen','½ cup','—'],['Frozen mixed berries','Frozen','½ cup','—']],steps:['Microwave frozen edamame with a splash of water 2 min on high. Drain and season with a pinch of sea salt.','Serve alongside mixed berries (thaw frozen berries briefly in the microwave for 30 sec if desired).']},
+  him:{macros:{kcal:170,pro:10,fat:4,carb:24,fv:'1 fruit'},ingredients:['½ cup shelled edamame (frozen)','½ cup mixed berries','Pinch of sea salt'],shopping:[['Frozen shelled edamame','Frozen','½ cup','—'],['Frozen mixed berries','Frozen','½ cup','—']],steps:['Microwave frozen edamame with a splash of water 2 min on high. Drain and season with a pinch of sea salt.','Serve alongside mixed berries (thaw frozen berries briefly in the microwave for 30 sec if desired).']},
   her:{macros:{kcal:160,pro:10,fat:4,carb:20,fv:'0.5c fruit'},ingredients:['½ cup shelled edamame (frozen)','½ cup mixed berries'],shopping:[['Frozen shelled edamame','Frozen','—','½ cup'],['Frozen mixed berries','Frozen','—','½ cup']],steps:['Microwave edamame 2 min. Serve with berries.']}},
  {id:'yogurt_parfait_eve',label:'Greek yogurt parfait',slots:['evening'],
   him:{macros:{kcal:270,pro:20,fat:4,carb:40,fv:'0.5c fruit'},ingredients:['0% Greek yogurt','¼ cup low-fat granola','½ cup mixed berries','1 tbsp honey'],shopping:[['0% Greek yogurt','Dairy','1 cup','—'],['Low-fat granola','Pantry','¼ cup','—'],['Frozen mixed berries','Frozen','½ cup','—']],steps:['Spoon half the Greek yogurt into a glass or bowl.','Add a layer of granola, then a layer of berries.','Repeat with remaining yogurt and another layer of berries on top.','Drizzle honey over the top. The layering keeps the granola from getting soggy for a few minutes.']},
@@ -579,9 +583,20 @@ function getPort(p,d,s){
   if(p==='shared'){
     var hisId=getMealId('him',d,s);
     var herId=getMealId('her',d,s);
-    if(!hisId||!herId||hisId!==herId)return null;
+    if(!hisId||!herId||hisId!==herId) return null;
     var m=getMeal(hisId);
-    return m&&m.both?m.both:null;
+    if(!m) return null;
+    if(m.both) return m.both;
+    // Build combined on the fly from him+her
+    var hm=m.him&&m.him.macros||{};
+    var rm=m.her&&m.her.macros||{};
+    return {macros:{
+      kcal:(hm.kcal||0)+(rm.kcal||0),
+      pro:(hm.pro||0)+(rm.pro||0),
+      fat:(hm.fat||0)+(rm.fat||0),
+      carb:(hm.carb||0)+(rm.carb||0),
+      fv:'combined'
+    }};
   }
   var m=getActiveMeal(p,d,s);return m?m[p]:null;
 }
@@ -697,6 +712,57 @@ function calcTotals(p,d){
 }
 
 // ── Meals render ─────────────────────────────────────────────
+var MEAL_VISUALS={
+  'his_shake':          {emoji:'🥤',q:'banana berry protein shake'},
+  'her_shake':          {emoji:'🥤',q:'acai peanut butter protein shake'},
+  'egg_scramble':       {emoji:'🍳',q:'egg white spinach scramble toast'},
+  'yogurt_bowl_post':   {emoji:'🥣',q:'greek yogurt oats power bowl'},
+  'overnight_oats':     {emoji:'🫙',q:'overnight oats berries'},
+  'protein_pancakes':   {emoji:'🥞',q:'protein oat pancakes'},
+  'tuna_scramble':      {emoji:'🍳',q:'tuna egg scramble toast'},
+  'egg_omelet':         {emoji:'🍳',q:'kale egg omelet toast'},
+  'korean_egg_bowl':    {emoji:'🍚',q:'korean egg rice bowl gochujang'},
+  'thai_tofu_scramble': {emoji:'🍳',q:'thai peanut tofu scramble'},
+  'viet_noodle_bowl':   {emoji:'🍜',q:'vietnamese egg vermicelli noodle bowl'},
+  'korean_juk':         {emoji:'🍲',q:'korean rice porridge juk egg'},
+  'quinoa_bowl':        {emoji:'🥗',q:'grilled chicken quinoa bowl'},
+  'hummus_wrap':        {emoji:'🌯',q:'chicken hummus wrap'},
+  'shrimp_bowl':        {emoji:'🍤',q:'shrimp black bean rice bowl'},
+  'tuna_white_bean':    {emoji:'🥗',q:'tuna white bean salad'},
+  'white_bean_soup':    {emoji:'🍲',q:'chicken white bean soup kale'},
+  'burrito_bowl':       {emoji:'🌯',q:'chicken burrito bowl'},
+  'viet_vermicelli':    {emoji:'🍜',q:'vietnamese chicken vermicelli salad'},
+  'korean_rice_bowl':   {emoji:'🍚',q:'korean chicken rice bowl gochujang'},
+  'thai_peanut_noodle': {emoji:'🍜',q:'thai peanut chicken noodle salad soba'},
+  'lemongrass_salad':   {emoji:'🥗',q:'vietnamese lemongrass chicken salad'},
+  'bibimbap':           {emoji:'🍚',q:'bibimbap chicken egg rice bowl'},
+  'red_curry':          {emoji:'🍛',q:'thai red curry chicken rice'},
+  'viet_tofu_soup':     {emoji:'🍲',q:'vietnamese tofu lentil soup'},
+  'rxbar_apple':        {emoji:'🍎',q:''},
+  'rxbar_orange':       {emoji:'🍊',q:''},
+  'eggs_apple':         {emoji:'🥚',q:''},
+  'eggs_orange':        {emoji:'🥚',q:''},
+  'tuna_crackers_apple':{emoji:'🐟',q:''},
+  'tuna_crackers_orange':{emoji:'🐟',q:''},
+  'eggs_chickpeas':     {emoji:'🥚',q:''},
+  'edamame_apple':      {emoji:'🫘',q:''},
+  'yogurt_snack':       {emoji:'🍓',q:''},
+  'salmon_lentils':     {emoji:'🐟',q:'baked salmon lentils spinach'},
+  'salmon_teriyaki_din':{emoji:'🐟',q:'salmon teriyaki brown rice stir fry'},
+  'chicken_thigh_din':  {emoji:'🍗',q:'baked chicken thigh sweet potato carrots'},
+  'turkey_meatballs_din':{emoji:'🍝',q:'turkey meatballs zucchini noodles pasta marinara'},
+  'cod_farro_din':      {emoji:'🐟',q:'baked cod farro asparagus'},
+  'filet_din':          {emoji:'🥩',q:'filet mignon roasted potatoes asparagus'},
+  'roast_chicken_din':  {emoji:'🍗',q:'herb roasted chicken farro brussels sprouts'},
+  'yogurt_berry_eve':   {emoji:'🍓',q:''},
+  'yogurt_orange_eve':  {emoji:'🍊',q:''},
+  'miso_edamame':       {emoji:'🍵',q:'miso soup tofu edamame'},
+  'miso_tofu':          {emoji:'🍵',q:'miso soup silken tofu'},
+  'edamame_orange_eve': {emoji:'🫘',q:''},
+  'edamame_berries_eve':{emoji:'🫘',q:''},
+  'yogurt_parfait_eve': {emoji:'🍓',q:''},
+};
+
 function renderMeals(){
   var t=calcTotals(person,day);
   var cc=person==='him'?'him-c':person==='shared'?'him-c':'her-c';
@@ -704,9 +770,10 @@ function renderMeals(){
   var cPct=t.kcal?Math.round(t.carb*4/t.kcal*100):0;
   var fPct=t.kcal?Math.round(t.fat*9/t.kcal*100):0;
 
+  var sharedLabel=person==='shared'?' (2 people)':'';
   var html='<div class="stats">'
-    +'<div class="stat"><div class="v '+cc+'">'+t.kcal.toLocaleString()+'</div><div class="l">kcal</div></div>'
-    +'<div class="stat"><div class="v '+cc+'">'+t.pro+'g</div><div class="l">protein</div></div>'
+    +'<div class="stat"><div class="v '+cc+'">'+t.kcal.toLocaleString()+'</div><div class="l">kcal'+sharedLabel+'</div></div>'
+    +'<div class="stat"><div class="v '+cc+'">'+t.pro+'g</div><div class="l">protein'+sharedLabel+'</div></div>'
     +'<div class="stat"><div class="v '+cc+'">'+t.fat+'g</div><div class="l">fat</div></div>'
     +'<div class="stat"><div class="v '+cc+'">'+t.carb+'g</div><div class="l">carbs</div></div>'
     +'</div>'
