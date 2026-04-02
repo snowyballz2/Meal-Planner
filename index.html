@@ -2,745 +2,598 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Family Meal Planner</title>
 <style>
-  :root {
-    --his: #1E5128; --his-mid: #2D6A4F; --his-light: #D8F3DC; --his-accent: #52B788;
-    --her: #4A148C; --her-mid: #7B1FA2; --her-light: #F3E5F5; --her-accent: #AB47BC;
-    --shared: #00695C; --shared-light: #E0F2F1;
-    --pre: #E8F5E9; --post: #DBEAFE; --lunch: #E0F7FA; --snack: #FFF8E1; --din: #FBE9E7; --eve: #F3E5F5;
-    --gray: #6C757D; --gray-light: #F8F9FA; --border: #DEE2E6;
-    --amber: #7B4F00; --amber-light: #FFF3CD;
-    --red: #B71C1C; --red-light: #FFEBEE;
-    --blue: #1B4965; --blue-light: #BEE9E8;
-    --radius: 12px; --radius-sm: 8px;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f5f7; color: #1a1a1a; font-size: 15px; }
+:root {
+  --his:#1E5128;--his-mid:#2D6A4F;--his-light:#D8F3DC;--his-acc:#52B788;
+  --her:#4A148C;--her-mid:#7B1FA2;--her-light:#F3E5F5;--her-acc:#AB47BC;
+  --shared:#00695C;--shared-light:#E0F2F1;
+  --pre-c:#166534;--post-c:#1D4ED8;--lunch-c:#0E7490;
+  --snack-c:#92400E;--din-c:#991B1B;--eve-c:#6B21A8;
+  --pre-bg:#F0FDF4;--post-bg:#EFF6FF;--lunch-bg:#ECFEFF;
+  --snack-bg:#FFFBEB;--din-bg:#FEF2F2;--eve-bg:#FAF5FF;
+  --gray:#6C757D;--gray-light:#F8F9FA;--border:#E5E7EB;
+  --amber:#92400E;--amber-bg:#FFFBEB;
+  --red-c:#991B1B;--red-bg:#FEF2F2;
+  --blue-c:#1E40AF;--blue-bg:#EFF6FF;
+  --radius:14px;--radius-sm:8px;
+  --shadow:0 1px 3px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F3F4F6;color:#111827;font-size:15px;min-height:100vh}
 
-  .app-header { padding: 16px 16px 0; }
-  .app-title { font-size: 20px; font-weight: 700; color: #1a1a1a; }
-  .app-sub { font-size: 13px; color: var(--gray); margin-top: 2px; }
+/* ── Header ── */
+.hdr{background:white;padding:14px 16px 0;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;box-shadow:var(--shadow)}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.hdr-title{font-size:18px;font-weight:700}
+.hdr-sub{font-size:11px;color:var(--gray);margin-top:1px}
 
-  /* Person tabs */
-  .person-tabs { display: flex; gap: 8px; padding: 14px 16px 0; }
-  .person-tab { flex: 1; padding: 10px 8px; border-radius: var(--radius-sm); border: 2px solid transparent;
-    font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; transition: all .15s; background: white; }
-  .person-tab.him { color: var(--his-mid); border-color: var(--his-light); }
-  .person-tab.him.active { background: var(--his); color: white; border-color: var(--his); }
-  .person-tab.her { color: var(--her-mid); border-color: var(--her-light); }
-  .person-tab.her.active { background: var(--her); color: white; border-color: var(--her); }
+/* ── Person tabs ── */
+.ptabs{display:flex;gap:8px;margin-bottom:10px}
+.ptab{flex:1;padding:9px 8px;border-radius:var(--radius-sm);border:2px solid transparent;
+  font-size:14px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s;background:var(--gray-light);color:var(--gray)}
+.ptab.him.on{background:var(--his);color:white;border-color:var(--his)}
+.ptab.him:not(.on){color:var(--his-mid);border-color:var(--his-light);background:var(--his-light)}
+.ptab.her.on{background:var(--her);color:white;border-color:var(--her)}
+.ptab.her:not(.on){color:var(--her-mid);border-color:var(--her-light);background:var(--her-light)}
 
-  /* Day tabs */
-  .day-scroll { display: flex; gap: 8px; padding: 12px 16px; overflow-x: auto; scrollbar-width: none; }
-  .day-scroll::-webkit-scrollbar { display: none; }
-  .day-tab { flex-shrink: 0; padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border);
-    font-size: 13px; font-weight: 500; cursor: pointer; background: white; color: var(--gray); transition: all .15s; }
-  .day-tab.active-him { background: var(--his); color: white; border-color: var(--his); }
-  .day-tab.active-her { background: var(--her); color: white; border-color: var(--her); }
+/* ── Day tabs ── */
+.dscroll{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:10px}
+.dscroll::-webkit-scrollbar{display:none}
+.dtab{flex-shrink:0;padding:5px 13px;border-radius:20px;border:1.5px solid var(--border);
+  font-size:13px;font-weight:500;cursor:pointer;background:white;color:var(--gray);white-space:nowrap;transition:all .15s}
+.dtab.on-him{background:var(--his);color:white;border-color:var(--his)}
+.dtab.on-her{background:var(--her);color:white;border-color:var(--her)}
 
-  /* Main content */
-  .content { padding: 0 16px 80px; }
+/* ── Content ── */
+.content{padding:12px 14px 90px}
 
-  /* Stat bar */
-  .stat-bar { display: flex; gap: 8px; margin-bottom: 12px; }
-  .stat-chip { flex: 1; background: white; border-radius: var(--radius-sm); padding: 8px 10px;
-    border: 1px solid var(--border); text-align: center; }
-  .stat-chip .val { font-size: 18px; font-weight: 700; }
-  .stat-chip .lbl { font-size: 11px; color: var(--gray); margin-top: 1px; }
-  .stat-chip.him .val { color: var(--his-mid); }
-  .stat-chip.her .val { color: var(--her-mid); }
+/* ── Stat bar ── */
+.stats{display:flex;gap:8px;margin-bottom:12px}
+.stat{flex:1;background:white;border-radius:var(--radius-sm);padding:9px 8px;
+  border:1px solid var(--border);text-align:center;box-shadow:var(--shadow)}
+.stat .v{font-size:19px;font-weight:700}
+.stat .l{font-size:11px;color:var(--gray);margin-top:1px}
+.him-c{color:var(--his-mid)}.her-c{color:var(--her-mid)}
 
-  /* Meal card */
-  .meal-card { background: white; border-radius: var(--radius); margin-bottom: 10px;
-    border: 1px solid var(--border); overflow: hidden; }
-  .meal-header { display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 14px 10px; cursor: pointer; }
-  .meal-slot-label { font-size: 11px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: .05em; color: var(--gray); margin-bottom: 2px; }
-  .meal-title { font-size: 15px; font-weight: 600; }
-  .meal-macros { font-size: 12px; color: var(--gray); margin-top: 3px; }
-  .expand-icon { font-size: 18px; color: var(--gray); flex-shrink: 0; margin-left: 8px;
-    transition: transform .2s; }
-  .meal-card.open .expand-icon { transform: rotate(180deg); }
+/* ── Meal card ── */
+.mc{background:white;border-radius:var(--radius);margin-bottom:10px;
+  border:1px solid var(--border);overflow:hidden;box-shadow:var(--shadow);transition:box-shadow .15s}
+.mc.open{box-shadow:0 4px 12px rgba(0,0,0,.1)}
 
-  /* Slot colour strips */
-  .meal-card[data-slot="pre"] .meal-header { border-left: 4px solid #52B788; }
-  .meal-card[data-slot="post"] .meal-header { border-left: 4px solid #3B82F6; }
-  .meal-card[data-slot="lunch"] .meal-header { border-left: 4px solid #06B6D4; }
-  .meal-card[data-slot="snack"] .meal-header { border-left: 4px solid #F59E0B; }
-  .meal-card[data-slot="dinner"] .meal-header { border-left: 4px solid #EF4444; }
-  .meal-card[data-slot="evening"] .meal-header { border-left: 4px solid #A855F7; }
+.mc-top{padding:12px 14px 0}
+.slot-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.slot-pre .slot-label{color:var(--pre-c)}
+.slot-post .slot-label{color:var(--post-c)}
+.slot-lunch .slot-label{color:var(--lunch-c)}
+.slot-snack .slot-label{color:var(--snack-c)}
+.slot-dinner .slot-label{color:var(--din-c)}
+.slot-evening .slot-label{color:var(--eve-c)}
 
-  /* Dropdown selector */
-  .meal-selector { padding: 0 14px 10px; }
-  .meal-selector select { width: 100%; padding: 8px 10px; border-radius: var(--radius-sm);
-    border: 1.5px solid var(--border); font-size: 13px; background: var(--gray-light);
-    appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236C757D' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; cursor: pointer; }
+.meal-select{width:100%;padding:8px 32px 8px 10px;border-radius:var(--radius-sm);
+  border:1.5px solid var(--border);font-size:13px;font-weight:500;background:var(--gray-light);
+  appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236C757D' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;cursor:pointer;color:#111827}
+.slot-pre .meal-select{border-color:#BBF7D0;background-color:#F0FDF4}
+.slot-post .meal-select{border-color:#BFDBFE;background-color:#EFF6FF}
+.slot-lunch .meal-select{border-color:#A5F3FC;background-color:#ECFEFF}
+.slot-snack .meal-select{border-color:#FDE68A;background-color:#FFFBEB}
+.slot-dinner .meal-select{border-color:#FECACA;background-color:#FEF2F2}
+.slot-evening .meal-select{border-color:#E9D5FF;background-color:#FAF5FF}
 
-  /* Expandable body */
-  .meal-body { display: none; border-top: 1px solid var(--border); }
-  .meal-card.open .meal-body { display: block; }
+.mc-meta{display:flex;align-items:center;justify-content:space-between;
+  padding:6px 14px 12px;cursor:pointer}
+.mc-macros{font-size:12px;color:var(--gray)}
+.mc-macros .shared-badge{display:inline-block;background:var(--shared-light);color:var(--shared);
+  font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:6px;vertical-align:middle}
+.expand-btn{font-size:16px;color:var(--gray);transition:transform .2s;flex-shrink:0;padding:2px 4px}
+.mc.open .expand-btn{transform:rotate(180deg)}
 
-  .body-section { padding: 12px 14px; }
-  .body-section + .body-section { border-top: 1px solid var(--border); }
-  .body-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .06em; margin-bottom: 8px; }
-  .body-section-title.ingr { color: var(--blue); }
-  .body-section-title.shop { color: var(--red); }
-  .body-section-title.cook { color: var(--amber); }
+/* ── Meal body ── */
+.mc-body{display:none;border-top:1px solid var(--border)}
+.mc.open .mc-body{display:block}
 
-  .ingr-list { list-style: none; }
-  .ingr-list li { font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--border); color: #333; }
-  .ingr-list li:last-child { border-bottom: none; }
-  .ingr-list li::before { content: "• "; color: var(--blue); font-weight: 700; }
+.bsec{padding:12px 14px}
+.bsec+.bsec{border-top:1px solid var(--border)}
+.bsec-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.bsec-title.shop{color:var(--red-c)}.bsec-title.ingr{color:var(--blue-c)}.bsec-title.cook{color:var(--amber)}
 
-  .shop-list { list-style: none; }
-  .shop-list li { font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--border);
-    display: flex; justify-content: space-between; gap: 8px; }
-  .shop-list li:last-child { border-bottom: none; }
-  .shop-item-name { color: #333; }
-  .shop-item-note { font-size: 11px; color: var(--gray); font-style: italic; text-align: right; flex-shrink: 0; }
+.ingr-list{list-style:none}
+.ingr-list li{font-size:13px;padding:4px 0;border-bottom:1px solid var(--border);color:#374151;line-height:1.4}
+.ingr-list li:last-child{border-bottom:none}
+.ingr-list li::before{content:"• ";color:var(--blue-c);font-weight:700}
 
-  .step-list { list-style: none; counter-reset: steps; }
-  .step-list li { font-size: 13px; padding: 6px 0 6px 28px; border-bottom: 1px solid var(--border);
-    counter-increment: steps; position: relative; color: #333; line-height: 1.5; }
-  .step-list li:last-child { border-bottom: none; }
-  .step-list li::before { content: counter(steps); position: absolute; left: 0; top: 6px;
-    background: var(--amber-light); color: var(--amber); border-radius: 50%;
-    width: 20px; height: 20px; font-size: 11px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center; }
+.shop-list{list-style:none}
+.shop-list li{font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.shop-list li:last-child{border-bottom:none}
+.shop-name{color:#374151;flex:1}
+.shop-loc{font-size:11px;color:var(--gray);font-style:italic;text-align:right;white-space:nowrap}
 
-  /* Shared dinner badge */
-  .shared-badge { display: inline-block; background: var(--shared-light); color: var(--shared);
-    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px;
-    text-transform: uppercase; letter-spacing: .04em; margin-left: 6px; vertical-align: middle; }
+.step-list{list-style:none;counter-reset:steps}
+.step-list li{font-size:13px;padding:6px 0 6px 30px;border-bottom:1px solid var(--border);
+  counter-increment:steps;position:relative;color:#374151;line-height:1.5}
+.step-list li:last-child{border-bottom:none}
+.step-list li::before{content:counter(steps);position:absolute;left:0;top:7px;
+  background:var(--amber-bg);color:var(--amber);border-radius:50%;
+  width:21px;height:21px;font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
 
-  /* Summary panel */
-  .summary-panel { background: white; border-radius: var(--radius); border: 1px solid var(--border);
-    margin-bottom: 10px; overflow: hidden; }
-  .summary-toggle { display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 14px; cursor: pointer; font-size: 14px; font-weight: 600; }
-  .summary-body { display: none; padding: 0 14px 12px; }
-  .summary-panel.open .summary-body { display: block; }
-  .summary-panel.open .sum-icon { transform: rotate(180deg); }
-  .sum-icon { transition: transform .2s; font-size: 16px; color: var(--gray); }
-  .summary-row { display: flex; justify-content: space-between; font-size: 13px;
-    padding: 5px 0; border-bottom: 1px solid var(--border); }
-  .summary-row:last-child { border-bottom: none; }
-  .summary-row .label { color: var(--gray); }
+.note-pill{font-size:12px;color:#C2410C;background:#FFF7ED;padding:5px 12px;
+  border-radius:8px;margin:0 14px 10px;border:1px solid #FED7AA}
 
+/* ── Reset banner ── */
+.reset-bar{text-align:center;padding:8px;margin-bottom:4px}
+.reset-btn{font-size:12px;color:var(--gray);background:none;border:1px solid var(--border);
+  border-radius:20px;padding:4px 14px;cursor:pointer}
+.reset-btn:hover{background:var(--gray-light)}
 </style>
 </head>
 <body>
 
-<div class="app-header">
-  <div class="app-title">Family Meal Planner</div>
-  <div class="app-sub">Giant Food · 2932 Chain Bridge Rd, Oakton VA</div>
+<div class="hdr">
+  <div class="hdr-top">
+    <div><div class="hdr-title">Family Meal Planner</div><div class="hdr-sub">Giant Food · 2932 Chain Bridge Rd, Oakton VA</div></div>
+  </div>
+  <div class="ptabs">
+    <div class="ptab him on" onclick="setPerson('him')">Him</div>
+    <div class="ptab her" onclick="setPerson('her')">Her</div>
+  </div>
+  <div class="dscroll" id="dTabs"></div>
 </div>
 
-<div class="person-tabs">
-  <div class="person-tab him active" onclick="setPerson('him')">Him</div>
-  <div class="person-tab her" onclick="setPerson('her')">Her</div>
-</div>
-
-<div class="day-scroll" id="dayTabs"></div>
-<div class="content" id="mainContent"></div>
+<div class="content" id="main"></div>
 
 <script>
-// ── DATA ───────────────────────────────────────────────────────
-const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const SLOTS=['pre','post','lunch','snack','dinner','evening'];
+const SLOT_LABEL={pre:'Pre-workout shake',post:'Post-workout breakfast',lunch:'Lunch',snack:'Snack',dinner:'Dinner',evening:'Evening snack'};
 
-// meal structure: { slot, title, macros:{kcal,pro,fv}, ingredients[], shopping[], steps[] }
-// slot: pre | post | lunch | snack | dinner | evening
+// Meal selections: { "him_Monday_post": 2, ... }
+const SEL = {};
+function selKey(p,d,s){return `${p}_${d}_${s}`}
+function getSel(p,d,s){return SEL[selKey(p,d,s)]||0}
+function setSel(p,d,s,i){SEL[selKey(p,d,s)]=i}
 
-const HIS_SHAKE = {
-  slot:'pre', title:'Protein, creatine & banana berry shake',
+// ── MEAL LIBRARY ───────────────────────────────────────────────
+// Each meal: { label, macros:{kcal,pro,fv}, ingredients[], shopping[[item,loc]], steps[], note?, shared? }
+
+const HIS_SHAKE = { label:'Protein, creatine & banana berry shake',
   macros:{kcal:320,pro:22,fv:'1.5c fruit'},
-  ingredients:['1 scoop protein powder (21g)','1 scoop creatine (5g)','1 medium banana','Small handful frozen mixed berries','Pinch of cinnamon','1–1.5 cups water'],
+  ingredients:['1 scoop protein powder (21g)','1 scoop creatine (5g)','1 medium banana','Small handful frozen mixed berries (~¼ cup)','Pinch of cinnamon','1–1.5 cups water'],
   shopping:[['Banana','Produce'],['Frozen mixed berries','Frozen'],['Protein powder','Pantry — if low'],['Creatine','Pantry — if low']],
-  steps:['Add water to blender first.','Add banana, berries, protein, creatine, and cinnamon.','Blend 30–45 sec until smooth.','Drink before workout.']
-};
+  steps:['Add water to blender first.','Add banana, berries, protein, creatine, and cinnamon.','Blend 30–45 sec until smooth.','Drink immediately before workout.']};
 
-const HER_SHAKE = {
-  slot:'pre', title:'Protein, creatine & acai peanut butter shake',
+const HER_SHAKE = { label:'Protein, creatine & acai peanut butter shake',
   macros:{kcal:340,pro:25,fv:'1c fruit'},
   ingredients:['1 scoop protein powder (21g)','1 scoop creatine (5g)','1 packet frozen acai (unsweetened)','1 tbsp peanut butter','1 tbsp old-fashioned oats','1–1.5 cups unsweetened cashew milk'],
-  shopping:[['Banana','Produce'],['Acai packet (frozen, unsweetened)','Frozen'],['Cashew milk (unsweetened)','Dairy alt'],['Peanut butter (no salt)','Pantry — if low']],
-  steps:['Add cashew milk to blender first.','Add acai, peanut butter, oats, protein, and creatine.','Blend 30–45 sec until smooth and creamy.','Drink before workout.']
+  shopping:[['Acai packet (frozen, unsweetened)','Frozen'],['Cashew milk (unsweetened)','Dairy alt'],['Peanut butter (no salt added)','Pantry — if low']],
+  steps:['Add cashew milk to blender first.','Add acai, peanut butter, oats, protein, and creatine.','Blend 30–45 sec until smooth.','Drink immediately before workout.']};
+
+// ── HIS MEAL OPTIONS BY SLOT ───────────────────────────────────
+const HIS = {
+  pre: [HIS_SHAKE],
+  post: [
+    { label:'Egg white scramble & toast', macros:{kcal:500,pro:40,fv:'1c veg'},
+      ingredients:['6 egg whites','1 whole egg','1 cup baby spinach','¼ cup diced bell pepper','2 slices whole-wheat toast','¼ avocado','1 tsp olive oil'],
+      shopping:[['Eggs (6 whites + 1 whole)','Dairy'],['Baby spinach','Produce'],['Bell pepper','Produce'],['Avocado','Produce'],['Whole-wheat bread','Bread']],
+      steps:['Heat olive oil in non-stick pan over medium heat.','Add bell pepper, cook 2 min. Add spinach until wilted ~1 min.','Whisk eggs, pour in. Scramble gently 3–4 min until just set.','Toast bread. Slice avocado. Plate together.']},
+    { label:'Greek yogurt power bowl', macros:{kcal:540,pro:34,fv:'0.5c fruit'},
+      ingredients:['1 cup 0% Greek yogurt','¾ cup old-fashioned oats','½ cup mixed berries','1 tbsp chia seeds','1 tbsp almond butter','1 tbsp honey'],
+      shopping:[['0% Greek yogurt','Dairy'],['Old-fashioned oats','Pantry'],['Mixed berries','Frozen'],['Almond butter (no salt)','Pantry']],
+      steps:['Cook oats in 1.5c water 5 min.','Spoon yogurt into bowl alongside oats.','Top with berries, chia seeds, almond butter, and honey.']},
+    { label:'Overnight oats with berries', macros:{kcal:490,pro:20,fv:'0.5c fruit'},
+      note:'Prep the night before!',
+      ingredients:['¾ cup old-fashioned oats','¾ cup water','1 tbsp chia seeds','½ cup mixed berries','1 tbsp almond butter'],
+      shopping:[['Old-fashioned oats','Pantry'],['Chia seeds','Pantry'],['Mixed berries','Frozen'],['Almond butter','Pantry']],
+      steps:['Night before: combine oats, water, chia seeds in jar. Stir, seal, refrigerate overnight.','Morning: stir, top with berries and almond butter.','Eat cold or microwave 60–90 sec.']},
+    { label:'Protein pancakes', macros:{kcal:560,pro:42,fv:'0.5c fruit'},
+      ingredients:['½ cup oat flour','1 scoop protein powder (21g)','2 egg whites','½ cup water','½ cup mixed berries (topping)','1 tbsp maple syrup','1 tbsp almond butter','½ tsp baking powder'],
+      shopping:[['Oat flour','Pantry'],['Egg whites (2)','Dairy'],['Mixed berries','Frozen'],['Pure maple syrup','Pantry'],['Almond butter','Pantry']],
+      steps:['Mix oat flour, protein, baking powder in bowl.','Whisk in egg whites and water. Let rest 2 min.','Cook ¼c portions in non-stick pan 2–3 min per side until bubbles form.','Top with berries, almond butter, and maple syrup.']},
+    { label:'Tuna scramble & toast', macros:{kcal:500,pro:48,fv:'1c veg'},
+      ingredients:['1 can (5 oz) light tuna in water (low sodium), drained','3 egg whites','1 whole egg','¼ cup diced bell pepper','1 cup baby kale','2 slices whole-wheat toast','1 tsp olive oil'],
+      shopping:[['Canned tuna (5 oz, low sodium)','Pantry'],['Eggs (3 whites + 1 whole)','Dairy'],['Bell pepper','Produce'],['Baby kale','Produce']],
+      steps:['Drain and flake tuna thoroughly.','Heat olive oil. Cook bell pepper 2 min, add kale until wilted.','Whisk eggs, pour in. Add tuna. Scramble gently 3–4 min.','Season with garlic powder and pepper. Serve with toast.']},
+    { label:'Egg & kale omelet with toast', macros:{kcal:490,pro:34,fv:'1c veg'},
+      ingredients:['2 whole eggs','3 egg whites','1 cup baby kale','¼ cup diced bell pepper','2 slices whole-wheat toast','1 tsp olive oil','Black pepper, garlic powder'],
+      shopping:[['Eggs (2 whole + 3 whites)','Dairy'],['Baby kale, bell pepper','Produce'],['Whole-wheat bread','Bread']],
+      steps:['Whisk eggs with pepper and garlic powder.','Heat olive oil. Cook bell pepper 1–2 min, add kale until wilted.','Pour eggs over veg. Let set 1–2 min, then fold in half.','Cook another 1–2 min. Serve with toast.']},
+  ],
+  lunch: [
+    { label:'Grilled chicken & quinoa bowl', macros:{kcal:670,pro:52,fv:'1.5c veg'},
+      ingredients:['6 oz boneless skinless chicken breast','¾ cup dry quinoa','1 cup broccoli florets','½ cup shredded carrots','2 tbsp olive oil','1 tbsp red wine vinegar','Garlic powder, herbs'],
+      shopping:[['6 oz chicken breast','Meat — from batch cook'],['Dry quinoa','Pantry'],['Broccoli florets','Produce'],['Carrots','Produce']],
+      steps:['Rinse quinoa. Simmer in 1.5c water 15 min. Fluff with fork.','Season chicken with garlic powder and herbs. Grill or pan-sear 5–6 min per side until 165°F. Rest 3 min, slice.','Toss broccoli with ½ tsp olive oil. Roast at 400°F 18–20 min.','Whisk remaining oil + vinegar for dressing. Assemble bowl.']},
+    { label:'Grilled chicken & hummus wrap', macros:{kcal:650,pro:48,fv:'1c veg'},
+      ingredients:['5 oz grilled chicken (batch cook)','1 large whole-wheat tortilla','3 tbsp hummus','1 cup baby spinach','¼ cup sliced bell pepper','¼ cup shredded carrots'],
+      shopping:[['5 oz chicken (batch cook)','Meat'],['Whole-wheat tortilla (large)','Bread'],['Hummus','Pantry'],['Spinach, bell pepper, carrots','Produce']],
+      steps:['Use batch-cooked chicken — slice or shred.','Lay tortilla flat. Spread hummus across center.','Layer spinach, bell pepper, carrots, and chicken.','Fold sides and roll tightly. Slice in half.']},
+    { label:'Shrimp, black bean & rice bowl', macros:{kcal:670,pro:52,fv:'1c veg'},
+      ingredients:['6 oz raw shrimp, peeled','½ cup canned black beans (no salt)','1 cup cooked brown rice','1 cup broccoli & bell pepper, chopped','¼ avocado','2 tbsp salsa','Lime, olive oil, cumin, black pepper'],
+      shopping:[['6 oz raw shrimp','Seafood'],['Black beans (no salt added)','Pantry'],['Avocado','Produce'],['Broccoli + bell pepper','Produce']],
+      steps:['Cook rice ahead.','Pat shrimp dry. Season with cumin, garlic, pepper. Cook in olive oil 1–2 min per side.','Stir-fry veg 3–4 min. Warm beans 60 sec in microwave.','Assemble: rice, beans, veg, shrimp, avocado, salsa, lime.']},
+    { label:'Tuna & white bean salad bowl', macros:{kcal:660,pro:50,fv:'2c veg'},
+      ingredients:['5 oz canned tuna (low sodium), drained','½ cup cannellini beans (no salt)','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','2 tbsp olive oil','1 tbsp red wine vinegar','1 whole-wheat roll'],
+      shopping:[['Canned tuna (low sodium)','Pantry'],['Cannellini beans (no salt)','Pantry'],['Baby kale, zucchini, carrots','Produce'],['Whole-wheat roll','Bread']],
+      steps:['Drain and flake tuna into large bowl.','Add beans, kale, zucchini, and carrots.','Whisk oil, vinegar, and pepper for dressing.','Toss salad with dressing. Serve with roll.']},
+    { label:'Chicken & white bean soup', macros:{kcal:640,pro:56,fv:'1.5c veg'},
+      ingredients:['6 oz shredded chicken (batch cook)','½ cup cannellini beans (no salt)','1 cup baby kale','½ cup diced carrots','1 stalk celery','2 cups low-sodium chicken broth','1 clove garlic, minced','1 whole-wheat roll'],
+      shopping:[['6 oz shredded chicken (batch)','Meat'],['Cannellini beans','Pantry'],['Kale, carrots, celery','Produce'],['Low-sodium chicken broth','Pantry']],
+      steps:['Sauté garlic, carrots, celery in splash of broth 3–4 min.','Add remaining broth, beans, and Italian seasoning. Bring to simmer.','Add shredded chicken and kale. Simmer 5–8 min until kale is tender.','Season with black pepper. Serve with roll.']},
+    { label:'Lentil & vegetable soup with chicken', macros:{kcal:660,pro:54,fv:'1.5c veg'},
+      ingredients:['5 oz chicken breast','¾ cup dry green lentils','1 cup baby kale','½ cup diced carrots','½ cup diced zucchini','2 cups low-sodium chicken broth','1 cup water','2 slices whole-wheat bread','Italian seasoning, cumin'],
+      shopping:[['Chicken breast (5 oz)','Meat'],['Dry green lentils','Pantry'],['Kale, carrots, zucchini','Produce'],['Low-sodium chicken broth','Pantry']],
+      steps:['Bake or poach chicken 20–22 min. Shred.','Sauté garlic + carrots in splash of broth 3 min.','Add lentils, broth, water, seasoning. Boil then simmer 20 min.','Add zucchini, kale, chicken. Simmer 8–10 min. Serve with toast.']},
+    { label:'Chicken burrito bowl', macros:{kcal:700,pro:56,fv:'1.5c veg'},
+      ingredients:['6 oz grilled chicken (batch cook)','½ cup black beans (no salt)','¾ cup cooked brown rice','1 cup shredded kale','¼ cup salsa','2 tbsp 0% Greek yogurt','¼ avocado','Lime, cumin'],
+      shopping:[['6 oz chicken (batch cook)','Meat'],['Black beans (no salt)','Pantry'],['Kale','Produce'],['Avocado','Produce']],
+      steps:['Warm rice, beans, and chicken in microwave.','Massage kale with a squeeze of lime.','Assemble: rice base, beans, chicken, kale, salsa, avocado.','Top with Greek yogurt instead of sour cream.']},
+  ],
+  snack: [
+    { label:'RX Bar + apple', macros:{kcal:280,pro:12,fv:'1 fruit'},
+      ingredients:['1 RX Bar','1 medium apple'],
+      shopping:[['RX Bar','Grab & go'],['Apple','Produce']],
+      steps:['No prep needed.']},
+    { label:'2 hard-boiled eggs + apple', macros:{kcal:220,pro:14,fv:'1 fruit'},
+      ingredients:['2 hard-boiled eggs (batch cooked)','1 medium apple'],
+      shopping:[['Apple','Produce']],
+      steps:['Batch cook eggs Sunday or Wednesday: simmer 10–11 min, ice bath, peel. Store up to 5 days.','Grab eggs and apple — no day-of prep.']},
+    { label:'RX Bar + orange', macros:{kcal:250,pro:12,fv:'1 fruit'},
+      ingredients:['1 RX Bar','1 medium orange'],
+      shopping:[['RX Bar','Grab & go'],['Orange','Produce']],
+      steps:['No prep needed.']},
+    { label:'2 hard-boiled eggs + orange', macros:{kcal:200,pro:14,fv:'1 fruit'},
+      ingredients:['2 hard-boiled eggs (batch cooked)','1 medium orange'],
+      shopping:[['Orange','Produce']],
+      steps:['Use batch-cooked eggs. No day-of prep.']},
+    { label:'Tuna pouch + crackers + apple', macros:{kcal:280,pro:20,fv:'1 fruit'},
+      ingredients:['1 Starkist tuna pouch (low sodium)','10 reduced-sodium Triscuits','1 medium apple'],
+      shopping:[['Tuna pouch (low sodium)','Grab & go'],['Triscuits (reduced sodium)','Pantry'],['Apple','Produce']],
+      steps:['Open tuna pouch. Eat with crackers and apple.']},
+    { label:'Tuna pouch + crackers + orange', macros:{kcal:260,pro:20,fv:'1 fruit'},
+      ingredients:['1 Starkist tuna pouch (low sodium)','10 reduced-sodium Triscuits','1 medium orange'],
+      shopping:[['Tuna pouch (low sodium)','Grab & go'],['Triscuits (reduced sodium)','Pantry'],['Orange','Produce']],
+      steps:['Open tuna pouch. Eat with crackers and orange.']},
+    { label:'2 eggs + roasted chickpeas + orange', macros:{kcal:270,pro:16,fv:'1 fruit'},
+      ingredients:['2 hard-boiled eggs (batch cooked)','¼ cup roasted chickpeas (Good Bean)','1 medium orange'],
+      shopping:[['Roasted chickpeas (Good Bean)','Pantry'],['Orange','Produce']],
+      steps:['Chickpeas straight from bag. Use batch eggs.']},
+  ],
+  dinner: [
+    { label:'Baked salmon, lentils & sautéed spinach', macros:{kcal:760,pro:57,fv:'1.5c veg'}, shared:true,
+      ingredients:['HIS 6 oz / HER 4 oz salmon fillet','¾ cup dry green lentils (shared pot)','1.5 cups baby spinach (shared pan)','HIS ¾c / HER ½c dry brown rice','1 tsp olive oil','Lemon juice, dill, black pepper'],
+      shopping:[['Salmon fillet (~1 lb total for both)','Seafood'],['Dry green lentils','Pantry'],['Brown rice','Pantry'],['Baby spinach','Produce']],
+      steps:['Cook rice: boil then simmer covered 40–45 min.','Cook lentils in 2c water 20–25 min. Drain.','Preheat 400°F. Season both fillets with lemon, dill, pepper. Bake 12–15 min.','Sauté spinach with garlic in olive oil 2–3 min.','Plate: his larger rice portion, hers smaller.']},
+    { label:'Salmon teriyaki, brown rice & stir-fry veg', macros:{kcal:760,pro:54,fv:'2c veg'}, shared:true,
+      ingredients:['HIS 6 oz / HER 4 oz salmon fillet','2 cups broccoli & bell pepper (shared pan)','HIS 1¼c / HER ¾c cooked brown rice','2 tbsp low-sodium soy sauce','1 tbsp honey','1 tsp sesame oil, 1 tsp rice vinegar','1 clove garlic minced, 1 tsp ginger'],
+      shopping:[['Salmon fillet (~1 lb total for both)','Seafood'],['Broccoli + bell pepper','Produce'],['Brown rice','Pantry'],['Low-sodium soy sauce + honey','Pantry']],
+      steps:['Make teriyaki glaze: whisk soy sauce, honey, rice vinegar, garlic, ginger.','Cook rice ahead or use pre-cooked.','Heat sesame oil. Sear salmon skin-side up 2–3 min. Flip. Brush glaze.','Transfer to 400°F oven 6–8 min until cooked through.','Stir-fry broccoli + bell pepper 3–4 min. Plate over rice — his larger portion.']},
+    { label:'Chicken thigh, sweet potato & roasted carrots', macros:{kcal:750,pro:56,fv:'1.5c veg'}, shared:true,
+      ingredients:['HIS 7 oz / HER 5 oz skinless chicken thigh','1 large sweet potato, cubed (shared)','1 cup carrots, sliced (shared)','1½ tsp olive oil','Lemon, rosemary, thyme, garlic, black pepper'],
+      shopping:[['Chicken thighs (his 7 oz + her 5 oz)','Meat — Sun shop'],['Sweet potato','Produce'],['Carrots','Produce']],
+      steps:['Preheat oven to 425°F.','Toss sweet potato + carrots with olive oil and herbs. Roast 15 min.','Season chicken thighs with lemon, garlic, herbs. Add to pan.','Roast together 20–22 min until chicken reaches 165°F.','Rest chicken 3 min. Plate — his larger chicken portion.']},
+    { label:'Turkey meatballs, zucchini noodles & pasta', macros:{kcal:740,pro:58,fv:'2c veg'}, shared:true,
+      ingredients:['HIS 6 oz / HER 4 oz 93% lean ground turkey','HIS ¾c / HER ½c whole-wheat pasta','1.5c zucchini noodles (shared)','½ cup low-sodium marinara (shared)','1 cup baby kale','Egg white, oat flour, Italian seasoning'],
+      shopping:[['Ground turkey (his 6 oz + her 4 oz)','Meat'],['Whole-wheat pasta','Pantry'],['Zucchini','Produce'],["Low-sodium marinara (Rao's)",'Pantry'],['Baby kale','Produce']],
+      steps:['Mix turkey, egg white, oat flour, seasoning. Roll into ~12 balls (1.5-inch).','Bake at 400°F 18–20 min until 165°F internal.','Cook pasta per package. Sauté kale in olive oil 2 min.','Warm marinara, add meatballs and pasta. Toss.','Add zucchini noodles last 2 min. His larger pasta portion, hers extra zucchini.']},
+    { label:'Baked cod, farro & roasted asparagus', macros:{kcal:730,pro:58,fv:'2c veg'}, shared:true,
+      ingredients:['HIS 7 oz / HER 5 oz cod fillet','1 cup dry farro (shared)','1 cup asparagus, trimmed (shared)','1 cup zucchini, sliced (shared)','1½ tbsp olive oil','Lemon juice, garlic, dill, black pepper'],
+      shopping:[['Cod (his 7 oz + her 5 oz)','Seafood'],['Dry farro','Pantry'],['Asparagus + zucchini','Produce']],
+      steps:['Cook farro: simmer in 2.5c water 25–30 min. Drain.','Preheat 425°F. Toss veg with olive oil and garlic. Spread on baking sheet.','Place both cod fillets on same sheet. Season with lemon, dill, pepper.','Roast 12–15 min until cod flakes easily. Serve over farro.']},
+    { label:'Filet mignon, roasted potatoes & asparagus', macros:{kcal:760,pro:56,fv:'2c veg'}, shared:true,
+      ingredients:['HIS 6 oz / HER 4 oz filet mignon','HIS 1¼c / HER ¾c Yukon Gold potatoes, cubed','1 cup asparagus (shared)','1 cup zucchini (shared)','1½ tbsp olive oil','Garlic powder, rosemary, black pepper, balsamic','1 tsp butter for basting (optional)'],
+      shopping:[['Filet mignon (his 6 oz + her 4 oz)','Meat — Wed shop'],['Yukon Gold potatoes','Produce'],['Asparagus + zucchini','Produce'],['Butter (unsalted)','Dairy — optional']],
+      steps:['Preheat 425°F. Take filets out 20 min early to reach room temp.','Toss potatoes with olive oil, garlic, rosemary, pepper. Roast 20 min.','After 20 min, add asparagus + zucchini. Roast 12–15 min more.','Pat filets dry. Season with pepper and garlic. Heat cast iron until smoking.','Sear filets 2–3 min per side. Add butter. Transfer to oven 4–5 min (130°F medium-rare).','Rest 5 min. Drizzle balsamic. His larger potato portion.']},
+    { label:'Herb-roasted chicken, farro & Brussels sprouts', macros:{kcal:750,pro:58,fv:'1.5c veg'}, shared:true,
+      ingredients:['HIS 7 oz / HER 5 oz chicken breast','1 cup dry farro (shared)','1.5 cups Brussels sprouts, halved (shared)','½ cup carrots (shared)','1½ tsp olive oil','Lemon, rosemary, thyme, garlic, black pepper'],
+      shopping:[['Chicken breast (his 7 oz + her 5 oz)','Meat — batch cook extra!'],['Dry farro','Pantry'],['Brussels sprouts + carrots','Produce']],
+      steps:['Cook farro: simmer in 2.5c water 25–30 min.','Toss Brussels sprouts + carrots with olive oil and herbs. Spread on lined baking sheet.','Rub both chicken pieces with olive oil, lemon, herbs. Add to same sheet.','Roast at 425°F 20–25 min until chicken reaches 165°F.','Tip: batch-cook extra chicken for Mon–Tue lunches this week!']},
+  ],
+  evening: [
+    { label:'Greek yogurt, granola & berries', macros:{kcal:280,pro:20,fv:'0.5c fruit'},
+      ingredients:['1 cup 0% Greek yogurt','¼ cup low-fat granola','½ cup mixed berries','1 tbsp honey'],
+      shopping:[['0% Greek yogurt','Dairy'],['Low-fat granola','Pantry'],['Mixed berries','Frozen']],
+      steps:['Spoon yogurt into bowl.','Top with granola, berries, and a drizzle of honey.']},
+    { label:'Greek yogurt, granola & orange', macros:{kcal:290,pro:20,fv:'1 fruit'},
+      ingredients:['1 cup 0% Greek yogurt','¼ cup low-fat granola','1 medium orange, segmented','1 tbsp honey'],
+      shopping:[['0% Greek yogurt','Dairy'],['Orange','Produce']],
+      steps:['Peel and segment orange.','Top yogurt with granola, orange, and honey.']},
+    { label:'Greek yogurt parfait', macros:{kcal:270,pro:20,fv:'0.5c fruit'},
+      ingredients:['1 cup 0% Greek yogurt','¼ cup low-fat granola','½ cup mixed berries','1 tbsp honey'],
+      shopping:[['0% Greek yogurt','Dairy'],['Mixed berries','Frozen']],
+      steps:['Layer yogurt, granola, and berries in a glass or bowl.','Drizzle honey on top.']},
+    { label:'Tuna pouch + crackers + apple', macros:{kcal:280,pro:20,fv:'1 fruit'},
+      ingredients:['1 Starkist tuna pouch (low sodium)','10 reduced-sodium Triscuits','1 medium apple'],
+      shopping:[['Tuna pouch (low sodium)','Grab & go'],['Triscuits','Pantry'],['Apple','Produce']],
+      steps:['Open pouch. Eat with crackers and apple. No prep needed.']},
+  ],
 };
 
-const data = {
+// ── HER MEAL OPTIONS BY SLOT ───────────────────────────────────
+const HER = {
+  pre: [HER_SHAKE],
+  post: [
+    { label:'Korean-style egg & veggie rice bowl', macros:{kcal:380,pro:22,fv:'1c veg'},
+      ingredients:['2 whole eggs','1 cup baby spinach','¼ cup shredded carrots','½ cup cooked brown rice','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp gochujang (optional)','1 tsp sesame seeds','½ tsp rice vinegar'],
+      shopping:[['Eggs (2)','Dairy'],['Baby spinach, carrots','Produce'],['Brown rice','Pantry'],['Gochujang','Pantry — optional']],
+      steps:['Cook rice or use pre-cooked.','Fry or poach eggs.','Sauté spinach + carrots in sesame oil 1–2 min.','Assemble: rice, veg, egg on top.','Drizzle soy sauce, rice vinegar, gochujang. Sprinkle sesame seeds.']},
+    { label:'Thai peanut tofu scramble', macros:{kcal:390,pro:28,fv:'1c veg'},
+      ingredients:['½ block firm tofu (7 oz), pressed and crumbled','1 cup baby spinach','¼ cup shredded carrots','1 egg','1 tbsp peanut butter','1 tsp low-sodium soy sauce','½ tsp sesame oil','½ tsp rice vinegar','Pinch red pepper flakes','1 slice whole-wheat toast'],
+      shopping:[['Firm tofu (½ block)','Refrigerated'],['Baby spinach, carrots','Produce'],['Peanut butter (no salt)','Pantry']],
+      steps:['Press tofu 5 min. Crumble into pieces.','Heat sesame oil. Cook tofu until golden, 4–5 min.','Push tofu aside, scramble egg in same pan.','Add spinach + carrots until wilted.','Whisk PB, soy, vinegar, pepper flakes + 1 tbsp water. Drizzle over. Serve with toast.']},
+    { label:'Vietnamese-style egg & noodle bowl', macros:{kcal:360,pro:20,fv:'1c veg'},
+      ingredients:['2 whole eggs, soft-boiled','½ cup rice vermicelli noodles, cooked','1 cup baby spinach','½ cup shredded carrots','1 tbsp low-sodium soy sauce','1 tsp sesame oil','1 tsp rice vinegar','Pinch chili flakes'],
+      shopping:[['Eggs (2)','Dairy'],['Rice vermicelli','Pantry'],['Baby spinach, carrots','Produce']],
+      steps:['Soft-boil eggs: simmer 6–7 min, transfer to ice bath, peel.','Soak vermicelli in hot water 5 min. Drain and rinse.','Wilt spinach + carrots in sesame oil 1–2 min.','Assemble: noodles, veg, halved eggs on top. Drizzle soy, vinegar, chili.']},
+    { label:'Korean soft tofu & egg scramble', macros:{kcal:370,pro:30,fv:'1c veg'},
+      ingredients:['½ block soft or firm tofu (7 oz)','2 egg whites','1 whole egg','1 cup baby kale','¼ cup diced bell pepper','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp gochujang (optional)','1 slice whole-wheat toast'],
+      shopping:[['Tofu (½ block)','Refrigerated'],['Baby kale, bell pepper','Produce']],
+      steps:['Drain and crumble tofu.','Cook tofu in sesame oil until lightly golden 3–4 min.','Add bell pepper + kale, stir until wilted.','Whisk eggs, pour over tofu. Scramble gently.','Season with soy + gochujang. Serve with toast.']},
+    { label:'Thai basil egg & veggie bowl', macros:{kcal:360,pro:26,fv:'1c veg'},
+      ingredients:['3 egg whites','1 whole egg','1 cup baby kale','¼ cup diced bell pepper','½ cup cooked brown rice','1 tsp low-sodium soy sauce','½ tsp sesame oil','Pinch chili flakes, dried basil','½ tsp rice vinegar'],
+      shopping:[['Eggs (3 whites + 1 whole)','Dairy'],['Baby kale, bell pepper','Produce'],['Brown rice','Pantry']],
+      steps:['Heat sesame oil. Cook bell pepper 1–2 min, add kale until wilted.','Whisk eggs, pour over veg. Scramble gently until just set.','Season with soy, rice vinegar, chili flakes, basil.','Serve over warm brown rice.']},
+    { label:'Korean-style egg & rice porridge (Juk)', macros:{kcal:360,pro:24,fv:'1c veg'},
+      ingredients:['½ cup dry rice','1.5 cups water or low-sodium broth','1 whole egg','2 egg whites','1 cup baby kale, chopped','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp sesame seeds','1 tsp sliced green onion (optional)'],
+      shopping:[['Rice','Pantry'],['Baby kale','Produce'],['Green onions (optional)','Produce']],
+      steps:['Combine rice + water/broth. Simmer 20–25 min stirring until porridge-like.','Stir in kale, cook 2 min.','Whisk eggs, stir into porridge over low heat until just set.','Season with soy + sesame oil. Top with seeds and green onion.']},
+    { label:'Vietnamese-style tofu & egg rice bowl', macros:{kcal:390,pro:26,fv:'1c veg'},
+      ingredients:['½ block firm tofu (7 oz), pressed and cubed','1 egg','½ cup cooked brown rice','1 cup baby kale','½ cup shredded carrots','1 tbsp low-sodium soy sauce','½ tsp sesame oil','1 tbsp lime juice','1 tsp honey','Pinch chili flakes'],
+      shopping:[['Firm tofu (½ block)','Refrigerated'],['Baby kale, carrots','Produce'],['Brown rice','Pantry']],
+      steps:['Press tofu. Cube. Pan-fry in sesame oil until golden, 4–5 min per side.','Fry or poach egg.','Wilt kale + carrots in same pan 1–2 min.','Make sauce: soy, lime, honey, chili.','Assemble over rice. Drizzle sauce.']},
+  ],
+  lunch: [
+    { label:'Vietnamese chicken & vermicelli salad', macros:{kcal:420,pro:36,fv:'1.5c veg'},
+      ingredients:['4 oz grilled chicken (batch cook), sliced','1 cup rice vermicelli, cooked','1 cup baby spinach','½ cup shredded carrots','¼ cup sliced bell pepper','2 tbsp low-sodium fish sauce (or soy sauce)','1 tbsp lime juice','1 tsp honey','1 clove garlic, minced','Pinch of red pepper flakes'],
+      shopping:[['Chicken (batch cook)','Meat'],['Rice vermicelli','Pantry'],['Spinach, carrots, bell pepper','Produce'],['Fish sauce (low sodium)','Pantry']],
+      steps:['Soak vermicelli in hot water 5 min. Drain and rinse cold.','Make dressing: whisk fish sauce, lime, honey, garlic, pepper flakes.','Combine noodles, spinach, carrots, bell pepper.','Top with sliced chicken. Drizzle dressing. Toss gently.']},
+    { label:'Korean-inspired chicken & rice bowl', macros:{kcal:430,pro:38,fv:'1.5c veg'},
+      ingredients:['4 oz grilled chicken (batch cook), sliced','½ cup cooked brown rice','1 cup shredded bell pepper & carrots','½ cup shelled edamame','2 tbsp low-sodium soy sauce','1 tsp sesame oil','1 tsp gochujang (optional)','1 tsp honey','1 tsp sesame seeds'],
+      shopping:[['Chicken (batch cook)','Meat'],['Bell pepper, carrots','Produce'],['Frozen edamame','Frozen'],['Gochujang','Pantry']],
+      steps:['Make sauce: whisk soy, sesame oil, gochujang, honey, rice vinegar.','Warm rice + edamame in microwave.','Assemble: rice, chicken, peppers, carrots, edamame.','Drizzle sauce. Top with sesame seeds.']},
+    { label:'Thai peanut chicken noodle salad', macros:{kcal:450,pro:36,fv:'1.5c veg'},
+      ingredients:['4 oz grilled chicken (batch cook), shredded','1 cup soba noodles, cooked','1 cup shredded kale','½ cup shredded carrots','2 tbsp peanut butter','1 tbsp low-sodium soy sauce','1 tbsp lime juice','1 tsp honey','1 tsp sesame oil','1 clove garlic minced','1 tsp sesame seeds'],
+      shopping:[['Chicken (batch cook)','Meat'],['Soba noodles','Pantry'],['Kale, carrots','Produce'],['Peanut butter (no salt)','Pantry']],
+      steps:['Cook soba 4–5 min. Drain and rinse cold.','Make peanut sauce: whisk PB, soy, lime, honey, sesame oil, garlic + 2 tbsp warm water.','Massage kale with pinch of salt to soften.','Combine noodles, kale, carrots, chicken. Drizzle sauce. Top with sesame seeds. Toss.']},
+    { label:'Vietnamese lemongrass chicken salad', macros:{kcal:380,pro:34,fv:'2c veg'},
+      ingredients:['4 oz grilled chicken (batch cook), sliced','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','2 tbsp low-sodium fish sauce','1 tbsp lime juice','1 tsp honey','1 clove garlic minced','½ tsp lemongrass paste (optional)','Pinch chili flakes','1 tbsp crushed roasted peanuts'],
+      shopping:[['Chicken (batch cook)','Meat'],['Baby kale, zucchini, carrots','Produce'],['Lemongrass paste','Pantry — optional'],['Roasted peanuts (unsalted)','Pantry']],
+      steps:['Make dressing: whisk fish sauce, lime, honey, garlic, lemongrass, chili.','Combine kale, zucchini, carrots in bowl.','Top with chicken. Drizzle dressing. Top with crushed peanuts.']},
+    { label:'Korean bibimbap-style bowl', macros:{kcal:430,pro:36,fv:'1.5c veg'},
+      ingredients:['4 oz grilled chicken (batch cook), sliced','½ cup cooked brown rice','1 cup baby kale','½ cup shredded carrots','¼ cup diced zucchini','1 egg, fried','1 tsp sesame oil','1 tbsp low-sodium soy sauce','1 tsp gochujang','1 tsp honey','1 tsp sesame seeds'],
+      shopping:[['Chicken (batch cook)','Meat'],['Baby kale, carrots, zucchini','Produce'],['Gochujang','Pantry']],
+      steps:['Warm rice. Sauté kale, carrots, zucchini in sesame oil 2–3 min.','Fry egg sunny-side up.','Make sauce: soy, gochujang, honey, rice vinegar.','Assemble: rice, veg in sections, chicken, egg on top. Drizzle sauce. Mix before eating.']},
+    { label:'Thai red curry chicken & rice', macros:{kcal:430,pro:36,fv:'1.5c veg'},
+      ingredients:['4 oz boneless skinless chicken breast, sliced','½ cup cooked brown rice','1 cup shredded kale','½ cup zucchini, sliced','¼ cup light coconut milk (low fat)','1 tsp Thai red curry paste','1 tsp low-sodium soy sauce','½ tsp fish sauce','½ tsp sesame oil','Lime juice, basil or cilantro'],
+      shopping:[['Chicken breast (4 oz)','Meat'],['Baby kale, zucchini','Produce'],['Light coconut milk (small can)','Pantry'],['Thai red curry paste (Thai Kitchen)','Pantry']],
+      steps:['Heat sesame oil over medium-high. Cook chicken 3–4 min until done.','Add red curry paste, stir 30 sec. Add coconut milk, soy sauce, fish sauce.','Add kale + zucchini. Simmer 3–4 min.','Serve over brown rice. Squeeze lime, top with herbs.']},
+    { label:'Vietnamese tofu & lentil soup', macros:{kcal:420,pro:30,fv:'1.5c veg'},
+      ingredients:['½ block firm tofu (7 oz), cubed','½ cup dry green lentils','1 cup baby kale','½ cup diced carrots','½ cup diced zucchini','1.5 cups low-sodium broth','1 tbsp low-sodium soy sauce','1 tsp sesame oil','1 clove garlic, 1 tsp ginger','1 tbsp lime juice','1 slice whole-wheat toast'],
+      shopping:[['Firm tofu (½ block)','Refrigerated'],['Dry green lentils','Pantry'],['Kale, carrots, zucchini','Produce'],['Low-sodium broth','Pantry']],
+      steps:['Simmer lentils in broth 20 min.','Pan-fry tofu cubes in sesame oil until golden, 4–5 min. Set aside.','Add garlic + ginger, cook 1 min. Add kale, carrots, zucchini. Simmer 8–10 min.','Add tofu, soy sauce, lime. Stir gently. Serve with toast.']},
+  ],
+  snack: [
+    { label:'2 hard-boiled eggs + apple', macros:{kcal:200,pro:12,fv:'1 fruit'},
+      ingredients:['2 hard-boiled eggs (batch cooked)','1 medium apple'],
+      shopping:[['Apple','Produce']],
+      steps:['Use Sunday or Wednesday batch-cooked eggs. No day-of prep.']},
+    { label:'2 hard-boiled eggs + orange', macros:{kcal:200,pro:12,fv:'1 fruit'},
+      ingredients:['2 hard-boiled eggs (batch cooked)','1 medium orange'],
+      shopping:[['Orange','Produce']],
+      steps:['Use batch-cooked eggs. No day-of prep.']},
+    { label:'Edamame + apple', macros:{kcal:180,pro:8,fv:'1 fruit'},
+      ingredients:['½ cup shelled edamame (frozen)','1 medium apple'],
+      shopping:[['Frozen edamame','Frozen'],['Apple','Produce']],
+      steps:['Microwave edamame 2 min. Season with a pinch of salt.','Serve with apple.']},
+    { label:'Greek yogurt + berries', macros:{kcal:170,pro:15,fv:'0.5c fruit'},
+      ingredients:['¾ cup 0% Greek yogurt','½ cup mixed berries','1 tsp honey'],
+      shopping:[['0% Greek yogurt','Dairy'],['Mixed berries','Frozen']],
+      steps:['Top yogurt with berries and honey.']},
+    { label:'Greek yogurt + orange', macros:{kcal:170,pro:15,fv:'1 fruit'},
+      ingredients:['¾ cup 0% Greek yogurt','1 orange, segmented','1 tsp honey'],
+      shopping:[['0% Greek yogurt','Dairy'],['Orange','Produce']],
+      steps:['Segment orange. Top yogurt with orange and honey.']},
+    { label:'Tuna pouch + crackers', macros:{kcal:200,pro:18,fv:''},
+      ingredients:['1 Starkist tuna pouch (low sodium)','10 reduced-sodium Triscuits'],
+      shopping:[['Tuna pouch (low sodium)','Grab & go'],['Triscuits','Pantry']],
+      steps:['Open pouch. Eat with crackers. No prep.']},
+    { label:'2 eggs + roasted chickpeas + orange', macros:{kcal:270,pro:16,fv:'1 fruit'},
+      ingredients:['2 hard-boiled eggs (batch cooked)','¼ cup roasted chickpeas (Good Bean)','1 medium orange'],
+      shopping:[['Roasted chickpeas (Good Bean)','Pantry'],['Orange','Produce']],
+      steps:['Chickpeas straight from bag. Use batch eggs. No prep.']},
+  ],
+  dinner: [
+    { label:'Baked salmon, lentils & sautéed spinach', macros:{kcal:490,pro:40,fv:'1.5c veg'}, shared:true,
+      ingredients:['HER 4 oz salmon fillet','½ cup lentils (shared pot)','1 cup spinach (shared pan)','HER ½c cooked brown rice','Lemon juice, dill, black pepper'],
+      shopping:[['Salmon (her 4 oz — buy with his)','Seafood'],['Lentils, brown rice, spinach — shared','Pantry/Produce']],
+      steps:['See HIS Monday dinner instructions.','Her salmon is 4 oz (vs his 6 oz). Rice is ½ cup cooked.','Cook alongside his on same baking sheet.']},
+    { label:'Salmon teriyaki, brown rice & stir-fry veg', macros:{kcal:490,pro:36,fv:'2c veg'}, shared:true,
+      ingredients:['HER 4 oz salmon fillet','1 cup broccoli & bell pepper (shared pan)','HER ¾c cooked brown rice','Teriyaki glaze — shared'],
+      shopping:[['Salmon (her 4 oz — buy with his)','Seafood']],
+      steps:['See HIS Tuesday dinner instructions.','Her fillet is 4 oz. Rice is ¾ cup cooked.','Glaze and cook alongside his — pull 1–2 min earlier if she prefers more done.']},
+    { label:'Chicken thigh, sweet potato & roasted carrots', macros:{kcal:430,pro:38,fv:'1.5c veg'}, shared:true,
+      ingredients:['HER 5 oz skinless chicken thigh','½ cup cubed sweet potato (shared pan)','½ cup roasted carrots (shared pan)','Olive oil, lemon, rosemary, thyme, garlic'],
+      shopping:[['Chicken thighs (her 5 oz — buy with his)','Meat — Sun shop']],
+      steps:['See HIS Wednesday dinner instructions.','Her chicken is 5 oz (vs his 7 oz). Smaller sweet potato + carrot portions.','All on the same sheet pan.']},
+    { label:'Turkey meatballs, zucchini noodles & pasta', macros:{kcal:480,pro:36,fv:'2c veg'}, shared:true,
+      ingredients:['HER 4 oz turkey meatballs','HER ½c whole-wheat pasta + extra zucchini noodles','Marinara + kale — shared'],
+      shopping:[['Ground turkey (her 4 oz — buy with his)','Meat'],['Extra zucchini for her noodles','Produce']],
+      steps:['See HIS Thursday dinner instructions.','Her portion: 4 oz meatballs, ½c pasta, extra zucchini noodles.','Cook all together — just plate separately.']},
+    { label:'Baked cod, farro & roasted asparagus', macros:{kcal:460,pro:40,fv:'2c veg'}, shared:true,
+      ingredients:['HER 5 oz cod fillet','½ cup cooked farro (shared)','Asparagus + zucchini from shared pan','Lemon, dill, olive oil'],
+      shopping:[['Cod (her 5 oz — buy with his)','Seafood']],
+      steps:['See HIS Friday dinner instructions.','Her cod is 5 oz (vs his 7 oz). Half portion of farro.','Both fillets on same baking sheet.']},
+    { label:'Filet mignon, roasted potatoes & asparagus', macros:{kcal:470,pro:36,fv:'2c veg'}, shared:true,
+      ingredients:['HER 4 oz filet mignon','HER ¾c roasted potatoes (shared pan)','Asparagus + zucchini from shared pan','Olive oil, rosemary, balsamic, butter (optional)'],
+      shopping:[['Filet mignon (her 4 oz — buy with his)','Meat — Wed shop']],
+      steps:['See HIS Saturday dinner instructions.','Her filet is 4 oz. Smaller potato portion.','Pull from oven 1–2 min earlier if she prefers more well-done.']},
+    { label:'Herb-roasted chicken, farro & Brussels sprouts', macros:{kcal:460,pro:40,fv:'1.5c veg'}, shared:true,
+      ingredients:['HER 5 oz chicken breast','½ cup cooked farro (shared)','Brussels sprouts + carrots from shared pan','Lemon, rosemary, thyme, garlic, olive oil'],
+      shopping:[['Chicken (her 5 oz — buy with his)','Meat — batch cook extra!']],
+      steps:['See HIS Sunday dinner instructions.','Her chicken is 5 oz (vs his 7 oz). Half portion of farro.','Both cook on same sheet.']},
+  ],
+  evening: [
+    { label:'Miso soup & edamame', macros:{kcal:180,pro:14,fv:''},
+      ingredients:['1 tsp white miso paste (low sodium)','1 cup hot water','¼ block silken tofu, cubed','1 tsp low-sodium soy sauce','½ cup shelled edamame (frozen)','1 tsp sesame seeds'],
+      shopping:[['White miso paste (low sodium)','Pantry'],['Silken tofu','Refrigerated'],['Frozen shelled edamame','Frozen']],
+      steps:['Dissolve miso in hot water (do not boil — destroys probiotics).','Add silken tofu cubes and soy sauce.','Microwave edamame 2 min. Sprinkle sesame seeds.','Serve miso alongside edamame.']},
+    { label:'Miso soup with tofu', macros:{kcal:130,pro:8,fv:''},
+      ingredients:['1 tsp white miso paste','1 cup hot water','¼ block silken tofu, cubed','1 tsp low-sodium soy sauce','1 tsp sesame seeds','1 tsp sliced green onion (optional)'],
+      shopping:[['White miso paste','Pantry'],['Silken tofu','Refrigerated']],
+      steps:['Dissolve miso in hot water.','Add tofu + soy sauce.','Top with sesame seeds and green onion.']},
+    { label:'Edamame & sliced orange', macros:{kcal:160,pro:8,fv:'1 fruit'},
+      ingredients:['½ cup shelled edamame (frozen)','1 medium orange, sliced','Pinch of sea salt'],
+      shopping:[['Frozen edamame','Frozen'],['Orange','Produce']],
+      steps:['Microwave edamame 2 min. Season with sea salt.','Slice orange. Serve together.']},
+    { label:'Edamame & mixed berries', macros:{kcal:150,pro:8,fv:'0.5c fruit'},
+      ingredients:['½ cup shelled edamame (frozen)','½ cup mixed berries','Pinch of sea salt'],
+      shopping:[['Frozen edamame','Frozen'],['Mixed berries','Frozen']],
+      steps:['Microwave edamame 2 min. Season.','Serve alongside mixed berries.']},
+    { label:'Greek yogurt + berries', macros:{kcal:170,pro:15,fv:'0.5c fruit'},
+      ingredients:['¾ cup 0% Greek yogurt','½ cup mixed berries','1 tsp honey'],
+      shopping:[['0% Greek yogurt','Dairy'],['Mixed berries','Frozen']],
+      steps:['Top yogurt with berries and honey.']},
+    { label:'Miso soup & mixed berries', macros:{kcal:140,pro:8,fv:'0.5c fruit'},
+      ingredients:['1 tsp white miso paste','1 cup hot water','¼ block silken tofu, cubed','½ cup mixed berries'],
+      shopping:[['White miso paste','Pantry'],['Silken tofu','Refrigerated'],['Mixed berries','Frozen']],
+      steps:['Dissolve miso in hot water. Add tofu.','Serve miso soup with mixed berries on the side.']},
+  ],
+};
+
+// Default selections per day (index into each slot's options array)
+const DEFAULTS = {
   him: {
-    Monday: [
-      HIS_SHAKE,
-      { slot:'post', title:'Egg white scramble & toast',
-        macros:{kcal:500,pro:40,fv:'1c veg'},
-        ingredients:['6 egg whites','1 whole egg','1 cup baby spinach','¼ cup diced bell pepper','2 slices whole-wheat toast','¼ avocado','1 tsp olive oil'],
-        shopping:[['Eggs (6 whites + 1 whole)','Dairy'],['Baby spinach','Produce — Sun shop'],['Bell pepper','Produce — Sun shop'],['Avocado','Produce'],['Whole-wheat bread','Bread']],
-        steps:['Heat olive oil in non-stick pan.','Add bell pepper 2 min. Add spinach until wilted.','Whisk eggs, pour in. Scramble 3–4 min.','Toast bread. Slice avocado. Plate.'] },
-      { slot:'lunch', title:'Grilled chicken & quinoa bowl',
-        macros:{kcal:670,pro:52,fv:'1.5c veg'},
-        ingredients:['6 oz boneless skinless chicken breast','¾ cup dry quinoa','1 cup broccoli florets','½ cup shredded carrots','2 tbsp olive oil','1 tbsp red wine vinegar'],
-        shopping:[['6 oz chicken breast','Meat — from batch cook'],['Quinoa (¾ cup dry)','Pantry'],['Broccoli florets','Produce — Sun shop'],['Carrots','Produce — Sun shop']],
-        steps:['Rinse quinoa. Simmer in 1.5c water 15 min.','Grill chicken 5–6 min per side until 165°F. Rest 3 min, slice.','Roast broccoli at 400°F 18–20 min.','Whisk oil + vinegar. Assemble bowl.'] },
-      { slot:'snack', title:'RX Bar + apple', altTitle:'2 hard-boiled eggs + apple',
-        options:[
-          { label:'RX Bar + apple', macros:{kcal:280,pro:12,fv:'1 fruit'}, ingredients:['1 RX Bar','1 medium apple'], shopping:[['RX Bar','Grab & go'],['Apple','Produce — Sun shop']], steps:['No prep needed.'] },
-          { label:'2 hard-boiled eggs + apple', macros:{kcal:220,pro:14,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs (batch Sunday)','1 medium apple'], shopping:[['Apple','Produce — Sun shop']], steps:['Batch cook eggs Sunday: simmer 10–11 min, ice bath, peel. Store up to 5 days.','Grab eggs and apple.'] }
-        ]},
-      { slot:'dinner', title:'Baked salmon, lentils & sautéed spinach', shared:true,
-        macros:{kcal:760,pro:57,fv:'1.5c veg'},
-        ingredients:['HIS 6 oz / HER 4 oz salmon fillet','¾ cup dry green lentils (shared pot)','1.5 cups baby spinach (shared)','HIS ¾c / HER ½c dry brown rice','1 tsp olive oil','Lemon juice, dill, black pepper'],
-        shopping:[['Salmon fillet (his 6 oz + her 4 oz)','Seafood — Sun shop'],['Dry green lentils','Pantry'],['Brown rice','Pantry'],['Baby spinach','Produce — Sun shop']],
-        steps:['Cook rice: boil then simmer 40–45 min.','Cook lentils in 2c water 20–25 min. Drain.','Preheat 400°F. Season both fillets with lemon, dill, pepper. Bake 12–15 min.','Sauté spinach with garlic in olive oil 2–3 min.','Plate — his larger rice portion, hers smaller.'] },
-      { slot:'evening', title:'Greek yogurt, granola & berries',
-        macros:{kcal:280,pro:20,fv:'0.5c fruit'},
-        ingredients:['1 cup 0% Greek yogurt','¼ cup low-fat granola','½ cup mixed berries','1 tbsp honey'],
-        shopping:[['0% Greek yogurt','Dairy'],['Low-fat granola','Pantry'],['Mixed berries (frozen or fresh)','Frozen/Produce']],
-        steps:['Spoon yogurt into bowl.','Top with granola, berries, and honey.'] }
-    ],
-    Tuesday: [
-      HIS_SHAKE,
-      { slot:'post', title:'Greek yogurt power bowl',
-        macros:{kcal:540,pro:34,fv:'0.5c fruit'},
-        ingredients:['1 cup 0% Greek yogurt','¾ cup old-fashioned oats','½ cup mixed berries','1 tbsp chia seeds','1 tbsp almond butter','1 tbsp honey'],
-        shopping:[['0% Greek yogurt','Dairy'],['Old-fashioned oats','Pantry'],['Mixed berries','Frozen'],['Almond butter (no salt)','Pantry']],
-        steps:['Cook oats in 1.5c water 5 min.','Spoon yogurt alongside oats.','Top with berries, chia seeds, almond butter, and honey.'] },
-      { slot:'lunch', title:'Grilled chicken & hummus wrap',
-        macros:{kcal:650,pro:48,fv:'1c veg'},
-        ingredients:['5 oz grilled chicken (batch Sunday)','1 large whole-wheat tortilla','3 tbsp hummus','1 cup baby spinach','¼ cup sliced bell pepper','¼ cup shredded carrots'],
-        shopping:[['Chicken (from Sun batch)','Meat'],['Whole-wheat tortilla (large)','Bread'],['Hummus','Pantry'],['Spinach, bell pepper, carrots','Produce — Sun shop']],
-        steps:['Use batch-cooked chicken — slice or shred.','Spread hummus on tortilla. Layer spinach, bell pepper, carrots, chicken.','Roll tightly. Slice in half.'] },
-      { slot:'snack', title:'RX Bar + apple', altTitle:'2 hard-boiled eggs + apple',
-        options:[
-          { label:'RX Bar + apple', macros:{kcal:280,pro:12,fv:'1 fruit'}, ingredients:['1 RX Bar','1 medium apple'], shopping:[['RX Bar','Grab & go'],['Apple','Produce']], steps:['No prep needed.'] },
-          { label:'2 hard-boiled eggs + apple', macros:{kcal:220,pro:14,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs (batch)','1 medium apple'], shopping:[['Apple','Produce']], steps:['Use Sunday batch eggs.'] }
-        ]},
-      { slot:'dinner', title:'Salmon teriyaki, brown rice & stir-fry veg', shared:true,
-        macros:{kcal:760,pro:54,fv:'2c veg'},
-        ingredients:['HIS 6 oz / HER 4 oz salmon fillet','2 cups broccoli & bell pepper (shared)','HIS 1¼c / HER ¾c cooked brown rice','2 tbsp low-sodium soy sauce','1 tbsp honey','1 tsp sesame oil','1 tsp rice vinegar','1 clove garlic minced','1 tsp ginger'],
-        shopping:[['Salmon fillet (his 6 oz + her 4 oz)','Seafood — Sun shop'],['Broccoli + bell pepper','Produce — Sun shop'],['Brown rice','Pantry'],['Low-sodium soy sauce','Pantry'],['Honey','Pantry']],
-        steps:['Make teriyaki glaze: whisk soy sauce, honey, rice vinegar, garlic, ginger.','Cook rice ahead.','Heat sesame oil. Sear salmon skin-side up 2–3 min. Flip. Brush glaze.','Transfer to 400°F oven 6–8 min.','Stir-fry broccoli and bell pepper 3–4 min.','Plate over rice — his larger, hers smaller.'] },
-      { slot:'evening', title:'Greek yogurt, granola & berries',
-        macros:{kcal:280,pro:20,fv:'0.5c fruit'},
-        ingredients:['1 cup 0% Greek yogurt','¼ cup low-fat granola','½ cup mixed berries','1 tbsp honey'],
-        shopping:[['0% Greek yogurt','Dairy'],['Mixed berries','Frozen']],
-        steps:['Spoon yogurt into bowl. Top with granola, berries, and honey.'] }
-    ],
-    Wednesday: [
-      HIS_SHAKE,
-      { slot:'post', title:'Overnight oats with berries',
-        macros:{kcal:490,pro:20,fv:'0.5c fruit'},
-        ingredients:['¾ cup old-fashioned oats','¾ cup water','1 tbsp chia seeds','½ cup mixed berries','1 tbsp almond butter'],
-        shopping:[['Old-fashioned oats','Pantry'],['Chia seeds','Pantry'],['Mixed berries','Frozen'],['Almond butter','Pantry']],
-        steps:['Night before: combine oats, water, chia seeds in jar. Refrigerate overnight.','Morning: stir, top with berries and almond butter.','Eat cold or microwave 60–90 sec.'],
-        note:'Prep the night before!' },
-      { slot:'lunch', title:'Shrimp, black bean & rice bowl',
-        macros:{kcal:670,pro:52,fv:'1c veg'},
-        ingredients:['6 oz raw shrimp, peeled','½ cup canned black beans (no salt)','1 cup brown rice','1 cup broccoli & bell pepper','¼ avocado','2 tbsp salsa','Lime, olive oil, cumin'],
-        shopping:[['6 oz raw shrimp','Seafood — Sun shop'],['Canned black beans (no salt added)','Pantry'],['Avocado','Produce'],['Broccoli + bell pepper','Produce — Sun shop']],
-        steps:['Cook rice ahead.','Season shrimp with cumin, garlic. Cook in olive oil 1–2 min per side.','Stir-fry veg 3–4 min. Warm beans 60 sec.','Assemble: rice, beans, veg, shrimp, avocado, salsa, lime.'] },
-      { slot:'snack', title:'RX Bar + apple', altTitle:'Tuna pouch + crackers + apple',
-        options:[
-          { label:'RX Bar + apple', macros:{kcal:280,pro:12,fv:'1 fruit'}, ingredients:['1 RX Bar','1 medium apple'], shopping:[['RX Bar','Grab & go'],['Apple','Produce']], steps:['No prep needed.'] },
-          { label:'Tuna pouch + crackers + apple', macros:{kcal:280,pro:20,fv:'1 fruit'}, ingredients:['1 Starkist tuna pouch (low sodium)','10 reduced-sodium Triscuits','1 medium apple'], shopping:[['Tuna pouch (low sodium)','Grab & go'],['Triscuits (reduced sodium)','Pantry'],['Apple','Produce']], steps:['Open pouch. Eat with crackers and apple.'] }
-        ]},
-      { slot:'dinner', title:'Chicken thigh, sweet potato & roasted carrots', shared:true,
-        macros:{kcal:750,pro:56,fv:'1.5c veg'},
-        ingredients:['HIS 7 oz / HER 5 oz skinless chicken thigh','1 large sweet potato, cubed (shared)','1 cup carrots, sliced (shared)','1½ tsp olive oil','Lemon, rosemary, thyme, garlic, pepper'],
-        shopping:[['Chicken thighs (his 7 oz + her 5 oz)','Meat — Sun shop'],['Sweet potato','Produce — Sun shop'],['Carrots','Produce — Sun shop']],
-        steps:['Preheat 425°F.','Toss sweet potato + carrots with olive oil and herbs. Roast 15 min.','Season chicken. Add to pan. Roast 20–22 min until 165°F.','Rest chicken 3 min. Plate — his larger portion.'] },
-      { slot:'evening', title:'Greek yogurt, granola & berries',
-        macros:{kcal:280,pro:20,fv:'0.5c fruit'},
-        ingredients:['1 cup 0% Greek yogurt','¼ cup low-fat granola','½ cup mixed berries','1 tbsp honey'],
-        shopping:[['0% Greek yogurt','Dairy'],['Mixed berries','Frozen']],
-        steps:['Spoon yogurt into bowl. Top with granola, berries, and honey.'] }
-    ],
-    Thursday: [
-      HIS_SHAKE,
-      { slot:'post', title:'Tuna scramble & toast',
-        macros:{kcal:500,pro:48,fv:'1c veg'},
-        ingredients:['1 can (5 oz) light tuna in water (low sodium), drained','3 egg whites','1 whole egg','¼ cup diced bell pepper','1 cup baby kale','2 slices whole-wheat toast','1 tsp olive oil'],
-        shopping:[['Canned tuna (low sodium)','Pantry — Wed shop'],['Eggs (3 whites + 1 whole)','Dairy'],['Bell pepper','Produce — Wed shop'],['Baby kale','Produce — Wed shop']],
-        steps:['Drain and flake tuna.','Heat olive oil. Cook bell pepper 2 min, add kale until wilted.','Whisk eggs, pour in. Add tuna. Scramble gently 3–4 min.','Serve with toast.'] },
-      { slot:'lunch', title:'Tuna & white bean salad bowl',
-        macros:{kcal:660,pro:50,fv:'2c veg'},
-        ingredients:['5 oz canned tuna (low sodium), drained','½ cup cannellini beans (no salt)','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','2 tbsp olive oil','1 tbsp red wine vinegar','1 whole-wheat roll'],
-        shopping:[['Canned tuna (low sodium)','Pantry — Wed shop'],['Cannellini beans (no salt)','Pantry'],['Baby kale, zucchini, carrots','Produce — Wed shop'],['Whole-wheat roll','Bread']],
-        steps:['Drain and flake tuna into large bowl.','Add beans, kale, zucchini, carrots.','Whisk oil, vinegar, pepper for dressing. Toss. Serve with roll.'] },
-      { slot:'snack', title:'RX Bar + orange', altTitle:'2 hard-boiled eggs + orange',
-        options:[
-          { label:'RX Bar + orange', macros:{kcal:250,pro:12,fv:'1 fruit'}, ingredients:['1 RX Bar','1 medium orange'], shopping:[['RX Bar','Grab & go'],['Orange','Produce — Wed shop']], steps:['No prep needed.'] },
-          { label:'2 hard-boiled eggs + orange', macros:{kcal:200,pro:14,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs (batch Wed)','1 medium orange'], shopping:[['Orange','Produce — Wed shop']], steps:['Use Wednesday batch-cooked eggs.'] }
-        ]},
-      { slot:'dinner', title:'Turkey meatballs, zucchini noodles & pasta', shared:true,
-        macros:{kcal:740,pro:58,fv:'2c veg'},
-        ingredients:['HIS 6 oz / HER 4 oz 93% lean ground turkey','HIS ¾c / HER ½c whole-wheat pasta','1.5c zucchini noodles (shared)','½ cup low-sodium marinara (shared)','1 cup baby kale','Egg white, oat flour, Italian seasoning'],
-        shopping:[['Ground turkey (his 6 oz + her 4 oz)','Meat — Wed shop'],['Whole-wheat pasta','Pantry'],['Zucchini (for noodles)','Produce — Wed shop'],['Low-sodium marinara (Rao\'s)','Pantry'],['Baby kale','Produce — Wed shop']],
-        steps:['Mix turkey, egg white, oat flour, seasoning. Roll ~12 balls.','Bake at 400°F 18–20 min until 165°F.','Cook pasta. Sauté kale in olive oil.','Warm marinara, add meatballs and pasta. Toss.','Add zucchini noodles last 2 min.','His larger pasta portion, hers more zucchini noodles.'] },
-      { slot:'evening', title:'Greek yogurt, granola & orange',
-        macros:{kcal:290,pro:20,fv:'1 fruit'},
-        ingredients:['1 cup 0% Greek yogurt','¼ cup low-fat granola','1 medium orange, segmented','1 tbsp honey'],
-        shopping:[['0% Greek yogurt','Dairy'],['Orange','Produce — Wed shop']],
-        steps:['Peel and segment orange.','Top yogurt with granola, orange, and honey.'] }
-    ],
-    Friday: [
-      HIS_SHAKE,
-      { slot:'post', title:'Egg & kale omelet with toast',
-        macros:{kcal:490,pro:34,fv:'1c veg'},
-        ingredients:['2 whole eggs','3 egg whites','1 cup baby kale','¼ cup diced bell pepper','2 slices whole-wheat toast','1 tsp olive oil'],
-        shopping:[['Eggs (2 whole + 3 whites)','Dairy'],['Baby kale, bell pepper','Produce — Wed shop'],['Whole-wheat bread','Bread']],
-        steps:['Whisk eggs with pepper and garlic powder.','Heat olive oil. Cook bell pepper, add kale until wilted.','Pour eggs over veg. Fold when set. Serve with toast.'] },
-      { slot:'lunch', title:'Chicken & white bean soup',
-        macros:{kcal:640,pro:56,fv:'1.5c veg'},
-        ingredients:['6 oz shredded chicken (batch Wed)','½ cup cannellini beans (no salt)','1 cup baby kale','½ cup diced carrots','1 stalk celery','2 cups low-sodium chicken broth','1 whole-wheat roll'],
-        shopping:[['Chicken (from Wed batch)','Meat'],['Cannellini beans','Pantry'],['Kale, carrots, celery','Produce — Wed shop'],['Low-sodium chicken broth','Pantry']],
-        steps:['Sauté garlic, carrots, celery in splash of broth 3 min.','Add broth, beans, seasoning. Bring to simmer.','Add chicken and kale. Simmer 5–8 min.','Serve with roll.'] },
-      { slot:'snack', title:'RX Bar + orange', altTitle:'2 hard-boiled eggs + orange',
-        options:[
-          { label:'RX Bar + orange', macros:{kcal:250,pro:12,fv:'1 fruit'}, ingredients:['1 RX Bar','1 medium orange'], shopping:[['RX Bar','Grab & go'],['Orange','Produce — Wed shop']], steps:['No prep needed.'] },
-          { label:'2 hard-boiled eggs + orange', macros:{kcal:200,pro:14,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs','1 medium orange'], shopping:[['Orange','Produce — Wed shop']], steps:['Use Wednesday batch eggs.'] }
-        ]},
-      { slot:'dinner', title:'Baked cod, farro & roasted asparagus', shared:true,
-        macros:{kcal:730,pro:58,fv:'2c veg'},
-        ingredients:['HIS 7 oz / HER 5 oz cod fillet','1 cup dry farro (shared)','1 cup asparagus (shared)','1 cup zucchini (shared)','1½ tbsp olive oil','Lemon, garlic, dill, pepper'],
-        shopping:[['Cod (his 7 oz + her 5 oz)','Seafood — Wed shop'],['Dry farro','Pantry'],['Asparagus, zucchini','Produce — Wed shop']],
-        steps:['Cook farro: 1c to 2.5c water, simmer 25–30 min.','Preheat 425°F. Toss veg with olive oil and garlic.','Place both cod fillets on sheet. Season with lemon, dill, pepper.','Roast 12–15 min until cod flakes. Serve over farro.'] },
-      { slot:'evening', title:'Greek yogurt, granola & berries',
-        macros:{kcal:270,pro:20,fv:'0.5c fruit'},
-        ingredients:['1 cup 0% Greek yogurt','¼ cup low-fat granola','½ cup mixed berries','1 tsp honey'],
-        shopping:[['0% Greek yogurt','Dairy'],['Mixed berries','Frozen']],
-        steps:['Spoon yogurt into bowl. Top with granola, berries, and honey.'] }
-    ],
-    Saturday: [
-      HIS_SHAKE,
-      { slot:'post', title:'Protein pancakes',
-        macros:{kcal:560,pro:42,fv:'0.5c fruit'},
-        ingredients:['½ cup oat flour','1 scoop protein powder','2 egg whites','½ cup water','½ cup mixed berries','1 tbsp maple syrup','1 tbsp almond butter','½ tsp baking powder'],
-        shopping:[['Oat flour','Pantry'],['Egg whites (2)','Dairy'],['Mixed berries','Frozen'],['Pure maple syrup','Pantry'],['Almond butter','Pantry']],
-        steps:['Mix oat flour, protein, baking powder.','Whisk in egg whites and water. Let rest 2 min.','Cook ¼c portions in non-stick pan 2–3 min per side.','Top with berries, almond butter, maple syrup.'] },
-      { slot:'lunch', title:'Chicken burrito bowl',
-        macros:{kcal:700,pro:56,fv:'1.5c veg'},
-        ingredients:['6 oz grilled chicken (batch Wed)','½ cup black beans (no salt)','¾ cup brown rice','1 cup shredded kale','¼ cup salsa','2 tbsp 0% Greek yogurt (as sour cream)','¼ avocado'],
-        shopping:[['Chicken (from Wed batch)','Meat'],['Black beans (no salt)','Pantry'],['Kale','Produce — Wed shop'],['Avocado','Produce'],['Salsa','Pantry']],
-        steps:['Warm rice, beans, chicken.','Massage kale with lime.','Assemble: rice, beans, chicken, kale, salsa, avocado.','Top with Greek yogurt.'] },
-      { slot:'snack', title:'RX Bar + orange', altTitle:'2 eggs + roasted chickpeas + orange',
-        options:[
-          { label:'RX Bar + orange', macros:{kcal:250,pro:12,fv:'1 fruit'}, ingredients:['1 RX Bar','1 medium orange'], shopping:[['RX Bar','Grab & go'],['Orange','Produce — Wed shop']], steps:['No prep needed.'] },
-          { label:'2 eggs + chickpeas + orange', macros:{kcal:270,pro:16,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs','¼ cup roasted chickpeas (Good Bean)','1 medium orange'], shopping:[['Orange','Produce — Wed shop'],['Roasted chickpeas (Good Bean)','Pantry']], steps:['Chickpeas straight from bag. Grab batch eggs.'] }
-        ]},
-      { slot:'dinner', title:'Filet mignon, roasted potatoes & asparagus', shared:true,
-        macros:{kcal:760,pro:56,fv:'2c veg'},
-        ingredients:['HIS 6 oz / HER 4 oz filet mignon','HIS 1¼c / HER ¾c Yukon Gold potatoes, cubed','1 cup asparagus (shared)','1 cup zucchini (shared)','1½ tbsp olive oil','Garlic powder, rosemary, pepper, balsamic','1 tsp butter for basting (optional)'],
-        shopping:[['Filet mignon (his 6 oz + her 4 oz)','Meat — Wed shop'],['Yukon Gold potatoes','Produce — Wed shop'],['Asparagus, zucchini','Produce — Wed shop'],['Butter (unsalted)','Dairy — optional']],
-        steps:['Preheat 425°F. Take filets out 20 min early.','Toss potatoes with olive oil and herbs. Roast 20 min.','Add asparagus + zucchini. Roast 12–15 min more.','Pat filets dry. Season with pepper and garlic powder.','Sear in screaming-hot cast iron 2–3 min per side.','Baste with butter. Transfer to oven 4–5 min (medium-rare 130°F).','Rest 5 min. Drizzle balsamic. Serve — his larger potato portion.'] },
-      { slot:'evening', title:'Greek yogurt & granola',
-        macros:{kcal:280,pro:20,fv:'0.5c fruit'},
-        ingredients:['1 cup 0% Greek yogurt','¼ cup low-fat granola','½ cup mixed berries','1 tbsp honey'],
-        shopping:[['0% Greek yogurt','Dairy'],['Mixed berries','Frozen']],
-        steps:['Spoon yogurt into bowl. Top with granola, berries, and honey.'] }
-    ],
-    Sunday: [
-      HIS_SHAKE,
-      { slot:'post', title:'Greek yogurt bowl',
-        macros:{kcal:550,pro:30,fv:'0.5c fruit'},
-        ingredients:['1 cup 0% Greek yogurt','¾ cup old-fashioned oats','½ cup mixed berries','1 tbsp almond butter','1 tbsp honey'],
-        shopping:[['0% Greek yogurt','Dairy'],['Old-fashioned oats','Pantry'],['Mixed berries','Frozen'],['Almond butter','Pantry']],
-        steps:['Cook oats in 1.5c water 5 min.','Spoon yogurt into bowl alongside oats.','Top with berries, almond butter, honey.'] },
-      { slot:'lunch', title:'Lentil & vegetable soup with chicken',
-        macros:{kcal:660,pro:54,fv:'1.5c veg'},
-        ingredients:['5 oz chicken breast','¾ cup dry green lentils','1 cup baby kale','½ cup diced carrots','½ cup diced zucchini','2 cups low-sodium chicken broth','1 cup water','2 slices whole-wheat bread'],
-        shopping:[['Chicken breast (5 oz)','Meat'],['Dry green lentils','Pantry'],['Kale, carrots, zucchini','Produce — Wed shop'],['Low-sodium chicken broth','Pantry']],
-        steps:['Bake or poach chicken. Shred.','Sauté garlic + carrots in broth 3 min.','Add lentils, broth, water, seasoning. Simmer 20 min.','Add zucchini, kale, chicken. Simmer 8–10 min. Serve with toast.','Tip: make extra — use as Mon/Tue lunch.'] },
-      { slot:'snack', title:'RX Bar + orange', altTitle:'Tuna pouch + crackers + orange',
-        options:[
-          { label:'RX Bar + orange', macros:{kcal:250,pro:12,fv:'1 fruit'}, ingredients:['1 RX Bar','1 medium orange'], shopping:[['RX Bar','Grab & go'],['Orange','Produce — Wed shop']], steps:['No prep needed.'] },
-          { label:'Tuna pouch + crackers + orange', macros:{kcal:260,pro:20,fv:'1 fruit'}, ingredients:['1 Starkist tuna pouch (low sodium)','10 Triscuits (reduced sodium)','1 medium orange'], shopping:[['Tuna pouch','Grab & go'],['Orange','Produce — Wed shop']], steps:['Open pouch. Eat with crackers and orange.'] }
-        ]},
-      { slot:'dinner', title:'Herb-roasted chicken, farro & Brussels sprouts', shared:true,
-        macros:{kcal:750,pro:58,fv:'1.5c veg'},
-        ingredients:['HIS 7 oz / HER 5 oz chicken breast','1 cup dry farro (shared)','1.5c Brussels sprouts, halved (shared)','½ cup carrots (shared)','1½ tsp olive oil','Lemon, rosemary, thyme, garlic, pepper'],
-        shopping:[['Chicken breast (his 7 oz + her 5 oz)','Meat — batch cook extra for next week!'],['Dry farro','Pantry'],['Brussels sprouts, carrots','Produce — Wed shop']],
-        steps:['Cook farro: simmer in 2.5c water 25–30 min.','Toss Brussels sprouts + carrots with olive oil and herbs. Roast 425°F.','Rub both chicken pieces with olive oil, lemon, herbs. Add to sheet.','Roast 20–25 min until 165°F.','Tip: batch-cook extra chicken for Mon–Tue lunches this week!'] },
-      { slot:'evening', title:'Greek yogurt parfait',
-        macros:{kcal:270,pro:20,fv:'0.5c fruit'},
-        ingredients:['1 cup 0% Greek yogurt','¼ cup low-fat granola','½ cup mixed berries','1 tbsp honey'],
-        shopping:[['0% Greek yogurt','Dairy'],['Mixed berries','Frozen']],
-        steps:['Spoon yogurt into bowl. Top with granola, berries, and honey.'] }
-    ]
+    Monday:    {pre:0,post:0,lunch:0,snack:0,dinner:0,evening:0},
+    Tuesday:   {pre:0,post:1,lunch:1,snack:0,dinner:1,evening:0},
+    Wednesday: {pre:0,post:2,lunch:2,snack:4,dinner:2,evening:0},
+    Thursday:  {pre:0,post:4,lunch:3,snack:2,dinner:3,evening:1},
+    Friday:    {pre:0,post:5,lunch:4,snack:3,dinner:4,evening:2},
+    Saturday:  {pre:0,post:3,lunch:6,snack:6,dinner:5,evening:0},
+    Sunday:    {pre:0,post:1,lunch:5,snack:5,dinner:6,evening:2},
   },
   her: {
-    Monday: [
-      HER_SHAKE,
-      { slot:'post', title:'Korean-style egg & veggie rice bowl',
-        macros:{kcal:380,pro:22,fv:'1c veg'},
-        ingredients:['2 whole eggs','1 cup baby spinach','¼ cup shredded carrots','½ cup cooked brown rice','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp gochujang (optional)','1 tsp sesame seeds','½ tsp rice vinegar'],
-        shopping:[['Eggs (2)','Dairy'],['Baby spinach, carrots','Produce — Sun shop'],['Brown rice','Pantry'],['Gochujang','Pantry — optional']],
-        steps:['Cook rice or use pre-cooked.','Fry or poach eggs.','Sauté spinach and carrots in sesame oil 1–2 min.','Assemble: rice, veg, egg on top.','Drizzle soy sauce, rice vinegar, gochujang. Sprinkle sesame seeds.'] },
-      { slot:'lunch', title:'Vietnamese-style chicken & vermicelli salad',
-        macros:{kcal:420,pro:36,fv:'1.5c veg'},
-        ingredients:['4 oz grilled chicken (batch Sunday), sliced','1 cup rice vermicelli, cooked','1 cup baby spinach','½ cup shredded carrots','¼ cup sliced bell pepper','2 tbsp low-sodium fish sauce (or soy sauce)','1 tbsp lime juice','1 tsp honey','1 clove garlic, minced','Pinch of red pepper flakes'],
-        shopping:[['Chicken (from Sun batch)','Meat'],['Rice vermicelli noodles','Pantry'],['Baby spinach, carrots, bell pepper','Produce — Sun shop'],['Fish sauce (low sodium)','Pantry']],
-        steps:['Soak vermicelli in hot water 5 min. Drain and rinse.','Make dressing: whisk fish sauce, lime juice, honey, garlic, pepper flakes.','Combine noodles, spinach, carrots, bell pepper.','Top with chicken. Drizzle dressing. Toss gently.'] },
-      { slot:'snack', title:'2 hard-boiled eggs + apple', altTitle:'Edamame + apple',
-        options:[
-          { label:'2 hard-boiled eggs + apple', macros:{kcal:200,pro:12,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs (batch Sunday)','1 medium apple'], shopping:[['Apple','Produce — Sun shop']], steps:['Use Sunday batch eggs.'] },
-          { label:'Edamame + apple', macros:{kcal:180,pro:8,fv:'1 fruit'}, ingredients:['½ cup shelled edamame (frozen)','1 medium apple'], shopping:[['Frozen shelled edamame','Frozen'],['Apple','Produce — Sun shop']], steps:['Microwave edamame 2 min. Season with pinch of salt.','Serve with apple.'] }
-        ]},
-      { slot:'dinner', title:'Baked salmon, lentils & sautéed spinach', shared:true,
-        macros:{kcal:490,pro:40,fv:'1.5c veg'},
-        ingredients:['HER 4 oz salmon fillet','½ cup lentils (shared pot)','1 cup spinach (shared pan)','HER ½c cooked brown rice','Lemon juice, dill, black pepper'],
-        shopping:[['Salmon (his 6 oz + her 4 oz — see his list)','Seafood — Sun shop'],['Brown rice, lentils, spinach — shared','See his dinner list']],
-        steps:['See HIS Monday dinner instructions.','Her salmon is 4 oz. Rice portion is ½ cup cooked.','Cook alongside his — same time, same temp.'] },
-      { slot:'evening', title:'Miso soup & edamame',
-        macros:{kcal:180,pro:14,fv:''},
-        ingredients:['1 tsp white miso paste (low sodium)','1 cup hot water','¼ block silken tofu, cubed','1 tsp low-sodium soy sauce','½ cup shelled edamame (frozen)','1 tsp sesame seeds'],
-        shopping:[['White miso paste (low sodium)','Pantry — Sun shop'],['Silken tofu','Refrigerated'],['Frozen shelled edamame','Frozen']],
-        steps:['Dissolve miso in hot water (do not boil).','Add silken tofu cubes and soy sauce.','Microwave edamame 2 min. Sprinkle sesame seeds.','Serve miso alongside edamame.'] }
-    ],
-    Tuesday: [
-      HER_SHAKE,
-      { slot:'post', title:'Thai peanut tofu scramble',
-        macros:{kcal:390,pro:28,fv:'1c veg'},
-        ingredients:['½ block firm tofu (7 oz), pressed and crumbled','1 cup baby spinach','¼ cup shredded carrots','1 egg','1 tbsp peanut butter','1 tsp low-sodium soy sauce','½ tsp sesame oil','½ tsp rice vinegar','Pinch red pepper flakes','1 slice whole-wheat toast'],
-        shopping:[['Firm tofu (½ block)','Refrigerated — Sun shop'],['Baby spinach, carrots','Produce — Sun shop'],['Peanut butter (no salt)','Pantry'],['Whole-wheat bread','Bread']],
-        steps:['Press tofu 5 min. Crumble.','Heat sesame oil. Cook tofu until golden, 4–5 min.','Push tofu aside, scramble egg in same pan.','Add spinach and carrots until wilted.','Whisk PB, soy sauce, vinegar, pepper flakes + 1 tbsp water. Drizzle over.','Serve with toast.'] },
-      { slot:'lunch', title:'Korean-inspired chicken & rice bowl',
-        macros:{kcal:430,pro:38,fv:'1.5c veg'},
-        ingredients:['4 oz grilled chicken (batch Sunday), sliced','½ cup cooked brown rice','1 cup shredded bell pepper & carrots','½ cup shelled edamame','2 tbsp low-sodium soy sauce','1 tsp sesame oil','1 tsp gochujang (optional)','1 tsp honey','1 tsp rice vinegar','1 tsp sesame seeds'],
-        shopping:[['Chicken (from Sun batch)','Meat'],['Bell pepper, carrots','Produce — Sun shop'],['Frozen edamame','Frozen'],['Gochujang','Pantry']],
-        steps:['Make sauce: whisk soy sauce, sesame oil, gochujang, honey, rice vinegar.','Warm rice and edamame in microwave.','Assemble: rice, chicken, peppers, carrots, edamame.','Drizzle sauce. Top with sesame seeds.'] },
-      { slot:'snack', title:'2 hard-boiled eggs + apple', altTitle:'Greek yogurt + berries',
-        options:[
-          { label:'2 hard-boiled eggs + apple', macros:{kcal:200,pro:12,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs (batch Sun)','1 medium apple'], shopping:[['Apple','Produce — Sun shop']], steps:['Use Sunday batch eggs.'] },
-          { label:'Greek yogurt + berries', macros:{kcal:170,pro:15,fv:'0.5c fruit'}, ingredients:['¾ cup 0% Greek yogurt','½ cup mixed berries','1 tsp honey'], shopping:[['0% Greek yogurt','Dairy'],['Mixed berries','Frozen']], steps:['Top yogurt with berries and honey.'] }
-        ]},
-      { slot:'dinner', title:'Salmon teriyaki, brown rice & stir-fry veg', shared:true,
-        macros:{kcal:490,pro:36,fv:'2c veg'},
-        ingredients:['HER 4 oz salmon fillet','1 cup broccoli & bell pepper (shared pan)','HER ¾c cooked brown rice','Teriyaki glaze — shared (soy sauce, honey, rice vinegar, garlic, ginger)'],
-        shopping:[['Salmon (his 6 oz + her 4 oz — see his list)','Seafood — Sun shop']],
-        steps:['See HIS Tuesday dinner instructions.','Her salmon is 4 oz. Rice portion is ¾ cup cooked.','Glaze and cook alongside his — pull 1–2 min earlier if needed.'] },
-      { slot:'evening', title:'Edamame & sliced orange',
-        macros:{kcal:160,pro:8,fv:'1 fruit'},
-        ingredients:['½ cup shelled edamame (frozen)','1 medium orange, sliced','Pinch of sea salt'],
-        shopping:[['Frozen edamame','Frozen'],['Orange','Produce — Sun shop']],
-        steps:['Microwave edamame 2 min. Season with salt.','Slice orange. Serve together.'] }
-    ],
-    Wednesday: [
-      HER_SHAKE,
-      { slot:'post', title:'Vietnamese-style egg & noodle bowl',
-        macros:{kcal:360,pro:20,fv:'1c veg'},
-        ingredients:['2 whole eggs, soft-boiled','½ cup rice vermicelli noodles, cooked','1 cup baby spinach','½ cup shredded carrots','1 tbsp low-sodium soy sauce','1 tsp sesame oil','1 tsp rice vinegar','Pinch chili flakes'],
-        shopping:[['Eggs (2)','Dairy'],['Rice vermicelli','Pantry — Sun shop'],['Baby spinach, carrots','Produce — Sun shop']],
-        steps:['Soft-boil eggs: simmer 6–7 min, ice bath, peel.','Soak vermicelli in hot water 5 min. Drain.','Wilt spinach + carrots in sesame oil 1–2 min.','Assemble: noodles, veg, eggs halved on top. Drizzle soy sauce, vinegar, chili.'] },
-      { slot:'lunch', title:'Thai peanut chicken noodle salad',
-        macros:{kcal:450,pro:36,fv:'1.5c veg'},
-        ingredients:['4 oz grilled chicken (batch Sunday), shredded','1 cup soba noodles, cooked','1 cup shredded kale','½ cup shredded carrots','2 tbsp peanut butter','1 tbsp low-sodium soy sauce','1 tbsp lime juice','1 tsp honey','1 tsp sesame oil','1 clove garlic minced','1 tsp sesame seeds'],
-        shopping:[['Chicken (from Sun batch)','Meat'],['Soba noodles','Pantry — Sun shop'],['Kale','Produce — now buy for Wed shop'],['Peanut butter','Pantry']],
-        steps:['Cook soba 4–5 min. Drain and rinse cold.','Make peanut sauce: whisk PB, soy, lime, honey, sesame oil, garlic + 2 tbsp warm water.','Massage kale with pinch of salt.','Combine noodles, kale, carrots, chicken. Drizzle sauce. Toss.'] },
-      { slot:'snack', title:'2 hard-boiled eggs + apple', altTitle:'Tuna pouch + crackers',
-        options:[
-          { label:'2 hard-boiled eggs + apple', macros:{kcal:200,pro:12,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs (batch today)','1 medium apple'], shopping:[['Apple','Produce — Sun shop']], steps:['Batch cook eggs now for Thu–Sat.'] },
-          { label:'Tuna pouch + crackers', macros:{kcal:200,pro:18,fv:''}, ingredients:['1 Starkist tuna pouch (low sodium)','10 Triscuits (reduced sodium)'], shopping:[['Tuna pouch','Grab & go'],['Triscuits','Pantry']], steps:['Open pouch. Eat with crackers.'] }
-        ]},
-      { slot:'dinner', title:'Chicken thigh, sweet potato & roasted carrots', shared:true,
-        macros:{kcal:430,pro:38,fv:'1.5c veg'},
-        ingredients:['HER 5 oz skinless chicken thigh','½ cup cubed sweet potato (shared)','½ cup roasted carrots (shared)','Olive oil, lemon, rosemary, thyme, garlic'],
-        shopping:[['Chicken thighs (his 7 oz + her 5 oz — see his list)','Meat — Sun shop'],['Sweet potato, carrots — shared','See his dinner list']],
-        steps:['See HIS Wednesday dinner instructions.','Her chicken is 5 oz. Smaller sweet potato + carrot portions.','Cook all together on same sheet pan.'] },
-      { slot:'evening', title:'Miso soup with tofu',
-        macros:{kcal:130,pro:8,fv:''},
-        ingredients:['1 tsp white miso paste','1 cup hot water','¼ block silken tofu, cubed','1 tsp low-sodium soy sauce','1 tsp sesame seeds','1 tsp sliced green onion (optional)'],
-        shopping:[['White miso paste','Pantry'],['Silken tofu','Refrigerated'],['Green onions (optional)','Produce']],
-        steps:['Dissolve miso in hot water (do not boil).','Add tofu + soy sauce.','Top with sesame seeds and green onion.'] }
-    ],
-    Thursday: [
-      HER_SHAKE,
-      { slot:'post', title:'Korean soft tofu & egg scramble',
-        macros:{kcal:370,pro:30,fv:'1c veg'},
-        ingredients:['½ block soft or firm tofu (7 oz)','2 egg whites','1 whole egg','1 cup baby kale','¼ cup diced bell pepper','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp gochujang (optional)','1 slice whole-wheat toast'],
-        shopping:[['Tofu (½ block)','Refrigerated — Wed shop'],['Baby kale, bell pepper','Produce — Wed shop'],['Whole-wheat bread','Bread']],
-        steps:['Drain tofu. Crumble.','Cook tofu in sesame oil until lightly golden 3–4 min.','Add bell pepper + kale, stir until wilted.','Whisk eggs, pour over tofu. Scramble gently.','Season with soy sauce + gochujang. Serve with toast.'] },
-      { slot:'lunch', title:'Vietnamese lemongrass chicken salad',
-        macros:{kcal:380,pro:34,fv:'2c veg'},
-        ingredients:['4 oz grilled chicken (batch Wed), sliced','2 cups baby kale','½ cup shredded zucchini','½ cup shredded carrots','2 tbsp low-sodium fish sauce','1 tbsp lime juice','1 tsp honey','1 clove garlic minced','½ tsp lemongrass paste (optional)','Pinch chili flakes','1 tbsp crushed roasted peanuts'],
-        shopping:[['Chicken (from Wed batch)','Meat'],['Baby kale, zucchini, carrots','Produce — Wed shop'],['Lemongrass paste','Pantry — optional'],['Roasted peanuts (unsalted)','Pantry']],
-        steps:['Make dressing: whisk fish sauce, lime, honey, garlic, lemongrass, chili.','Combine kale, zucchini, carrots in bowl.','Top with chicken. Drizzle dressing. Top with crushed peanuts.'] },
-      { slot:'snack', title:'2 hard-boiled eggs + orange', altTitle:'Greek yogurt + orange',
-        options:[
-          { label:'2 hard-boiled eggs + orange', macros:{kcal:200,pro:12,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs (batch Wed)','1 medium orange'], shopping:[['Orange','Produce — Wed shop']], steps:['Use Wednesday batch eggs.'] },
-          { label:'Greek yogurt + orange', macros:{kcal:170,pro:15,fv:'1 fruit'}, ingredients:['¾ cup 0% Greek yogurt','1 orange segmented','1 tsp honey'], shopping:[['0% Greek yogurt','Dairy'],['Orange','Produce — Wed shop']], steps:['Top yogurt with orange segments and honey.'] }
-        ]},
-      { slot:'dinner', title:'Turkey meatballs, zucchini noodles & pasta', shared:true,
-        macros:{kcal:480,pro:36,fv:'2c veg'},
-        ingredients:['HER 4 oz turkey meatballs','HER ½c whole-wheat pasta + extra zucchini noodles','Marinara and kale — from shared pan'],
-        shopping:[['Ground turkey (shared — see his list)','Meat — Wed shop'],['Zucchini (extra for her noodles)','Produce — Wed shop'],['Whole-wheat pasta','Pantry']],
-        steps:['See HIS Thursday dinner instructions.','Her portion: 4 oz meatballs with ½c pasta and extra zucchini noodles.','Add more zucchini noodles for her to boost volume without extra calories.'] },
-      { slot:'evening', title:'Edamame & orange',
-        macros:{kcal:170,pro:8,fv:'1 fruit'},
-        ingredients:['½ cup shelled edamame (frozen)','1 medium orange','Pinch of sea salt'],
-        shopping:[['Frozen edamame','Frozen'],['Orange','Produce — Wed shop']],
-        steps:['Microwave edamame 2 min. Season.','Serve with orange.'] }
-    ],
-    Friday: [
-      HER_SHAKE,
-      { slot:'post', title:'Thai basil egg & veggie bowl',
-        macros:{kcal:360,pro:26,fv:'1c veg'},
-        ingredients:['3 egg whites','1 whole egg','1 cup baby kale','¼ cup diced bell pepper','½ cup cooked brown rice','1 tsp low-sodium soy sauce','½ tsp sesame oil','Pinch chili flakes','Dried or fresh basil','½ tsp rice vinegar'],
-        shopping:[['Eggs (3 whites + 1 whole)','Dairy'],['Baby kale, bell pepper','Produce — Wed shop'],['Brown rice','Pantry']],
-        steps:['Heat sesame oil. Cook bell pepper 1–2 min, add kale until wilted.','Whisk eggs, pour over veg. Scramble gently.','Season with soy sauce, vinegar, chili flakes, basil.','Serve over warm brown rice.'] },
-      { slot:'lunch', title:'Korean bibimbap-style bowl',
-        macros:{kcal:430,pro:36,fv:'1.5c veg'},
-        ingredients:['4 oz grilled chicken (batch Wed), sliced','½ cup cooked brown rice','1 cup baby kale','½ cup shredded carrots','¼ cup diced zucchini','1 egg, fried','1 tsp sesame oil','1 tbsp low-sodium soy sauce','1 tsp gochujang','1 tsp honey','1 tsp sesame seeds'],
-        shopping:[['Chicken (from Wed batch)','Meat'],['Baby kale, carrots, zucchini','Produce — Wed shop'],['Gochujang','Pantry']],
-        steps:['Warm rice. Sauté kale, carrots, zucchini in sesame oil 2–3 min.','Fry egg sunny-side up.','Make sauce: soy, gochujang, honey, rice vinegar.','Assemble: rice, veg in sections, chicken, egg on top. Drizzle sauce. Mix before eating.'] },
-      { slot:'snack', title:'2 hard-boiled eggs + orange', altTitle:'Tuna pouch + crackers',
-        options:[
-          { label:'2 hard-boiled eggs + orange', macros:{kcal:200,pro:12,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs','1 medium orange'], shopping:[['Orange','Produce — Wed shop']], steps:['Use Wednesday batch eggs.'] },
-          { label:'Tuna pouch + crackers', macros:{kcal:200,pro:18,fv:''}, ingredients:['1 Starkist tuna pouch (low sodium)','10 Triscuits (reduced sodium)'], shopping:[['Tuna pouch','Grab & go'],['Orange','Produce — Wed shop']], steps:['Open pouch. Eat with crackers.'] }
-        ]},
-      { slot:'dinner', title:'Baked cod, farro & roasted asparagus', shared:true,
-        macros:{kcal:460,pro:40,fv:'2c veg'},
-        ingredients:['HER 5 oz cod fillet','½ cup cooked farro (shared pot)','Asparagus + zucchini from shared pan','Lemon, dill, olive oil'],
-        shopping:[['Cod (his 7 oz + her 5 oz — see his list)','Seafood — Wed shop'],['Farro, asparagus, zucchini — shared','See his dinner list']],
-        steps:['See HIS Friday dinner instructions.','Her cod is 5 oz. Half portion of farro.','Both fillets cook on same sheet — same time.'] },
-      { slot:'evening', title:'Miso soup & edamame',
-        macros:{kcal:180,pro:12,fv:''},
-        ingredients:['1 tsp white miso paste','1 cup hot water','¼ block silken tofu, cubed','½ cup shelled edamame (frozen)','1 tsp sesame seeds'],
-        shopping:[['White miso paste','Pantry'],['Silken tofu','Refrigerated'],['Frozen edamame','Frozen']],
-        steps:['Dissolve miso in hot water.','Add silken tofu.','Microwave edamame 2 min. Sprinkle sesame seeds.'] }
-    ],
-    Saturday: [
-      HER_SHAKE,
-      { slot:'post', title:'Vietnamese-style tofu & egg rice bowl',
-        macros:{kcal:390,pro:26,fv:'1c veg'},
-        ingredients:['½ block firm tofu (7 oz), pressed and cubed','1 egg','½ cup cooked brown rice','1 cup baby kale','½ cup shredded carrots','1 tbsp low-sodium soy sauce','½ tsp sesame oil','1 tbsp lime juice','1 tsp honey','Pinch chili flakes'],
-        shopping:[['Firm tofu (½ block)','Refrigerated — Wed shop'],['Baby kale, carrots','Produce — Wed shop'],['Brown rice','Pantry']],
-        steps:['Press tofu. Cube. Pan-fry in sesame oil until golden, 4–5 min per side.','Fry or poach egg.','Wilt kale + carrots in same pan 1–2 min.','Make sauce: soy, lime, honey, chili.','Assemble over rice. Drizzle sauce.'] },
-      { slot:'lunch', title:'Thai red curry chicken & rice',
-        macros:{kcal:430,pro:36,fv:'1.5c veg'},
-        ingredients:['4 oz boneless skinless chicken breast, sliced thin','½ cup cooked brown rice','1 cup shredded kale','½ cup zucchini, sliced','¼ cup light coconut milk (low fat)','1 tsp Thai red curry paste','1 tsp low-sodium soy sauce','½ tsp fish sauce','½ tsp sesame oil','Lime juice, basil or cilantro'],
-        shopping:[['Chicken breast (4 oz fresh)','Meat — Wed shop'],['Baby kale, zucchini','Produce — Wed shop'],['Light coconut milk (small can)','Pantry — Wed shop'],['Thai red curry paste (Thai Kitchen)','Pantry — Wed shop']],
-        steps:['Heat sesame oil over medium-high.','Cook chicken 3–4 min until done.','Add red curry paste, stir 30 sec. Add coconut milk, soy sauce, fish sauce.','Add kale + zucchini. Simmer 3–4 min.','Serve over rice. Squeeze lime, top with herbs.'] },
-      { slot:'snack', title:'2 hard-boiled eggs + orange', altTitle:'Greek yogurt + berries',
-        options:[
-          { label:'2 hard-boiled eggs + orange', macros:{kcal:200,pro:12,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs','1 medium orange'], shopping:[['Orange','Produce — Wed shop']], steps:['Use Wednesday batch eggs.'] },
-          { label:'Greek yogurt + berries', macros:{kcal:170,pro:15,fv:'0.5c fruit'}, ingredients:['¾ cup 0% Greek yogurt','½ cup mixed berries','1 tsp honey'], shopping:[['0% Greek yogurt','Dairy'],['Mixed berries','Frozen']], steps:['Top yogurt with berries and honey.'] }
-        ]},
-      { slot:'dinner', title:'Filet mignon, roasted potatoes & asparagus', shared:true,
-        macros:{kcal:470,pro:36,fv:'2c veg'},
-        ingredients:['HER 4 oz filet mignon','HER ¾c roasted potatoes (shared pan)','Asparagus + zucchini from shared pan','Olive oil, rosemary, balsamic, butter (optional)'],
-        shopping:[['Filet mignon (his 6 oz + her 4 oz — see his list)','Meat — Wed shop'],['Potatoes, asparagus, zucchini — shared','See his dinner list']],
-        steps:['See HIS Saturday dinner instructions.','Her filet is 4 oz. Smaller potato portion.','Pull her filet from oven 1–2 min earlier if she prefers more done.'] },
-      { slot:'evening', title:'Edamame & mixed berries',
-        macros:{kcal:150,pro:8,fv:'0.5c fruit'},
-        ingredients:['½ cup shelled edamame (frozen)','½ cup mixed berries','Pinch of sea salt'],
-        shopping:[['Frozen edamame','Frozen'],['Mixed berries','Frozen']],
-        steps:['Microwave edamame 2 min. Season.','Serve alongside mixed berries.'] }
-    ],
-    Sunday: [
-      HER_SHAKE,
-      { slot:'post', title:'Korean-style egg & rice porridge (Juk)',
-        macros:{kcal:360,pro:24,fv:'1c veg'},
-        ingredients:['½ cup dry white or brown rice','1.5 cups water or low-sodium broth','1 whole egg','2 egg whites','1 cup baby kale, chopped','1 tsp low-sodium soy sauce','½ tsp sesame oil','1 tsp sesame seeds','1 tsp sliced green onion (optional)'],
-        shopping:[['Rice','Pantry'],['Baby kale','Produce — Wed shop'],['Green onions (optional)','Produce — Wed shop']],
-        steps:['Combine rice + water/broth. Simmer 20–25 min stirring until porridge-like.','Stir in kale 2 min.','Whisk eggs, stir into porridge over low heat until just set.','Season with soy sauce + sesame oil. Top with seeds and green onion.'] },
-      { slot:'lunch', title:'Vietnamese tofu & lentil soup',
-        macros:{kcal:420,pro:30,fv:'1.5c veg'},
-        ingredients:['½ block firm tofu (7 oz), cubed','½ cup dry green lentils','1 cup baby kale','½ cup diced carrots','½ cup diced zucchini','1.5 cups low-sodium broth','1 tbsp low-sodium soy sauce','1 tsp sesame oil','1 clove garlic','1 tsp fresh ginger','1 tbsp lime juice','1 slice whole-wheat toast'],
-        shopping:[['Firm tofu (½ block)','Refrigerated — Wed shop'],['Dry green lentils','Pantry'],['Kale, carrots, zucchini','Produce — Wed shop'],['Low-sodium broth','Pantry']],
-        steps:['Simmer lentils in broth 20 min.','Pan-fry tofu cubes in sesame oil until golden 4–5 min. Set aside.','Add garlic + ginger, cook 1 min. Add kale, carrots, zucchini. Simmer 8–10 min.','Add tofu, soy sauce, lime. Stir gently. Serve with toast.'] },
-      { slot:'snack', title:'2 hard-boiled eggs + orange', altTitle:'Tuna pouch + crackers + orange',
-        options:[
-          { label:'2 hard-boiled eggs + orange', macros:{kcal:200,pro:12,fv:'1 fruit'}, ingredients:['2 hard-boiled eggs','1 medium orange'], shopping:[['Orange','Produce — Wed shop']], steps:['No prep needed.'] },
-          { label:'Tuna pouch + crackers + orange', macros:{kcal:260,pro:20,fv:'1 fruit'}, ingredients:['1 Starkist tuna pouch (low sodium)','10 Triscuits (reduced sodium)','1 medium orange'], shopping:[['Tuna pouch','Grab & go'],['Orange','Produce — Wed shop']], steps:['Open pouch. Eat with crackers and orange.'] }
-        ]},
-      { slot:'dinner', title:'Herb-roasted chicken, farro & Brussels sprouts', shared:true,
-        macros:{kcal:460,pro:40,fv:'1.5c veg'},
-        ingredients:['HER 5 oz chicken breast','½ cup cooked farro (shared)','Brussels sprouts + carrots from shared pan','Lemon, rosemary, thyme, garlic, olive oil'],
-        shopping:[['Chicken (his 7 oz + her 5 oz — see his list)','Meat — batch cook extra!'],['Farro, Brussels sprouts, carrots — shared','See his dinner list']],
-        steps:['See HIS Sunday dinner instructions.','Her chicken is 5 oz. Half portion of farro.','Both pieces cook on same sheet.'] },
-      { slot:'evening', title:'Miso soup & mixed berries',
-        macros:{kcal:140,pro:8,fv:'0.5c fruit'},
-        ingredients:['1 tsp white miso paste','1 cup hot water','¼ block silken tofu, cubed','½ cup mixed berries'],
-        shopping:[['White miso paste','Pantry'],['Silken tofu','Refrigerated'],['Mixed berries','Frozen']],
-        steps:['Dissolve miso in hot water. Add tofu.','Serve miso soup with mixed berries on the side.'] }
-    ]
+    Monday:    {pre:0,post:0,lunch:0,snack:0,dinner:0,evening:0},
+    Tuesday:   {pre:0,post:1,lunch:1,snack:3,dinner:1,evening:2},
+    Wednesday: {pre:0,post:2,lunch:2,snack:0,dinner:2,evening:1},
+    Thursday:  {pre:0,post:3,lunch:3,snack:1,dinner:3,evening:3},
+    Friday:    {pre:0,post:4,lunch:4,snack:0,dinner:4,evening:0},
+    Saturday:  {pre:0,post:6,lunch:5,snack:1,dinner:5,evening:3},
+    Sunday:    {pre:0,post:5,lunch:6,snack:5,dinner:6,evening:5},
   }
 };
 
 // ── STATE ──────────────────────────────────────────────────────
-let person = 'him';
-let day = 'Monday';
-// track selected option index per meal slot
-const selections = {};
+let person='him', day='Monday';
+const openCards={};
 
-function getKey(p, d, slot) { return `${p}_${d}_${slot}`; }
+function getMeals(p){return p==='him'?HIS:HER}
+function getSelIdx(p,d,s){
+  const k=selKey(p,d,s);
+  return k in SEL ? SEL[k] : (DEFAULTS[p][d]?.[s]||0);
+}
+function getActiveMeal(p,d,s){
+  const meals=getMeals(p);
+  const opts=meals[s]||[];
+  const idx=Math.min(getSelIdx(p,d,s),opts.length-1);
+  return opts[idx]||opts[0];
+}
+
+function calcTotals(p,d){
+  let kcal=0,pro=0;
+  SLOTS.forEach(s=>{const m=getActiveMeal(p,d,s);if(m){kcal+=m.macros.kcal;pro+=m.macros.pro}});
+  return {kcal,pro};
+}
 
 // ── RENDER ─────────────────────────────────────────────────────
-function setPerson(p) {
-  person = p;
-  document.querySelectorAll('.person-tab').forEach(t => t.classList.remove('active'));
-  document.querySelector(`.person-tab.${p}`).classList.add('active');
-  renderDayTabs();
-  renderContent();
+function setPerson(p){
+  person=p;
+  document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('on'));
+  document.querySelector(`.ptab.${p}`).classList.add('on');
+  renderDayTabs(); renderAll();
+}
+function setDay(d){
+  day=d; renderDayTabs(); renderAll();
 }
 
-function setDay(d) {
-  day = d;
-  renderDayTabs();
-  renderContent();
-}
-
-function renderDayTabs() {
-  const c = document.getElementById('dayTabs');
-  c.innerHTML = DAYS.map(d => {
-    const cls = d === day ? (person === 'him' ? 'active-him' : 'active-her') : '';
-    return `<div class="day-tab ${cls}" onclick="setDay('${d}')">${d.slice(0,3)}</div>`;
+function renderDayTabs(){
+  document.getElementById('dTabs').innerHTML=DAYS.map(d=>{
+    const cls=d===day?(person==='him'?'on-him':'on-her'):'';
+    return `<div class="dtab ${cls}" onclick="setDay('${d}')">${d.slice(0,3)}</div>`;
   }).join('');
 }
 
-function getMealData(mealDef, slot) {
-  if (mealDef.options) {
-    const key = getKey(person, day, slot);
-    const idx = selections[key] || 0;
-    return { ...mealDef.options[idx], isOption: true, options: mealDef.options };
-  }
-  return mealDef;
-}
+function renderAll(){
+  const {kcal,pro}=calcTotals(person,day);
+  const cc=person==='him'?'him-c':'her-c';
+  let html=`<div class="stats">
+    <div class="stat"><div class="v ${cc}">${kcal.toLocaleString()}</div><div class="l">kcal</div></div>
+    <div class="stat"><div class="v ${cc}">${pro}g</div><div class="l">protein</div></div>
+    <div class="stat"><div class="v ${cc}">&lt;18g</div><div class="l">sat fat</div></div>
+  </div>
+  <div class="reset-bar"><button class="reset-btn" onclick="resetDay()">↺ Reset to defaults</button></div>`;
 
-function calcTotals(meals) {
-  let kcal = 0, pro = 0;
-  meals.forEach(m => {
-    const d = getMealData(m, m.slot);
-    kcal += d.macros.kcal;
-    pro += d.macros.pro;
-  });
-  return { kcal, pro };
-}
+  SLOTS.forEach(s=>{
+    const meals=getMeals(person)[s]||[];
+    if(!meals.length)return;
+    const idx=Math.min(getSelIdx(person,day,s),meals.length-1);
+    const m=meals[idx];
+    const k=selKey(person,day,s);
+    const isOpen=openCards[k]||false;
 
-function renderContent() {
-  const meals = data[person][day];
-  const totals = calcTotals(meals);
-  const accent = person === 'him' ? 'him' : 'her';
+    const opts=meals.map((o,i)=>`<option value="${i}"${i===idx?' selected':''}>${o.label}</option>`).join('');
+    const sharedBadge=m.shared?'<span class="shared-badge">Shared</span>':'';
+    const notePill=m.note?`<div class="note-pill">⏰ ${m.note}</div>`:'';
 
-  let html = `<div class="stat-bar" style="margin-top:12px">
-    <div class="stat-chip ${accent}"><div class="val">${totals.kcal.toLocaleString()}</div><div class="lbl">kcal</div></div>
-    <div class="stat-chip ${accent}"><div class="val">${totals.pro}g</div><div class="lbl">protein</div></div>
-    <div class="stat-chip ${accent}"><div class="val">&lt;18g</div><div class="lbl">sat fat</div></div>
-  </div>`;
+    const shopHtml=(m.shopping||[]).map(([n,l])=>`<li><span class="shop-name">${n}</span><span class="shop-loc">${l}</span></li>`).join('');
+    const ingrHtml=(m.ingredients||[]).map(i=>`<li>${i}</li>`).join('');
+    const stepsHtml=(m.steps||[]).map(st=>`<li>${st}</li>`).join('');
 
-  meals.forEach(mealDef => {
-    const slot = mealDef.slot;
-    const key = getKey(person, day, slot);
-    const d = getMealData(mealDef, slot);
-    const isOpen = false;
-    const sharedBadge = mealDef.shared ? '<span class="shared-badge">Shared</span>' : '';
-
-    const slotLabel = {pre:'Pre-workout shake',post:'Post-workout breakfast',
-      lunch:'Lunch',snack:'Snack',dinner:'Dinner',evening:'Evening snack'}[slot] || slot;
-
-    // Dropdown if options exist
-    let selectorHtml = '';
-    if (mealDef.options) {
-      const selIdx = selections[key] || 0;
-      selectorHtml = `<div class="meal-selector">
-        <select onchange="selectOption('${key}','${slot}',this.value)">
-          ${mealDef.options.map((o,i) => `<option value="${i}" ${i===selIdx?'selected':''}>${o.label}</option>`).join('')}
-        </select>
-      </div>`;
-    }
-
-    // Note pill
-    const notePill = d.note ? `<div style="font-size:12px;color:#E65100;background:#FFF3E0;padding:4px 10px;border-radius:8px;margin:0 14px 8px;">⏰ ${d.note}</div>` : '';
-
-    // Ingredients
-    const ingrHtml = (d.ingredients||[]).map(i => `<li>${i}</li>`).join('');
-
-    // Shopping
-    const shopHtml = (d.shopping||[]).map(([item,loc]) =>
-      `<li><span class="shop-item-name">${item}</span><span class="shop-item-note">${loc}</span></li>`
-    ).join('');
-
-    // Steps
-    const stepsHtml = (d.steps||[]).map(s => `<li>${s}</li>`).join('');
-
-    html += `<div class="meal-card" data-slot="${slot}" data-key="${key}" id="card_${key}">
-      <div class="meal-header" onclick="toggleCard('${key}')">
-        <div>
-          <div class="meal-slot-label">${slotLabel}</div>
-          <div class="meal-title">${d.title || mealDef.title}${sharedBadge}</div>
-          <div class="meal-macros">${d.macros.kcal} kcal &middot; ${d.macros.pro}g protein${d.macros.fv ? ' &middot; ' + d.macros.fv : ''}</div>
-        </div>
-        <div class="expand-icon">⌄</div>
+    html+=`<div class="mc slot-${s}${isOpen?' open':''}" id="mc_${k}">
+      <div class="mc-top">
+        <div class="slot-label">${SLOT_LABEL[s]||s}</div>
+        <select class="meal-select" onchange="changeMeal('${s}',this.value)">${opts}</select>
       </div>
-      ${selectorHtml}
+      <div class="mc-meta" onclick="toggleCard('${k}')">
+        <div class="mc-macros">${m.macros.kcal} kcal · ${m.macros.pro}g protein${m.macros.fv?' · '+m.macros.fv:''}${sharedBadge}</div>
+        <div class="expand-btn">⌄</div>
+      </div>
       ${notePill}
-      <div class="meal-body">
-        <div class="body-section">
-          <div class="body-section-title shop">🛒 Shopping (if needed)</div>
-          <ul class="shop-list">${shopHtml}</ul>
-        </div>
-        <div class="body-section">
-          <div class="body-section-title ingr">🥗 Ingredients</div>
-          <ul class="ingr-list">${ingrHtml}</ul>
-        </div>
-        <div class="body-section">
-          <div class="body-section-title cook">👨‍🍳 How to make it</div>
-          <ol class="step-list">${stepsHtml}</ol>
-        </div>
+      <div class="mc-body">
+        <div class="bsec"><div class="bsec-title shop">🛒 Shopping (if needed)</div><ul class="shop-list">${shopHtml}</ul></div>
+        <div class="bsec"><div class="bsec-title ingr">🥗 Ingredients</div><ul class="ingr-list">${ingrHtml}</ul></div>
+        <div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">${stepsHtml}</ol></div>
       </div>
     </div>`;
   });
 
-  document.getElementById('mainContent').innerHTML = html;
+  document.getElementById('main').innerHTML=html;
 }
 
-function toggleCard(key) {
-  const card = document.getElementById(`card_${key}`);
-  card.classList.toggle('open');
+function toggleCard(k){
+  openCards[k]=!openCards[k];
+  const card=document.getElementById(`mc_${k}`);
+  if(card)card.classList.toggle('open',openCards[k]);
 }
 
-function selectOption(key, slot, idx) {
-  selections[key] = parseInt(idx);
-  // Re-render just that card
-  const meals = data[person][day];
-  const mealDef = meals.find(m => m.slot === slot);
-  if (!mealDef) return;
-  const d = getMealData(mealDef, slot);
-
-  // Update title and macros in header
-  const card = document.getElementById(`card_${key}`);
-  if (!card) return;
-  card.querySelector('.meal-title').childNodes[0].textContent = d.title || mealDef.title;
-  card.querySelector('.meal-macros').textContent =
-    `${d.macros.kcal} kcal · ${d.macros.pro}g protein${d.macros.fv ? ' · ' + d.macros.fv : ''}`;
-
-  // Update shopping
-  const shopHtml = (d.shopping||[]).map(([item,loc]) =>
-    `<li><span class="shop-item-name">${item}</span><span class="shop-item-note">${loc}</span></li>`
-  ).join('');
-  card.querySelector('.shop-list').innerHTML = shopHtml;
-
-  // Update ingredients
-  card.querySelector('.ingr-list').innerHTML = (d.ingredients||[]).map(i => `<li>${i}</li>`).join('');
-
-  // Update steps
-  card.querySelector('.step-list').innerHTML = (d.steps||[]).map(s => `<li>${s}</li>`).join('');
-
-  // Update stat bar totals
-  const meals2 = data[person][day];
-  const totals = calcTotals(meals2);
-  document.querySelectorAll('.stat-chip .val')[0].textContent = totals.kcal.toLocaleString();
-  document.querySelectorAll('.stat-chip .val')[1].textContent = totals.pro + 'g';
+function changeMeal(slot,idx){
+  setSel(person,day,slot,parseInt(idx));
+  // Full re-render to update totals and card
+  renderAll();
+  // Re-open any cards that were open
 }
 
-// Init
+function resetDay(){
+  SLOTS.forEach(s=>{
+    const k=selKey(person,day,s);
+    delete SEL[k];
+  });
+  renderAll();
+}
+
 renderDayTabs();
-renderContent();
+renderAll();
 </script>
 </body>
 </html>
