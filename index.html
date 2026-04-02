@@ -1298,7 +1298,7 @@ function saveSyncIdLocal(id){
 // Create a new shared blob
 function createSync(){
   setSyncStatus('Creating shared sync...','loading');
-  var payload={weeks:weeks,version:1};
+  var payload={weeks:weeks,customMeals:customMeals,version:1};
   fetch(JSONBLOB_BASE,{
     method:'POST',
     headers:{'Content-Type':'application/json','X-Jsonblob-Create-If-Not-Exists':'true'},
@@ -1320,7 +1320,7 @@ function pushSync(){
   fetch(JSONBLOB_BASE+'/'+syncId,{
     method:'PUT',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({weeks:weeks,version:1,updated:new Date().toISOString()})
+    body:JSON.stringify({weeks:weeks,customMeals:customMeals,version:1,updated:new Date().toISOString()})
   }).then(function(r){
     if(r.ok){setSyncStatus('Pushed successfully \u2713  '+new Date().toLocaleTimeString(),'ok');}
     else{setSyncStatus('Push failed ('+r.status+').','err');}
@@ -1386,7 +1386,7 @@ function clearSyncId(){
 
 // Export: base64-encode weeks JSON, copy to clipboard
 function exportWeeks(){
-  var json=JSON.stringify(weeks,null,2);
+  var json=JSON.stringify({weeks:weeks,customMeals:customMeals},null,2);
   var b64=btoa(unescape(encodeURIComponent(json)));
   navigator.clipboard.writeText(b64).then(function(){
     setSyncStatus('Export copied to clipboard! Paste it on your other device.','ok');
@@ -1405,13 +1405,25 @@ function importWeeks(){
   try{
     var json=decodeURIComponent(escape(atob(val)));
     var imported=JSON.parse(json);
-    var added=0,updated=0;
-    Object.keys(imported).forEach(function(id){
-      if(!weeks[id]){weeks[id]=imported[id];added++;}
-      else{weeks[id]=imported[id];updated++;}
+    // Support both old format (flat weeks obj) and new format ({weeks,customMeals})
+    var importedWeeks=imported.weeks||imported;
+    var importedMeals=imported.customMeals||{};
+    var added=0,updated=0,mAdded=0,mUpdated=0;
+    Object.keys(importedWeeks).forEach(function(id){
+      if(!weeks[id]){weeks[id]=importedWeeks[id];added++;}
+      else{weeks[id]=importedWeeks[id];updated++;}
     });
-    saveWeeks();renderWeekBar();
-    setSyncStatus('Imported: '+added+' new, '+updated+' updated.','ok');
+    Object.keys(importedMeals).forEach(function(id){
+      if(!customMeals[id]){customMeals[id]=importedMeals[id];mAdded++;}
+      else{customMeals[id]=importedMeals[id];mUpdated++;}
+    });
+    saveWeeks();
+    saveCustomMeals();
+    injectCustomMeals();
+    renderWeekBar();
+    var msg='Imported: '+added+' week'+(added!==1?'s':'')+' ('+updated+' updated)';
+    if(mAdded||mUpdated) msg+=', '+mAdded+' recipe'+(mAdded!==1?'s':'')+' ('+mUpdated+' updated)';
+    setSyncStatus(msg,'ok');
     if(ta) ta.value='';
     renderSyncView();
   }catch(e){setSyncStatus('Invalid import code.','err');}
