@@ -122,6 +122,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .meal-links{display:flex;flex-direction:column;gap:4px}
 .meal-link{font-size:12px;color:var(--shop);text-decoration:none;display:flex;align-items:center;gap:4px}
 .meal-link:hover{text-decoration:underline}
+
+.qty-his{color:var(--his-mid);font-weight:600;font-size:12px}
+.qty-her{color:var(--her-mid);font-weight:600;font-size:12px}
+.qty-tot{color:#374151;font-weight:700;font-size:12px}
+.qty-sep{color:var(--gray);font-size:11px}
 </style>
 </head>
 <body>
@@ -602,6 +607,35 @@ function getPort(p,d,s){
 }
 function getMealsForSlot(s){return MEALS.filter(function(m){return m.slots.indexOf(s)>=0&&(m.him||m.her)})}
 
+function sumQtyStrings(a,b){
+  // Try to sum two qty strings like "25 oz" + "17 oz" = "42 oz"
+  function parse(s){
+    if(!s) return null;
+    var clean=s.trim()
+      .replace('½','0.5').replace('¼','0.25').replace('¾','0.75')
+      .replace('1¼','1.25').replace('1½','1.5').replace('1¾','1.75');
+    var m=clean.match(/^([\d.]+)\s*(oz|cup|cups|tbsp|tsp|clove|cloves|lb|lbs|scoop|can|block)?/i);
+    if(!m) return null;
+    var unit=(m[2]||'').toLowerCase().replace('cups','cup').replace('cloves','clove').replace('lbs','lb');
+    return {num:parseFloat(m[1]),unit:unit};
+  }
+  function fmt(num,unit){
+    var s;
+    if(num===Math.round(num)) s=String(Math.round(num));
+    else if(Math.abs(num-0.25)<0.01) s='¼';
+    else if(Math.abs(num-0.5)<0.01) s='½';
+    else if(Math.abs(num-0.75)<0.01) s='¾';
+    else if(Math.abs(num-1.25)<0.01) s='1¼';
+    else if(Math.abs(num-1.5)<0.01) s='1½';
+    else s=Math.round(num*10)/10+'';
+    return unit?s+' '+unit:s;
+  }
+  var pa=parse(a), pb=parse(b);
+  if(!pa||!pb) return null;
+  if(pa.unit!==pb.unit) return null;
+  return fmt(pa.num+pb.num, pa.unit);
+}
+
 function buildShoppingList(trip,fp){
   var tDays=TRIP_DAYS[trip];
   // key = normCat|||name  ->  {name,cat,hisOzTotal,herOzTotal,hisUnit,herUnit,hisNote,herNote,his[],her[]}
@@ -1020,13 +1054,18 @@ function renderShop(){
         } else if(shopPerson==='her'){
           qtyText=item.herQty&&item.herQty!=='—'?item.herQty:'';
         } else {
-          // Both — show combined on one row
-          var bothNeed=item.his.length>0&&item.her.length>0;
-          var h=item.hisQty&&item.hisQty!=='—'?'Him: '+item.hisQty:'';
-          var r=item.herQty&&item.herQty!=='—'?'Her: '+item.herQty:'';
-          if(bothNeed && h && r) qtyText=h+' / '+r;
-          else if(h) qtyText=h;
-          else if(r) qtyText=r;
+          // Both — color-coded his / her / total
+          var hv=item.hisQty&&item.hisQty!=='—'?item.hisQty:null;
+          var rv=item.herQty&&item.herQty!=='—'?item.herQty:null;
+          var parts=[];
+          if(hv) parts.push('<span class="qty-his">'+hv+'</span>');
+          if(rv) parts.push('<span class="qty-her">'+rv+'</span>');
+          // Calculate total if both are numeric oz/cup values
+          if(hv&&rv){
+            var tot=sumQtyStrings(hv,rv);
+            if(tot) parts.push('<span class="qty-tot">'+tot+'</span>');
+          }
+          qtyText=parts.join('<span class="qty-sep"> / </span>');
         }
 
         var ckEsc=ck.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
