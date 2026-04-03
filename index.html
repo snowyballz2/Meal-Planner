@@ -219,6 +219,156 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   cursor:pointer;background:var(--gray-light);color:var(--gray)}
 .rf-custom-tag{display:inline-block;font-size:10px;background:#FEF3C7;color:#92400E;
   border-radius:4px;padding:1px 5px;margin-left:4px;font-weight:600;vertical-align:middle}
+
+.prep-night.active .prep-night.active .prep-section-label.shared{color:#065F46}
+.prep-section-label.him{color:var(--his-mid)}
+.prep-section-label.her{color:var(--her-mid)}
+.prep-task:last-child{border-bottom:none}
+.prep-dtab.on{background:#065F46;color:white;border-color:#065F46}
+
+.ingr-edit-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--gray-light)}
+.ingr-edit-row:last-child{border-bottom:none}
+.ingr-qty-input{width:72px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;
+  font-size:12px;text-align:center;background:white;flex-shrink:0}
+.ingr-qty-input:focus{outline:none;border-color:var(--shop)}
+.ingr-name-span{font-size:13px;flex:1;color:#374151}
+.ingr-macro-pill{font-size:10px;color:var(--gray);white-space:nowrap;flex-shrink:0}
+.ingr-edit-btn{font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;
+  cursor:pointer;background:white;color:var(--gray);flex-shrink:0}
+.ingr-edit-btn:hover{background:var(--gray-light)}
+.macros-live{transition:all .2s}
+.macros-live.updated{color:var(--shop)!important}
+
+
+
+.settings-title{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.settings-person-row{display:flex;gap:8px;margin-bottom:10px;align-items:center}
+.settings-label{font-size:13px;font-weight:600;min-width:80px;color:#374151}
+
+
+
+.settings-him .settings-input{border-color:var(--his-light)}
+.settings-him .settings-input:focus{border-color:var(--his-mid)}
+.settings-her .settings-input{border-color:var(--her-light)}
+.settings-her .settings-input:focus{border-color:var(--her-mid)}
+
+
+
+
+
+.goal-indicator{display:flex;align-items:center;justify-content:space-between;
+  padding:8px 12px;border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px}
+.goal-indicator.him{background:var(--his-light);color:var(--his-mid)}
+.goal-indicator.her{background:var(--her-light);color:var(--her-mid)}
+.goal-indicator .gi-label{font-weight:600}
+.goal-indicator .gi-val{font-weight:700}
+/* Prep time pill */
+
+
+
+
+
+.top-tab.on-settings{color:#1B4965;border-bottom-color:#1B4965}
+.settings-section{background:white;border-radius:var(--radius);border:1px solid var(--border);margin:0 0 12px;padding:16px;box-shadow:var(--shadow)}
+
+
+.settings-row:last-child{margin-bottom:0}
+
+
+
+
+.settings-input{width:64px;padding:7px 6px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:14px;text-align:center;background:white}
+.settings-input:focus{outline:none;border-color:var(--shop)}
+.settings-unit{font-size:11px;color:var(--gray);flex-shrink:0;width:28px}
+.settings-preset-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.settings-preset{padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;font-weight:600;cursor:pointer;background:white;color:var(--gray)}
+.settings-preset.on{background:var(--shop);color:white;border-color:var(--shop)}
+.settings-save-btn{width:100%;padding:12px;background:var(--shop);color:white;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;cursor:pointer;margin-top:4px}
+.settings-save-btn:active{opacity:.85}
+
+
+
+
+
+
+
+
+
+
+.prep-pill{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;margin-left:5px;vertical-align:middle;flex-shrink:0}
+.prep-pill.quick{background:#D1FAE5;color:#065F46}
+.prep-pill.medium{background:#FEF3C7;color:#92400E}
+.prep-pill.involved{background:#FEE2E2;color:#991B1B}
+
+
+
+  border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:700;
+  cursor:pointer;transition:background .15s,opacity .15s}
+
+.cal-scroll-wrap{position:relative;height:160px;overflow:hidden;margin:0 0 20px;
+  -webkit-mask-image:linear-gradient(transparent 0%,black 30%,black 70%,transparent 100%)}
+.cal-scroll-list{overflow-y:scroll;height:160px;scroll-snap-type:y mandatory;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.cal-scroll-list::-webkit-scrollbar{display:none}
+.cal-scroll-item{height:48px;display:flex;align-items:center;justify-content:center;
+  scroll-snap-align:center;font-size:18px;font-weight:600;color:#9CA3AF;
+  transition:color .15s,font-size .15s}
+.cal-scroll-item.selected{color:#111827;font-size:22px}
+.cal-scroll-selector{position:absolute;top:50%;left:0;right:0;height:48px;
+  transform:translateY(-50%);border-top:2px solid var(--border);
+  border-bottom:2px solid var(--border);pointer-events:none;border-radius:4px}
+.cal-scroll-selector.him{border-color:var(--his-mid)}
+.cal-scroll-selector.her{border-color:var(--her-mid)}
+
+.cal-drum-wrap{position:relative;height:180px;overflow:hidden;margin:0 0 18px;
+  -webkit-mask-image:linear-gradient(transparent 0%,black 28%,black 72%,transparent 100%);
+  mask-image:linear-gradient(transparent 0%,black 28%,black 72%,transparent 100%)}
+.cal-drum{overflow-y:scroll;height:180px;scroll-snap-type:y mandatory;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.cal-drum::-webkit-scrollbar{display:none}
+.cal-drum-item{height:52px;display:flex;align-items:center;justify-content:center;
+  scroll-snap-align:center;gap:8px;transition:all .1s}
+.cal-drum-item .cal-kcal{font-size:20px;font-weight:700;color:#D1D5DB;transition:color .1s}
+.cal-drum-item .cal-zone{font-size:12px;color:#D1D5DB;transition:color .1s}
+.cal-drum-item.on .cal-kcal{font-size:24px;color:#111827}
+.cal-drum-item.on .cal-zone{font-size:13px;color:#6B7280}
+.cal-drum-selector{position:absolute;top:50%;left:16px;right:16px;height:52px;
+  transform:translateY(-50%);border-top:2px solid;border-bottom:2px solid;
+  border-radius:6px;pointer-events:none}
+.cal-drum-selector.him{border-color:var(--his-mid)}
+.cal-drum-selector.her{border-color:var(--her-mid)}
+
+.cal-popup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;
+  display:flex;align-items:flex-end;justify-content:center}
+.cal-popup{background:white;border-radius:18px 18px 0 0;width:100%;max-width:460px;
+  padding:20px 20px 40px;box-shadow:0 -6px 30px rgba(0,0,0,.2)}
+.cal-popup-title{font-size:16px;font-weight:700;text-align:center;margin-bottom:3px}
+.cal-popup-sub{font-size:12px;color:var(--gray);text-align:center;margin-bottom:18px}
+.cal-drum-wrap{position:relative;height:180px;overflow:hidden;margin:0 0 18px;
+  -webkit-mask-image:linear-gradient(transparent 0%,black 28%,black 72%,transparent 100%)}
+.cal-drum{overflow-y:scroll;height:180px;scroll-snap-type:y mandatory;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.cal-drum::-webkit-scrollbar{display:none}
+.cal-drum-item{height:52px;display:flex;align-items:center;justify-content:center;gap:8px}
+.cal-drum-item .dk{font-size:19px;font-weight:700;color:#D1D5DB;transition:all .1s}
+.cal-drum-item .dz{font-size:12px;color:#D1D5DB;transition:all .1s}
+.cal-drum-item.on .dk{font-size:24px;color:#111827}
+.cal-drum-item.on .dz{font-size:13px;color:#6B7280}
+.cal-drum-selector{position:absolute;top:50%;left:16px;right:16px;height:52px;
+  transform:translateY(-50%);border-top:2px solid;border-bottom:2px solid;
+  border-radius:6px;pointer-events:none}
+.cal-drum-selector.him{border-color:var(--his-mid)}
+.cal-drum-selector.her{border-color:var(--her-mid)}
+.cal-popup-btns{display:flex;gap:10px}
+.cal-popup-cancel{flex:1;padding:12px;border:1.5px solid var(--border);
+  border-radius:var(--radius-sm);background:white;font-size:14px;font-weight:600;
+  cursor:pointer;color:#374151}
+.cal-popup-ok{flex:2;padding:12px;border:none;border-radius:var(--radius-sm);
+  font-size:14px;font-weight:700;cursor:pointer;color:white}
+.cal-popup-ok.him{background:var(--his-mid)}
+.cal-popup-ok.her{background:var(--her-mid)}
+.kcal-tap{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+.kcal-tap:active{opacity:.7}
 </style>
 </head>
 <body>
@@ -242,6 +392,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="dscroll" id="dTabs"></div>
   </div>
 </div>
+<div id="calPopupOverlay" style="display:none"></div>
 <div id="mealView" class="content"></div>
 <div id="shopView" class="shop-view" style="display:none"></div>
 <div id="syncView" class="content" style="display:none"></div>
@@ -491,11 +642,18 @@ const MEALS=[
    shopping:[['Firm tofu (½ block)','Refrigerated','½ block','—'],['Dry green lentils','Pantry','½ cup','—'],['Kale','Produce','1c + 1c','—'],['Low-sodium chicken or veg broth','Pantry','1.5 cups','—'],['Garlic (fresh)','Produce','1 clove','—']],
    steps:['Drain tofu, press with a clean towel 5 min, then cut into 1-inch cubes.','Heat sesame oil in a pan or pot over medium-high heat. Add tofu cubes in a single layer and cook undisturbed 2–3 min until golden on the bottom. Flip and cook another 2 min. Remove and set aside.','In the same pot, add a little more broth. Sauté minced garlic and grated ginger for 1 min until fragrant.','Add lentils and remaining broth. Bring to a boil, then reduce to a simmer. Cook 20 min until lentils are soft but not mushy.','Add kale, diced carrots, and diced zucchini. Simmer 8–10 min until vegetables are tender.','Return tofu to the pot. Add soy sauce and a squeeze of lime juice. Stir gently so tofu doesn\'t break up.','Taste and adjust seasoning. Serve with a slice of whole-wheat toast for dipping.']},
   her:{macros:{kcal:390,pro:24,fat:12,carb:54,fv:'1.5c veg'},
-   ingredients:['½ block firm tofu (7 oz), cubed','½ cup dry green lentils','1 cup kale','½ cup diced carrots','½ cup diced zucchini','1.5 cups low-sodium broth','1 tbsp low-sodium soy sauce','1 tbsp lime juice','1 slice whole-wheat toast','1 clove garlic, minced','1 tsp ginger','1 tsp sesame oil'],
-   shopping:[['Firm tofu (½ block)','Refrigerated','—','½ block'],['Sesame oil','Pantry — if low','—','1 tsp'],['Dry green lentils','Pantry','—','½ cup'],['Kale','Produce','—','1c + 1c'],['Low-sodium chicken or veg broth','Pantry','—','1.5 cups'],['Garlic (fresh)','Produce','—','1 clove']],
-   steps:['Drain and press tofu 5 min. Cube.','Pan-fry tofu in sesame oil until golden, 4–5 min per side. Set aside.','Sauté garlic + ginger in the same pot 1 min. Add lentils and broth. Simmer 20 min.','Add kale, carrots, zucchini. Simmer 8–10 min until tender.','Return tofu to pot. Add soy sauce and lime juice. Stir gently. Serve with toast.']}},
-
- // SNACK
+   ingredients:['½ block firm tofu (7 oz), cubed','½ cup dry green lentils','1 cup kale','½ cup diced carrots','½ cup diced zucchini','1.5 cups low-sodium broth','1 tbsp low-sodium soy sauce','1 tsp sesame oil','1 clove garlic, minced','1 tsp fresh ginger','1 tbsp lime juice','1 slice whole-wheat toast'],
+   shopping:[['Firm tofu (½ block)','Refrigerated','—','½ block'],['Dry green lentils','Pantry','—','½ cup'],['Kale','Produce','—','1c + 1c'],['Low-sodium chicken or veg broth','Pantry','—','1.5 cups'],['Garlic (fresh)','Produce','—','1 clove'],['Sesame oil','Pantry — if low','—','1 tsp']],
+   steps:['Drain and press tofu 5 min. Cube.','Pan-fry tofu cubes in sesame oil until golden, 4–5 min per side. Set aside.','Sauté garlic + ginger in the same pot 1 min. Add lentils and broth. Simmer 20 min.','Add kale, carrots, zucchini. Simmer 8–10 min until tender.','Return tofu to pot. Add soy sauce and lime juice. Stir gently. Serve with toast.']}},
+ {id:'fitness_bowl',label:'Thai Turkey Fitness Bowl',slots:['lunch','dinner'],
+  him:{macros:{kcal:620,pro:48,fat:14,carb:68,fv:'1.5c veg'},
+   ingredients:['7 oz 93% lean ground turkey','1.5 cups fresh green beans, trimmed and halved','1 cup cooked white rice','1 Thai chili, thinly sliced','Handful of fresh Thai basil leaves','2 cloves garlic, minced','1 tsp low-sodium soy sauce','1 tsp fish sauce','1 tsp oyster sauce','1.5 tsp pure maple syrup','1 tsp neutral oil'],
+   shopping:[['Ground turkey (93% lean)','Meat','7 oz','5 oz'],['Fresh green beans','Produce','1.5 cups','1 cup'],['White rice (dry)','Pantry','½ cup','⅓ cup'],['Thai chilis (fresh)','Produce','2','2'],['Thai basil (fresh)','Produce','1 bunch','1 bunch'],['Garlic (fresh)','Produce','3 cloves','2 cloves'],['Oyster sauce','Pantry — if low','1 tbsp','1 tbsp']],
+   steps:['Make the sauce: whisk soy sauce, fish sauce, oyster sauce, and maple syrup together in a small bowl. Set aside.','Cook white rice: rinse and simmer in 1.5× water 18 min until absorbed. Fluff and keep covered.','Trim and halve green beans. Blanch in boiling water 2–3 min until bright green and tender-crisp. Drain and set aside.','Heat oil in a wok or large skillet over high heat until shimmering. Add garlic and Thai chilis. Stir-fry 30 sec until fragrant — watch it closely, garlic burns fast.','Add ground turkey. Break it apart and cook over high heat 5–6 min until cooked through and lightly browned in spots.','Add blanched green beans and toss 1–2 min.','Pour the sauce over everything and toss to coat. Cook 30 sec until the sauce reduces slightly and glazes the meat.','Remove from heat. Fold in Thai basil — it will wilt beautifully from the residual heat.','Serve over white rice. His larger portion on the left, hers smaller on the right.']},
+  her:{macros:{kcal:430,pro:32,fat:10,carb:52,fv:'1c veg'},
+   ingredients:['5 oz 93% lean ground turkey','1 cup fresh green beans, trimmed and halved','⅔ cup cooked white rice','1 Thai chili, thinly sliced','Handful of fresh Thai basil leaves','1 clove garlic, minced','1 tsp low-sodium soy sauce','1 tsp fish sauce','1 tsp oyster sauce','1 tsp pure maple syrup','1 tsp neutral oil'],
+   shopping:[['Ground turkey (93% lean)','Meat','—','5 oz'],['Fresh green beans','Produce','—','1 cup']],
+   steps:['Make the sauce: whisk soy sauce, fish sauce, oyster sauce, and maple syrup together in a small bowl. Set aside. Shared batch — scale down slightly for her portion.','Cook white rice: rinse and simmer in 1.5× water 18 min until absorbed. Fluff. Her portion: ⅔ cup cooked.','Trim and halve green beans. Blanch in boiling water 2–3 min until bright green and tender-crisp. Drain and set aside.','Heat oil in a wok or large skillet over high heat until shimmering. Add garlic and Thai chili. Stir-fry 30 sec until fragrant.','Add ground turkey. Break apart and cook over high heat 5–6 min until cooked through and lightly browned.','Add blanched green beans and toss 1–2 min.','Pour the sauce over and toss to coat. Cook 30 sec until sauce reduces and glazes the meat.','Remove from heat. Fold in Thai basil leaves — they wilt from the residual heat.','Serve over white rice. Use 1 Thai chili for milder heat, or remove seeds for less spice.']}},
  {id:'rxbar_apple',label:'RX Bar + apple',slots:['snack'],
   him:{macros:{kcal:280,pro:12,fat:6,carb:50,fv:'1 fruit'},ingredients:['1 RX Bar','1 medium apple'],shopping:[['RX Bar','Grab & go','1','—'],['Apple','Produce','1','—']],steps:['No prep needed.']},
   her:{macros:{kcal:280,pro:12,fat:6,carb:50,fv:'1 fruit'},ingredients:['1 RX Bar','1 medium apple'],shopping:[['RX Bar','Grab & go','—','1'],['Apple','Produce','—','1']],steps:['No prep needed.']}},
@@ -531,9 +689,9 @@ const MEALS=[
    shopping:[['Salmon fillet','Seafood','6 oz','4 oz'],['Dry green lentils','Pantry','¾ cup dry','—'],['Brown rice (dry)','Pantry','¾ cup dry','—'],['Baby spinach','Produce','3 cups','—'],['Garlic (fresh)','Produce','1 clove','1 clove']],
    steps:['Cook rice: rinse rice, combine with 1.5x cold water in a saucepan. Bring to a boil, cover tightly, reduce to the lowest heat. Simmer 40–45 min. Remove from heat and let steam covered 5 min. Fluff with a fork.','Cook lentils: rinse lentils and pick out any debris. Combine with 2 cups cold water in a saucepan. Bring to a boil, skim any foam, then reduce to a gentle simmer. Cook 20–25 min until tender but not mushy. Drain any excess water. Season with black pepper.','Preheat oven to 400°F. Pat both salmon fillets dry with paper towels — this helps them roast rather than steam. Season generously with fresh lemon juice, dried dill, and black pepper. Place on a lined baking sheet.','Roast 12–15 min. Salmon is done when it flakes easily with a fork and the thickest part is just opaque. His 6 oz piece may need a minute longer than her 4 oz piece.','While salmon roasts, heat olive oil in a pan over medium heat. Add spinach and a minced garlic clove. Sauté 2–3 min until wilted. Season with black pepper.','Plate together: his larger rice + lentil portion, hers smaller. Salmon on top, spinach alongside.']},
   her:{macros:{kcal:420,pro:28,fat:14,carb:48,fv:'1.5c veg'},
-   ingredients:['Salmon fillet','½ cup lentils — shared','1 cup spinach — shared','½ cup cooked brown rice (her)','Lemon, dill, pepper','1 clove garlic (shared)'],
+   ingredients:['4 oz salmon fillet','¾ cup dry green lentils (shared pot)','1.5 cups baby spinach (shared)','½ cup dry brown rice','1 tsp olive oil','1 clove garlic (for spinach)','Fresh lemon juice, dried dill, black pepper'],
    shopping:[['Salmon fillet','Seafood','6 oz','4 oz']],
-   steps:['Her salmon is 4 oz (vs his 6 oz). Roast alongside his at 400°F 12–14 min.','Her rice and lentil portions are smaller — see combined cook instructions above.','Everything cooks on the same sheet and in the same pots.']},
+   steps:['Cook rice: rinse, add to 1.5x cold water. Bring to boil, cover, reduce to lowest heat. Simmer 40–45 min. Let steam 5 min. Fluff. Her portion: ½ cup dry.','Cook lentils: rinse, simmer in 2 cups cold water 20–25 min until tender. Drain. Season with black pepper. Shared pot.','Preheat oven to 400°F. Pat both fillets dry. Season with lemon juice, dill, and black pepper. Place on a lined baking sheet.','Roast 12–14 min. Her 4 oz fillet will be done 1 min before his 6 oz piece. Check by flaking with a fork.','While salmon roasts, sauté spinach with garlic in olive oil 2–3 min until wilted.','Plate: her smaller rice and lentil portion alongside spinach, salmon on top.']},
   both:{macros:{kcal:1180,pro:85,fat:36,carb:120,fv:'combined'},
    ingredients:['6 oz salmon fillet (his) + 4 oz (hers)','¾ cup dry green lentils','1.5 cups baby spinach','His: ¾ cup dry brown rice · Her: ½ cup dry brown rice','1 tsp olive oil','Lemon juice, dill, black pepper']}},
 
@@ -543,9 +701,9 @@ const MEALS=[
    shopping:[['Salmon fillet','Seafood','6 oz','4 oz'],['Broccoli florets','Produce','2 cups','—'],['Low-sodium soy sauce','Pantry','2 tbsp','—'],['Honey','Pantry','1 tbsp','—']],
    steps:['Make the teriyaki glaze: in a small bowl whisk 2 tbsp low-sodium soy sauce, 1 tbsp honey, 1 tsp rice vinegar, 1 minced garlic clove, and 1 tsp freshly grated or jarred ginger until combined.','Cook rice ahead (batch on Sunday, reheat as needed). His portion: 1¼ cup cooked, hers: ¾ cup cooked.','Heat sesame oil in an oven-safe pan over medium-high heat. Pat both salmon fillets dry. Place skin-side up and sear 2–3 min without touching.','Flip both fillets. Brush the teriyaki glaze generously over each. Transfer pan to 400°F oven and cook 6–8 min until salmon flakes easily and glaze is caramelized.','While salmon finishes, stir-fry broccoli and bell pepper in a separate pan with a little sesame oil over high heat 3–4 min until tender-crisp and slightly charred.','Plate: rice base, stir-fry veg alongside, glazed salmon on top. His larger portion, hers smaller.']},
   her:{macros:{kcal:430,pro:28,fat:14,carb:56,fv:'2c veg'},
-   ingredients:['Salmon fillet','Seafood','—','4 oz'],
+   ingredients:['4 oz salmon fillet','1 cup broccoli & bell pepper (shared)','¾ cup cooked brown rice','2 tbsp low-sodium soy sauce (shared glaze)','1 tbsp honey','1 tsp sesame oil','1 tsp rice vinegar','1 clove garlic, minced','1 tsp fresh ginger'],
    shopping:[['Salmon fillet','Seafood','6 oz','4 oz']],
-   steps:['Her fillet is 4 oz (vs his 6 oz). Glaze and cook alongside his.','Her rice is ¾ cup cooked. Everything else is shared — same glaze, same veg, same pan.']},
+   steps:['Make teriyaki glaze: whisk soy sauce, honey, rice vinegar, garlic, and ginger together. Shared batch.','Warm pre-cooked brown rice. Her portion: ¾ cup cooked.','Heat sesame oil in an oven-safe pan over medium-high. Pat both fillets dry. Sear skin-side up 2–3 min. Flip both.','Brush glaze over both fillets. Transfer pan to 400°F oven 6–8 min. Her 4 oz piece may be done 1 min earlier — check by flaking.','While salmon finishes, stir-fry broccoli and bell pepper in the same pan with a little sesame oil over high heat 3–4 min.','Plate: her smaller rice portion, stir-fry veg alongside, glazed salmon on top.']},
   both:{macros:{kcal:1190,pro:82,fat:32,carb:138,fv:'combined'},
    ingredients:['6 oz salmon fillet (his) + 4 oz (hers)','2 cups broccoli & bell pepper','His: 1¼ cup cooked brown rice · Her: ¾ cup','2 tbsp low-sodium soy sauce, 1 tbsp honey','1 tsp sesame oil, 1 tsp rice vinegar, 1 clove garlic, 1 tsp ginger']}},
 
@@ -555,9 +713,9 @@ const MEALS=[
    shopping:[['Chicken thighs','Meat — Sun shop','7 oz','5 oz'],['Sweet potato (large)','Produce','1 large','—'],['Carrots','Produce','2 cups','—']],
    steps:['Preheat oven to 425°F. Remove chicken thighs from fridge 15 min early to take off the chill.','Cut sweet potato into 1-inch cubes and slice carrots into ½-inch rounds. Toss both with olive oil, dried rosemary, dried thyme, garlic powder, and black pepper. Spread in a single layer on a large rimmed baking sheet.','Roast veg 15 min until starting to soften and brown at the edges.','Season chicken thighs on both sides with lemon juice, garlic powder, rosemary, thyme, and pepper. Push the veg to the sides and place chicken thighs skin-side up in the center of the pan.','Roast everything together 20–22 min until chicken reaches 165°F internal temp and the skin is golden. If skin isn\'t crispy, broil on high for the last 2–3 min.','Rest chicken 3 min before serving. His 7 oz portion, her 5 oz portion.']},
   her:{macros:{kcal:390,pro:28,fat:10,carb:46,fv:'1.5c veg'},
-   ingredients:['Chicken thighs','½ cup sweet potato — shared pan','½ cup carrots — shared pan','Olive oil, lemon, rosemary, thyme','Garlic powder to taste'],
+   ingredients:['5 oz skinless chicken thigh','1 medium sweet potato, cubed (shared)','1 cup carrots, sliced (shared)','1½ tsp olive oil','Fresh lemon juice, rosemary, thyme, garlic powder, black pepper'],
    shopping:[['Chicken thighs','Meat — Sun shop','7 oz','5 oz']],
-   steps:['Her thigh is 5 oz. Cook on the same sheet pan as his.','Her sweet potato and carrot portions are smaller. Everything cooks together.']},
+   steps:['Preheat oven to 425°F. Remove chicken from fridge 15 min early.','Toss sweet potato and carrots with olive oil, rosemary, thyme, garlic powder, and black pepper. Spread on a large rimmed baking sheet.','Roast veg 15 min until starting to soften and brown.','Season her 5 oz chicken thigh with lemon juice and herbs. Add to the sheet alongside his.','Roast together 20–22 min until chicken reaches 165°F. Her smaller piece may be done 2 min earlier — check with a thermometer.','Rest 3 min before serving. Her portion alongside the shared veg.']},
   both:{macros:{kcal:1140,pro:84,fat:26,carb:124,fv:'combined'},
    ingredients:['7 oz skinless chicken thigh (his) + 5 oz (hers)','1 large sweet potato, cubed','1 cup carrots, sliced','1½ tsp olive oil','Lemon, rosemary, thyme, garlic, pepper']}},
 
@@ -567,9 +725,9 @@ const MEALS=[
    shopping:[['Ground turkey (93% lean)','Meat','6 oz','4 oz'],['Zucchini','Produce','2 medium','—'],['Kale','Produce','2 cups','—']],
    steps:['Preheat oven to 400°F. Line a baking sheet with parchment.','Make meatballs: combine ground turkey, 1 egg white, 2 tbsp oat flour, ½ tsp Italian seasoning, ½ tsp garlic powder, and black pepper in a bowl. Mix gently — don\'t overwork the meat. Roll into golf ball-sized balls (~12 total). Place on baking sheet.','Bake meatballs 18–20 min until internal temp reaches 165°F and outsides are lightly browned.','While meatballs bake, cook whole-wheat pasta per package. In the last 2 min, add zucchini noodles to the boiling pasta water. Drain both together.','In a pan, heat marinara sauce over low heat 3–4 min. Add cooked meatballs and toss to coat.','In a separate pan, sauté kale in a little olive oil 2 min until wilted.','Plate: his larger pasta portion with more meatballs, her pasta with extra zucchini noodles. Spoon marinara and meatballs over. Kale alongside.']},
   her:{macros:{kcal:430,pro:28,fat:12,carb:56,fv:'2c veg'},
-   ingredients:['4 oz 93% lean ground turkey (her meatballs)','½ cup whole-wheat pasta (her) + extra zucchini noodles','Marinara + kale — shared','½ tsp garlic powder','Black pepper to taste'],
+   ingredients:['4 oz 93% lean ground turkey (for her meatballs)','½ cup whole-wheat pasta','1.5 cups zucchini noodles','½ cup low-sodium marinara','1 cup kale','1 egg white + 2 tbsp oat flour + Italian seasoning (shared meatball binder)','Garlic powder, black pepper'],
    shopping:[['Ground turkey (93% lean)','Meat','6 oz','4 oz']],
-   steps:['Her meatballs are from 4 oz turkey (vs his 6 oz). Make all meatballs together.','Her pasta is ½ cup, with extra zucchini noodles for volume.','Everything cooks together — just portion differently at the end.']},
+   steps:['Preheat oven to 400°F. Line a baking sheet with parchment.','Mix ground turkey (combined his + hers), egg white, oat flour, Italian seasoning, garlic powder, and black pepper. Roll into golf ball-sized balls (~12 total). Place on baking sheet.','Bake meatballs 18–20 min until internal temp reaches 165°F.','Cook her ½ cup whole-wheat pasta per package. In the last 2 min, add zucchini noodles to the boiling water. Drain both.','Warm marinara over low heat 3–4 min. Add meatballs and toss to coat.','Sauté kale in a little oil 2 min until wilted.','Plate: her smaller pasta portion with extra zucchini noodles, meatballs and marinara over top, kale alongside.']},
   both:{macros:{kcal:1170,pro:86,fat:28,carb:136,fv:'combined'},
    ingredients:['10 oz 93% lean ground turkey (his 6 oz + her 4 oz)','His: ¾ cup whole-wheat pasta · Her: ½ cup','1.5 cups zucchini noodles','½ cup low-sodium marinara','1 cup kale','1 egg white + 2 tbsp oat flour + Italian seasoning']}},
 
@@ -579,9 +737,9 @@ const MEALS=[
    shopping:[['Cod fillet','Seafood','7 oz','5 oz'],['Dry farro','Pantry','1 cup','—'],['Asparagus','Produce','2 cups trimmed','—']],
    steps:['Cook farro: rinse and drain. Combine with 2.5 cups water in a saucepan. Bring to a boil, then reduce to a simmer. Cook uncovered 25–30 min until tender but still slightly chewy. Drain any excess water. Season with black pepper.','Preheat oven to 425°F. Toss asparagus and zucchini with olive oil, minced garlic, and black pepper. Spread on a large rimmed baking sheet.','Pat both cod fillets completely dry — moisture is the enemy of good roasted fish. Place directly on top of the veg or on a separate section of the sheet.','Season cod with lemon juice, dried dill, garlic powder, and black pepper.','Roast 12–15 min until cod is opaque throughout and flakes easily with a fork. His 7 oz piece may need 1–2 min more than her 5 oz piece.','Serve cod over farro with roasted veg alongside. A squeeze of fresh lemon finishes it nicely.']},
   her:{macros:{kcal:420,pro:30,fat:10,carb:58,fv:'2c veg'},
-   ingredients:['Cod fillet','Seafood','—','5 oz'],
+   ingredients:['5 oz cod fillet','1 cup dry farro (shared pot)','1 cup asparagus, trimmed (shared)','1 cup zucchini, sliced (shared)','1½ tbsp olive oil','Fresh lemon juice, garlic powder, dried dill, black pepper'],
    shopping:[['Cod fillet','Seafood','7 oz','5 oz']],
-   steps:['Her cod is 5 oz (vs his 7 oz). Roast alongside his — check hers first at 12 min.','Her farro portion is half of his. Everything cooks in the same pots and pan.']},
+   steps:['Cook farro: rinse and drain. Simmer in 2.5 cups water 25–30 min until tender. Drain any excess water. Shared pot.','Preheat oven to 425°F. Toss asparagus and zucchini with olive oil, garlic, and pepper. Spread on a large rimmed baking sheet.','Pat her 5 oz cod fillet completely dry. Place on the baking sheet alongside his 7 oz piece.','Season both with lemon juice, dried dill, garlic powder, and black pepper.','Roast 12–14 min. Her smaller fillet will flake 1–2 min before his — check first at 12 min.','Serve her cod over farro with roasted veg alongside. Finish with a squeeze of fresh lemon.']},
   both:{macros:{kcal:1150,pro:88,fat:24,carb:146,fv:'combined'},
    ingredients:['7 oz cod fillet (his) + 5 oz (hers)','1 cup dry farro','1 cup asparagus, trimmed','1 cup zucchini, sliced','1½ tbsp olive oil','Lemon, garlic, dill, black pepper']}},
 
@@ -591,9 +749,9 @@ const MEALS=[
    shopping:[['Filet mignon','Meat — Wed shop','6 oz','4 oz'],['Yukon Gold potatoes','Produce','1¼ cup','¾ cup'],['Asparagus','Produce','2 cups trimmed','—'],['Butter (unsalted)','Dairy — optional','1 tsp','—']],
    steps:['Take both filets out of the fridge 20–30 min before cooking — room temp meat sears more evenly.','Preheat oven to 425°F. Toss diced potatoes with olive oil, garlic powder, dried rosemary, and black pepper. Spread on a baking sheet and roast 20 min until starting to brown.','After 20 min, add asparagus and zucchini to the pan (toss with a tiny bit of oil). Roast 12–15 min more.','Pat both filets completely dry with paper towels. Season generously with black pepper and garlic powder — no salt needed given the marinade.','Heat a cast-iron or heavy skillet over the highest heat possible until it\'s smoking hot. Add a tiny bit of oil. Sear filets 2–3 min per side without touching — you need the crust.','Add butter to the pan and baste the steaks. Transfer pan to oven for 4–5 min for medium-rare (130°F internal). Remove and rest on a cutting board 5 min — don\'t skip this.','Drizzle balsamic vinegar over steaks just before serving. His larger potato portion, hers smaller.']},
   her:{macros:{kcal:420,pro:28,fat:18,carb:42,fv:'2c veg'},
-   ingredients:['4 oz filet mignon (hers)','¾ cup Yukon Gold potatoes (her) — shared pan','Asparagus + zucchini — shared'],
+   ingredients:['4 oz filet mignon','¾ cup Yukon Gold potatoes, cubed','1 cup asparagus (shared)','1 cup zucchini (shared)','1½ tbsp olive oil','Garlic powder, rosemary, black pepper','1 tbsp balsamic vinegar','1 tsp butter for basting (optional)'],
    shopping:[['Filet mignon','Meat — Wed shop','6 oz','4 oz']],
-   steps:['Her filet is 4 oz (vs his 6 oz). Sear alongside his.','Her potato portion is smaller. Pull her filet 1–2 min earlier than his if she prefers it more done.','Everything cooks in the same pan and baking sheet.']},
+   steps:['Take both filets out of the fridge 20–30 min before cooking to come to room temp.','Preheat oven to 425°F. Toss her potatoes with olive oil, garlic powder, rosemary, and pepper. Add to the shared baking sheet. Roast 20 min.','After 20 min, add asparagus and zucchini to the sheet. Roast 12–15 min more.','Pat her 4 oz filet completely dry. Season generously with black pepper and garlic powder.','Heat a cast-iron skillet until smoking hot. Add a tiny bit of oil. Sear both filets 2–3 min per side without moving.','Baste with butter. Transfer to oven 3–4 min for medium-rare (130°F). Her smaller filet may reach temp 1 min before his.','Rest both filets 5 min on a cutting board. Drizzle balsamic over before serving.']},
   both:{macros:{kcal:1180,pro:84,fat:46,carb:108,fv:'combined'},
    ingredients:['6 oz filet mignon (his) + 4 oz (hers)','His: 1¼ cup Yukon Gold potatoes · Her: ¾ cup','1 cup asparagus','1 cup zucchini','1½ tbsp olive oil','Garlic powder, rosemary, pepper, balsamic vinegar','1 tsp butter for basting (optional)']}},
 
@@ -603,9 +761,9 @@ const MEALS=[
    shopping:[['Chicken breast','Meat — cook fresh extra!','7 oz','5 oz'],['Dry farro','Pantry','1 cup','—'],['Brussels sprouts','Produce','1.5 cups','—']],
    steps:['Cook farro: rinse and drain. Simmer in 2.5 cups water 25–30 min until tender. Drain excess water.','Preheat oven to 425°F. Halve Brussels sprouts and slice carrots. Toss both with olive oil, garlic powder, dried thyme, and black pepper. Spread on a large rimmed baking sheet.','Rub both chicken breasts with olive oil, fresh lemon juice, dried rosemary, dried thyme, minced garlic, and black pepper. Place on top of the veg.','Roast 20–25 min until chicken reaches 165°F internal temp. Chicken is done when juices run clear when pierced. Let rest 3–5 min before slicing.','Plate: farro base, roasted veg alongside, sliced chicken on top. His larger farro portion, hers smaller.','Tip: roast 2 extra chicken breasts tonight. Slice and refrigerate — they\'re Monday and Tuesday lunches for the week.']},
   her:{macros:{kcal:420,pro:30,fat:10,carb:52,fv:'1.5c veg'},
-   ingredients:['Chicken breast','Meat','—','5 oz'],
+   ingredients:['5 oz chicken breast','1 cup dry farro (shared pot)','1.5 cups Brussels sprouts, halved (shared)','½ cup carrots (shared)','1½ tsp olive oil','Fresh lemon juice, dried rosemary, thyme, garlic, black pepper'],
    shopping:[['Chicken breast','Meat — cook fresh extra!','7 oz','5 oz']],
-   steps:['Her chicken is 5 oz (vs his 7 oz). Roast alongside his on the same sheet.','Her farro is half his portion. Everything cooks together.']},
+   steps:['Cook farro: rinse and drain. Simmer in 2.5 cups water 25–30 min until tender. Drain. Shared pot.','Preheat oven to 425°F. Halve Brussels sprouts and slice carrots. Toss both with olive oil, garlic powder, thyme, and black pepper. Spread on a large rimmed baking sheet.','Rub her 5 oz chicken breast with olive oil, lemon juice, rosemary, thyme, garlic, and black pepper. Place on the sheet alongside his.','Roast 20–25 min until chicken reaches 165°F. Her smaller piece may be done 2–3 min earlier — check with a thermometer.','Rest chicken 3–5 min before slicing. Plate over farro with roasted veg alongside.','Tip: if cooking extra for the week, roast 2 more breasts now and refrigerate — they become lunches for the next few days.']},
   both:{macros:{kcal:1170,pro:88,fat:26,carb:134,fv:'combined'},
    ingredients:['7 oz chicken breast (his) + 5 oz (hers)','1 cup dry farro','1.5 cups Brussels sprouts, halved','½ cup carrots','1½ tsp olive oil','Lemon, rosemary, thyme, garlic, pepper']}},
 
@@ -625,6 +783,15 @@ const MEALS=[
  {id:'yogurt_parfait_eve',label:'Greek yogurt parfait',slots:['evening'],
   him:{macros:{kcal:270,pro:20,fat:4,carb:40,fv:'0.5c fruit'},ingredients:['0% Greek yogurt','¼ cup low-fat granola','½ cup mixed berries','1 tbsp honey'],shopping:[['0% Greek yogurt','Dairy','1 cup','—'],['Low-fat granola','Pantry','¼ cup','—'],['Frozen mixed berries','Frozen','½ cup','—']],steps:['Spoon half the Greek yogurt into a glass or bowl.','Add a layer of granola, then a layer of berries.','Repeat with remaining yogurt and another layer of berries on top.','Drizzle honey over the top. The layering keeps the granola from getting soggy for a few minutes.']},
   her:{macros:{kcal:190,pro:14,fat:2,carb:28,fv:'0.5c fruit'},ingredients:['0% Greek yogurt','2 tbsp low-fat granola','½ cup mixed berries','1 tsp honey'],shopping:[['0% Greek yogurt','Dairy','—','¾ cup'],['Frozen mixed berries','Frozen','—','½ cup']],steps:['Layer yogurt, granola, berries. Drizzle honey.']}},
+ {id:'white_bean_chicken_chili',label:'White Bean Chicken Chili with Poblano & Cheddar',slots:['lunch','dinner'],
+  him:{macros:{kcal:620,pro:52,fat:18,carb:40,fv:'1c veg'},
+   ingredients:['6 oz cooked pulled chicken breast','¾ can (11.5 oz) cannellini beans with liquid','½ poblano pepper, seeded and medium diced','1 scallion, thinly sliced (white and green separated)','½ lime, quartered','2 tbsp heavy cream','1.5 oz shredded cheddar & Monterey Jack blend','3 tbsp tomatillo-poblano sauce','½ tsp vegetable broth concentrate','¾ tsp smoky spice blend (smoked paprika, onion powder, garlic powder, cumin)','Olive oil','Salt and black pepper'],
+   shopping:[['Chicken breast','Meat','6 oz','5 oz'],['Cannellini beans (canned)','Pantry','¾ can','½ can'],['Poblano pepper','Produce','1','1'],['Scallions','Produce','2','2'],['Lime','Produce','1','1'],['Heavy cream','Dairy','2 tbsp','1.5 tbsp'],['Shredded cheddar & Monterey Jack','Dairy','1.5 oz','1 oz'],['Tomatillo-poblano sauce','Pantry','3 tbsp','3 tbsp'],['Vegetable broth concentrate','Pantry','½ tsp','½ tsp']],
+   steps:['Prep: dice the poblano (remove stem and seeds), slice scallions separating white bottoms from green tops, quarter the lime. If cooking chicken fresh: season with smoky spice blend and pan-sear or bake at 400°F until 165°F, then shred or pull.','In a medium pot, heat a drizzle of olive oil over medium-high. Add diced poblano and scallion whites. Season with the smoky spice blend, salt, and pepper. Cook 3–4 min stirring occasionally until softened.','Add tomatillo-poblano sauce and cannellini beans along with their canning liquid. Cook 1–2 min, mashing the beans lightly with the back of a spoon until partially broken down.','Add the broth concentrate and ½ cup water. Stir to combine. Bring to a boil over high heat, then reduce to a simmer. Cook 4–5 min until slightly thickened.','Add pulled chicken and stir in the cream. Simmer 2–3 min until chicken is heated through and the chili is creamy and thick. Taste and season with salt, pepper, and a squeeze of lime.','Ladle into a bowl. Top with shredded cheese, scallion greens, and as much lime as you like. Serve immediately.']},
+  her:{macros:{kcal:480,pro:38,fat:14,carb:32,fv:'1c veg'},
+   ingredients:['5 oz cooked pulled chicken breast','½ can (7.75 oz) cannellini beans with liquid','½ poblano pepper, seeded and medium diced','1 scallion, thinly sliced (white and green separated)','½ lime, quartered','1.5 tbsp heavy cream','1 oz shredded cheddar & Monterey Jack blend','3 tbsp tomatillo-poblano sauce','½ tsp vegetable broth concentrate','¾ tsp smoky spice blend','Olive oil','Salt and black pepper'],
+   shopping:[['Chicken breast','Meat','—','5 oz'],['Cannellini beans (canned)','Pantry','—','½ can'],['Poblano pepper','Produce','—','½'],['Heavy cream','Dairy','—','1.5 tbsp'],['Shredded cheddar & Monterey Jack','Dairy','—','1 oz']],
+   steps:['Prep: dice the poblano, slice scallion separating whites and greens, quarter lime. Shred or pull cooked chicken.','Cook poblano and scallion whites in olive oil over medium-high 3–4 min until softened. Season with smoky spice blend, salt, and pepper.','Add tomatillo sauce and beans with liquid. Lightly mash beans 1–2 min until partially broken down.','Add broth concentrate and ½ cup water. Bring to a boil then simmer 4–5 min until thickened.','Stir in pulled chicken and cream. Simmer 2–3 min until creamy and heated through. Squeeze in lime juice. Her portion uses ½ can beans vs his ¾ can and 5 oz chicken vs his 6 oz.','Top with shredded cheese and scallion greens. Serve with remaining lime wedge.']}},
 ];
 
 const DEFAULTS={
@@ -650,17 +817,18 @@ const DEFAULTS={
 
 </script>
 <script>
+
 const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const SLOTS=['pre','post','lunch','snack','dinner','evening'];
 const SLOT_LABEL={pre:'Pre-workout shake',post:'Post-workout breakfast',lunch:'Lunch',snack:'Snack',dinner:'Dinner',evening:'Evening snack'};
 const PERSONS=['him','her'];
 const TRIP_DAYS={sun:['Monday','Tuesday','Wednesday'],wed:['Thursday','Friday','Saturday','Sunday']};
 
-const SEL={},CHECKS={},openCards={};
+var SEL={},CHECKS={},openCards={};
 let topTab='meals',person='him',day='Monday',shopTrip='sun',shopPerson='both';
 
 // Items to always put in "If Low" section regardless of their original category
-const IF_LOW_ITEMS=['almond butter','peanut butter','olive oil','sesame oil','soy sauce','fish sauce','rice vinegar','gochujang','red curry paste','thai red curry paste','green curry paste','coconut milk','cashew milk','marinara','hummus','maple syrup','honey','triscuits','reduced-sodium triscuits','oat flour','oats','old-fashioned oats','brown rice','white rice','rice','granola','low-fat granola','baking powder','lemongrass paste','roasted peanuts','roasted chickpeas','crackers'];
+const IF_LOW_ITEMS=['almond butter','peanut butter','olive oil','sesame oil','soy sauce','fish sauce','oyster sauce','rice vinegar','gochujang','red curry paste','thai red curry paste','green curry paste','coconut milk','cashew milk','marinara','hummus','maple syrup','honey','triscuits','reduced-sodium triscuits','oat flour','oats','old-fashioned oats','brown rice','white rice','rice','granola','low-fat granola','baking powder','lemongrass paste','roasted peanuts','roasted chickpeas','crackers'];
 
 function isIfLow(name){
   var n=name.toLowerCase();
@@ -911,17 +1079,128 @@ function renderDayTabs(){
 
 function calcTotals(p,d){
   var kcal=0,pro=0,fat=0,carb=0;
+  var ratio=(p==='him'||p==='her')?getCalRatio(p):1;
   SLOTS.forEach(function(s){
     var port=getPort(p,d,s);
     if(port){
-      kcal+=port.macros.kcal; pro+=port.macros.pro;
-      fat+=(port.macros.fat||0); carb+=(port.macros.carb||0);
+      var r=(s==='post')?ratio:1;
+      kcal+=Math.round(port.macros.kcal*r);
+      pro+=Math.round(port.macros.pro*r);
+      fat+=Math.round((port.macros.fat||0)*r);
+      carb+=Math.round((port.macros.carb||0)*r);
     }
   });
   return{kcal:kcal,pro:pro,fat:fat,carb:carb};
 }
 
 // ── Meals render ─────────────────────────────────────────────
+
+// ── CALORIE POPUP ─────────────────────────────────────────────
+var CAL_BASE={him:2800,her:1900};
+var APPLIED_KCAL={him:2800,her:1900};
+
+function calSteps(p){
+  var steps=[],b=CAL_BASE[p];
+  for(var k=b-300;k<=b+300;k+=100) steps.push(k);
+  return steps;
+}
+function calZone(p,kcal){
+  var d=kcal-CAL_BASE[p];
+  return d<-100?'Cut':d>100?'Build':'Maintain';
+}
+function openCalPopup(p){
+  var overlay=document.getElementById('calPopupOverlay');
+  if(!overlay) return;
+  var steps=calSteps(p);
+  var curIdx=steps.indexOf(APPLIED_KCAL[p]);
+  if(curIdx<0) curIdx=3;
+  window._calP=p;
+  var items=steps.map(function(k,i){
+    return '<div class="cal-drum-item'+(i===curIdx?' on':'')+'" data-i="'+i+'">'
+      +'<span class="dk">'+k.toLocaleString()+' kcal</span>'
+      +'<span class="dz">'+calZone(p,k)+'</span>'
+      +'</div>';
+  }).join('');
+  overlay.innerHTML='<div class="cal-popup-overlay" onclick="if(event.target===this)closeCalPopup()">'
+    +'<div class="cal-popup">'
+    +'<div class="cal-popup-title">'+(p==='him'?'His':'Her')+' Daily Calories</div>'
+    +'<div class="cal-popup-sub">Scroll to select · applies today & forward</div>'
+    +'<div class="cal-drum-wrap">'
+    +'<div class="cal-drum-selector '+p+'"></div>'
+    +'<div class="cal-drum" id="calDrum" onscroll="onDrumScroll()">'
+    +'<div style="height:64px"></div>'+items+'<div style="height:64px"></div>'
+    +'</div></div>'
+    +'<div class="cal-popup-btns">'
+    +'<button class="cal-popup-cancel" onclick="closeCalPopup()">Cancel</button>'
+    +'<button class="cal-popup-ok '+p+'" onclick="confirmCal()">OK</button>'
+    +'</div></div></div>';
+  overlay.style.display='';
+  setTimeout(function(){
+    var d=document.getElementById('calDrum');
+    if(d){d.scrollTop=curIdx*52; highlightDrum(curIdx);}
+  },40);
+}
+function highlightDrum(idx){
+  var d=document.getElementById('calDrum');
+  if(!d) return;
+  d.querySelectorAll('.cal-drum-item').forEach(function(el,i){
+    el.classList.toggle('on',i===idx);
+  });
+}
+function onDrumScroll(){
+  var d=document.getElementById('calDrum');
+  if(!d) return;
+  highlightDrum(Math.round(d.scrollTop/52));
+}
+function confirmCal(){
+  var d=document.getElementById('calDrum');
+  var p=window._calP;
+  if(!d||!p) return;
+  var steps=calSteps(p);
+  var idx=Math.max(0,Math.min(Math.round(d.scrollTop/52),steps.length-1));
+  APPLIED_KCAL[p]=steps[idx];
+  closeCalPopup();
+  renderMeals();
+}
+function closeCalPopup(){
+  var o=document.getElementById('calPopupOverlay');
+  if(o) o.style.display='none';
+}
+function getCalRatio(p){return APPLIED_KCAL[p]/CAL_BASE[p];}
+function scalePort(port,p,slot){
+  if(!port||!port.macros) return port;
+  if(slot!=='post') return port;  // only scale post-workout breakfast
+  var r=getCalRatio(p);
+  if(Math.abs(r-1.0)<0.005) return port;
+  var m=port.macros;
+  return{macros:{kcal:Math.round(m.kcal*r),pro:Math.round(m.pro*r),
+    fat:Math.round(m.fat*r),carb:Math.round(m.carb*r),fv:m.fv||''},
+    ingredients:port.ingredients,shopping:port.shopping,steps:port.steps};
+}
+
+function scaleIngrText(ingr, ratio) {
+  if (Math.abs(ratio - 1.0) < 0.005) return ingr;
+  // Match leading number (including fractions) and scale it
+  var s = ingr
+    .replace(/1¾/g,'1.75').replace(/1½/g,'1.5').replace(/1¼/g,'1.25')
+    .replace(/¾/g,'0.75').replace(/½/g,'0.5').replace(/¼/g,'0.25')
+    .replace(/⅔/g,'0.67').replace(/⅓/g,'0.33');
+  var m = s.match(/^(\d+\.?\d*)(.*)$/);
+  if (!m) return ingr;
+  var num = parseFloat(m[1]) * ratio;
+  var rest = m[2];
+  // Format nicely
+  var fmt;
+  if (Math.abs(num - Math.round(num)) < 0.05) fmt = String(Math.round(num));
+  else if (Math.abs(num - 0.25) < 0.05) fmt = '¼';
+  else if (Math.abs(num - 0.5)  < 0.05) fmt = '½';
+  else if (Math.abs(num - 0.75) < 0.05) fmt = '¾';
+  else if (Math.abs(num - 1.25) < 0.05) fmt = '1¼';
+  else if (Math.abs(num - 1.5)  < 0.05) fmt = '1½';
+  else if (Math.abs(num - 1.75) < 0.05) fmt = '1¾';
+  else fmt = Math.round(num * 10) / 10 + '';
+  return fmt + rest;
+}
 
 function renderMeals(){
   var t=calcTotals(person,day);
@@ -930,10 +1209,11 @@ function renderMeals(){
   var cPct=t.kcal?Math.round(t.carb*4/t.kcal*100):0;
   var fPct=t.kcal?Math.round(t.fat*9/t.kcal*100):0;
 
-  var sharedLabel=person==='shared'?' (2 people)':'';
   var html='<div class="stats">'
-    +'<div class="stat"><div class="v '+cc+'">'+t.kcal.toLocaleString()+'</div><div class="l">kcal'+sharedLabel+'</div></div>'
-    +'<div class="stat"><div class="v '+cc+'">'+t.pro+'g</div><div class="l">protein'+sharedLabel+'</div></div>'
+    +(person!=='shared'
+      ?'<div class="stat" data-p="'+person+'" onclick="openCalPopup(this.dataset.p)"><div class="v kcal-tap '+cc+'">'+t.kcal.toLocaleString()+'<div style="font-size:9px;opacity:.65;margin-top:1px">'+calZone(person,APPLIED_KCAL[person])+' &#9658;</div></div><div class="l">kcal</div></div>'
+      :'<div class="stat"><div class="v '+cc+'">'+t.kcal.toLocaleString()+'</div><div class="l">kcal</div></div>')
+    +'<div class="stat"><div class="v '+cc+'">'+t.pro+'g</div><div class="l">protein</div></div>'
     +'<div class="stat"><div class="v '+cc+'">'+t.fat+'g</div><div class="l">fat</div></div>'
     +'<div class="stat"><div class="v '+cc+'">'+t.carb+'g</div><div class="l">carbs</div></div>'
     +'</div>'
@@ -949,63 +1229,33 @@ function renderMeals(){
       var herId=getMealId('her',day,s);
       if(!hisId||!herId||hisId!==herId)return;
       var meal=getMeal(hisId);
-      if(!meal)return;
+      if(!meal||!meal.both)return;
       hasShared=true;
+      var both=meal.both;
       var k='shared_'+day+'_'+s;
       var isOpen=openCards[k]||false;
       var slotLabel=SLOT_LABEL[s]||s;
-
-      // Use pre-built both: block if it exists, otherwise combine him+her on the fly
-      var pm, ingrHtml, stepsHtml;
-      if(meal.both){
-        var both=meal.both;
-        pm=both.macros;
-        ingrHtml=(both.ingredients||[]).map(function(i){return'<li>'+i+'</li>'}).join('');
-        stepsHtml=((meal.him&&meal.him.steps)||[]).map(function(st){return'<li>'+st+'</li>'}).join('');
-      } else {
-        // Build combined macros and merged ingredient list from him + her portions
-        var hp=meal.him, rp=meal.her;
-        var hm=hp&&hp.macros||{kcal:0,pro:0,fat:0,carb:0};
-        var rm=rp&&rp.macros||{kcal:0,pro:0,fat:0,carb:0};
-        pm={
-          kcal:(hm.kcal||0)+(rm.kcal||0),
-          pro:(hm.pro||0)+(rm.pro||0),
-          fat:(hm.fat||0)+(rm.fat||0),
-          carb:(hm.carb||0)+(rm.carb||0),
-          fv:'combined'
-        };
-        // Merge ingredients: his list first, deduplicate against hers
-        var hisIngr=hp&&hp.ingredients||[];
-        var herIngr=rp&&rp.ingredients||[];
-        // Build a deduplicated combined list — items unique to him labeled, unique to her labeled, shared unlabeled
-        var combined=[];
-        var herLower=herIngr.map(function(x){return x.toLowerCase()});
-        hisIngr.forEach(function(item){
-          var lc=item.toLowerCase();
-          var herIdx=herLower.findIndex(function(h){return h===lc||h.indexOf(lc.split(' ').slice(-2).join(' '))>=0});
-          if(herIdx>=0){
-            combined.push(item); // same in both — just list once
-          } else {
-            combined.push('Him: '+item);
-          }
-        });
-        herIngr.forEach(function(item){
-          var lc=item.toLowerCase();
-          var hisLower=hisIngr.map(function(x){return x.toLowerCase()});
-          var inHis=hisLower.some(function(h){return h===lc||h.indexOf(lc.split(' ').slice(-2).join(' '))>=0});
-          if(!inHis) combined.push('Her: '+item);
-        });
-        ingrHtml=combined.map(function(i){return'<li>'+i+'</li>'}).join('');
-        stepsHtml=(hisIngr.length?(hp.steps||[]):[]).map(function(st){return'<li>'+st+'</li>'}).join('');
-      }
-
+      var pm=both.macros;
       var mFat=pm.fat||0,mCarb=pm.carb||0;
       var mPct=pm.kcal?Math.round(pm.pro*4/pm.kcal*100):0;
       var cPct2=pm.kcal?Math.round(mCarb*4/pm.kcal*100):0;
       var fPct2=pm.kcal?Math.round(mFat*9/pm.kcal*100):0;
-      var macroLine=pm.kcal+' kcal · P '+pm.pro+'g ('+mPct+'%) · C '+mCarb+'g ('+cPct2+'%) · F '+mFat+'g ('+fPct2+'%)';
-
-      html+='<div class="mc slot-'+s+(isOpen?' open':'')+'" id="mc_'+k+'">'        +'<div class="mc-top"><div class="slot-label">'+slotLabel+'</div>'        +'<div style="font-size:15px;font-weight:600;padding:4px 0 6px">'+meal.label        +' <span class="shared-badge">Both</span></div>'        +'</div>'        +'<div class="mc-meta" onclick="toggleCard(\''+k+'\')"><div><div class="mc-macros">'+macroLine+'</div>'        +macroBar(pm.kcal,pm.pro,mFat,mCarb)        +'</div><div class="expand-btn">⌄</div></div>'        +'<div class="mc-body">'        +'<div class="bsec"><div class="bsec-title ingr">🥗 Combined ingredients (serves 2)</div><ul class="ingr-list">'+ingrHtml+'</ul></div>'        +'<div class="bsec"><div class="bsec-title cook">👨\u200d🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'        +'</div></div>';
+      var macroLine=pm.kcal+' kcal \u00b7 P '+pm.pro+'g ('+mPct+'%) \u00b7 C '+mCarb+'g ('+cPct2+'%) \u00b7 F '+mFat+'g ('+fPct2+'%)';
+      var ingrHtml=(both.ingredients||[]).map(function(i){return'<li>'+i+'</li>'}).join('');
+      var hisPort=meal.him;
+      var stepsHtml=(hisPort&&hisPort.steps||[]).map(function(st){return'<li>'+st+'</li>'}).join('');
+      html+='<div class="mc slot-'+s+(isOpen?' open':'')+'" id="mc_'+k+'">'
+        +'<div class="mc-top"><div class="slot-label">'+slotLabel+'</div>'
+        +'<div style="font-size:15px;font-weight:600;padding:4px 0 6px">'+meal.label
+        +' <span class="shared-badge">Both</span></div>'
+        +'</div>'
+        +'<div class="mc-meta" onclick="toggleCard(\''+k+'\')"><div><div class="mc-macros">'+macroLine+'</div>'
+        +macroBar(pm.kcal,pm.pro,mFat,mCarb)
+        +'</div><div class="expand-btn">&#8964;</div></div>'
+        +'<div class="mc-body">'
+        +'<div class="bsec"><div class="bsec-title ingr">\ud83e\udd57 Combined ingredients (serves 2)</div><ul class="ingr-list">'+ingrHtml+'</ul></div>'
+        +'<div class="bsec"><div class="bsec-title cook">\ud83d\udc68\u200d\ud83c\udf73 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'
+        +'</div></div>';
     });
     if(!hasShared) html+='<div class="empty-shop" style="padding:40px 20px;text-align:center;color:var(--gray)">No shared meals on '+day+'. Select the same meal for both of you in a slot to see it here.</div>';
     document.getElementById('mealView').innerHTML=html;
@@ -1013,7 +1263,7 @@ function renderMeals(){
   }
 
   // Normal him/her view
-  html+='<div class="reset-bar"><button class="reset-btn" onclick="resetDay()">↺ Reset '+day+' to defaults</button></div>';
+  html+='<div class="reset-bar"><button class="reset-btn" onclick="resetDay()">\u21ba Reset '+day+' to defaults</button></div>';
   var other=person==='him'?'her':'him';
 
   SLOTS.forEach(function(s){
@@ -1022,35 +1272,35 @@ function renderMeals(){
     var activeId=getMealId(person,day,s);
     var activeMeal=getMeal(activeId)||slotMeals[0];
     var port=activeMeal[person];if(!port)return;
+    if(person==='him'||person==='her') port=scalePort(port,person,s);
     var k=person+'_'+day+'_'+s;
     var isOpen=openCards[k]||false;
 
     var opts=slotMeals.map(function(m){
-      var prefix=m._custom?'★ ':'';
-      return'<option value="'+m.id+'"'+(m.id===activeId?' selected':'')+'>'+prefix+m.label+'</option>';
+      return'<option value="'+m.id+'"'+(m.id===activeId?' selected':'')+'>'+m.label+'</option>';
     }).join('');
 
-    // Check if this slot matches the other person — show shared badge
+    // Check if this slot matches the other person \u2014 show shared badge
     var otherId=getMealId(other,day,s);
     var isSharedSlot=(otherId&&otherId===activeId);
     var sharedBadge=isSharedSlot?'<span class="shared-badge">Shared with '+(other==='him'?'him':'her')+'</span>':'';
     var dinnerSharedBadge=activeMeal.shared&&!isSharedSlot?'<span class="shared-badge">Shared dinner</span>':'';
-    var notePill=activeMeal.note?'<div class="note-pill">⏰ '+activeMeal.note+'</div>':'';
+    var notePill=activeMeal.note?'<div class="note-pill">\u23f0 '+activeMeal.note+'</div>':'';
 
     var pm=port.macros;
     var mFat=pm.fat||0,mCarb=pm.carb||0;
     var mPct=pm.kcal?Math.round(pm.pro*4/pm.kcal*100):0;
     var cPct2=pm.kcal?Math.round(mCarb*4/pm.kcal*100):0;
     var fPct2=pm.kcal?Math.round(mFat*9/pm.kcal*100):0;
-    var macroLine=pm.kcal+' kcal · P '+pm.pro+'g ('+mPct+'%) · C '+mCarb+'g ('+cPct2+'%) · F '+mFat+'g ('+fPct2+'%)'+(pm.fv?' · '+pm.fv:'');
+    var macroLine=pm.kcal+' kcal \u00b7 P '+pm.pro+'g ('+mPct+'%) \u00b7 C '+mCarb+'g ('+cPct2+'%) \u00b7 F '+mFat+'g ('+fPct2+'%)'+(pm.fv?' \u00b7 '+pm.fv:'');
 
     var shopHtml=(port.shopping||[]).map(function(r){
       var q=person==='him'?r[2]:r[3];
       return'<li><span class="shop-name">'+r[0]+'</span><span class="shop-loc">'+q+'</span></li>';
     }).join('');
-    var ingrHtml=(port.ingredients||[]).map(function(i){return'<li>'+i+'</li>'}).join('');
+    var _r=(person==='him'||person==='her')&&s==='post'?getCalRatio(person):1;
+    var ingrHtml=(port.ingredients||[]).map(function(i){return'<li>'+scaleIngrText(i,_r)+'</li>'}).join('');
     var stepsHtml=(port.steps||[]).map(function(st){return'<li>'+st+'</li>'}).join('');
-
 
     html+='<div class="mc slot-'+s+(isOpen?' open':'')+'" id="mc_'+k+'">'
       +'<div class="mc-top"><div class="slot-label">'+SLOT_LABEL[s]+'</div>'
@@ -1058,12 +1308,12 @@ function renderMeals(){
       +'</div>'
       +'<div class="mc-meta" onclick="toggleCard(\''+k+'\')"><div><div class="mc-macros">'+macroLine+sharedBadge+dinnerSharedBadge+'</div>'
       +macroBar(pm.kcal,pm.pro,mFat,mCarb)
-      +'</div><div class="expand-btn">⌄</div></div>'
+      +'</div><div class="expand-btn">&#8964;</div></div>'
       +notePill
       +'<div class="mc-body">'
-      +'<div class="bsec"><div class="bsec-title shop">🛒 Shopping (if needed today)</div><ul class="shop-list">'+shopHtml+'</ul></div>'
-      +'<div class="bsec"><div class="bsec-title ingr">🥗 Ingredients</div><ul class="ingr-list">'+ingrHtml+'</ul></div>'
-      +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'
+      +'<div class="bsec"><div class="bsec-title shop">\ud83d\uded2 Shopping (if needed today)</div><ul class="shop-list">'+shopHtml+'</ul></div>'
+      +'<div class="bsec"><div class="bsec-title ingr">\ud83e\udd57 Ingredients</div><ul class="ingr-list">'+ingrHtml+'</ul></div>'
+      +'<div class="bsec"><div class="bsec-title cook">\ud83d\udc68\u200d\ud83c\udf73 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'
       +'</div></div>';
   });
   document.getElementById('mealView').innerHTML=html;
@@ -1322,7 +1572,7 @@ function pushSync(){
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({weeks:weeks,customMeals:customMeals,version:1,updated:new Date().toISOString()})
   }).then(function(r){
-    if(r.ok){setSyncStatus('Pushed successfully \u2713  '+new Date().toLocaleTimeString(),'ok');}
+    if(r.ok){setSyncStatus('Pushed successfully ✓  '+new Date().toLocaleTimeString(),'ok');}
     else{setSyncStatus('Push failed ('+r.status+').','err');}
   }).catch(function(){setSyncStatus('Network error. Check connection.','err');});
 }
@@ -1344,7 +1594,7 @@ function pullSync(){
     });
     saveWeeks();
     renderWeekBar();
-    setSyncStatus('Pulled \u2713  '+added+' new, '+updated+' updated  '+new Date().toLocaleTimeString(),'ok');
+    setSyncStatus('Pulled ✓  '+added+' new, '+updated+' updated  '+new Date().toLocaleTimeString(),'ok');
     renderSyncView();
   }).catch(function(){setSyncStatus('Pull failed. Check Sync ID or network.','err');});
 }
@@ -1844,9 +2094,41 @@ function renderRecipesView(){
   }
 }
 
+// ── PREP TAB ──────────────────────────────────────────────────
+var NIGHTLY_PREP={
+  'Monday':[{text:'Shred carrots (his lunch + her breakfast & lunch bowls)',who:'both'},{text:'Slice bell pepper for his lunch wrap',who:'him'}],
+  'Tuesday':[{text:'Make overnight oats: combine ¾ cup oats + ¾ cup water + 1 tbsp chia seeds in a jar, seal and refrigerate',who:'him'},{text:'Chop broccoli & bell pepper for his shrimp bowl lunch',who:'him'},{text:'Shred kale and carrots for her Thai peanut noodle lunch',who:'her'}],
+  'Wednesday':[{text:'Mince garlic (2–3 cloves) for his and her lunches',who:'both'},{text:'Dice bell pepper for his post-workout scramble',who:'him'},{text:'Shred zucchini and carrots for his tuna white bean salad',who:'him'},{text:'Shred carrots for her tofu scramble breakfast',who:'her'},{text:'Shred zucchini and carrots for her lemongrass salad lunch',who:'her'}],
+  'Thursday':[{text:'Dice bell pepper for his egg omelet breakfast',who:'him'},{text:'Dice carrots and mince garlic for his white bean soup lunch',who:'him'},{text:'Chop kale for her Korean juk breakfast',who:'her'},{text:'Shred carrots and dice zucchini for her bibimbap lunch',who:'her'}],
+  'Friday':[{text:'Shred kale for his burrito bowl lunch',who:'him'},{text:'Shred carrots for her noodle bowl breakfast',who:'her'},{text:'Shred kale and slice zucchini for her red curry lunch',who:'her'}],
+  'Saturday':[{text:'Mince garlic for tomorrow lunches',who:'both'},{text:'Dice carrots for his white bean soup lunch',who:'him'},{text:'Shred carrots for her Korean egg bowl breakfast',who:'her'},{text:'Dice carrots and zucchini for her viet tofu soup lunch',who:'her'}],
+  'Sunday':[{text:'Dice bell pepper and shred carrots for his breakfast scramble & lunch wrap',who:'him'},{text:'Shred carrots and slice bell pepper for her breakfast & vermicelli lunch',who:'her'},{text:'Mince garlic for her vermicelli dressing',who:'her'}],
+};
+
+function renderPrepSection(person,day){
+  var nextDay=DAYS[(DAYS.indexOf(day)+1)%7];
+  var tasks=NIGHTLY_PREP[day]||[];
+  var filtered=person==='both'?tasks:tasks.filter(function(t){return t.who==='both'||t.who===person;});
+  if(!filtered.length) return '';
+  var bg=person==='him'?'var(--his-light)':person==='her'?'var(--her-light)':'#F0FDF4';
+  var bdr=person==='him'?'var(--his-light)':person==='her'?'var(--her-light)':'#BBF7D0';
+  var tc=person==='him'?'var(--his-mid)':person==='her'?'var(--her-mid)':'#065F46';
+  var label=person==='both'?'Tonight\'s prep (all)':person==='him'?'His prep tonight':'Her prep tonight';
+  var rows=filtered.map(function(t){
+    var dot=t.who==='both'?'<span style="color:#065F46">&#9679;</span>':t.who==='him'?'<span style="color:var(--his-mid)">&#9679;</span>':'<span style="color:var(--her-mid)">&#9679;</span>';
+    return '<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.06);font-size:13px;line-height:1.45">'+dot+'<span>'+t.text+'</span></div>';
+  }).join('');
+  return '<div style="margin-top:12px;background:'+bg+';border:1px solid '+bdr+';border-radius:var(--radius-sm);padding:10px 12px">'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:'+tc+';margin-bottom:6px">📋 '+label+' — for '+nextDay+'</div>'
+    +rows+'</div>';
+}
+
+
 loadCustomMeals();
 renderDayTabs();
 renderMeals();
+
+
 </script>
 </body>
 </html>
