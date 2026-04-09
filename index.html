@@ -44,6 +44,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .mc-top-row{display:flex;align-items:center;justify-content:space-between}
 .slot-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--gray)}
 .meal-select{width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-weight:600;margin-top:4px;background:var(--bg-surface);color:var(--text)}
+.meal-select optgroup{font-weight:700;font-size:12px;color:var(--shop)}
+.meal-select option{font-weight:600;color:var(--text)}
 .mc-meta{display:flex;align-items:center;padding:8px 12px;cursor:pointer}
 .mc-meta>div:first-child{flex:1}
 .mc-macros{font-size:12px;font-weight:600;color:var(--text-mid)}
@@ -127,9 +129,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .cs-action-btn{padding:5px 12px;border:1.5px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-mid);font-size:11px;font-weight:600;cursor:pointer}
 .cs-action-btn:active{opacity:.7}
 .cs-count{font-size:11px;color:var(--gray);margin-left:auto}
-.cs-divider{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray);padding:10px 0 6px;border-top:1px solid var(--border);margin-top:10px;letter-spacing:.5px}
+.cs-section-hdr{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:700;color:var(--text);padding:10px 0 6px;cursor:pointer;border-top:1px solid var(--border);margin-top:6px;user-select:none;-webkit-user-select:none}
+.cs-section-hdr:first-child{border-top:none;margin-top:0}
+.cs-hdr-count{color:var(--shop);font-weight:700}
+.cs-hdr-clear{font-size:10px;font-weight:600;color:var(--gray);background:none;border:1.5px solid var(--border);border-radius:5px;padding:2px 8px;cursor:pointer}
+.cs-hdr-clear:active{opacity:.7}
 .cs-recipe-list{max-height:250px;overflow-y:auto;-webkit-overflow-scrolling:touch}
-.cs-recipe-group-hdr{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);padding:6px 0 3px;letter-spacing:.3px}
+.cs-recipe-group-hdr{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--shop);padding:6px 0 3px;letter-spacing:.3px}
+.cs-protein-hdr{font-size:10px;font-weight:600;color:var(--gray);padding:4px 0 2px;margin-top:2px;text-transform:capitalize}
 .cs-recipe-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(148,163,184,.06)}
 .cs-recipe-name{flex:1;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs-recipe-pill{font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px;cursor:pointer;border:1.5px solid var(--border);color:var(--gray);background:var(--bg);transition:all .15s;flex-shrink:0}
@@ -1946,6 +1953,7 @@ const PERSONS=['him','her'];
 const TRIP_DAYS={sun:['Monday','Tuesday','Wednesday'],wed:['Thursday','Friday','Saturday','Sunday'],custom:[]};
 var CUSTOM_SHOP_SEL={}; // key: 'person_day_slot', true if selected for custom shop
 var CUSTOM_RECIPE_SEL={}; // key: 'mealId_person', true if selected for custom shop by recipe
+var csGridOpen=false, csRecipesOpen=false;
 
 var SEL={},CHECKS={},openCards={};
 var OVERRIDES={}; // key: 'person_day_slot', value: [{idx, dbKey, amt},...] - per-ingredient overrides
@@ -2567,6 +2575,10 @@ function getSlotAdjustment(p,d,s){
 
 // ── Meals render ────────────────────────────────────────────
 function renderMeals(){
+  var mealEl=document.getElementById('mealView');
+  var prevHeight=mealEl.offsetHeight;
+  mealEl.style.minHeight=prevHeight+'px';
+  var scrollY=window.scrollY;
   var t=calcTotals(person,day);
   var cc=person==='him'?'him-c':person==='shared'?'him-c':'her-c';
 
@@ -2642,6 +2654,8 @@ function renderMeals(){
     });
     if(!hasShared)html+='<div class="empty-shop" style="padding:40px 20px;text-align:center;color:var(--gray)">No shared meals on '+day+'.</div>';
     document.getElementById('mealView').innerHTML=html;
+    window.scrollTo(0,scrollY);
+    requestAnimationFrame(function(){window.scrollTo(0,scrollY);mealEl.style.minHeight='';});
     return;
   }
 
@@ -2658,9 +2672,43 @@ function renderMeals(){
     var k=person+'_'+day+'_'+s;
     var isOpen=openCards[k]||false;
 
-    var opts=slotMeals.map(function(m){
-      return'<option value="'+m.id+'"'+(m.id===activeId?' selected':'')+'>'+m.label+'</option>';
-    }).join('');
+    var opts=(function(){
+      // Group meals by primary protein
+      function getMealProtein(m){
+        var port=m.him||m.her;
+        if(!port||!port.ingredients)return 'Other';
+        var proIngr=port.ingredients.filter(function(i){return i.role==='protein';});
+        if(!proIngr.length)return 'Other';
+        var key=proIngr[0].dbKey;
+        var map={'egg white':'Egg','whole egg':'Egg','hard boiled egg':'Egg',
+          'ground turkey 93':'Turkey','ground chicken':'Chicken','chicken thigh':'Chicken','chicken breast':'Chicken',
+          'canned tuna':'Tuna','tuna pouch':'Tuna',
+          'tofu firm':'Tofu','silken tofu':'Tofu',
+          'greek yogurt 0%':'Yogurt','white miso':'Miso',
+          'protein powder':'Protein Powder','rxbar':'RX Bar',
+          'edamame':'Edamame'};
+        return map[key]||(key.charAt(0).toUpperCase()+key.slice(1));
+      }
+      var byProt={};
+      slotMeals.forEach(function(m){
+        var p=getMealProtein(m);
+        if(!byProt[p])byProt[p]=[];
+        byProt[p].push(m);
+      });
+      var protKeys=Object.keys(byProt).sort();
+      // Sort meals within each group alphabetically
+      protKeys.forEach(function(pk){byProt[pk].sort(function(a,b){return a.label<b.label?-1:1;});});
+      // If only one group, skip optgroup wrapper
+      if(protKeys.length<=1){
+        return slotMeals.map(function(m){return'<option value="'+m.id+'"'+(m.id===activeId?' selected':'')+'>'+m.label+'</option>';}).join('');
+      }
+      return protKeys.map(function(pk){
+        var optHtml=byProt[pk].map(function(m){
+          return'<option value="'+m.id+'"'+(m.id===activeId?' selected':'')+'>'+m.label+'</option>';
+        }).join('');
+        return'<optgroup label="'+pk+'">'+optHtml+'</optgroup>';
+      }).join('');
+    })();
 
     var otherId=getMealId(other,day,s);
     var isSharedSlot=(otherId&&otherId===activeId);
@@ -2975,6 +3023,8 @@ function renderMeals(){
   }
 
   document.getElementById('mealView').innerHTML=html;
+  window.scrollTo(0,scrollY);
+  requestAnimationFrame(function(){window.scrollTo(0,scrollY);mealEl.style.minHeight='';});
 }
 
 function toggleCard(k){openCards[k]=!openCards[k];var card=document.getElementById('mc_'+k);if(card)card.classList.toggle('open',openCards[k]);}
@@ -3196,6 +3246,14 @@ function toggleCustomRecipe(mealId,p){
   if(!CUSTOM_RECIPE_SEL[k])delete CUSTOM_RECIPE_SEL[k];
   renderShop();
 }
+function clearCustomRecipes(){CUSTOM_RECIPE_SEL={};renderShop();}
+function toggleCustomRecipeBoth(mealId){
+  var hk=mealId+'_him',rk=mealId+'_her';
+  var bothOn=!!CUSTOM_RECIPE_SEL[hk]&&!!CUSTOM_RECIPE_SEL[rk];
+  if(bothOn){delete CUSTOM_RECIPE_SEL[hk];delete CUSTOM_RECIPE_SEL[rk];}
+  else{CUSTOM_RECIPE_SEL[hk]=true;CUSTOM_RECIPE_SEL[rk]=true;}
+  renderShop();
+}
 function toggleCheck(k){
   CHECKS[k]=!CHECKS[k];if(!CHECKS[k])delete CHECKS[k];
   renderShop();
@@ -3207,6 +3265,13 @@ function checkAll(){
   renderShop();
 }
 function renderShop(){
+  var shopEl=document.getElementById('shopView');
+  var prevHeight=shopEl.offsetHeight;
+  shopEl.style.minHeight=prevHeight+'px';
+  var scrollY=window.scrollY;
+  // Save recipe list scroll position
+  var recipeListEl=shopEl.querySelector('.cs-recipe-list');
+  var recipeScrollTop=recipeListEl?recipeListEl.scrollTop:0;
   var grouped=buildShoppingList(shopTrip,shopPerson);
   var totalItems=Object.keys(grouped).reduce(function(a,c){return a+grouped[c].length},0);
   var checkedCount=Object.keys(CHECKS).filter(function(k){return k.indexOf(shopTrip+'_')===0&&CHECKS[k]}).length;
@@ -3232,6 +3297,13 @@ function renderShop(){
     var persons=shopPerson==='both'?['him','her']:shopPerson==='him'?['him']:['her'];
     html+='<div class="custom-shop-selector">';
     
+    // Collapsible grid section
+    var gridIcon=csGridOpen?'▾':'▸';
+    var selCount=Object.keys(CUSTOM_SHOP_SEL).length;
+    var gridExtra=selCount>0?' <span class="cs-hdr-count">('+selCount+')</span>':'';
+    var gridClear=selCount>0?'<button class="cs-hdr-clear" onclick="event.stopPropagation();CUSTOM_SHOP_SEL={};renderShop()">Clear</button>':'';
+    html+='<div class="cs-section-hdr" onclick="csGridOpen=!csGridOpen;renderShop()"><span>'+gridIcon+' Select by day'+gridExtra+'</span>'+gridClear+'</div>';
+    if(csGridOpen){
     // Grid header: empty cell + day abbreviations
     html+='<div class="cs-grid">';
     html+='<div class="cs-corner"></div>';
@@ -3273,10 +3345,15 @@ function renderShop(){
       +'<button class="cs-action-btn" onclick="customShopSelectAll()">Select all</button>'
       +'<button class="cs-action-btn" onclick="customShopClearAll()">Clear all</button>'
       +'<span class="cs-count">'+selCount+' meals selected</span></div>';
+    } // end csGridOpen
     
-    // Recipe picker — add specific recipes not tied to a day
+    // Collapsible recipe picker
     var recipeCount=Object.keys(CUSTOM_RECIPE_SEL).filter(function(k){return CUSTOM_RECIPE_SEL[k];}).length;
-    html+='<div class="cs-divider">or add by recipe</div>';
+    var recipeIcon=csRecipesOpen?'▾':'▸';
+    var recipeExtra=recipeCount>0?' <span class="cs-hdr-count">('+recipeCount+')</span>':'';
+    var recipeClear=recipeCount>0?'<button class="cs-hdr-clear" onclick="event.stopPropagation();clearCustomRecipes()">Clear</button>':'';
+    html+='<div class="cs-section-hdr" onclick="csRecipesOpen=!csRecipesOpen;renderShop()"><span>'+recipeIcon+' Add by recipe'+recipeExtra+'</span>'+recipeClear+'</div>';
+    if(csRecipesOpen){
     html+='<div class="cs-recipe-list">';
     // Group meals by slot type
     var slotGroups={pre:[],post:[],lunch:[],snack:[],evening:[]};
@@ -3285,11 +3362,46 @@ function renderShop(){
         if(slotGroups[sl]&&slotGroups[sl].indexOf(m)<0)slotGroups[sl].push(m);
       });
     });
+    
+    // Helper: get primary protein name for a meal
+    function getPrimaryProtein(m){
+      var port=m.him||m.her;
+      if(!port||!port.ingredients)return 'other';
+      var proIngr=port.ingredients.filter(function(i){return i.role==='protein';});
+      if(!proIngr.length)return 'other';
+      // Clean up the DB key into a readable name
+      var key=proIngr[0].dbKey;
+      // Normalize similar proteins
+      var map={'egg white':'egg','whole egg':'egg','hard boiled egg':'egg',
+        'ground turkey 93':'turkey','ground chicken':'chicken','chicken thigh':'chicken','chicken breast':'chicken',
+        'canned tuna':'tuna','tuna pouch':'tuna',
+        'tofu firm':'tofu','silken tofu':'tofu',
+        'greek yogurt 0%':'yogurt',
+        'white miso':'miso'};
+      return map[key]||key;
+    }
+    
     ['pre','post','lunch','snack','evening'].forEach(function(sl){
       var meals=slotGroups[sl];
       if(!meals||!meals.length)return;
       html+='<div class="cs-recipe-group"><div class="cs-recipe-group-hdr">'+SLOT_LABEL[sl]+'</div>';
+      
+      // Group by protein, then sort groups alphabetically, meals within each group alphabetically
+      var byProtein={};
       meals.forEach(function(m){
+        var prot=getPrimaryProtein(m);
+        if(!byProtein[prot])byProtein[prot]=[];
+        byProtein[prot].push(m);
+      });
+      // Sort protein groups alphabetically
+      var proteinKeys=Object.keys(byProtein).sort();
+      proteinKeys.forEach(function(prot){
+        // Sort meals within group alphabetically by label
+        byProtein[prot].sort(function(a,b){return a.label<b.label?-1:a.label>b.label?1:0;});
+        // Protein sub-header
+        var proteinLabel=prot.charAt(0).toUpperCase()+prot.slice(1);
+        html+='<div class="cs-protein-hdr">'+proteinLabel+'</div>';
+        byProtein[prot].forEach(function(m){
         var hasHim=!!m.him,hasHer=!!m.her;
         var himKey=m.id+'_him',herKey=m.id+'_her';
         var himOn=!!CUSTOM_RECIPE_SEL[himKey],herOn=!!CUSTOM_RECIPE_SEL[herKey];
@@ -3298,7 +3410,8 @@ function renderShop(){
         html+='<div class="cs-recipe-row">'
           +'<span class="cs-recipe-name">'+m.label+'</span>';
         if(showHim&&showHer){
-          // Both versions exist — show Him/Her pills
+          var bothOn=himOn&&herOn;
+          html+='<div class="cs-recipe-pill'+(bothOn?' on':'')+'" onclick="toggleCustomRecipeBoth(\''+m.id+'\')">Both</div>';
           html+='<div class="cs-recipe-pill'+(himOn?' on':'')+'" onclick="toggleCustomRecipe(\''+m.id+'\',\'him\')">Him</div>';
           html+='<div class="cs-recipe-pill'+(herOn?' on':'')+'" onclick="toggleCustomRecipe(\''+m.id+'\',\'her\')">Her</div>';
         } else if(showHim){
@@ -3307,13 +3420,15 @@ function renderShop(){
           html+='<div class="cs-recipe-pill'+(herOn?' on':'')+'" onclick="toggleCustomRecipe(\''+m.id+'\',\'her\')">Add</div>';
         }
         html+='</div>';
-      });
+      }); // end meal forEach
+      }); // end proteinKeys forEach
       html+='</div>';
     });
     html+='</div>';
     if(recipeCount>0){
-      html+='<div style="padding:4px 0;font-size:11px;color:var(--gray)">'+recipeCount+' recipe'+(recipeCount>1?'s':'')+' added</div>';
+      html+='<div class="cs-actions" style="margin-top:6px"><button class="cs-action-btn" onclick="clearCustomRecipes()">Clear recipes</button><span class="cs-count">'+recipeCount+' recipe'+(recipeCount>1?'s':'')+' added</span></div>';
     }
+    } // end csRecipesOpen
     html+='</div>';
   }
 
@@ -3409,6 +3524,13 @@ function renderShop(){
     }
   }
   document.getElementById('shopView').innerHTML=html;
+  window.scrollTo(0,scrollY);
+  requestAnimationFrame(function(){
+    window.scrollTo(0,scrollY);
+    shopEl.style.minHeight='';
+    var newRecipeList=document.querySelector('.cs-recipe-list');
+    if(newRecipeList&&recipeScrollTop)newRecipeList.scrollTop=recipeScrollTop;
+  });
 }
 
 // ── WEEK MANAGEMENT ─────────────────────────────────────────
