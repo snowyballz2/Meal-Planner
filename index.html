@@ -275,7 +275,7 @@ var NUTRI_DB = {
   'silken tofu':           {kcal:15,  pro:1.7,fat:0.7, carb:0.3, unit:'oz', brand:'Nature\'s Tofu', altUnits:{g:85}},
   // Dairy & alt
   'greek yogurt 0%':       {kcal:120, pro:24, fat:0,   carb:7,   unit:'cup', brand:'Fage', altUnits:{g:227}},
-  'cashew milk':           {kcal:130, pro:4,  fat:10,  carb:8,   unit:'cup', brand:'Elmhurst', altUnits:{floz:8,ml:240}},
+  'cashew milk (sweetened)':{kcal:130, pro:4,  fat:10,  carb:8,   unit:'cup', brand:'Elmhurst', altUnits:{floz:8,ml:240}},
   'heavy cream':           {kcal:52,  pro:0.3,fat:5.5, carb:0.4, unit:'tbsp'},
   'cheddar jack':          {kcal:110, pro:7,  fat:9,   carb:0.5, unit:'oz'},
   'butter':                {kcal:34,  pro:0,  fat:3.8, carb:0,   unit:'tsp'},
@@ -316,7 +316,7 @@ var NUTRI_DB = {
   'apple':                 {kcal:95,  pro:0.5,fat:0.3, carb:25,  unit:'each'},
   'orange':                {kcal:62,  pro:1.2,fat:0.2, carb:15,  unit:'each'},
   'mixed berries':         {kcal:70,  pro:1,  fat:0.5, carb:17,  unit:'cup', brand:'Giant', altUnits:{g:140}},
-  'acai':                  {kcal:70,  pro:1,  fat:1.5, carb:13,  unit:'each', brand:'Sambazon', altUnits:{g:115}},
+  'acai':                  {kcal:70,  pro:1,  fat:1.5, carb:13,  unit:'cup', brand:'Sambazon', altUnits:{g:115}},
   'lime':                  {kcal:20,  pro:0.5,fat:0.1, carb:7,   unit:'each'},
   // Fats & oils
   'avocado oil':             {kcal:119, pro:0,  fat:13.5,carb:0,   unit:'tbsp'},
@@ -348,6 +348,9 @@ var NUTRI_DB = {
   'broth concentrate':     {kcal:5,   pro:0.5,fat:0,   carb:0.5, unit:'tsp'},
   'water':                 {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'cup'},
   'cinnamon':              {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'tsp'},
+  'garlic clove':          {kcal:4,   pro:0.2,fat:0,   carb:1,   unit:'each'},
+  'ginger':                {kcal:2,   pro:0,  fat:0,   carb:0.4, unit:'tsp'},
+  'lemongrass':            {kcal:5,   pro:0,  fat:0,   carb:1.2, unit:'tbsp'},
   'ground chicken':        {kcal:35,  pro:5.8,fat:1.3, carb:0,   unit:'oz'},
   'oyster sauce':          {kcal:9,   pro:0.3,fat:0,   carb:2,   unit:'tbsp'},
   'dark soy sauce':        {kcal:10,  pro:0.9,fat:0,   carb:1.5, unit:'tbsp'},
@@ -610,7 +613,7 @@ const MEALS=[
      I('cinnamon',1,'Pinch of cinnamon','fixed',false)
    ],
    fv:'1.5c fruit',
-   shopping:[['Banana','Produce','1','—'],['Frozen mixed berries','Frozen','handful','—'],['Protein powder','Pantry — if low','1 scoop','—'],['Creatine','Pantry — if low','1 scoop','—']],
+   shopping:[['Banana','Produce','1','—'],['Frozen mixed berries','Frozen','¼ cup','—'],['Protein powder','Supplements','1 scoop','—'],['Creatine','Supplements','1 scoop','—']],
    steps:['Add water to blender first.','Add banana, berries, protein, creatine, cinnamon.','Blend 30–45 sec until smooth.','Drink immediately before workout.']},her:null},
 
  {id:'her_shake',label:'Protein, creatine & acai peanut butter shake',slots:['pre'],
@@ -619,13 +622,13 @@ const MEALS=[
    ingredients:[
      I('protein powder',1,'1 scoop protein powder (21g)','protein'),
      I('creatine',1,'1 scoop creatine (5g)','fixed',false),
-     I('acai',1,'1 packet frozen acai (unsweetened)','carb'),
+     I('acai',1,'1 cup frozen acai (unsweetened)','carb'),
      I('peanut butter',1,'1 tbsp peanut butter','fat'),
      I('oats',0.125,'1 tbsp old-fashioned oats','carb'),
-     I('cashew milk',1.25,'1–1.5 cups cashew milk','fixed',false)
+     I('cashew milk (sweetened)',1.25,'1–1.5 cups cashew milk','fixed',false)
    ],
    fv:'1c fruit',
-   shopping:[['Acai packet (frozen)','Frozen','—','1 packet'],['Cashew milk (unsweetened)','Dairy alt','—','1 carton (32 oz)'],['Peanut butter (no salt added)','Pantry','—','1 tbsp'],['Creatine','Pantry — if low','—','1 scoop'],['Protein powder','Pantry — if low','—','1 scoop']],
+   shopping:[['Frozen acai (unsweetened)','Frozen','—','1 cup'],['Cashew milk (sweetened)','Dairy alt','—','1¼ cups'],['Peanut butter (no salt added)','Pantry','—','1 tbsp'],['Creatine','Supplements','—','1 scoop'],['Protein powder','Supplements','—','1 scoop']],
    steps:['Add cashew milk to blender first.','Add acai, peanut butter, oats, protein, creatine.','Blend 30–45 sec.','Drink immediately before workout.']}},
 
  {id:'egg_scramble',label:'Egg white scramble & toast',slots:['post'],
@@ -803,7 +806,7 @@ const MEALS=[
      I('rice vinegar',1,'1 tsp rice vinegar','sauce',false)
    ],
    fv:'1c veg',
-   shopping:[['Eggs (large)','Dairy','2+2w','—'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Baby spinach','Produce','1 cup + ¼ cup','—'],['Brown rice (dry)','Pantry','½ cup','—'],['Gochujang','Pantry — optional','1 tsp','—']],
+   shopping:[['Eggs (large)','Dairy','2+2w','—'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Baby spinach','Produce','1¼ cups','—'],['Brown rice (dry)','Pantry','½ cup','—'],['Gochujang','Sauces','1 tsp','—']],
    steps:['Cook rice or use pre-cooked rice — microwave 90 sec.','Fry eggs: heat a small pan over medium heat with a drop of sesame oil. Crack eggs in, cover with a lid for 2 min for runny yolk.','In the same pan, sauté spinach and shredded carrots in sesame oil for 1–2 min.','Assemble the bowl: rice base, veg on top, eggs on top of that.','Drizzle with soy sauce and rice vinegar. Add gochujang to taste. Sprinkle sesame seeds.']},
   her:{
    ingredients:[
@@ -817,7 +820,7 @@ const MEALS=[
      I('rice vinegar',1,'1 tsp rice vinegar','sauce',false)
    ],
    fv:'1c veg',
-   shopping:[['Eggs (large)','Dairy','—','2'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Baby spinach','Produce','—','1 cup + ¼ cup'],['Brown rice (dry)','Pantry','—','½ cup'],['Gochujang','Pantry — optional','—','1 tsp']],
+   shopping:[['Eggs (large)','Dairy','—','2'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Baby spinach','Produce','—','1¼ cups'],['Brown rice (dry)','Pantry','—','½ cup'],['Gochujang','Sauces','—','1 tsp']],
    steps:['Cook or reheat rice. Fry or poach eggs to your liking.','Sauté spinach and carrots in sesame oil 1–2 min.','Assemble: rice, veg, eggs on top. Drizzle soy sauce, rice vinegar, gochujang. Finish with sesame seeds.']}},
 
  {id:'thai_tofu_scramble',label:'Thai-spiced tofu scramble & toast',slots:['post'],
@@ -854,7 +857,7 @@ const MEALS=[
  {id:'korean_juk',label:'Korean egg & rice porridge (Juk)',slots:['post'],
   him:{
    ingredients:[
-     I('brown rice cooked',1.25,'1¼ cups cooked rice (from ½c dry)','carb'),
+     I('brown rice cooked',0.5,'½ cup cooked brown rice','carb'),
      I('water',2,'2 cups water or broth','fixed',false),
      I('whole egg',1,'1 whole egg','protein'),
      I('egg white',2,'2 egg whites','protein'),
@@ -867,7 +870,7 @@ const MEALS=[
    steps:['Rinse rice. Combine with 2 cups water. Bring to boil, reduce to medium-low. Cook 20–25 min until thick and creamy.','Stir in chopped kale 2 min.','Whisk eggs, slowly stir into porridge for silky ribbons. Cook 1 min.','Season with soy sauce and sesame oil. Top with sesame seeds.']},
   her:{
    ingredients:[
-     I('brown rice cooked',1.25,'1¼ cups cooked rice (from ½c dry)','carb'),
+     I('brown rice cooked',0.5,'½ cup cooked brown rice','carb'),
      I('water',1.5,'1½ cups water or broth','fixed',false),
      I('whole egg',1,'1 whole egg','protein'),
      I('egg white',2,'2 egg whites','protein'),
@@ -884,7 +887,7 @@ const MEALS=[
   him:{
    ingredients:[
      I('chicken breast',6,'6 oz boneless skinless chicken breast','protein'),
-     I('quinoa cooked',2.25,'2¼ cups cooked quinoa (from ¾c dry)','carb'),
+     I('quinoa cooked',0.75,'¾ cup cooked quinoa','carb'),
      I('broccoli',1,'1 cup broccoli florets','veg'),
      I('carrots',0.5,'½ cup shredded carrots','veg'),
      I('avocado oil',2,'2 tbsp avocado oil','fat'),
@@ -896,7 +899,7 @@ const MEALS=[
   her:{
    ingredients:[
      I('chicken breast',4,'4 oz boneless skinless chicken breast','protein'),
-     I('quinoa cooked',1.5,'1½ cups cooked quinoa (from ½c dry)','carb'),
+     I('quinoa cooked',0.5,'½ cup cooked quinoa','carb'),
      I('broccoli',1,'1 cup broccoli florets','veg'),
      I('carrots',0.5,'½ cup shredded carrots','veg'),
      I('avocado oil',1,'1 tbsp avocado oil','fat'),
@@ -917,7 +920,7 @@ const MEALS=[
      I('carrots',0.25,'¼ cup shredded carrots','veg')
    ],
    fv:'1c veg',
-   shopping:[['Chicken breast','Meat','5 oz','—'],['Hummus','Pantry','3 tbsp','—'],['Baby spinach','Produce','1c + ½c','—']],
+   shopping:[['Chicken breast','Meat','5 oz','—'],['Hummus','Pantry','3 tbsp','—'],['Baby spinach','Produce','1½ cups','—']],
    steps:['Slice or shred cooked chicken.','Lay tortilla flat. Spread hummus across center.','Layer spinach, bell pepper, carrots, and chicken.','Fold sides in, roll tightly. Slice in half.']},
   her:{
    ingredients:[
@@ -929,8 +932,8 @@ const MEALS=[
      I('carrots',0.25,'¼ cup shredded carrots','veg')
    ],
    fv:'1c veg',
-   shopping:[['Chicken breast','Meat','—','3 oz'],['Hummus','Pantry','—','2 tbsp'],['Baby spinach','Produce','—','1c + ½c']],
-   steps:['Slice cooked chicken. Spread hummus on tortilla. Layer veg and chicken. Roll tightly.']}},
+   shopping:[['Chicken breast','Meat','—','3 oz'],['Hummus','Pantry','—','2 tbsp'],['Baby spinach','Produce','—','1½ cups']],
+   steps:['Slice or shred cooked chicken breast.','Lay tortilla flat. Spread hummus across the center third, leaving 2 inches at top and bottom.','Layer spinach, sliced bell pepper, shredded carrots, and chicken on top of the hummus.','Fold the sides in first, then roll from the bottom up tightly. Slice in half diagonally.']}},
 
  {id:'shrimp_bowl',label:'Shrimp, black bean & rice bowl',slots:['lunch','dinner'],
   him:{
@@ -974,7 +977,7 @@ const MEALS=[
      I('red wine vinegar',1,'1 tbsp red wine vinegar','sauce',false)
    ],
    fv:'2c veg',
-   shopping:[['Canned tuna in water (low sodium)','Pantry','1 can','—'],['Cannellini beans (no salt added)','Pantry','½ cup','—'],['Kale','Produce','2c + 1c','—']],
+   shopping:[['Canned tuna in water (low sodium)','Pantry','1 can','—'],['Cannellini beans (no salt added)','Pantry','½ cup','—'],['Kale','Produce','3 cups','—']],
    steps:['Drain tuna and flake. Drain and rinse beans.','Combine tuna, beans, kale, zucchini, carrots.','Whisk avocado oil + vinegar + black pepper. Pour over and toss.']},
   her:{
    ingredients:[
@@ -987,7 +990,7 @@ const MEALS=[
      I('red wine vinegar',1,'1 tbsp red wine vinegar','sauce',false)
    ],
    fv:'2c veg',
-   shopping:[['Canned tuna in water (low sodium)','Pantry','—','½ can'],['Cannellini beans (no salt added)','Pantry','—','½ cup'],['Kale','Produce','—','2c + 1c']],
+   shopping:[['Canned tuna in water (low sodium)','Pantry','—','½ can'],['Cannellini beans (no salt added)','Pantry','—','½ cup'],['Kale','Produce','—','3 cups']],
    steps:['Drain tuna and flake. Drain and rinse beans.','Combine tuna, beans, kale, zucchini, carrots.','Whisk 1 tbsp avocado oil + vinegar + pepper. Toss well.']}},
 
  {id:'white_bean_soup',label:'Chicken & white bean soup',slots:['lunch','dinner'],
@@ -1000,7 +1003,7 @@ const MEALS=[
      I('celery',1,'1 stalk celery','veg')
    ],
    fv:'1.5c veg',
-   shopping:[['Chicken breast','Meat','6 oz','—'],['Cannellini beans (no salt added)','Pantry','½ cup','—'],['Kale','Produce','1c + 1c + 1','—'],['Low-sodium chicken or veg broth','Pantry','2 cups','—'],['Garlic (fresh)','Produce','2 cloves','—']],
+   shopping:[['Chicken breast','Meat','6 oz','—'],['Cannellini beans (no salt added)','Pantry','½ cup','—'],['Kale','Produce','3 cups','—'],['Low-sodium chicken or veg broth','Pantry','2 cups','—'],['Garlic (fresh)','Produce','2 cloves','—']],
    steps:['Sauté garlic, carrots, celery in broth 3–4 min.','Add remaining broth, beans, Italian seasoning. Simmer.','Add chicken and kale. Simmer 5–8 min.','Season with black pepper.']},
   her:{
    ingredients:[
@@ -1010,8 +1013,8 @@ const MEALS=[
      I('carrots',0.5,'½ cup diced carrots','veg')
    ],
    fv:'1.5c veg',
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Cannellini beans (no salt added)','Pantry','—','½ cup'],['Kale','Produce','—','1c + ½c'],['Low-sodium chicken or veg broth','Pantry','—','1.5 cups'],['Garlic (fresh)','Produce','—','1 clove']],
-   steps:['Sauté garlic, carrots in broth 3 min.','Add broth, beans, seasoning. Simmer.','Add chicken + kale. Simmer 5–8 min.']}},
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Cannellini beans (no salt added)','Pantry','—','½ cup'],['Kale','Produce','—','1½ cups'],['Low-sodium chicken or veg broth','Pantry','—','1.5 cups'],['Garlic (fresh)','Produce','—','1 clove']],
+   steps:['Sauté minced garlic and diced carrots in a splash of broth over medium heat for 3–4 min until softened.','Add the remaining broth, drained cannellini beans, and Italian seasoning. Bring to a simmer.','Add shredded chicken and kale. Simmer 5–8 min until kale is tender.','Season with black pepper.']}},
 
  {id:'burrito_bowl',label:'Chicken burrito bowl',slots:['lunch','dinner'],
   him:{
@@ -1039,7 +1042,7 @@ const MEALS=[
    ],
    fv:'1.5c veg',
    shopping:[['Chicken breast','Meat','—','4 oz'],['Black beans (no salt added)','Pantry','—','½ cup'],['Kale','Produce','—','1 cup'],['Avocado','Produce','—','¼']],
-   steps:['Warm rice, beans, and chicken.','Massage kale with lime juice + salt 30 sec.','Assemble: rice, beans, chicken, kale, salsa, avocado, Greek yogurt.']}},
+   steps:['Warm pre-cooked rice, black beans, and chicken together.','Massage shredded kale with a squeeze of lime juice and a pinch of salt for 30 sec to soften.','Assemble: rice as the base, beans and chicken on top, massaged kale on the side.','Add salsa, sliced avocado, and a dollop of Greek yogurt.']}},
 
  {id:'viet_vermicelli',label:'Vietnamese chicken & vermicelli salad',slots:['lunch','dinner'],
   him:{
@@ -1053,7 +1056,7 @@ const MEALS=[
      I('honey tsp',1,'1 tsp honey','carb')
    ],
    fv:'1.5c veg',
-   shopping:[['Chicken breast','Meat','5 oz','—'],['Rice vermicelli','Pantry','1 cup','—'],['Baby spinach','Produce','1c + ¾c','—'],['Fish sauce (low sodium)','Pantry','2 tbsp','—'],['Garlic (fresh)','Produce','1 clove','—']],
+   shopping:[['Chicken breast','Meat','5 oz','—'],['Rice vermicelli','Pantry','1 cup','—'],['Baby spinach','Produce','1¾ cups','—'],['Fish sauce (low sodium)','Pantry','2 tbsp','—'],['Garlic (fresh)','Produce','1 clove','—']],
    steps:['Soak vermicelli in hot water 5 min. Drain and rinse cold.','Make dressing: whisk fish sauce, lime juice, honey, garlic, pepper flakes.','Slice chicken. Combine noodles, spinach, carrots, bell pepper.','Top with chicken. Drizzle dressing. Toss and eat immediately.']},
   her:{
    ingredients:[
@@ -1066,7 +1069,7 @@ const MEALS=[
      I('honey tsp',1,'1 tsp honey','carb')
    ],
    fv:'1.5c veg',
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Rice vermicelli','Pantry','—','1 cup'],['Baby spinach','Produce','—','1c + ¾c'],['Fish sauce (low sodium)','Pantry','—','2 tbsp'],['Red pepper flakes','Pantry — if low','—','pinch'],['Garlic (fresh)','Produce','—','1 clove']],
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Rice vermicelli','Pantry','—','1 cup'],['Baby spinach','Produce','—','1¾ cups'],['Fish sauce (low sodium)','Pantry','—','2 tbsp'],['Red pepper flakes','Spices','—','pinch'],['Garlic (fresh)','Produce','—','1 clove']],
    steps:['Soak vermicelli 5 min. Drain and rinse cold.','Make dressing: fish sauce, lime juice, honey, garlic, pepper flakes.','Combine noodles, spinach, carrots, bell pepper. Top with chicken. Toss.']}},
 
  {id:'korean_rice_bowl',label:'Korean-inspired chicken & rice bowl',slots:['lunch','dinner'],
@@ -1082,7 +1085,7 @@ const MEALS=[
      I('honey tsp',1,'1 tsp honey','carb')
    ],
    fv:'1.5c veg',
-   shopping:[['Chicken breast','Meat','5 oz','—'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Bell peppers','Produce','1 cup','—'],['Frozen shelled edamame','Frozen','½ cup','—'],['Gochujang','Pantry — optional','1 tsp','—']],
+   shopping:[['Chicken breast','Meat','5 oz','—'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Bell peppers','Produce','1 cup','—'],['Frozen shelled edamame','Frozen','½ cup','—'],['Gochujang','Sauces','1 tsp','—']],
    steps:['Make sauce: whisk soy sauce, sesame oil, gochujang, honey, rice vinegar.','Warm rice and edamame. Slice chicken.','Assemble: rice, chicken, peppers, carrots, edamame. Drizzle sauce. Top with sesame seeds.']},
   her:{
    ingredients:[
@@ -1112,7 +1115,7 @@ const MEALS=[
      I('honey tsp',1,'1 tsp honey','carb')
    ],
    fv:'1.5c veg',
-   shopping:[['Chicken breast','Meat','5 oz','—'],['Udon noodles','Pantry','1 cup','—'],['Kale','Produce','1c + ½c','—'],['Peanut butter (no salt added)','Pantry','2 tbsp','—']],
+   shopping:[['Chicken breast','Meat','5 oz','—'],['Udon noodles','Pantry','1 cup','—'],['Kale','Produce','1½ cups','—'],['Peanut butter (no salt added)','Pantry','2 tbsp','—']],
    steps:['Cook udon per package directions. Drain and rinse cold.','Make PB sauce: whisk peanut butter + soy sauce + lime + honey + warm water.','Massage kale. Combine noodles, kale, carrots, chicken. Pour sauce. Toss.']},
   her:{
    ingredients:[
@@ -1126,7 +1129,7 @@ const MEALS=[
      I('honey tsp',1,'1 tsp honey','carb')
    ],
    fv:'1.5c veg',
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Sesame oil','Pantry — if low','—','1 tsp'],['Udon noodles','Pantry','—','1 cup'],['Kale','Produce','—','1c + ½c'],['Peanut butter (no salt added)','Pantry','—','2 tbsp']],
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Sesame oil','Pantry — if low','—','1 tsp'],['Udon noodles','Pantry','—','1 cup'],['Kale','Produce','—','1½ cups'],['Peanut butter (no salt added)','Pantry','—','2 tbsp']],
    steps:['Cook udon per package directions. Drain and rinse cold.','Make PB sauce: whisk peanut butter + soy sauce + lime + honey + warm water.','Massage kale. Combine noodles, kale, carrots, chicken. Pour sauce. Toss.']}},
 
  {id:'lemongrass_salad',label:'Vietnamese lemongrass chicken salad',slots:['lunch','dinner'],
@@ -1140,7 +1143,7 @@ const MEALS=[
      I('honey tsp',1,'1 tsp honey','carb')
    ],
    fv:'2c veg',
-   shopping:[['Chicken breast','Meat','5 oz','—'],['Kale','Produce','2c + 1c','—'],['Lemongrass paste','Pantry — optional','½ tsp','—'],['Roasted peanuts (unsalted)','Pantry','1 tbsp','—'],['Garlic (fresh)','Produce','1 clove','—']],
+   shopping:[['Chicken breast','Meat','5 oz','—'],['Kale','Produce','3 cups','—'],['Lemongrass paste','Pantry — optional','½ tsp','—'],['Roasted peanuts (unsalted)','Pantry','1 tbsp','—'],['Garlic (fresh)','Produce','1 clove','—']],
    steps:['Make dressing: whisk fish sauce, lime juice, honey, garlic, lemongrass, chili flakes.','Slice chicken. Combine kale, zucchini, carrots. Top with chicken. Toss with dressing. Top with peanuts.']},
   her:{
    ingredients:[
@@ -1152,7 +1155,7 @@ const MEALS=[
      I('honey tsp',1,'1 tsp honey','carb')
    ],
    fv:'2c veg',
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Lemongrass paste','Pantry — optional','—','½ tsp'],['Kale','Produce','—','2c + 1c'],['Roasted peanuts (unsalted)','Pantry','—','1 tbsp'],['Garlic (fresh)','Produce','—','1 clove']],
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Lemongrass paste','Pantry — optional','—','½ tsp'],['Kale','Produce','—','3 cups'],['Roasted peanuts (unsalted)','Pantry','—','1 tbsp'],['Garlic (fresh)','Produce','—','1 clove']],
    steps:['Make dressing: fish sauce, lime juice, honey, garlic, lemongrass, chili flakes.','Slice chicken. Combine kale, zucchini, carrots. Top with chicken. Toss. Top with peanuts.']}},
 
  {id:'bibimbap',label:'Korean bibimbap-style bowl',slots:['lunch','dinner'],
@@ -1169,7 +1172,7 @@ const MEALS=[
      I('gochujang',1,'1 tsp gochujang','sauce',false)
    ],
    fv:'1.5c veg',
-   shopping:[['Chicken breast','Meat','5 oz','—'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Kale','Produce','1c + ¾c','—'],['Gochujang','Pantry','1 tsp','—']],
+   shopping:[['Chicken breast','Meat','5 oz','—'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Kale','Produce','1¾ cups','—'],['Gochujang','Sauces','1 tsp','—']],
    steps:['Warm rice. Sauté kale, carrots, zucchini in sesame oil 2–3 min.','Fry egg sunny-side up.','Assemble: rice center, veg and chicken around it, egg on top. Drizzle sauce. Mix before eating.']},
   her:{
    ingredients:[
@@ -1184,8 +1187,8 @@ const MEALS=[
      I('gochujang',1,'1 tsp gochujang','sauce',false)
    ],
    fv:'1.5c veg',
-   shopping:[['Chicken breast','Meat','—','4 oz'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Kale','Produce','—','1c + ¾c'],['Gochujang','Pantry','—','1 tsp']],
-   steps:['Warm rice. Sauté kale, carrots, zucchini.','Fry egg. Assemble: rice, veg, chicken, egg. Drizzle sauce.']}},
+   shopping:[['Chicken breast','Meat','—','4 oz'],['Rice vinegar','Pantry — if low','1 tsp','1 tsp'],['Kale','Produce','—','1¾ cups'],['Gochujang','Sauces','—','1 tsp']],
+   steps:['Warm pre-cooked rice. Heat sesame oil in a pan. Sauté kale, shredded carrots, and diced zucchini 2–3 min until just tender.','Fry an egg sunny-side up: crack egg in, cover with lid, cook 2–3 min until white is set.','Make bibimbap sauce: stir together soy sauce, gochujang, honey, and rice vinegar.','Assemble: rice in center, veg and sliced chicken around it, egg on top. Drizzle sauce. Sprinkle sesame seeds. Mix before eating.']}},
 
  {id:'red_curry',label:'Thai red curry with tofu & vegetables',slots:['lunch','dinner'],
   him:null,
@@ -1202,7 +1205,7 @@ const MEALS=[
    ],
    fv:'1.5c veg',
    shopping:[['Firm tofu','Refrigerated','—','5 oz'],['Red curry paste','Pantry','—','1 tbsp'],['Coconut milk (lite)','Pantry','—','⅓ cup'],['Broccoli florets','Produce','—','½ cup'],['Bell peppers','Produce','—','½ cup'],['Kale','Produce','—','½ cup']],
-   steps:['Press and cube tofu. Pan-fry in oil until golden.','Add curry paste, stir 30 sec. Add coconut milk and veg. Simmer 8 min.','Serve over rice.']}},
+   steps:['Press tofu: wrap in paper towels and press under a heavy object 10 min. Cut into 1-inch cubes.','Heat avocado oil in a pan over medium-high. Pan-fry tofu cubes 3–4 min per side until golden and crispy. Remove and set aside.','Add red curry paste to the pan and stir 30 sec until fragrant.','Pour in coconut milk. Add broccoli and bell pepper. Simmer 6–8 min until veg is tender.','Add kale and return tofu to the pan. Cook 2 min until kale is wilted.','Serve over brown rice.']}},
 
  {id:'viet_tofu_soup',label:'Vietnamese tofu & noodle soup',slots:['lunch','dinner'],
   him:null,
@@ -1218,7 +1221,7 @@ const MEALS=[
    ],
    fv:'1c veg',
    shopping:[['Firm tofu','Refrigerated','—','4 oz'],['Rice vermicelli','Pantry','—','¾ cup'],['Zucchini','Produce','—','¼ cup'],['Carrots','Produce','—','¼ cup']],
-   steps:['Simmer broth. Add carrots, zucchini. Cook 3 min.','Add tofu slices, spinach, soy sauce. Simmer 2 min.','Add vermicelli. Drizzle sesame oil.']}},
+   steps:['Bring broth to a simmer in a medium pot over medium heat.','Add sliced carrots and diced zucchini. Cook 3 min until beginning to soften.','Add sliced silken tofu, spinach, and soy sauce. Simmer 2 min until spinach is wilted and tofu is heated through.','Add cooked rice vermicelli. Stir gently to combine.','Drizzle with sesame oil. Serve in a bowl with a squeeze of lime and fresh herbs.']}},
 
  // SNACKS
  {id:'rxbar_apple',label:'RX Bar + apple',slots:['snack'],
@@ -1272,9 +1275,9 @@ const MEALS=[
   him:{
    ingredients:[
      I('salmon',6,'6 oz salmon fillet','protein'),
-     I('lentils cooked',1,'1 cup cooked green lentils (from ~½c dry)','carb'),
+     I('lentils cooked',0.5,'½ cup cooked lentils','carb'),
      I('baby spinach',1,'1 cup baby spinach (shared)','veg'),
-     I('brown rice cooked',2,'2 cups cooked rice (from ¾c dry)','carb'),
+     I('brown rice cooked',0.75,'¾ cup cooked brown rice','carb'),
      I('avocado oil',0.5,'½ tbsp avocado oil','fat')
    ],
    fv:'1.5c veg',
@@ -1283,19 +1286,19 @@ const MEALS=[
   her:{
    ingredients:[
      I('salmon',4,'4 oz salmon fillet','protein'),
-     I('lentils cooked',0.67,'⅔ cup cooked green lentils (from ~⅓c dry)','carb'),
+     I('lentils cooked',0.33,'⅓ cup cooked lentils','carb'),
      I('baby spinach',0.75,'¾ cup baby spinach (shared)','veg'),
-     I('brown rice cooked',1.25,'1¼ cups cooked rice (from ½c dry)','carb'),
+     I('brown rice cooked',0.5,'½ cup cooked brown rice','carb'),
      I('avocado oil',0.5,'½ tbsp avocado oil','fat')
    ],
    fv:'1.5c veg',
    shopping:[['Salmon fillet','Seafood','6 oz','4 oz']],
-   steps:['Cook rice: her portion ½ cup dry.','Cook lentils: shared pot.','Roast her 4 oz salmon 12–14 min.','Sauté spinach. Plate: smaller rice/lentil portion, salmon, spinach.']},
+   steps:['Cook rice: rinse, combine with 1.5x cold water. Bring to boil, cover, simmer 40–45 min. Fluff.','Cook lentils: rinse, simmer in 2 cups water 20–25 min until tender. Drain. Season with black pepper.','Preheat oven to 400°F. Pat salmon fillet dry. Season with lemon juice, dried dill, and black pepper. Roast 12–14 min until it flakes easily.','Sauté spinach with garlic in oil 2–3 min until wilted.','Plate: rice and lentils, salmon on top, spinach alongside.']},
   both:{ingredients:[
      I('salmon',10,'6 oz (his) + 4 oz (hers) salmon fillet','protein'),
-     I('lentils cooked',1.67,'1⅔ cups cooked green lentils (from ~¾c dry)','carb'),
+     I('lentils cooked',0.75,'¾ cup cooked lentils','carb'),
      I('baby spinach',1.5,'1.5 cups baby spinach','veg'),
-     I('brown rice cooked',3.25,'His: 2c · Her: 1¼c cooked rice','carb'),
+     I('brown rice cooked',1.25,'His: ¾c · Her: ½c cooked brown rice','carb'),
      I('avocado oil',0.5,'½ tbsp avocado oil','fat')
    ]}},
 
@@ -1325,7 +1328,7 @@ const MEALS=[
    ],
    fv:'2c veg',
    shopping:[['Salmon fillet','Seafood','6 oz','4 oz']],
-   steps:['Shared glaze. Warm ¾ cup rice. Sear + glaze her 4 oz fillet. Stir-fry veg. Plate.']},
+   steps:['Make teriyaki glaze: whisk soy sauce, honey, rice vinegar, garlic, and ginger.','Warm pre-cooked brown rice.','Heat sesame oil in an oven-safe pan over medium-high. Pat salmon dry. Sear skin-side up 2–3 min.','Flip fillet. Brush glaze generously. Transfer to 400°F oven 6–8 min until salmon flakes and glaze is caramelized.','Stir-fry broccoli and bell pepper in sesame oil over high heat 3–4 min until tender-crisp.','Plate: rice base, stir-fry veg alongside, glazed salmon on top.']},
   both:{ingredients:[
      I('salmon',10,'6 oz (his) + 4 oz (hers) salmon','protein'),
      I('broccoli',2,'2 cups broccoli & bell pepper','veg'),
@@ -1343,7 +1346,7 @@ const MEALS=[
      I('avocado oil',0.5,'½ tbsp avocado oil','fat')
    ],
    fv:'1.5c veg',
-   shopping:[['Chicken thighs','Meat — Sun shop','7 oz','5 oz'],['Sweet potato (large)','Produce','1 large','—'],['Carrots','Produce','2 cups','—']],
+   shopping:[['Chicken thighs','Meat — Sun shop','7 oz','5 oz'],['Sweet potato (large)','Produce','1 large','—'],['Carrots','Produce','½ cup','—']],
    steps:['Preheat oven to 425°F. Toss sweet potato and carrots with avocado oil, herbs, pepper.','Roast veg 15 min. Season chicken, add to pan. Roast 20–22 min until 165°F.','Rest chicken 3 min. Plate.']},
   her:{
    ingredients:[
@@ -1354,7 +1357,7 @@ const MEALS=[
    ],
    fv:'1.5c veg',
    shopping:[['Chicken thighs','Meat — Sun shop','7 oz','5 oz']],
-   steps:['Shared sheet pan. Her 5 oz piece may be done 2 min earlier. Check with thermometer.']},
+   steps:['Preheat oven to 425°F. Remove chicken from fridge 15 min early.','Cut sweet potato into cubes and slice carrots. Toss with avocado oil, rosemary, thyme, garlic powder, and pepper. Spread on a baking sheet.','Roast veg 15 min until starting to soften and brown.','Season chicken thigh with lemon juice, garlic powder, rosemary, thyme, and pepper. Add to the sheet.','Roast together 20–22 min until chicken reaches 165°F. Check with a thermometer.','Rest chicken 3 min before serving with roasted veg.']},
   both:{ingredients:[
      I('chicken thigh',12,'7 oz (his) + 5 oz (hers) chicken thigh','protein'),
      I('sweet potato',2,'1 large sweet potato, cubed','carb'),
@@ -1386,7 +1389,7 @@ const MEALS=[
    ],
    fv:'2c veg',
    shopping:[['Ground turkey (93% lean)','Meat','6 oz','4 oz']],
-   steps:['Shared meatball batch. Her smaller pasta portion with extra zucchini noodles.']},
+   steps:['Preheat oven to 400°F. Line a baking sheet with parchment.','Make meatballs: combine ground turkey, egg white, oat flour, Italian seasoning, garlic powder, and black pepper. Mix gently. Roll into balls. Bake 18–20 min until 165°F.','Cook whole-wheat pasta per package. In the last 2 min, add zucchini noodles. Drain both.','Heat marinara in a pan 3–4 min. Add meatballs and toss to coat.','Sauté kale in a little oil 2 min until wilted.','Plate: pasta with zucchini noodles, meatballs and marinara over top, kale alongside.']},
   both:{ingredients:[
      I('ground turkey 93',10,'10 oz ground turkey total','protein'),
      I('whole wheat pasta cooked',1.25,'His ¾c · Her ½c pasta','carb'),
@@ -1399,7 +1402,7 @@ const MEALS=[
   him:{
    ingredients:[
      I('halibut',7,'7 oz halibut fillet','protein'),
-     I('farro cooked',1.75,'1¾ cups cooked farro (his portion)','carb'),
+     I('farro cooked',0.75,'¾ cup cooked farro','carb'),
      I('asparagus',1,'1 cup asparagus','veg'),
      I('zucchini',1,'1 cup zucchini','veg'),
      I('avocado oil',1.5,'1½ tbsp avocado oil','fat')
@@ -1410,17 +1413,17 @@ const MEALS=[
   her:{
    ingredients:[
      I('halibut',5,'5 oz halibut fillet','protein'),
-     I('farro cooked',1.25,'1¼ cups cooked farro (her portion)','carb'),
+     I('farro cooked',0.5,'½ cup cooked farro','carb'),
      I('asparagus',1,'1 cup asparagus (shared)','veg'),
      I('zucchini',1,'1 cup zucchini (shared)','veg'),
      I('avocado oil',1,'1 tbsp avocado oil','fat')
    ],
    fv:'2c veg',
    shopping:[['Halibut fillet','Seafood','7 oz','5 oz']],
-   steps:['Shared farro pot. Her smaller halibut piece. Roast 12–14 min.']},
+   steps:['Cook farro: rinse and drain. Simmer in 2.5 cups water 25–30 min until tender. Drain excess water.','Preheat oven to 425°F. Toss asparagus and zucchini with avocado oil, garlic, and pepper. Spread on a baking sheet.','Pat halibut fillet completely dry. Place on the baking sheet alongside the veg.','Season with lemon juice, dried dill, garlic powder, and black pepper.','Roast 12–14 min until halibut is opaque and flakes easily.','Serve halibut over farro with roasted veg. Finish with a squeeze of lemon.']},
   both:{ingredients:[
      I('halibut',12,'7 oz (his) + 5 oz (hers) halibut','protein'),
-     I('farro cooked',3,'3 cups cooked farro (from 1c dry)','carb'),
+     I('farro cooked',1.25,'1¼ cups cooked farro','carb'),
      I('asparagus',1,'1 cup asparagus','veg'),
      I('zucchini',1,'1 cup zucchini','veg'),
      I('avocado oil',1.5,'1½ tbsp avocado oil','fat')
@@ -1449,7 +1452,7 @@ const MEALS=[
    ],
    fv:'2c veg',
    shopping:[['Filet mignon','Meat — Wed shop','6 oz','4 oz'],['Yukon Gold potatoes','Produce','1¼ cup','¾ cup']],
-   steps:['Shared sheet pan. Her smaller potato portion. Sear her 4 oz filet alongside his.']},
+   steps:['Take filet out of the fridge 20–30 min before cooking.','Preheat oven to 425°F. Toss diced potatoes with avocado oil, garlic powder, rosemary, and pepper. Roast 20 min.','Add asparagus and zucchini to the pan. Roast 12–15 min more.','Pat filet dry. Season with black pepper and garlic powder.','Heat a cast-iron skillet over highest heat until smoking. Sear filet 2–3 min per side.','Transfer to oven 4–5 min for medium-rare (130°F). Rest 5 min.','Drizzle balsamic vinegar over steak. Serve with potatoes and veg.']},
   both:{ingredients:[
      I('filet mignon',10,'6 oz (his) + 4 oz (hers) filet','protein'),
      I('yukon potato',2,'His 1¼c · Her ¾c potatoes','carb'),
@@ -1462,7 +1465,7 @@ const MEALS=[
   him:{
    ingredients:[
      I('chicken breast',7,'7 oz boneless skinless chicken breast','protein'),
-     I('farro cooked',1.75,'1¾ cups cooked farro (his portion)','carb'),
+     I('farro cooked',0.75,'¾ cup cooked farro','carb'),
      I('brussels sprouts',1.5,'1.5 cups Brussels sprouts, halved','veg'),
      I('carrots',0.5,'½ cup carrots','veg'),
      I('avocado oil',0.5,'½ tbsp avocado oil','fat')
@@ -1473,17 +1476,17 @@ const MEALS=[
   her:{
    ingredients:[
      I('chicken breast',5,'5 oz boneless skinless chicken breast','protein'),
-     I('farro cooked',1.25,'1¼ cups cooked farro (her portion)','carb'),
+     I('farro cooked',0.5,'½ cup cooked farro','carb'),
      I('brussels sprouts',1,'1 cup Brussels sprouts (shared)','veg'),
      I('carrots',0.5,'½ cup carrots (shared)','veg'),
      I('avocado oil',0.5,'½ tbsp avocado oil','fat')
    ],
    fv:'1.5c veg',
    shopping:[['Chicken breast','Meat — cook fresh extra!','7 oz','5 oz']],
-   steps:['Shared sheet pan. Her 5 oz piece may be done 2–3 min earlier.']},
+   steps:['Cook farro: rinse, simmer in 2.5 cups water 25–30 min until tender. Drain.','Preheat oven to 425°F. Halve Brussels sprouts and slice carrots. Toss with avocado oil, garlic powder, thyme, and pepper. Spread on a baking sheet.','Rub chicken breast with avocado oil, lemon juice, rosemary, thyme, garlic, and pepper. Place on the sheet.','Roast 20–25 min until chicken reaches 165°F. Check with a thermometer.','Rest chicken 3–5 min before slicing. Plate over farro with roasted veg.']},
   both:{ingredients:[
      I('chicken breast',12,'7 oz (his) + 5 oz (hers) chicken','protein'),
-     I('farro cooked',3,'3 cups cooked farro (from 1c dry)','carb'),
+     I('farro cooked',1.25,'1¼ cups cooked farro','carb'),
      I('brussels sprouts',1.5,'1.5 cups Brussels sprouts','veg'),
      I('carrots',0.5,'½ cup carrots','veg'),
      I('avocado oil',0.5,'½ tbsp avocado oil','fat')
@@ -1558,7 +1561,7 @@ const MEALS=[
    ],
    fv:'1c veg',
    shopping:[['Chicken breast','Meat','—','5 oz'],['Cannellini beans (canned)','Pantry','—','½ can'],['Poblano pepper','Produce','—','½'],['Heavy cream','Dairy','—','1.5 tbsp'],['Shredded cheddar & Monterey Jack','Dairy','—','1 oz']],
-   steps:['Same as his — her portion uses ½ can beans, 5 oz chicken, 1 oz cheese.']}},
+   steps:['Prep: dice the poblano, slice scallions separating whites and greens, quarter lime.','Heat avocado oil over medium-high. Add diced poblano and scallion whites. Season with smoky spice blend. Cook 3–4 min.','Add tomatillo sauce and cannellini beans with liquid. Mash beans lightly 1–2 min.','Add broth concentrate and ½ cup water. Bring to boil then simmer 4–5 min until thickened.','Stir in pulled chicken and cream. Simmer 2–3 min. Squeeze in lime juice.','Top with shredded cheese, scallion greens, and lime.']}},
 
  // NEW MEALS
  {id:'coconut_turkey_curry',label:'Coconut turkey curry with jasmine rice',slots:['lunch','dinner'],shared:true,
@@ -1568,6 +1571,8 @@ const MEALS=[
      I('zucchini',1,'1 cup zucchini, diced into half moons','veg'),
      I('bell pepper',0.5,'½ cup red bell pepper, sliced','veg'),
      I('shallot',1,'1 large shallot, sliced thin','veg'),
+     I('garlic clove',2,'2 garlic cloves, minced','veg',false),
+     I('ginger',2,'2 tsp ginger, minced','veg',false),
      I('coconut milk',0.5,'½ cup coconut milk','fat'),
      I('red curry paste',2,'2 tbsp Maesri red curry paste','sauce',false),
      I('baby spinach',1,'1 cup spinach','veg'),
@@ -1584,6 +1589,8 @@ const MEALS=[
      I('zucchini',1,'1 cup zucchini, diced','veg'),
      I('bell pepper',0.5,'½ cup red bell pepper, sliced','veg'),
      I('shallot',1,'1 large shallot, sliced thin','veg'),
+     I('garlic clove',2,'2 garlic cloves, minced','veg',false),
+     I('ginger',2,'2 tsp ginger, minced','veg',false),
      I('coconut milk',0.33,'⅓ cup coconut milk','fat'),
      I('red curry paste',2,'2 tbsp Maesri red curry paste','sauce',false),
      I('baby spinach',1,'1 cup spinach','veg'),
@@ -1593,12 +1600,14 @@ const MEALS=[
    ],
    fv:'2c veg',
    shopping:[['Ground turkey (93% lean)','Meat','6 oz','4 oz']],
-   steps:['Shared skillet — her portion uses 4 oz turkey, ⅓ cup coconut milk, ¾ cup rice.']},
+   steps:['Heat avocado oil in a large skillet over medium heat. Add shallots and cook 5 min until softened.','Add ginger and garlic, cook 2 min until fragrant.','Add bell peppers and sauté 2–3 min.','Add ground turkey and cook 7–8 min until no longer pink.','Add red curry paste and coconut milk. Stir. Add zucchini and simmer 5 min until tender.','Stir in spinach until wilted. Serve over jasmine rice.']},
   both:{ingredients:[
      I('ground turkey 93',10,'10 oz ground turkey total','protein'),
      I('zucchini',2,'2 cups zucchini','veg'),
      I('bell pepper',1,'1 cup bell pepper','veg'),
      I('shallot',2,'2 large shallots','veg'),
+     I('garlic clove',4,'4 garlic cloves, minced','veg',false),
+     I('ginger',4,'4 tsp ginger, minced','veg',false),
      I('coconut milk',1,'1 cup coconut milk','fat'),
      I('red curry paste',4,'4 tbsp Maesri red curry paste','sauce',false),
      I('baby spinach',2,'2 cups spinach','veg'),
@@ -1610,6 +1619,8 @@ const MEALS=[
   him:{
    ingredients:[
      I('chicken thigh',8,'8 oz chicken thighs (deboned)','protein'),
+     I('lemongrass',1.5,'1½ tbsp lemongrass, minced','sauce',false),
+     I('garlic clove',3,'3 garlic cloves, minced','sauce',false),
      I('soy sauce',1,'1 tbsp soy sauce','sauce',false),
      I('fish sauce',1,'1 tbsp fish sauce','sauce',false),
      I('oyster sauce',1,'1 tbsp oyster sauce','sauce',false),
@@ -1621,11 +1632,13 @@ const MEALS=[
      I('water',2,'2 tbsp water (dipping sauce)','fixed',false)
    ],
    fv:'',
-   shopping:[['Chicken thighs (deboned)','Meat','8 oz','6 oz'],['Lemongrass','Produce','3 tbsp','—'],['Soy sauce','Pantry','3 tbsp','—'],['Fish sauce','Pantry','2 tbsp + 2 tbsp','—'],['Oyster sauce','Pantry','1 tbsp','—'],['Dark soy sauce','Pantry','½ tbsp','—'],['Lime','Produce','1','—']],
+   shopping:[['Chicken thighs (deboned)','Meat','8 oz','6 oz'],['Lemongrass','Produce','3 tbsp','—'],['Soy sauce','Pantry','3 tbsp','—'],['Fish sauce','Pantry','4 tbsp','—'],['Oyster sauce','Pantry','1 tbsp','—'],['Dark soy sauce','Pantry','½ tbsp','—'],['Lime','Produce','1','—']],
    steps:['Make marinade: combine lemongrass, avocado oil, garlic, soy sauce, fish sauce, oyster sauce, dark soy sauce, and sugar.','Marinate chicken thighs at least 30 min (overnight is best).','Cook chicken in a hot pan or grill until charred and cooked through, about 5–6 min per side.','Make dipping sauce: mix fish sauce, water, lime juice, garlic, and sugar.','Serve chicken over jasmine rice with dipping sauce on the side.']},
   her:{
    ingredients:[
      I('chicken thigh',6,'6 oz chicken thighs (deboned)','protein'),
+     I('lemongrass',1.5,'1½ tbsp lemongrass, minced','sauce',false),
+     I('garlic clove',3,'3 garlic cloves, minced','sauce',false),
      I('soy sauce',1,'1 tbsp soy sauce','sauce',false),
      I('fish sauce',0.5,'½ tbsp fish sauce','sauce',false),
      I('oyster sauce',1,'1 tbsp oyster sauce','sauce',false),
@@ -1638,9 +1651,11 @@ const MEALS=[
    ],
    fv:'',
    shopping:[['Chicken thighs (deboned)','Meat','8 oz','6 oz']],
-   steps:['Shared marinade and dipping sauce. Her portion: 6 oz chicken, ¾ cup rice.']},
+   steps:['Make marinade: combine lemongrass, avocado oil, garlic, soy sauce, fish sauce, oyster sauce, dark soy sauce, and maple syrup.','Marinate chicken thighs at least 30 min (overnight is best).','Cook chicken in a hot pan or grill until charred and cooked through, about 5–6 min per side.','Make dipping sauce: mix fish sauce, water, lime juice, garlic, and maple syrup.','Serve chicken over jasmine rice with dipping sauce on the side.']},
   both:{ingredients:[
      I('chicken thigh',14,'14 oz chicken thighs total','protein'),
+     I('lemongrass',3,'3 tbsp lemongrass, minced','sauce',false),
+     I('garlic clove',6,'6 garlic cloves, minced','sauce',false),
      I('soy sauce',2,'2 tbsp soy sauce','sauce',false),
      I('fish sauce',1.5,'1½ tbsp fish sauce','sauce',false),
      I('oyster sauce',2,'2 tbsp oyster sauce','sauce',false),
@@ -1654,6 +1669,8 @@ const MEALS=[
      I('ground chicken',6,'6 oz chicken mince','protein'),
      I('silken tofu',6,'6 oz silken tofu','protein'),
      I('udon noodles cooked',1,'1 cup frozen udon, cooked','carb'),
+     I('garlic clove',2,'2 garlic cloves, grated','sauce',false),
+     I('ginger',1,'1 tsp ginger, grated','sauce',false),
      I('soy sauce',1,'1 tbsp soy sauce (chicken)','sauce',false),
      I('oyster sauce',0.5,'½ tbsp oyster sauce (chicken)','sauce',false),
      I('mirin',1,'1 tsp mirin (chicken)','sauce',false),
@@ -1674,6 +1691,8 @@ const MEALS=[
      I('ground chicken',4,'4 oz chicken mince','protein'),
      I('silken tofu',4,'4 oz silken tofu','protein'),
      I('udon noodles cooked',0.75,'¾ cup frozen udon, cooked','carb'),
+     I('garlic clove',2,'2 garlic cloves, grated','sauce',false),
+     I('ginger',1,'1 tsp ginger, grated','sauce',false),
      I('soy sauce',1,'1 tbsp soy sauce (chicken)','sauce',false),
      I('oyster sauce',0.5,'½ tbsp oyster sauce (chicken)','sauce',false),
      I('mirin',1,'1 tsp mirin (chicken)','sauce',false),
@@ -1688,27 +1707,27 @@ const MEALS=[
    ],
    fv:'0.5c veg',
    shopping:[['Ground chicken','Meat','—','4 oz'],['Silken tofu','Refrigerated','—','4 oz'],['Frozen udon noodles','Frozen','—','1 pack']],
-   steps:['Same method — her portion: 4 oz chicken, 4 oz tofu, ¾ cup udon.']}},
+   steps:['Make sauce: add silken tofu, tahini, soy sauce, miso, gochugaru, and rice vinegar to a blender. Pulse until smooth. Set aside.','Julienne the spring onions. Slice the cucumber into thin rounds and cut into strips.','Add chicken mince to a hot pan over medium heat. Once coloured, deglaze with mirin, then add soy sauce, oyster sauce, ginger, and garlic. Cook a few more min.','Cook the udon noodles per package directions.','Plate: noodles on the bottom, pour the sauce over, chicken on one side, cucumber salad on the other. Finish with sesame seeds.']}},
 ];
 
 const DEFAULTS={
  him:{
-  Monday:   {pre:'his_shake',post:'egg_scramble',    lunch:'quinoa_bowl',      snack:'eggs_apple',          dinner:'salmon_lentils',      evening:'yogurt_berry_eve'},
-  Tuesday:  {pre:'his_shake',post:'yogurt_bowl_post',lunch:'hummus_wrap',      snack:'rxbar_apple',         dinner:'salmon_teriyaki_din', evening:'yogurt_berry_eve'},
-  Wednesday:{pre:'his_shake',post:'overnight_oats',  lunch:'shrimp_bowl',      snack:'tuna_crackers_apple', dinner:'chicken_thigh_din',   evening:'yogurt_berry_eve'},
-  Thursday: {pre:'his_shake',post:'tuna_scramble',   lunch:'tuna_white_bean',  snack:'eggs_orange',         dinner:'turkey_meatballs_din',evening:'yogurt_orange_eve'},
-  Friday:   {pre:'his_shake',post:'egg_omelet',      lunch:'white_bean_soup',  snack:'rxbar_orange',        dinner:'halibut_farro_din',       evening:'yogurt_parfait_eve'},
-  Saturday: {pre:'his_shake',post:'protein_pancakes',lunch:'burrito_bowl',     snack:'eggs_chickpeas',      dinner:'filet_din',           evening:'yogurt_berry_eve'},
-  Sunday:   {pre:'his_shake',post:'yogurt_bowl_post',lunch:'white_bean_soup',  snack:'tuna_crackers_orange',dinner:'roast_chicken_din',   evening:'yogurt_parfait_eve'},
+  Monday:   {pre:'his_shake',post:'egg_scramble',    lunch:'quinoa_bowl',          snack:'tuna_crackers_apple', dinner:'salmon_lentils',          evening:'yogurt_berry_eve'},
+  Tuesday:  {pre:'his_shake',post:'yogurt_bowl_post',lunch:'burrito_bowl',         snack:'edamame_apple',       dinner:'salmon_teriyaki_din',     evening:'yogurt_berry_eve'},
+  Wednesday:{pre:'his_shake',post:'egg_scramble',    lunch:'shrimp_bowl',          snack:'tuna_crackers_apple', dinner:'chicken_thigh_din',       evening:'yogurt_orange_eve'},
+  Thursday: {pre:'his_shake',post:'tuna_scramble',   lunch:'coconut_turkey_curry', snack:'tuna_crackers_orange',dinner:'turkey_meatballs_din',    evening:'yogurt_orange_eve'},
+  Friday:   {pre:'his_shake',post:'egg_omelet',      lunch:'salmon_lentils',       snack:'tuna_crackers_apple', dinner:'coconut_turkey_curry',    evening:'yogurt_parfait_eve'},
+  Saturday: {pre:'his_shake',post:'protein_pancakes',lunch:'burrito_bowl',         snack:'eggs_chickpeas',      dinner:'filet_din',               evening:'yogurt_berry_eve'},
+  Sunday:   {pre:'his_shake',post:'yogurt_bowl_post',lunch:'thai_peanut_noodle',  snack:'tuna_crackers_apple', dinner:'lemongrass_chicken_thigh',evening:'yogurt_parfait_eve'},
  },
  her:{
-  Monday:   {pre:'her_shake',post:'korean_egg_bowl',   lunch:'viet_vermicelli',   snack:'eggs_apple',          dinner:'salmon_lentils',      evening:'miso_edamame'},
-  Tuesday:  {pre:'her_shake',post:'thai_tofu_scramble',lunch:'korean_rice_bowl',  snack:'yogurt_snack',        dinner:'salmon_teriyaki_din', evening:'edamame_orange_eve'},
-  Wednesday:{pre:'her_shake',post:'viet_noodle_bowl',  lunch:'thai_peanut_noodle',snack:'eggs_apple',          dinner:'chicken_thigh_din',   evening:'miso_tofu'},
-  Thursday: {pre:'her_shake',post:'thai_tofu_scramble',lunch:'lemongrass_salad',  snack:'eggs_orange',         dinner:'turkey_meatballs_din',evening:'edamame_berries_eve'},
+  Monday:   {pre:'her_shake',post:'korean_egg_bowl',   lunch:'viet_vermicelli',   snack:'eggs_apple',          dinner:'salmon_lentils',          evening:'miso_edamame'},
+  Tuesday:  {pre:'her_shake',post:'thai_tofu_scramble',lunch:'korean_rice_bowl',  snack:'yogurt_snack',        dinner:'salmon_teriyaki_din',     evening:'edamame_orange_eve'},
+  Wednesday:{pre:'her_shake',post:'viet_noodle_bowl',  lunch:'korean_rice_bowl',  snack:'eggs_apple',          dinner:'chicken_thigh_din',       evening:'miso_tofu'},
+  Thursday: {pre:'her_shake',post:'thai_tofu_scramble',lunch:'salmon_lentils',    snack:'eggs_orange',         dinner:'turkey_meatballs_din',    evening:'edamame_berries_eve'},
   Friday:   {pre:'her_shake',post:'korean_juk',        lunch:'bibimbap',          snack:'eggs_orange',         dinner:'halibut_farro_din',       evening:'miso_edamame'},
-  Saturday: {pre:'her_shake',post:'viet_noodle_bowl',  lunch:'red_curry',         snack:'eggs_chickpeas',      dinner:'filet_din',           evening:'edamame_berries_eve'},
-  Sunday:   {pre:'her_shake',post:'korean_egg_bowl',   lunch:'viet_tofu_soup',    snack:'tuna_crackers_orange',dinner:'roast_chicken_din',   evening:'miso_tofu'},
+  Saturday: {pre:'her_shake',post:'viet_noodle_bowl',  lunch:'viet_vermicelli',   snack:'eggs_chickpeas',      dinner:'roast_chicken_din',       evening:'edamame_berries_eve'},
+  Sunday:   {pre:'her_shake',post:'korean_egg_bowl',   lunch:'viet_tofu_soup',    snack:'tuna_crackers_orange',dinner:'roast_chicken_din',       evening:'miso_tofu'},
  }
 };
 
@@ -1777,10 +1796,10 @@ function getDbKeysByRole(){
 var DB_KEYS_BY_ROLE=null; // lazy init
 
 // Items to always put in "If Low" section
-var IF_LOW_ITEMS=['avocado oil','sesame oil','rice vinegar','soy sauce','fish sauce','honey','cinnamon','garlic powder','onion powder','black pepper','cumin','italian seasoning','rosemary','thyme','dill','gochujang','lemongrass','chili flake','red pepper flake','peanut butter','almond butter','chia','protein powder','creatine','baking powder','oat flour','maple syrup','balsamic'];
+var IF_LOW_ITEMS=['avocado oil','sesame oil','rice vinegar','soy sauce','fish sauce','honey','cinnamon','garlic powder','onion powder','black pepper','cumin','italian seasoning','rosemary','thyme','dill','gochujang','lemongrass','chili flake','red pepper flake','peanut butter','almond butter','chia','protein powder','creatine','baking powder','oat flour','maple syrup','balsamic','cashew milk','oats','granola','rice','mixed berries','edamame','acai'];
 
 function isIfLow(name){var n=name.toLowerCase();return IF_LOW_ITEMS.some(function(k){return n.indexOf(k)>=0})}
-function normCat(cat){if(cat.indexOf('Meat')===0)return 'Meat';if(isIfLow_cat(cat))return 'If Low';return cat;}
+function normCat(cat){if(cat.indexOf('Meat')===0)return 'Meat';if(isIfLow_cat(cat))return cat.replace('Pantry — if low','Pantry').replace('Pantry — optional','Pantry');return cat;}
 function isIfLow_cat(cat){return cat==='Pantry — if low'||cat==='Pantry — optional';}
 
 const CAT_ORDER=['Meat','Seafood','Dairy','Dairy alt','Refrigerated','Produce','Frozen','Bread','Pantry','Grab & go','If Low'];
@@ -1829,16 +1848,29 @@ function getMealsForSlot(s){return MEALS.filter(function(m){return m.slots.index
 function sumQtyStrings(a,b){
   function parse(s){
     if(!s)return null;
-    var clean=s.trim().replace('½','0.5').replace('¼','0.25').replace('¾','0.75').replace('1¼','1.25').replace('1½','1.5').replace('1¾','1.75');
+    var clean=s.trim();
+    // Handle compound fractions: split whole+fraction character before replacing
+    clean=clean.replace(/(\d)(⅔)/g,'$1.67').replace(/(\d)(⅓)/g,'$1.33').replace(/(\d)(¾)/g,'$1.75').replace(/(\d)(½)/g,'$1.5').replace(/(\d)(¼)/g,'$1.25');
+    // Handle standalone fractions
+    clean=clean.replace('⅔','0.67').replace('⅓','0.33').replace('¾','0.75').replace('½','0.5').replace('¼','0.25');
     var m=clean.match(/^([\d.]+)\s*(oz|cup|cups|tbsp|tsp|clove|cloves|lb|lbs|scoop|can|block)?/i);
     if(!m)return null;
     var unit=(m[2]||'').toLowerCase().replace('cups','cup').replace('cloves','clove').replace('lbs','lb');
     return{num:parseFloat(m[1]),unit:unit};
   }
   function fmt(num,unit){
+    var snapped=Math.round(num*4)/4;
+    if(snapped<=0)snapped=0.25;
+    var whole=Math.floor(snapped);
+    var frac=snapped-whole;
     var s;
-    if(num===Math.round(num))s=String(Math.round(num));
-    else s=Math.round(num*10)/10+'';
+    if(frac<0.01)s=String(whole);
+    else if(Math.abs(frac-0.25)<0.01)s=(whole?whole:'')+'¼';
+    else if(Math.abs(frac-0.33)<0.05)s=(whole?whole:'')+'⅓';
+    else if(Math.abs(frac-0.5)<0.01)s=(whole?whole:'')+'½';
+    else if(Math.abs(frac-0.67)<0.05)s=(whole?whole:'')+'⅔';
+    else if(Math.abs(frac-0.75)<0.01)s=(whole?whole:'')+'¾';
+    else s=String(snapped);
     return unit?s+' '+unit:s;
   }
   var pa=parse(a),pb=parse(b);
@@ -1849,7 +1881,9 @@ function sumQtyStrings(a,b){
 
 function parseQty(raw){
   if(!raw||raw==='—')return null;
-  var s=raw.trim().replace('½','0.5').replace('¼','0.25').replace('¾','0.75').replace('1¼','1.25').replace('1½','1.5').replace('1¾','1.75');
+  var s=raw.trim();
+  s=s.replace(/(\d)(⅔)/g,'$1.67').replace(/(\d)(⅓)/g,'$1.33').replace(/(\d)(¾)/g,'$1.75').replace(/(\d)(½)/g,'$1.5').replace(/(\d)(¼)/g,'$1.25');
+  s=s.replace('⅔','0.67').replace('⅓','0.33').replace('¾','0.75').replace('½','0.5').replace('¼','0.25');
   var m=s.match(/^([\d.]+)\s*(oz|cup|cups|tbsp|tsp|clove|cloves|lb|lbs|scoop|can|block)?/i);
   if(!m)return null;
   var unit=(m[2]||'').toLowerCase().replace('cups','cup').replace('cloves','clove').replace('lbs','lb');
@@ -1863,9 +1897,19 @@ function addQty(existing,num,unit){
 function fmtQty(q){
   if(!q)return'—';
   var n=q.num;
+  // Snap to nearest clean fraction
+  var snapped = Math.round(n*4)/4; // snap to quarter
+  if(snapped<=0)snapped=0.25;
   var s;
-  if(n===Math.round(n))s=String(Math.round(n));
-  else s=Math.round(n*10)/10+'';
+  var whole=Math.floor(snapped);
+  var frac=snapped-whole;
+  if(frac<0.01)s=String(whole);
+  else if(Math.abs(frac-0.25)<0.01)s=(whole?whole:'')+'¼';
+  else if(Math.abs(frac-0.33)<0.05)s=(whole?whole:'')+'⅓';
+  else if(Math.abs(frac-0.5)<0.01)s=(whole?whole:'')+'½';
+  else if(Math.abs(frac-0.67)<0.05)s=(whole?whole:'')+'⅔';
+  else if(Math.abs(frac-0.75)<0.01)s=(whole?whole:'')+'¾';
+  else s=String(snapped);
   return q.unit?s+' '+q.unit:s;
 }
 
@@ -1884,8 +1928,9 @@ function buildShoppingList(trip,who){
         var port=m[p];
         (port.shopping||[]).forEach(function(row){
           var name=row[0],cat=row[1],hisQty=row[2],herQty=row[3];
-          if(isIfLow(name))cat='If Low';
+          var isLow=isIfLow(name);
           cat=normCat(cat);
+          if(isLow)cat='If Low — '+cat;
           var rawQty=p==='him'?hisQty:herQty;
           if(!rawQty||rawQty==='—')return;
           var key=(cat+'_'+name).toLowerCase().replace(/[^a-z0-9]/g,'_');
@@ -2188,7 +2233,6 @@ function renderMeals(){
     var otherId=getMealId(other,day,s);
     var isSharedSlot=(otherId&&otherId===activeId);
     var sharedBadge=isSharedSlot?'<span class="shared-badge">Shared with '+(other==='him'?'him':'her')+'</span>':'';
-    var dinnerSharedBadge=activeMeal.shared&&!isSharedSlot?'<span class="shared-badge">Shared dinner</span>':'';
     var notePill=activeMeal.note?'<div class="note-pill">⏰ '+activeMeal.note+'</div>':'';
 
     // Ingredient display with per-ingredient nutrition — EDITABLE
@@ -2308,7 +2352,7 @@ function renderMeals(){
     html+='<div class="mc slot-'+s+(isOpen?' open':'')+'" id="mc_'+k+'">'
       +'<div class="mc-top"><div class="slot-label">'+SLOT_LABEL[s]+'</div>'
       +'<select class="meal-select" onchange="changeMeal(\''+s+'\',this.value)">'+opts+'</select></div>'
-      +'<div class="mc-meta" onclick="toggleCard(\''+k+'\')"><div><div class="mc-macros">'+macroLine+sharedBadge+dinnerSharedBadge+'</div>'
+      +'<div class="mc-meta" onclick="toggleCard(\''+k+'\')"><div><div class="mc-macros">'+macroLine+sharedBadge+'</div>'
       +macroBar(pm.kcal,pm.pro,mFat,mCarb)
       +'</div><div class="expand-btn">⌄</div></div>'
       +notePill
@@ -2442,9 +2486,8 @@ function randomizeWeek(){
 function setShopTrip(t){shopTrip=t;renderShop();}
 function setShopPerson(p){shopPerson=p;renderShop();}
 function toggleCheck(k){
-  CHECKS[k]=!CHECKS[k];
-  var el=document.getElementById('si_'+safeId(k));
-  if(el){el.classList.toggle('checked',CHECKS[k]);var chk=el.querySelector('.si-check');if(chk)chk.textContent=CHECKS[k]?'✓':'';}
+  CHECKS[k]=!CHECKS[k];if(!CHECKS[k])delete CHECKS[k];
+  renderShop();
 }
 function clearAll(){Object.keys(CHECKS).forEach(function(k){if(k.indexOf(shopTrip+'_')===0)delete CHECKS[k]});renderShop();}
 function checkAll(){
@@ -2456,7 +2499,14 @@ function renderShop(){
   var grouped=buildShoppingList(shopTrip,shopPerson);
   var totalItems=Object.keys(grouped).reduce(function(a,c){return a+grouped[c].length},0);
   var checkedCount=Object.keys(CHECKS).filter(function(k){return k.indexOf(shopTrip+'_')===0&&CHECKS[k]}).length;
-  var sortedCats=Object.keys(grouped).sort(function(a,b){var ai=CAT_ORDER.indexOf(a),bi=CAT_ORDER.indexOf(b);return(ai<0?999:ai)-(bi<0?999:bi);});
+  var sortedCats=Object.keys(grouped).sort(function(a,b){
+    var isLowA=a.indexOf('If Low')===0, isLowB=b.indexOf('If Low')===0;
+    if(isLowA&&!isLowB)return 1; // If Low always last
+    if(!isLowA&&isLowB)return -1;
+    if(isLowA&&isLowB)return a<b?-1:1; // alphabetical within If Low
+    var ai=CAT_ORDER.indexOf(a),bi=CAT_ORDER.indexOf(b);
+    return(ai<0?999:ai)-(bi<0?999:bi);
+  });
   var html='<div class="shop-trip-tabs">'
     +'<div class="shop-trip-tab'+(shopTrip==='sun'?' on':'')+'" onclick="setShopTrip(\'sun\')">☀️ Sunday shop<br><span style="font-size:11px;font-weight:400">Mon · Tue · Wed</span></div>'
     +'<div class="shop-trip-tab'+(shopTrip==='wed'?' on':'')+'" onclick="setShopTrip(\'wed\')">📅 Wednesday shop<br><span style="font-size:11px;font-weight:400">Thu · Fri · Sat · Sun</span></div></div>'
@@ -2470,11 +2520,25 @@ function renderShop(){
     +'<div class="shop-action-btn">'+checkedCount+' / '+totalItems+' checked</div></div>';
   if(!totalItems){html+='<div class="empty-shop">No items for this selection.</div>';}
   else {
+    var fullItems=[];
     sortedCats.forEach(function(cat){
       var items=grouped[cat];
-      var catLabel=cat==='If Low'?'If Running Low (pantry staples)':cat;
-      html+='<div class="shop-section"><div class="shop-section-hdr">'+(CAT_ICONS[cat]||'📦')+' '+catLabel+'</div>';
+      var unchecked=[];
       items.forEach(function(item){
+        var ck=shopTrip+'_'+cat+'_'+item.name.toLowerCase();
+        if(CHECKS[ck]){
+          fullItems.push({item:item,cat:cat,ck:ck});
+        } else {
+          unchecked.push(item);
+        }
+      });
+      if(!unchecked.length)return; // skip empty categories
+      var isLowCat=cat.indexOf('If Low')===0;
+      var subCat=isLowCat?cat.replace('If Low — ',''):'';
+      var catLabel=isLowCat?'If Running Low — '+subCat:cat;
+      var catIcon=isLowCat?(CAT_ICONS[subCat]||'📦'):(CAT_ICONS[cat]||'📦');
+      html+='<div class="shop-section"><div class="shop-section-hdr">'+catIcon+' '+catLabel+'</div>';
+      unchecked.forEach(function(item){
         var ck=shopTrip+'_'+cat+'_'+item.name.toLowerCase();
         var sid='si_'+safeId(ck);
         var checked=CHECKS[ck]||false;
@@ -2506,6 +2570,40 @@ function renderShop(){
       });
       html+='</div>';
     });
+    // "Full" section at the bottom for checked items
+    if(fullItems.length){
+      html+='<div class="shop-section"><div class="shop-section-hdr">✅ Full</div>';
+      fullItems.forEach(function(fi){
+        var item=fi.item,cat=fi.cat,ck=fi.ck;
+        var sid='si_'+safeId(ck);
+        var whoLabel='',whoClass='';
+        if(shopPerson==='both'){
+          var hi=item.his.length>0,hr=item.her.length>0;
+          if(hi&&hr){whoLabel='Both';whoClass='both';}
+          else if(hi){whoLabel='Him';whoClass='him';}
+          else{whoLabel='Her';whoClass='her';}
+        }
+        var qtyText='';
+        if(shopPerson==='him'){qtyText=item.hisQty&&item.hisQty!=='—'?item.hisQty:'';}
+        else if(shopPerson==='her'){qtyText=item.herQty&&item.herQty!=='—'?item.herQty:'';}
+        else {
+          var hv=item.hisQty&&item.hisQty!=='—'?item.hisQty:null;
+          var rv=item.herQty&&item.herQty!=='—'?item.herQty:null;
+          var parts=[];
+          if(hv)parts.push('<span class="qty-his">'+hv+'</span>');
+          if(rv)parts.push('<span class="qty-her">'+rv+'</span>');
+          if(hv&&rv){var tot=sumQtyStrings(hv,rv);if(tot)parts.push('<span class="qty-tot">'+tot+'</span>');}
+          qtyText=parts.join('<span class="qty-sep"> / </span>');
+        }
+        var ckEsc=ck.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        html+='<div class="shop-item checked" id="'+sid+'" onclick="toggleCheck(\''+ckEsc+'\')">'
+          +'<div class="si-left"><div class="si-check">✓</div><div>'
+          +'<div class="si-name">'+item.name+'</div>'
+          +(whoClass?'<div class="si-who '+whoClass+'">'+whoLabel+'</div>':'')
+          +'</div></div><div class="si-qty">'+qtyText+'</div></div>';
+      });
+      html+='</div>';
+    }
   }
   document.getElementById('shopView').innerHTML=html;
 }
