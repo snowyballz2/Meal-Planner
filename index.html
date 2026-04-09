@@ -29,7 +29,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .ptab.him.on{background:var(--his-light);border-color:var(--his);color:var(--his)}
 .ptab.her.on{background:var(--her-light);border-color:var(--her);color:var(--her)}
 .ptab.shared.on{background:rgba(16,185,129,.12);border-color:#10B981;color:#34D399}
-.dscroll{display:flex;gap:4px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch}
+.dscroll{display:flex;gap:4px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch;justify-content:center}
 .dscroll::-webkit-scrollbar{display:none}
 .dtab{padding:5px 10px;font-size:12px;font-weight:700;border-radius:20px;white-space:nowrap;cursor:pointer;border:1.5px solid var(--border);background:var(--bg-card);color:var(--gray)}
 .dtab.on-him{background:var(--his);color:var(--bg);border-color:var(--his)}
@@ -96,7 +96,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .reset-btn{flex:1;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);font-size:12px;font-weight:700;color:var(--gray);cursor:pointer}
 .reset-btn.secondary{background:var(--gray-light)}
 .note-pill{font-size:11px;color:#FBBF24;background:rgba(251,191,36,.12);border-radius:8px;padding:3px 10px;margin:0 12px 6px;display:inline-block;font-weight:600}
-.week-bar{display:flex;gap:6px;align-items:center}
+.week-bar{display:flex;gap:0;align-items:center}
+.week-toggle{display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden}
+.week-pill{padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;color:var(--gray);background:var(--bg-card);white-space:nowrap;transition:all .15s}
+.week-pill.on{background:var(--shop);color:#000}
+.week-pill:active{opacity:.7}
+.sync-icon-btn{border:none;background:none;font-size:18px;cursor:pointer;padding:4px;border-radius:6px;line-height:1}
+.sync-icon-btn:active{opacity:.6}
 .week-select{flex:1;padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:11px;font-weight:600;background:var(--bg-surface);color:var(--text)}
 .week-btn{padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:11px;font-weight:700;cursor:pointer;background:var(--bg-card);color:var(--gray);white-space:nowrap}
 .week-btn.save{background:var(--shop);color:var(--bg);border-color:var(--shop)}
@@ -324,12 +330,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="hdr">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div class="hdr-title">🥗 Family Meal Planner</div>
-    <div id="weekBar" class="week-bar" style="flex:1;margin-left:12px;max-width:260px"></div>
+    <div style="display:flex;align-items:center;gap:6px;flex:1;margin-left:12px;max-width:300px">
+      <div id="weekBar" class="week-bar" style="flex:1"></div>
+      <button class="sync-icon-btn" id="syncToggleBtn" onclick="toggleSyncPanel()">☁️</button>
+    </div>
   </div>
   <div class="top-tabs">
     <div class="top-tab on-meals" id="ttMeals" onclick="setTopTab('meals')">Meals</div>
     <div class="top-tab" id="ttShop" onclick="setTopTab('shop')">🛒 Shopping</div>
-    <div class="top-tab" id="ttSync" onclick="setTopTab('sync')">☁️ Sync</div>
     <div class="top-tab" id="ttRecipes" onclick="setTopTab('recipes')">✚ Recipes</div>
   </div>
   <div id="mealHdrExtra">
@@ -1950,7 +1958,7 @@ const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunda
 const SLOTS=['pre','post','lunch','snack','dinner','evening','late_snack'];
 const SLOT_LABEL={pre:'Morning Shake',post:'Breakfast',lunch:'Lunch',snack:'Snack',dinner:'Dinner',evening:'Evening Snack',late_snack:'Late Night Snack'};
 const PERSONS=['him','her'];
-const TRIP_DAYS={sun:['Monday','Tuesday','Wednesday'],wed:['Thursday','Friday','Saturday','Sunday'],custom:[]};
+const TRIP_DAYS_STATIC={sun:['Monday','Tuesday','Wednesday'],wed:['Thursday','Friday','Saturday','Sunday'],custom:[]};
 var CUSTOM_SHOP_SEL={}; // key: 'person_day_slot', true if selected for custom shop
 var CUSTOM_RECIPE_SEL={}; // key: 'mealId_person', true if selected for custom shop by recipe
 var csGridOpen=false, csRecipesOpen=false;
@@ -2139,7 +2147,7 @@ function fmtQty(q){
 
 // ── Shopping list builder ────────────────────────────────────
 function buildShoppingList(trip,who){
-  var days=trip==='custom'?DAYS:(TRIP_DAYS[trip]||[]);
+  var days=trip==='custom'?DAYS:(TRIP_DAYS_STATIC[trip]||[]);
   var persons=who==='both'?['him','her']:who==='him'?['him']:['her'];
   var items={};
   persons.forEach(function(p){
@@ -2300,15 +2308,13 @@ function setTopTab(t){
   topTab=t;
   document.getElementById('ttMeals').className='top-tab'+(t==='meals'?' on-meals':'');
   document.getElementById('ttShop').className='top-tab'+(t==='shop'?' on-shop':'');
-  document.getElementById('ttSync').className='top-tab'+(t==='sync'?' on-sync':'');
   document.getElementById('ttRecipes').className='top-tab'+(t==='recipes'?' on-recipes':'');
   document.getElementById('mealHdrExtra').style.display=t==='meals'?'':'none';
   document.getElementById('mealView').style.display=t==='meals'?'':'none';
   document.getElementById('shopView').style.display=t==='shop'?'':'none';
-  document.getElementById('syncView').style.display=t==='sync'?'':'none';
+  document.getElementById('syncView').style.display='none';
   document.getElementById('recipesView').style.display=t==='recipes'?'':'none';
   if(t==='shop')renderShop();
-  if(t==='sync')renderSyncView();
   if(t==='recipes')renderRecipesView();
 }
 function setPerson(p){
@@ -2660,7 +2666,7 @@ function renderMeals(){
   }
 
   // Normal him/her view
-  html+='<div class="reset-bar"><button class="reset-btn" onclick="randomizeDay()">🎲 Randomize today</button><button class="reset-btn secondary" onclick="randomizeWeek()">🔀 New week</button></div>';
+  html+='<div class="reset-bar"><button class="reset-btn" onclick="randomizeDay()">🎲 Randomize today</button><button class="reset-btn secondary" onclick="randomizeWeek()">🔀 Randomize week</button></div>';
   var other=person==='him'?'her':'him';
 
   SLOTS.forEach(function(s){
@@ -3080,7 +3086,7 @@ function loadEatOutEntry(p,d,s,idx){
   renderMeals();
 }
 function deleteEatOutEntry(idx){EAT_OUT_DB.splice(idx,1);saveEatOutDB();renderMeals();}
-function changeMeal(slot,mealId){SEL[person+'_'+day+'_'+slot]=mealId;clearOverrides(person,day,slot);renderMeals();if(topTab==='shop')renderShop();}
+function changeMeal(slot,mealId){SEL[person+'_'+day+'_'+slot]=mealId;clearOverrides(person,day,slot);autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();}
 
 // ── Ingredient edit handlers ────────────────────────────────
 function onIngrAmt(p,d,s,idx,val){
@@ -3143,7 +3149,7 @@ function randomizeDay(){
       else delete SEL[person+'_'+day+'_'+s];
     });
   }
-  renderMeals(); if(topTab==='shop') renderShop();
+  renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
 }
 
 function randomizeWeek(){
@@ -3193,7 +3199,7 @@ function randomizeWeek(){
       }
     });
   });
-  renderMeals(); if(topTab==='shop') renderShop();
+  renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
 }
 
 // ── Shopping render ─────────────────────────────────────────
@@ -3283,9 +3289,10 @@ function renderShop(){
     var ai=CAT_ORDER.indexOf(a),bi=CAT_ORDER.indexOf(b);
     return(ai<0?999:ai)-(bi<0?999:bi);
   });
+  var sunLabel=activeWeek==='this'?'Next week\'s':'This week\'s';
   var html='<div class="shop-trip-tabs">'
-    +'<div class="shop-trip-tab'+(shopTrip==='sun'?' on':'')+'" onclick="setShopTrip(\'sun\')">☀️ Sunday<br><span style="font-size:11px;font-weight:400">Mon · Tue · Wed</span></div>'
-    +'<div class="shop-trip-tab'+(shopTrip==='wed'?' on':'')+'" onclick="setShopTrip(\'wed\')">📅 Wednesday<br><span style="font-size:11px;font-weight:400">Thu · Fri · Sat · Sun</span></div>'
+    +'<div class="shop-trip-tab'+(shopTrip==='sun'?' on':'')+'" onclick="setShopTrip(\'sun\')">☀️ Sunday shop<br><span style="font-size:11px;font-weight:400">'+sunLabel+' Mon–Wed</span></div>'
+    +'<div class="shop-trip-tab'+(shopTrip==='wed'?' on':'')+'" onclick="setShopTrip(\'wed\')">📅 Wednesday shop<br><span style="font-size:11px;font-weight:400">This week\'s Thu–Sun</span></div>'
     +'<div class="shop-trip-tab'+(shopTrip==='custom'?' on':'')+'" onclick="setShopTrip(\'custom\')">🛒 Shop Now<br><span style="font-size:11px;font-weight:400">Pick meals</span></div></div>'
     +'<div class="shop-person-row">'
     +'<div class="shop-person-btn him'+(shopPerson==='him'?' on':'')+'" onclick="setShopPerson(\'him\')">Him only</div>'
@@ -3534,39 +3541,78 @@ function renderShop(){
 }
 
 // ── WEEK MANAGEMENT ─────────────────────────────────────────
-var weeks={};var activeWeekId=null;
-function getWeekId(dateStr){return 'week_'+dateStr.replace(/-/g,'');}
+var activeWeek='this'; // 'this' or 'next'
+var weekData={this:{sel:{},monday:''},next:{sel:{},monday:''}};
+
 function getMondayStr(d){var dt=new Date(d);var diff=dt.getDay()===0?-6:1-dt.getDay();dt.setDate(dt.getDate()+diff);return dt.toISOString().slice(0,10);}
-function fmtWeekLabel(mondayStr){var d=new Date(mondayStr+'T12:00:00');var end=new Date(d);end.setDate(d.getDate()+6);var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return mo[d.getMonth()]+' '+d.getDate()+' – '+mo[end.getMonth()]+' '+end.getDate()+', '+end.getFullYear();}
+function fmtWeekLabel(mondayStr){var d=new Date(mondayStr+'T12:00:00');var end=new Date(d);end.setDate(d.getDate()+6);var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return mo[d.getMonth()]+' '+d.getDate()+' – '+mo[end.getMonth()]+' '+end.getDate();}
 function todayMonday(){return getMondayStr(new Date().toISOString().slice(0,10));}
-function loadWeeks(){try{var raw=localStorage.getItem('mealPlannerWeeks');weeks=raw?JSON.parse(raw):{};}catch(e){weeks={};}}
-function saveWeeks(){try{localStorage.setItem('mealPlannerWeeks',JSON.stringify(weeks));}catch(e){}}
-function saveCurrentWeek(label,weekId){weeks[weekId]={label:label,sel:JSON.parse(JSON.stringify(SEL))};saveWeeks();activeWeekId=weekId;renderWeekBar();}
-function loadWeek(weekId){if(!weekId||!weeks[weekId])return;Object.keys(SEL).forEach(function(k){delete SEL[k];});var saved=weeks[weekId].sel||{};Object.keys(saved).forEach(function(k){SEL[k]=saved[k];});activeWeekId=weekId;renderWeekBar();renderMeals();if(topTab==='shop')renderShop();}
-function deleteWeek(weekId){delete weeks[weekId];saveWeeks();if(activeWeekId===weekId)activeWeekId=null;renderWeekBar();}
+function nextMonday(){var d=new Date(todayMonday()+'T12:00:00');d.setDate(d.getDate()+7);return d.toISOString().slice(0,10);}
+
+function loadWeeks(){
+  try{
+    var raw=localStorage.getItem('mealPlannerWeekData');
+    if(raw)weekData=JSON.parse(raw);
+  }catch(e){}
+  
+  // Auto-rollover: check if the calendar has moved forward
+  var currentMonday=todayMonday();
+  var thisMonday=weekData['this'].monday||'';
+  var nextMon=weekData['next'].monday||'';
+  
+  if(thisMonday && thisMonday!==currentMonday){
+    // The real-world week has changed
+    if(nextMon===currentMonday){
+      // Next week's plan is now this week — shift it over
+      weekData['this']={sel:JSON.parse(JSON.stringify(weekData['next'].sel||{})),monday:currentMonday};
+      weekData['next']={sel:{},monday:nextMonday()};
+    } else {
+      // More than a week has passed, or dates don't match — reset both
+      weekData['this']={sel:{},monday:currentMonday};
+      weekData['next']={sel:{},monday:nextMonday()};
+    }
+    // Save the rollover
+    try{localStorage.setItem('mealPlannerWeekData',JSON.stringify(weekData));}catch(e){}
+  }
+  
+  // Ensure monday stamps are set
+  if(!weekData['this'].monday)weekData['this'].monday=currentMonday;
+  if(!weekData['next'].monday)weekData['next'].monday=nextMonday();
+  
+  // Load active week's selections into SEL
+  var saved=weekData[activeWeek]&&weekData[activeWeek].sel||{};
+  Object.keys(SEL).forEach(function(k){delete SEL[k];});
+  Object.keys(saved).forEach(function(k){SEL[k]=saved[k];});
+}
+function saveWeeks(){
+  weekData[activeWeek].sel=JSON.parse(JSON.stringify(SEL));
+  weekData['this'].monday=todayMonday();
+  weekData['next'].monday=nextMonday();
+  try{localStorage.setItem('mealPlannerWeekData',JSON.stringify(weekData));}catch(e){}
+}
+function switchWeek(w){
+  // Save current week's selections first
+  saveWeeks();
+  activeWeek=w;
+  // Load the target week's selections
+  var saved=weekData[activeWeek]&&weekData[activeWeek].sel||{};
+  Object.keys(SEL).forEach(function(k){delete SEL[k];});
+  Object.keys(saved).forEach(function(k){SEL[k]=saved[k];});
+  renderWeekBar();renderDayTabs();renderMeals();
+  if(topTab==='shop')renderShop();
+}
 function renderWeekBar(){
   var bar=document.getElementById('weekBar');if(!bar)return;
-  var ids=Object.keys(weeks).sort().reverse();
-  var opts=ids.map(function(id){var w=weeks[id];return'<option value="'+id+'"'+(id===activeWeekId?' selected':'')+'>'+w.label+'</option>';});
-  bar.innerHTML='<select class="week-select" onchange="onWeekSelect(this.value)">'+(opts.length?opts.join(''):'<option value="">No saved weeks</option>')+'</select>'
-    +'<button class="week-btn save" onclick="showSaveModal()">＋ Save</button>';
+  var thisLabel=fmtWeekLabel(todayMonday());
+  var nextLabel=fmtWeekLabel(nextMonday());
+  bar.innerHTML='<div class="week-toggle">'
+    +'<div class="week-pill'+(activeWeek==='this'?' on':'')+'" onclick="switchWeek(\'this\')">This week</div>'
+    +'<div class="week-pill'+(activeWeek==='next'?' on':'')+'" onclick="switchWeek(\'next\')">Next week</div>'
+    +'</div>';
 }
-function onWeekSelect(id){if(id)loadWeek(id);}
-function showSaveModal(){
-  var monday=todayMonday();var weekId=activeWeekId||getWeekId(monday);var existing=weeks[weekId];var suggested=existing?existing.label:fmtWeekLabel(monday);
-  var backdrop=document.createElement('div');backdrop.className='week-modal-backdrop';backdrop.id='weekModalBackdrop';
-  backdrop.innerHTML='<div class="week-modal"><h3>'+(existing?'Update week':'Save week')+'</h3>'
-    +'<input id="weekLabelInput" type="text" value="'+suggested+'">'
-    +'<div class="week-modal-btns">'+(existing?'<button class="week-btn wm-delete" onclick="confirmDeleteWeek(\''+weekId+'\')">✕ Delete</button>':'')
-    +'<button class="wm-cancel week-btn" onclick="closeModal()">Cancel</button>'
-    +'<button class="wm-save" onclick="doSaveWeek(\''+weekId+'\')">Save</button></div></div>';
-  document.body.appendChild(backdrop);
-  setTimeout(function(){var el=document.getElementById('weekLabelInput');if(el)el.select();},50);
-}
-function doSaveWeek(weekId){var el=document.getElementById('weekLabelInput');var label=el?el.value.trim():'';if(!label)return;saveCurrentWeek(label,weekId);closeModal();}
-function confirmDeleteWeek(weekId){if(confirm('Delete this saved week?')){deleteWeek(weekId);closeModal();}}
-function closeModal(){var b=document.getElementById('weekModalBackdrop');if(b)b.remove();}
-document.addEventListener('click',function(e){if(e.target&&e.target.id==='weekModalBackdrop')closeModal();});
+// Auto-save selections when they change
+var _selSaveTimer=null;
+function autoSaveWeek(){clearTimeout(_selSaveTimer);_selSaveTimer=setTimeout(function(){saveWeeks();},500);}
 
 // ── CLOUD SYNC ──────────────────────────────────────────────
 var JSONBLOB_BASE='https://jsonblob.com/api/jsonBlob';
@@ -3576,7 +3622,7 @@ function saveSyncIdLocal(id){syncId=id;try{localStorage.setItem('mealPlannerSync
 function setSyncStatus(msg,type){syncStatus='<span style="color:'+(type==='err'?'#DC2626':type==='ok'?'#059669':'var(--gray)')+'">'+msg+'</span>';var el=document.getElementById('syncStatusMsg');if(el)el.innerHTML=syncStatus;}
 function createSync(){
   setSyncStatus('Creating shared sync...','loading');
-  var payload={weeks:weeks,customMeals:customMeals,version:1};
+  var payload={weekData:weekData,customMeals:customMeals,version:1};
   fetch(JSONBLOB_BASE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);
     var loc=r.headers.get('Location')||r.headers.get('location')||'';
@@ -3591,7 +3637,7 @@ function createSync(){
 function pushSync(){
   if(!syncId)return;
   setSyncStatus('Pushing to cloud...','loading');
-  var payload={weeks:weeks,customMeals:customMeals,version:1};
+  var payload={weekData:weekData,customMeals:customMeals,version:1};
   fetch(JSONBLOB_BASE+'/'+syncId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);setSyncStatus('Pushed successfully!','ok');
   }).catch(function(e){setSyncStatus('Push failed: '+e.message,'err');});
@@ -3600,8 +3646,12 @@ function pullSync(){
   if(!syncId)return;
   setSyncStatus('Pulling from cloud...','loading');
   fetch(JSONBLOB_BASE+'/'+syncId).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
-    if(data.weeks){Object.keys(data.weeks).forEach(function(k){weeks[k]=data.weeks[k];});}
+    if(data.weekData){weekData=data.weekData;}
     if(data.customMeals){Object.keys(data.customMeals).forEach(function(k){customMeals[k]=data.customMeals[k];});}
+    // Reload active week's selections
+    var saved=weekData[activeWeek]&&weekData[activeWeek].sel||{};
+    Object.keys(SEL).forEach(function(k){delete SEL[k];});
+    Object.keys(saved).forEach(function(k){SEL[k]=saved[k];});
     saveWeeks();saveCustomMeals();injectCustomMeals();renderWeekBar();
     setSyncStatus('Pulled successfully!','ok');renderSyncView();
   }).catch(function(e){setSyncStatus('Pull failed: '+e.message,'err');});
@@ -3609,23 +3659,24 @@ function pullSync(){
 function connectSyncId(){var el=document.getElementById('syncIdInput');if(!el||!el.value.trim())return;saveSyncIdLocal(el.value.trim());setSyncStatus('Connected! Now pull to get data.','ok');renderSyncView();}
 function clearSyncId(){syncId=null;try{localStorage.removeItem('mealPlannerSyncId');}catch(e){}setSyncStatus('Disconnected.','ok');renderSyncView();}
 function copyId(){if(syncId){navigator.clipboard.writeText(syncId).then(function(){setSyncStatus('ID copied!','ok');});}}
-function exportWeeks(){
-  var payload={weeks:weeks,customMeals:customMeals};
-  var code=btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-  var ta=document.getElementById('exportTA');
-  if(ta){ta.style.display='block';ta.value=code;ta.select();}
-  navigator.clipboard.writeText(code).then(function(){setSyncStatus('Export code copied!','ok');}).catch(function(){setSyncStatus('Code shown below — copy manually.','ok');});
-}
-function importWeeks(){
-  var ta=document.getElementById('importTA');if(!ta||!ta.value.trim())return;
-  try{
-    var val=ta.value.trim();var json=decodeURIComponent(escape(atob(val)));var imported=JSON.parse(json);
-    var importedWeeks=imported.weeks||imported;var importedMeals=imported.customMeals||{};
-    Object.keys(importedWeeks).forEach(function(id){weeks[id]=importedWeeks[id];});
-    Object.keys(importedMeals).forEach(function(id){customMeals[id]=importedMeals[id];});
-    saveWeeks();saveCustomMeals();injectCustomMeals();renderWeekBar();
-    setSyncStatus('Import successful!','ok');if(ta)ta.value='';renderSyncView();
-  }catch(e){setSyncStatus('Invalid import code.','err');}
+function toggleSyncPanel(){
+  var sv=document.getElementById('syncView');
+  var isVisible=sv.style.display!=='none';
+  if(isVisible){
+    sv.style.display='none';
+  } else {
+    // Hide other views, show sync
+    document.getElementById('mealView').style.display='none';
+    document.getElementById('shopView').style.display='none';
+    document.getElementById('recipesView').style.display='none';
+    document.getElementById('mealHdrExtra').style.display='none';
+    sv.style.display='';
+    renderSyncView();
+    // Deselect top tabs
+    document.getElementById('ttMeals').className='top-tab';
+    document.getElementById('ttShop').className='top-tab';
+    document.getElementById('ttRecipes').className='top-tab';
+  }
 }
 function renderSyncView(){
   var el=document.getElementById('syncView');if(!el)return;
@@ -3645,14 +3696,7 @@ function renderSyncView(){
       +'<div class="sync-row"><input class="sync-input" id="syncIdInput" placeholder="Paste Sync ID here">'
       +'<button class="sync-btn primary" onclick="connectSyncId()">Connect</button></div>';
   }
-  html+='<div id="syncStatusMsg" class="sync-status">'+syncStatus+'</div></div>'
-    +'<div class="sync-panel"><div class="sync-title">📤 Export / Import</div>'
-    +'<p style="font-size:13px;color:var(--gray);margin-bottom:10px">Copy your saved weeks as a code to paste on another device.</p>'
-    +'<button class="sync-btn primary" style="width:100%;margin-bottom:10px" onclick="exportWeeks()">Copy export code</button>'
-    +'<textarea id="exportTA" style="display:none;width:100%;height:80px;font-family:monospace;font-size:11px;padding:6px;border:1.5px solid var(--border);border-radius:var(--radius-sm);resize:none"></textarea>'
-    +'<div style="font-size:12px;color:var(--gray);margin:8px 0 6px">Import from another device:</div>'
-    +'<textarea id="importTA" style="width:100%;height:80px;font-family:monospace;font-size:11px;padding:6px;border:1.5px solid var(--border);border-radius:var(--radius-sm);resize:none" placeholder="Paste export code here"></textarea>'
-    +'<button class="sync-btn primary" style="margin-top:6px;width:100%" onclick="importWeeks()">Import weeks</button></div></div>';
+  html+='<div id="syncStatusMsg" class="sync-status">'+syncStatus+'</div></div></div>';
   el.innerHTML=html;
 }
 
