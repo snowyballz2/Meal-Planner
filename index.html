@@ -1,3 +1,4 @@
+<!-- Recipe Form v3 - Card Layout -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -144,6 +145,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .rf-person-title{font-size:12px;font-weight:700;margin-bottom:8px}
 .rf-hint{font-size:11px;color:var(--gray);margin:-4px 0 8px;font-style:italic}
 .rf-actions{display:flex;gap:8px;margin-top:14px}
+.rf-ingr-row{display:flex;align-items:center;gap:5px;padding:6px 0;border-bottom:1px solid var(--border)}
+.rf-ingr-row:last-child{border-bottom:none}
+.rf-ingr-row .rf-ingr-amt{width:44px;padding:6px 2px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;text-align:center;background:var(--bg);color:var(--text);appearance:none;-webkit-appearance:none;flex-shrink:0;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%239CA3AF'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 3px center;padding-right:12px}
+.rf-ingr-row .rf-ingr-unit{font-size:11px;color:var(--text-dim);min-width:22px;flex-shrink:0}
+.rf-ingr-row .rf-ingr-select{flex:1;min-width:0;padding:6px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg);color:var(--text);appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%239CA3AF'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 6px center;padding-right:16px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.rf-ingr-row .rf-ingr-role{width:58px;padding:6px 2px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg);color:var(--text);appearance:none;-webkit-appearance:none;flex-shrink:0;text-align:center;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%239CA3AF'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 4px center;padding-right:14px}
+.rf-ingr-row .rf-ingr-cal{font-size:10px;font-weight:600;color:var(--shop);white-space:nowrap;flex-shrink:0}
+.rf-ingr-row .rf-ingr-del{padding:2px 4px;border:none;background:none;color:var(--gray);font-size:14px;cursor:pointer;flex-shrink:0}
+.rf-ingr-row .rf-ingr-del:active{color:#EF4444}
+.rf-add-ingr-btn{width:100%;padding:10px;margin-top:6px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);background:none;color:var(--shop);font-size:13px;font-weight:600;cursor:pointer}
+.rf-add-ingr-btn:active{opacity:.7}
+.rf-macro-total{font-size:13px;font-weight:700;color:var(--text);padding:6px 0 10px;border-bottom:1px solid var(--border);margin-bottom:8px}
 .rf-save{flex:1;padding:10px;border:none;border-radius:var(--radius-sm);background:var(--shop);
   color:var(--bg);font-size:14px;font-weight:700;cursor:pointer}
 .rf-cancel{padding:10px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);
@@ -2756,50 +2772,204 @@ function buildCustomMeal(){
   if(!label){alert('Please enter a recipe name.');return null;}
   if(!selectedSlots.length){alert('Please select at least one slot.');return null;}
   var url=document.getElementById('rf_url').value.trim();
-  var hKcal=parseInt(document.getElementById('rf_h_kcal').value)||0;
-  var hPro=parseInt(document.getElementById('rf_h_pro').value)||0;
-  var hFat=parseInt(document.getElementById('rf_h_fat').value)||0;
-  var hCarb=parseInt(document.getElementById('rf_h_carb').value)||0;
-  var hIngr=document.getElementById('rf_h_ingr').value.trim().split('\n').filter(function(l){return l.trim();});
-  var hShop=parseShoppingLines(document.getElementById('rf_h_shop').value);
-  var hSteps=parseStepsLines(document.getElementById('rf_h_steps').value);
-  var rKcal=parseInt(document.getElementById('rf_r_kcal').value)||0;
-  var rPro=parseInt(document.getElementById('rf_r_pro').value)||0;
-  var rFat=parseInt(document.getElementById('rf_r_fat').value)||0;
-  var rCarb=parseInt(document.getElementById('rf_r_carb').value)||0;
-  var rIngr=document.getElementById('rf_r_ingr').value.trim().split('\n').filter(function(l){return l.trim();});
-  var rShop=parseShoppingLines(document.getElementById('rf_r_shop').value);
-  var rSteps=parseStepsLines(document.getElementById('rf_r_steps').value);
-  var him=null,her=null;
   var himOn=document.getElementById('rf_him_on').checked;
   var herOn=document.getElementById('rf_her_on').checked;
-  if(himOn&&hIngr.length){him={macros:{kcal:hKcal,pro:hPro,fat:hFat,carb:hCarb,fv:''},ingredients:hIngr,shopping:hShop,steps:hSteps};}
-  if(herOn&&rIngr.length){her={macros:{kcal:rKcal,pro:rPro,fat:rFat,carb:rCarb,fv:''},ingredients:rIngr,shopping:rShop,steps:rSteps};}
-  if(!him&&!her){alert('Please fill in at least Him or Her details.');return null;}
+  var sharedSteps=parseStepsLines(document.getElementById('rf_steps').value);
+  var ingr=collectFormIngredients('m');
+  if(!ingr.length){alert('Please add at least one ingredient.');return null;}
+  var shop=ingr.map(function(ing){
+    var db=NUTRI_DB[ing.dbKey];
+    var unit=db?db.unit:'';
+    var qtyStr=ing.amt+(unit?' '+unit:'');
+    var hQty=himOn?qtyStr:'—';
+    var rQty=herOn?qtyStr:'—';
+    return [ing.dbKey,isIfLow(ing.dbKey)?'Pantry':'Produce',hQty,rQty];
+  });
+  var him=null,her=null;
+  if(himOn){him={ingredients:ingr,fv:'',shopping:shop,steps:sharedSteps};}
+  if(herOn){her={ingredients:ingr,fv:'',shopping:shop,steps:sharedSteps};}
+  if(!him&&!her){alert('Please add at least one ingredient for Him or Her.');return null;}
   var meal={id:editingRecipeId||customMealId(label),label:label,slots:selectedSlots.slice(),him:him,her:her,_custom:true};
   if(url)meal.sourceUrl=url;
   return meal;
 }
+
+// Collect I() ingredients from form rows
+function collectFormIngredients(prefix){
+  var rows=document.querySelectorAll('.rf-ingr-row[data-prefix="'+prefix+'"]');
+  var result=[];
+  rows.forEach(function(row){
+    var dbKey=row.querySelector('.rf-ingr-select').value;
+    var amt=parseFloat(row.querySelector('.rf-ingr-amt').value)||0;
+    var role=row.querySelector('.rf-ingr-role').value||'fixed';
+    if(!dbKey||amt<=0)return;
+    var db=NUTRI_DB[dbKey];
+    var unit=db?db.unit:'';
+    var displayText=amt+' '+unit+' '+dbKey;
+    result.push(I(dbKey,amt,displayText,role));
+  });
+  return result;
+}
+
+// Add a new ingredient row to the form
+function addIngrRow(prefix,dbKey,amt,role){
+  var container=document.getElementById(prefix==='m'?'rf_ingr_list':'rf_'+prefix+'_ingr_list');
+  if(!container)return;
+  var optHtml=buildFilteredOptions(role||'protein',dbKey||'');
+  var db=dbKey?NUTRI_DB[dbKey]:null;
+  var unit=db?db.unit:'';
+  var qtyOpts=buildQtyOptions(unit,amt||1);
+  var qtyHtml=qtyOpts.map(function(q){
+    var sel=(Math.abs(q.val-(amt||1))<0.02)?' selected':'';
+    return '<option value="'+q.val+'"'+sel+'>'+q.label+'</option>';
+  }).join('');
+  var roleOpts=['protein','carb','fat','veg','sauce','fixed'].map(function(r){
+    return '<option value="'+r+'"'+(r===(role||'protein')?' selected':'')+'>'+r+'</option>';
+  }).join('');
+  var rowHtml='<div class="rf-ingr-row" data-prefix="'+prefix+'">'
+    +'<select class="rf-ingr-role" onchange="onRoleChange(this)">'+roleOpts+'</select>'
+    +'<select class="rf-ingr-select" onchange="onIngrSelectChange(this)">'+optHtml+'</select>'
+    +'<select class="rf-ingr-amt" onchange="updateIngrRowMacro(this.closest(\'.rf-ingr-row\'));updateFormMacros(\''+prefix+'\')">'+qtyHtml+'</select>'
+    +'<span class="rf-ingr-unit">'+(unit||'—')+'</span>'
+    +'<span class="rf-ingr-cal"></span>'
+    +'<button class="rf-ingr-del" onclick="this.closest(\'.rf-ingr-row\').remove();updateFormMacros(\''+prefix+'\')">✕</button>'
+    +'</div>';
+  container.insertAdjacentHTML('beforeend',rowHtml);
+  var newRow=container.lastElementChild;
+  updateIngrRowMacro(newRow);
+  updateFormMacros(prefix);
+}
+
+// When ingredient select changes, update the unit label and qty options
+function onIngrSelectChange(sel){
+  var row=sel.closest('.rf-ingr-row');
+  var prefix=row.dataset.prefix;
+  var dbKey=sel.value;
+  var db=NUTRI_DB[dbKey];
+  var unit=db?db.unit:'';
+  row.querySelector('.rf-ingr-unit').textContent=unit||'—';
+  // Rebuild qty options
+  var amtSel=row.querySelector('.rf-ingr-amt');
+  var currentAmt=parseFloat(amtSel.value)||1;
+  var qtyOpts=buildQtyOptions(unit,currentAmt);
+  amtSel.innerHTML=qtyOpts.map(function(q){
+    var sel2=(Math.abs(q.val-currentAmt)<0.02)?' selected':'';
+    return '<option value="'+q.val+'"'+sel2+'>'+q.label+'</option>';
+  }).join('');
+  updateIngrRowMacro(row);
+  updateFormMacros(prefix);
+}
+
+// Build role->ingredients map from all meals
+function buildRoleIngredients(){
+  var map={protein:{},carb:{},fat:{},veg:{},sauce:{},fixed:{}};
+  MEALS.forEach(function(m){
+    ['him','her'].forEach(function(p){
+      if(!m[p]||!m[p].ingredients)return;
+      m[p].ingredients.forEach(function(ing){
+        if(!ing.dbKey)return;
+        var role=ing.role||'fixed';
+        if(map[role])map[role][ing.dbKey]=true;
+      });
+    });
+  });
+  // Convert to sorted arrays
+  var result={};
+  Object.keys(map).forEach(function(role){
+    result[role]=Object.keys(map[role]).sort();
+  });
+  // Unused DB keys only go into 'fixed' as a catch-all
+  var allUsed={};
+  Object.keys(result).forEach(function(r){result[r].forEach(function(k){allUsed[k]=true;});});
+  var unused=Object.keys(NUTRI_DB).filter(function(k){return !allUsed[k];}).sort();
+  unused.forEach(function(k){if(result.fixed.indexOf(k)<0)result.fixed.push(k);});
+  result.fixed.sort();
+  result.all=Object.keys(NUTRI_DB).sort();
+  return result;
+}
+var ROLE_INGR=null;
+
+// When role changes, filter the ingredient dropdown
+function onRoleChange(roleSel){
+  var row=roleSel.closest('.rf-ingr-row');
+  var role=roleSel.value;
+  if(!ROLE_INGR)ROLE_INGR=buildRoleIngredients();
+  var keys=ROLE_INGR[role]||ROLE_INGR.all;
+  var ingrSel=row.querySelector('.rf-ingr-select');
+  var current=ingrSel.value;
+  var optHtml='<option value="">— Select —</option>'+keys.map(function(k){
+    return '<option value="'+k+'"'+(k===current?' selected':'')+'>'+k+'</option>';
+  }).join('');
+  ingrSel.innerHTML=optHtml;
+}
+
+// Build filtered options for initial render
+function buildFilteredOptions(role, selectedKey){
+  if(!ROLE_INGR)ROLE_INGR=buildRoleIngredients();
+  var keys=ROLE_INGR[role]||ROLE_INGR.all;
+  return '<option value="">— Select —</option>'+keys.map(function(k){
+    return '<option value="'+k+'"'+(k===selectedKey?' selected':'')+'>'+k+'</option>';
+  }).join('');
+}
+
+function updateIngrRowMacro(row){
+  var dbKey=row.querySelector('.rf-ingr-select').value;
+  var amt=parseFloat(row.querySelector('.rf-ingr-amt').value)||0;
+  var db=NUTRI_DB[dbKey];
+  var pill=row.querySelector('.rf-ingr-cal');
+  if(db&&amt>0){
+    var kcal=Math.round(db.kcal*amt);
+    var pro=Math.round(db.pro*amt);
+    pill.textContent=kcal+'cal'+(pro>0?' · '+pro+'p':'');
+  } else {
+    pill.textContent='';
+  }
+}
+
+// Update the total macros display for a person
+function updateFormMacros(prefix){
+  var rows=document.querySelectorAll('.rf-ingr-row[data-prefix="'+prefix+'"]');
+  var kcal=0,pro=0,fat=0,carb=0;
+  rows.forEach(function(row){
+    var dbKey=row.querySelector('.rf-ingr-select').value;
+    var amt=parseFloat(row.querySelector('.rf-ingr-amt').value)||0;
+    var db=NUTRI_DB[dbKey];
+    if(db&&amt>0){kcal+=Math.round(db.kcal*amt);pro+=Math.round(db.pro*amt);fat+=Math.round(db.fat*amt);carb+=Math.round(db.carb*amt);}
+  });
+  var el=document.getElementById(prefix==='m'?'rf_macros':'rf_'+prefix+'_macros');
+  if(el)el.textContent=kcal+' kcal · P '+pro+'g · F '+fat+'g · C '+carb+'g';
+}
+
+// Add a new ingredient to the DB from the form
+function addNewDbIngredient(){
+  var name=document.getElementById('rf_new_name').value.trim().toLowerCase();
+  var kcal=Math.max(0,parseFloat(document.getElementById('rf_new_kcal').value)||0);
+  var pro=Math.max(0,parseFloat(document.getElementById('rf_new_pro').value)||0);
+  var fat=Math.max(0,parseFloat(document.getElementById('rf_new_fat').value)||0);
+  var carb=Math.max(0,parseFloat(document.getElementById('rf_new_carb').value)||0);
+  var unit=document.getElementById('rf_new_unit').value||'each';
+  var role=document.getElementById('rf_new_role').value||'protein';
+  if(!name){alert('Enter an ingredient name.');return;}
+  if(NUTRI_DB[name]){alert(name+' already exists in the database.');return;}
+  NUTRI_DB[name]={kcal:kcal,pro:pro,fat:fat,carb:carb,unit:unit};
+  DB_KEYS_BY_ROLE=null;
+  // Add to role cache so it appears in filtered dropdowns immediately
+  if(ROLE_INGR){
+    if(!ROLE_INGR[role])ROLE_INGR[role]=[];
+    ROLE_INGR[role].push(name);ROLE_INGR[role].sort();
+    if(!ROLE_INGR.all)ROLE_INGR.all=[];
+    ROLE_INGR.all.push(name);ROLE_INGR.all.sort();
+  }
+  alert('Added "'+name+'" to the database!');
+  ['rf_new_name','rf_new_kcal','rf_new_pro','rf_new_fat','rf_new_carb'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('rf_new_unit').value='oz';
+  document.getElementById('rf_new_role').value='protein';
+}
 function saveRecipe(){var meal=buildCustomMeal();if(!meal)return;customMeals[meal.id]=meal;saveCustomMeals();injectCustomMeals();closeRecipeForm();renderRecipesView();}
 function editRecipe(id){editingRecipeId=id;var m=customMeals[id];if(!m)return;showRecipeForm(m);}
 function deleteRecipe(id){if(!confirm('Delete "'+customMeals[id].label+'"?'))return;delete customMeals[id];saveCustomMeals();injectCustomMeals();renderRecipesView();}
-function closeRecipeForm(){editingRecipeId=null;selectedSlots=[];document.getElementById('recipeFormWrap').style.display='none';document.getElementById('recipesListWrap').style.display='';}
-function togglePersonFields(person,on){
-  var suffix=person==='him'?'h':'r';
-  ['kcal','pro','fat','carb','ingr','shop','steps'].forEach(function(f){var el=document.getElementById('rf_'+suffix+'_'+f);if(el)el.disabled=!on;});
-  var col=document.getElementById('rf_'+person+'_col');if(col)col.style.opacity=on?'1':'0.4';
-}
-function autoScaleHer(){
-  var hKcal=parseFloat(document.getElementById('rf_h_kcal').value)||0;
-  var hPro=parseFloat(document.getElementById('rf_h_pro').value)||0;
-  var hFat=parseFloat(document.getElementById('rf_h_fat').value)||0;
-  var hCarb=parseFloat(document.getElementById('rf_h_carb').value)||0;
-  var ratio=0.75;
-  var rKcal=document.getElementById('rf_r_kcal');if(rKcal&&!rKcal.value)rKcal.value=Math.round(hKcal*ratio)||'';
-  var rPro=document.getElementById('rf_r_pro');if(rPro&&!rPro.value)rPro.value=Math.round(hPro*ratio)||'';
-  var rFat=document.getElementById('rf_r_fat');if(rFat&&!rFat.value)rFat.value=Math.round(hFat*ratio)||'';
-  var rCarb=document.getElementById('rf_r_carb');if(rCarb&&!rCarb.value)rCarb.value=Math.round(hCarb*ratio)||'';
-}
+function closeRecipeForm(){editingRecipeId=null;selectedSlots=[];renderRecipesView();}
+function clearRecipeForm(){editingRecipeId=null;selectedSlots=[];renderRecipesView();}
 function renderSlotChips(){
   var container=document.getElementById('rf_slots');if(!container)return;
   container.innerHTML=Object.keys(SLOT_NAMES).map(function(s){
@@ -2814,65 +2984,81 @@ function showRecipeForm(existing){
   selectedSlots=existing?existing.slots.slice():[];renderSlotChips();
   document.getElementById('rf_label').value=existing?existing.label:'';
   document.getElementById('rf_url').value=existing?(existing.sourceUrl||''):'';
-  var himOn=existing&&!!existing.him;document.getElementById('rf_him_on').checked=himOn;togglePersonFields('him',himOn);
-  if(existing&&existing.him){var hm=existing.him.macros||{};document.getElementById('rf_h_kcal').value=hm.kcal||'';document.getElementById('rf_h_pro').value=hm.pro||'';document.getElementById('rf_h_fat').value=hm.fat||'';document.getElementById('rf_h_carb').value=hm.carb||'';document.getElementById('rf_h_ingr').value=(existing.him.ingredients||[]).join('\n');document.getElementById('rf_h_shop').value=(existing.him.shopping||[]).map(function(r){return r.join(' | ');}).join('\n');document.getElementById('rf_h_steps').value=(existing.him.steps||[]).join('\n');}
-  else {['rf_h_kcal','rf_h_pro','rf_h_fat','rf_h_carb','rf_h_ingr','rf_h_shop','rf_h_steps'].forEach(function(id){document.getElementById(id).value='';});}
-  var herOn=existing&&!!existing.her;document.getElementById('rf_her_on').checked=herOn;togglePersonFields('her',herOn);
-  if(existing&&existing.her){var rm=existing.her.macros||{};document.getElementById('rf_r_kcal').value=rm.kcal||'';document.getElementById('rf_r_pro').value=rm.pro||'';document.getElementById('rf_r_fat').value=rm.fat||'';document.getElementById('rf_r_carb').value=rm.carb||'';document.getElementById('rf_r_ingr').value=(existing.her.ingredients||[]).join('\n');document.getElementById('rf_r_shop').value=(existing.her.shopping||[]).map(function(r){return r.join(' | ');}).join('\n');document.getElementById('rf_r_steps').value=(existing.her.steps||[]).join('\n');}
-  else {['rf_r_kcal','rf_r_pro','rf_r_fat','rf_r_carb','rf_r_ingr','rf_r_shop','rf_r_steps'].forEach(function(id){document.getElementById(id).value='';});}
+  // Clear ingredient list
+  document.getElementById('rf_ingr_list').innerHTML='';
+  // Load ingredients from him (or her if him is null)
+  var srcPort=existing?(existing.him||existing.her):null;
+  if(srcPort&&srcPort.ingredients){
+    srcPort.ingredients.forEach(function(ing){
+      if(ing.dbKey)addIngrRow('m',ing.dbKey,ing.amt,ing.role);
+    });
+  }
+  // Him/Her checkboxes
+  document.getElementById('rf_him_on').checked=existing?!!existing.him:true;
+  document.getElementById('rf_her_on').checked=existing?!!existing.her:true;
+  // Shared steps
+  var steps=srcPort?srcPort.steps:[];
+  document.getElementById('rf_steps').value=(steps||[]).join('\n');
+  updateFormMacros('m');
 }
 function renderRecipesView(){
   var el=document.getElementById('recipesView');if(!el)return;
   var listIds=Object.keys(customMeals);
-  el.innerHTML='<div style="padding:0 0 80px"><div id="recipesListWrap">'
-    +'<div style="padding:14px 14px 0;display:flex;align-items:center;justify-content:space-between">'
-    +'<div style="font-size:16px;font-weight:700">Custom Recipes</div>'
-    +'<button style="padding:8px 16px;background:var(--shop);color:var(--bg);border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:700;cursor:pointer" onclick="editingRecipeId=null;showRecipeForm(null)">+ Add Recipe</button></div>'
-    +(listIds.length===0
-      ?'<div style="text-align:center;padding:40px 20px;color:var(--gray);font-size:14px">No custom recipes yet.<br>Tap <b>+ Add Recipe</b> to create one.</div>'
-      :'<div style="padding:10px 14px">'+listIds.map(function(id){
+  el.innerHTML='<div style="padding:0 0 80px">'
+    +'<div id="recipeFormWrap" style="padding:12px 14px"><div class="recipe-form">'
+    +'<div style="font-size:15px;font-weight:700;margin-bottom:12px">'+(editingRecipeId?'Edit Recipe':'New Recipe')+'</div>'
+    +'<div class="rf-section">Basic Info</div>'
+    +'<div class="rf-row"><div class="rf-label">Name</div><input class="rf-input" id="rf_label" placeholder="e.g. Teriyaki Salmon Bowl"></div>'
+    +'<div class="rf-row"><div class="rf-label">Source</div><input class="rf-input" id="rf_url" type="url" placeholder="https://... (optional)"></div>'
+    +'<div class="rf-section">Meal Slot</div><div class="rf-hint">Which slot(s) should this appear in?</div><div id="rf_slots" class="rf-slot-grid"></div>'
+    +'<div class="rf-section" style="margin-top:16px">Ingredients</div>'
+    +'<div class="rf-macro-total" id="rf_macros">0 kcal · P 0g · F 0g · C 0g</div>'
+    +'<div id="rf_ingr_list"></div>'
+    +'<button class="rf-add-ingr-btn" onclick="addIngrRow(\'m\')">+ Add Ingredient to New Recipe</button>'
+    +'<div style="display:flex;gap:16px;margin-top:12px;margin-bottom:8px">'
+    +'<label style="font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px"><input type="checkbox" id="rf_him_on" checked> Include for Him</label>'
+    +'<label style="font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px"><input type="checkbox" id="rf_her_on" checked> Include for Her</label></div>'
+    +'<div class="rf-section" style="margin-top:16px">Instructions <span style="font-weight:400;font-size:11px">(one per line)</span></div>'
+    +'<textarea class="rf-ta" id="rf_steps" placeholder="Preheat oven to 400°F."></textarea>'
+    +'<div style="margin-top:20px;padding:14px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm)">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="var el=document.getElementById(\'rf_new_db\');el.style.display=el.style.display===\'none\'?\'block\':\'none\'">'
+    +'<div style="font-size:15px;font-weight:700;color:#7DD3FC">Add New Ingredient to Database</div>'
+    +'<span style="font-size:12px;color:var(--shop);font-weight:600">▸ expand</span></div>'
+    +'<div id="rf_new_db" style="display:none;margin-top:10px">'
+    +'<div style="font-size:12px;color:var(--text-mid);margin-bottom:10px">Add an ingredient that isn\'t already in the dropdown.</div>'
+    +'<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Ingredient Name</div><input class="rf-input" id="rf_new_name" placeholder="e.g. tempeh" style="width:100%"></div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:8px">'
+    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Unit</div><select class="rf-input" id="rf_new_unit" style="width:100%"><option value="oz">oz</option><option value="cup">cup</option><option value="tbsp">tbsp</option><option value="tsp">tsp</option><option value="each">each</option><option value="scoop">scoop</option><option value="slice">slice</option></select></div>'
+    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Role</div><select class="rf-input" id="rf_new_role" style="width:100%"><option value="protein">protein</option><option value="carb">carb</option><option value="fat">fat</option><option value="veg">veg</option><option value="sauce">sauce</option><option value="fixed">fixed</option></select></div></div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:10px">'
+    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Kcal</div><input class="rf-input" id="rf_new_kcal" type="number" min="0" placeholder="0" style="width:100%"></div>'
+    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Protein</div><input class="rf-input" id="rf_new_pro" type="number" min="0" placeholder="0" style="width:100%"></div>'
+    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Fat</div><input class="rf-input" id="rf_new_fat" type="number" min="0" placeholder="0" style="width:100%"></div>'
+    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Carbs</div><input class="rf-input" id="rf_new_carb" type="number" min="0" placeholder="0" style="width:100%"></div></div>'
+    +'<button class="rf-save" style="width:100%;padding:10px;font-size:13px" onclick="addNewDbIngredient()">+ Add to Database</button></div></div>'
+    +'<div class="rf-actions"><button class="rf-cancel" onclick="clearRecipeForm()">Clear</button>'
+    +'<button class="rf-save" onclick="saveRecipe()">Save Recipe</button></div></div></div>'
+    +(listIds.length>0
+      ?'<div style="padding:14px"><div style="font-size:16px;font-weight:700;margin-bottom:10px">Saved Recipes</div>'
+      +listIds.map(function(id){
         var m=customMeals[id];var slotNames=m.slots.map(function(s){return SLOT_NAMES[s]||s;}).join(', ');
-        var macroSum=(m.him&&m.him.macros)?m.him.macros.kcal+' kcal · '+m.him.macros.pro+'g protein':'';
+        var macroSum='';
+        if(m.him&&m.him.ingredients&&m.him.ingredients.length&&m.him.ingredients[0].dbKey){
+          var mc=computeMacros(m.him.ingredients);macroSum=mc.kcal+' kcal · '+mc.pro+'g protein';
+        }
         return '<div class="recipe-list-item"><div style="flex:1"><div class="rli-label">'+m.label+'</div><div class="rli-meta">'+slotNames+(macroSum?' · '+macroSum:'')+'</div>'
           +(m.sourceUrl?'<a href="'+m.sourceUrl+'" target="_blank" style="font-size:11px;color:var(--shop)">View source ↗</a>':'')
           +'</div><button class="rli-btn edit" onclick="editRecipe(\''+id+'\')">Edit</button>'
           +'<button class="rli-btn del" onclick="deleteRecipe(\''+id+'\')">Delete</button></div>';
-      }).join('')+'</div>')
-    +'</div>'
-    +'<div id="recipeFormWrap" style="display:none;padding:12px 14px"><div class="recipe-form">'
-    +'<div style="font-size:15px;font-weight:700;margin-bottom:12px">'+(editingRecipeId?'Edit Recipe':'New Recipe')+'</div>'
-    +'<div class="rf-section">Basic Info</div>'
-    +'<div class="rf-row"><div class="rf-label">Name</div><input class="rf-input" id="rf_label" placeholder="e.g. Teriyaki Salmon Bowl"></div>'
-    +'<div class="rf-row"><div class="rf-label">Source</div><input class="rf-input" id="rf_url" type="url" placeholder="https://allrecipes.com/... (optional)"></div>'
-    +'<div class="rf-section">Meal Slot</div><div class="rf-hint">Which slot(s) should this appear in?</div><div id="rf_slots" class="rf-slot-grid"></div>'
-    +'<div class="rf-section">Him <label style="font-weight:400;font-size:11px"><input type="checkbox" id="rf_him_on" checked onchange="togglePersonFields(\'him\',this.checked)"> Include</label></div>'
-    +'<div id="rf_him_col" class="rf-person-col him-col"><div class="rf-person-title" style="color:var(--his-mid)">His macros</div><div class="rf-macro-row">'
-    +'<div class="rf-macro-cell"><label>Calories</label><input id="rf_h_kcal" type="number" placeholder="0" onblur="autoScaleHer()"></div>'
-    +'<div class="rf-macro-cell"><label>Protein g</label><input id="rf_h_pro" type="number" placeholder="0" onblur="autoScaleHer()"></div>'
-    +'<div class="rf-macro-cell"><label>Fat g</label><input id="rf_h_fat" type="number" placeholder="0" onblur="autoScaleHer()"></div>'
-    +'<div class="rf-macro-cell"><label>Carbs g</label><input id="rf_h_carb" type="number" placeholder="0" onblur="autoScaleHer()"></div></div>'
-    +'<div class="rf-person-title" style="color:var(--his-mid);margin-top:8px">His ingredients <span style="font-weight:400;font-size:11px">(one per line)</span></div>'
-    +'<textarea class="rf-ta" id="rf_h_ingr" placeholder="6 oz salmon fillet&#10;1 cup brown rice"></textarea>'
-    +'<div class="rf-person-title" style="color:var(--his-mid);margin-top:8px">His shopping list <span style="font-weight:400;font-size:11px">(Item | Category | His qty | Her qty)</span></div>'
-    +'<textarea class="rf-ta" id="rf_h_shop" placeholder="Salmon fillet | Seafood | 6 oz | 4 oz"></textarea>'
-    +'<div class="rf-person-title" style="color:var(--his-mid);margin-top:8px">Steps <span style="font-weight:400;font-size:11px">(one per line)</span></div>'
-    +'<textarea class="rf-ta" id="rf_h_steps" placeholder="Preheat oven to 400°F."></textarea></div>'
-    +'<div class="rf-section">Her <label style="font-weight:400;font-size:11px"><input type="checkbox" id="rf_her_on" checked onchange="togglePersonFields(\'her\',this.checked)"> Include</label></div>'
-    +'<div id="rf_her_col" class="rf-person-col her-col"><div class="rf-person-title" style="color:var(--her-mid)">Her macros <span style="font-size:11px;font-weight:400;color:var(--gray)">(auto-filled at 75% of his)</span></div><div class="rf-macro-row">'
-    +'<div class="rf-macro-cell"><label>Calories</label><input id="rf_r_kcal" type="number" placeholder="0"></div>'
-    +'<div class="rf-macro-cell"><label>Protein g</label><input id="rf_r_pro" type="number" placeholder="0"></div>'
-    +'<div class="rf-macro-cell"><label>Fat g</label><input id="rf_r_fat" type="number" placeholder="0"></div>'
-    +'<div class="rf-macro-cell"><label>Carbs g</label><input id="rf_r_carb" type="number" placeholder="0"></div></div>'
-    +'<div class="rf-person-title" style="color:var(--her-mid);margin-top:8px">Her ingredients</div>'
-    +'<textarea class="rf-ta" id="rf_r_ingr" placeholder="4 oz salmon fillet"></textarea>'
-    +'<div class="rf-person-title" style="color:var(--her-mid);margin-top:8px">Her shopping qty</div>'
-    +'<textarea class="rf-ta" id="rf_r_shop" placeholder=""></textarea>'
-    +'<div class="rf-person-title" style="color:var(--her-mid);margin-top:8px">Her steps</div>'
-    +'<textarea class="rf-ta" id="rf_r_steps" placeholder="(leave blank to use same steps)"></textarea></div>'
-    +'<div class="rf-actions"><button class="rf-cancel" onclick="closeRecipeForm()">Cancel</button>'
-    +'<button class="rf-save" onclick="saveRecipe()">Save Recipe</button></div></div></div></div>';
+      }).join('')+'</div>'
+      :'')
+    +'</div>';
   renderSlotChips();
-  if(editingRecipeId&&customMeals[editingRecipeId]){document.getElementById('recipesListWrap').style.display='none';document.getElementById('recipeFormWrap').style.display='';}
+  // Add one starter ingredient row if not editing
+  if(!editingRecipeId){
+    addIngrRow('m');
+  }
+  if(editingRecipeId&&customMeals[editingRecipeId]){showRecipeForm(customMeals[editingRecipeId]);}
 }
 
 // ── INIT ────────────────────────────────────────────────────
@@ -2882,3 +3068,4 @@ loadCustomMeals();renderDayTabs();renderMeals();
 </script>
 </body>
 </html>
+<!-- v2 -->
