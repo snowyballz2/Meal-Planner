@@ -379,7 +379,7 @@ var NUTRI_DB = {
   'halibut':               {kcal:26,  pro:5.3,fat:0.4, carb:0,   unit:'oz'},
   'filet mignon':          {kcal:57,  pro:6.6,fat:3.2, carb:0,   unit:'oz'},
   'shrimp':                {kcal:24,  pro:5.7,fat:0.3, carb:0,   unit:'oz'},
-  'canned tuna':           {kcal:27.5,pro:6.5,fat:0.25,carb:0,   unit:'oz', brand:'Starkist', altUnits:{can:4,g:113}},
+  'canned tuna':{kcal:27.5,pro:6.5,fat:0.25,carb:0,unit:'oz',brand:'Starkist',altUnits:{can:4,g:113},pkg:{size:5,unit:'oz',drained:4,note:'5oz can, 4oz drained'}},
   'tofu firm':             {kcal:20,  pro:2.2,fat:1.1, carb:0.5, unit:'oz'},
   'silken tofu':           {kcal:15,  pro:1.7,fat:0.7, carb:0.3, unit:'oz', brand:'Nature\'s Tofu', altUnits:{g:85}},
   // Dairy & alt
@@ -402,12 +402,16 @@ var NUTRI_DB = {
   'sweet potato':          {kcal:114, pro:2.1,fat:0.1, carb:27,  unit:'cup'},
   'yukon potato':          {kcal:118, pro:2.5,fat:0.1, carb:27,  unit:'cup'},
   // Beans & legumes (cooked/canned values)
-  'black beans canned':           {kcal:227, pro:15, fat:0.9, carb:41,  unit:'cup', note:'canned, drained'},
-  'cannellini beans canned':      {kcal:200, pro:14, fat:0,   carb:38,  unit:'cup', brand:'Goya', altUnits:{g:244}},
+  'black beans canned':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'canned, drained',pkg:{size:15.5,unit:'oz',drained:1.75,note:'15.5oz can, 1¾ cups drained'}},
+  'black beans dried':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)'},
+  'cannellini beans canned':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',brand:'Goya',altUnits:{g:244},pkg:{size:15.5,unit:'oz',drained:1.75,note:'15.5oz can, 1¾ cups drained'}},
+  'cannellini beans dried':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)'},
   'lentils cooked':               {kcal:230, pro:18, fat:0.8, carb:40,  unit:'cup', note:'cooked', altUnits:{g:198}},
+  'lentils dried':{kcal:230,pro:18,fat:0.8,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked'},
+  'chickpeas dried':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)'},
   'edamame':               {kcal:188, pro:18, fat:8,   carb:14,  unit:'cup'},
   'hummus':                {kcal:25,  pro:1.2,fat:1.4, carb:2,   unit:'tbsp'},
-  'chickpeas roasted':     {kcal:220, pro:14, fat:2,   carb:40,  unit:'cup', brand:'Giant', altUnits:{g:260}},
+  'chickpeas roasted':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',brand:'Giant',altUnits:{g:260},pkg:{size:15.5,unit:'oz',drained:1.75,note:'15.5oz can, 1¾ cups drained'}},
   // Vegetables
   'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup'},
   'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup'},
@@ -419,7 +423,7 @@ var NUTRI_DB = {
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup'},
   'celery':                {kcal:6,   pro:0.3,fat:0.1, carb:1.2, unit:'each'},
   'egg noodles dry':       {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup'},
-  'chicken broth':         {kcal:15,  pro:2,  fat:0.5, carb:1,   unit:'cup'},
+  'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',pkg:{size:32,unit:'oz',cups:4,note:'32oz carton = 4 cups'}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each'},
   'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each'},
   // Fruits
@@ -447,13 +451,13 @@ var NUTRI_DB = {
   // Sauces & seasonings
   'soy sauce':             {kcal:9,   pro:0.9,fat:0,   carb:1,   unit:'tbsp'},
   'fish sauce':            {kcal:6,   pro:1,  fat:0,   carb:0.7, unit:'tbsp'},
-  'gochujang':             {kcal:10,  pro:0.3,fat:0.1, carb:2,   unit:'tsp'},
+  'gochujang':{kcal:10,pro:0.3,fat:0.1,carb:2,unit:'tsp'},
   'rice vinegar':          {kcal:1,   pro:0,  fat:0,   carb:0,   unit:'tsp'},
   'red wine vinegar':      {kcal:3,   pro:0,  fat:0,   carb:0,   unit:'tbsp'},
   'balsamic vinegar':      {kcal:14,  pro:0.1,fat:0,   carb:3,   unit:'tbsp'},
   'salsa':                 {kcal:5,   pro:0.2,fat:0,   carb:1,   unit:'tbsp'},
-  'marinara':              {kcal:66,  pro:2,  fat:1.5, carb:12,  unit:'cup'},
-  'white miso':            {kcal:33,  pro:2,  fat:1,   carb:4.3, unit:'tbsp'},
+  'marinara':{kcal:66,pro:2,fat:1.5,carb:12,unit:'cup',pkg:{size:24,unit:'oz',cups:3,note:'24oz jar = 3 cups'}},
+  'white miso':{kcal:33,pro:2,fat:1,carb:4.3,unit:'tbsp'},
   'tomatillo sauce':       {kcal:5,   pro:0.2,fat:0.2, carb:1,   unit:'tbsp'},
   'broth concentrate':     {kcal:5,   pro:0.5,fat:0,   carb:0.5, unit:'tsp'},
   'water':                 {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'cup'},
@@ -482,14 +486,14 @@ var NUTRI_DB = {
   'sugar':                 {kcal:48,  pro:0,  fat:0,   carb:12,  unit:'tbsp'},
   'shallot':               {kcal:30,  pro:1,  fat:0,   carb:7,   unit:'each'},
   'cucumber':              {kcal:16,  pro:0.7,fat:0.1, carb:3.6, unit:'each'},
-  'red curry paste':       {kcal:20,  pro:0,  fat:0,   carb:4,   unit:'tbsp', brand:'Maesri'},
+  'red curry paste':{kcal:20,pro:0,fat:0,carb:4,unit:'tbsp',brand:'Maesri'},
   'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup'},
   // Packaged / grab-and-go
-  'rxbar':                 {kcal:180, pro:12, fat:6,   carb:24,  unit:'each', brand:'RXBar', altUnits:{g:52}},
-  'tuna pouch':            {kcal:90,  pro:20, fat:1,   carb:0,   unit:'each'},
+  'rxbar':{kcal:180,pro:12,fat:6,carb:24,unit:'each',brand:'RXBar',altUnits:{g:52}},
+  'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz',note:'2.6oz pouch, drained'}},
   'triscuit':              {kcal:20,  pro:0.4,fat:0.7, carb:3.3, unit:'each'},
   // Milks
-  'coconut milk':          {kcal:420, pro:1,  fat:14,  carb:2,   unit:'cup', brand:'Chaokoh'},
+  'coconut milk':{kcal:420,pro:1,fat:14,carb:2,unit:'cup',brand:'Chaokoh',pkg:{size:13.5,unit:'oz',cups:1.7,note:'13.5oz can ≈ 1⅔ cups'}},
   'coconut water':         {kcal:50,  pro:0,  fat:0,   carb:12,  unit:'cup', brand:'H2C'},
   'oat milk':              {kcal:100, pro:3,  fat:2,   carb:17,  unit:'cup', brand:'Elmhurst'},
   '1% milk':               {kcal:110, pro:8,  fat:2.5, carb:13,  unit:'cup', brand:'Horizon Organic'},
@@ -760,8 +764,8 @@ function adjustIngredients(ingredients, targetDelta) {
   // Sort by priority
   var sorted;
   if (targetDelta > 0) {
-    // Adding calories: protein and carbs only, exclude fat
-    sorted = scalable.filter(function(item){return item.role==='protein'||item.role==='carb'||item.role==='veg';});
+    // Adding calories: protein and carbs primarily, veg gets minor bump only
+    sorted = scalable.filter(function(item){return item.role==='protein'||item.role==='carb';});
     if(!sorted.length) sorted = scalable; // fallback if no protein/carb available
     sorted.sort(function(a, b) {
       var order = { protein:0, carb:1 };
@@ -785,6 +789,8 @@ function adjustIngredients(ingredients, targetDelta) {
     // Don't let any ingredient go below 25% of original or negative
     var minAmt = item.ing.amt * 0.25;
     if (newAmt < minAmt) newAmt = minAmt;
+    // Cap veg at 1.5x original to avoid ridiculous amounts
+    if (item.role==='veg' && newAmt > item.ing.amt * 1.5) newAmt = item.ing.amt * 1.5;
     // Snap based on unit: whole numbers for oz/each/slice/scoop, quarters for cup/tbsp/tsp
     var db = NUTRI_DB[item.ing.dbKey];
     var unit = db ? db.unit : '';
@@ -1121,11 +1127,11 @@ const MEALS=[
  {id:'quinoa_bowl',label:'Grilled chicken & quinoa bowl',slots:['lunch','dinner'],
   him:{
    ingredients:[
-     I('chicken breast',6,'6 oz boneless skinless chicken breast','protein'),
-     I('quinoa cooked',0.75,'¾ cup cooked quinoa','carb'),
+     I('chicken breast',7,'7 oz boneless skinless chicken breast','protein'),
+     I('quinoa cooked',1,'1 cup cooked quinoa','carb'),
      I('broccoli',1,'1 cup broccoli florets','veg'),
      I('carrots',0.5,'½ cup shredded carrots','veg'),
-     I('avocado oil',2,'2 tbsp avocado oil','fat'),
+     I('avocado oil',1,'1 tbsp avocado oil','fat'),
      I('red wine vinegar',1,'1 tbsp red wine vinegar','sauce',false),
      I('garlic powder',0.5,'½ tsp garlic powder','fixed',false),
      I('onion powder',0.5,'½ tsp onion powder','fixed',false),
@@ -1211,12 +1217,12 @@ const MEALS=[
  {id:'tuna_white_bean',label:'Tuna & white bean salad bowl',slots:['lunch','dinner'],
   him:{
    ingredients:[
-     I('canned tuna',5,'5 oz canned tuna (low sodium), drained','protein'),
-     I('cannellini beans canned',0.5,'½ cup cannellini beans (no salt)','carb'),
+     I('canned tuna',6,'6 oz canned tuna (low sodium), drained','protein'),
+     I('cannellini beans canned',0.75,'¾ cup cannellini beans (no salt)','carb'),
      I('kale',2,'2 cups kale','veg'),
      I('zucchini',0.5,'½ cup shredded zucchini','veg'),
      I('carrots',0.5,'½ cup shredded carrots','veg'),
-     I('avocado oil',2,'2 tbsp avocado oil','fat'),
+     I('avocado oil',1,'1 tbsp avocado oil','fat'),
      I('red wine vinegar',1,'1 tbsp red wine vinegar','sauce',false),
      I('black pepper',0.5,'½ tsp black pepper','fixed',false)
    ],
@@ -1642,11 +1648,11 @@ const MEALS=[
  {id:'halibut_farro_din',label:'Baked halibut, farro & roasted asparagus',slots:['lunch','dinner'],
   him:{
    ingredients:[
-     I('halibut',7,'7 oz halibut fillet','protein'),
-     I('farro cooked',0.75,'¾ cup cooked farro','carb'),
+     I('halibut',8,'8 oz halibut fillet','protein'),
+     I('farro cooked',1,'1 cup cooked farro','carb'),
      I('asparagus',1,'1 cup asparagus','veg'),
      I('zucchini',1,'1 cup zucchini','veg'),
-     I('avocado oil',1.5,'1½ tbsp avocado oil','fat'),
+     I('avocado oil',1,'1 tbsp avocado oil','fat'),
      I('lemon',0.5,'½ lemon, juiced','sauce',false),
      I('dill',0.5,'½ tsp dried dill','fixed',false),
      I('garlic',1,'1 garlic clove, minced','fixed',false)
@@ -1670,12 +1676,11 @@ const MEALS=[
  {id:'filet_din',label:'Filet mignon, roasted potatoes & asparagus',slots:['lunch','dinner'],
   him:{
    ingredients:[
-     I('filet mignon',6,'6 oz filet mignon','protein'),
+     I('filet mignon',7,'7 oz filet mignon','protein'),
      I('yukon potato',1.25,'1¼ cup Yukon Gold potatoes, cubed','carb'),
      I('asparagus',1,'1 cup asparagus (shared)','veg'),
      I('zucchini',1,'1 cup zucchini (shared)','veg'),
-     I('avocado oil',1.5,'1½ tbsp avocado oil','fat'),
-     I('butter',0.5,'½ tbsp butter for basting','fat'),
+     I('avocado oil',1,'1 tbsp avocado oil','fat'),
      I('garlic',1,'1 garlic clove, minced','fixed',false)
    ],
    fv:'2c veg',
@@ -1908,7 +1913,6 @@ const MEALS=[
      I('chicken broth',2.5,'2½ cups chicken broth','liquid'),
      I('carrots',0.5,'½ cup diced carrots','veg'),
      I('celery',1,'1 stalk celery, diced','veg'),
-     I('butter',1,'1 tbsp butter','fat'),
      I('garlic',1,'1 garlic clove, minced','fixed',false),
      I('salt',0.5,'½ tsp salt, to taste','fixed',false),
      I('black pepper',0.5,'½ tsp black pepper','fixed',false),
@@ -1916,7 +1920,7 @@ const MEALS=[
      I('dried thyme',0.5,'½ tsp dried thyme','fixed',false)
    ],
    fv:'0.5c veg',
-   steps:['Dice celery and carrots. Melt butter in a large pot over medium-high heat.','Sauté celery and carrots 3 min. Add garlic, cook 30 sec.','Add chicken broth. Season with salt, pepper, pinch of rosemary and thyme.','Bring to a boil. Add egg noodles, cook until just al dente (about 6–8 min).','Add shredded chicken. Taste broth and adjust seasoning. Serve.']},
+   steps:['Dice celery and carrots. Heat avocado oil in a large pot over medium-high heat.','Sauté celery and carrots 3 min. Add garlic, cook 30 sec.','Add chicken broth. Season with salt, pepper, pinch of rosemary and thyme.','Bring to a boil. Add egg noodles, cook until just al dente (about 6–8 min).','Add shredded chicken. Taste broth and adjust seasoning. Serve.']},
   her:{
    ingredients:[
      I('chicken breast',5,'5 oz rotisserie chicken, shredded','protein'),
@@ -1924,7 +1928,6 @@ const MEALS=[
      I('chicken broth',2,'2 cups chicken broth','liquid'),
      I('carrots',0.25,'¼ cup diced carrots','veg'),
      I('celery',1,'1 stalk celery, diced','veg'),
-     I('butter',1,'1 tbsp butter','fat'),
      I('garlic',1,'1 garlic clove, minced','fixed',false),
      I('salt',0.5,'½ tsp salt, to taste','fixed',false),
      I('black pepper',0.5,'½ tsp black pepper','fixed',false),
@@ -1932,7 +1935,7 @@ const MEALS=[
      I('dried thyme',0.5,'½ tsp dried thyme','fixed',false)
    ],
    fv:'0.5c veg',
-   steps:['Dice celery and carrots. Melt butter in a large pot over medium-high heat.','Sauté celery and carrots 3 min. Add garlic, cook 30 sec.','Add chicken broth. Season with salt, pepper, pinch of rosemary and thyme.','Bring to a boil. Add egg noodles, cook until just al dente (about 6–8 min).','Add shredded chicken. Taste broth and adjust seasoning. Serve.']}},
+   steps:['Dice celery and carrots. Heat avocado oil in a large pot over medium-high heat.','Sauté celery and carrots 3 min. Add garlic, cook 30 sec.','Add chicken broth. Season with salt, pepper, pinch of rosemary and thyme.','Bring to a boil. Add egg noodles, cook until just al dente (about 6–8 min).','Add shredded chicken. Taste broth and adjust seasoning. Serve.']}},
 ];
 
 const DEFAULTS={
@@ -2189,7 +2192,7 @@ function sumQtyStrings(a,b){
     clean=clean.replace('⅔','0.67').replace('⅓','0.33').replace('¾','0.75').replace('½','0.5').replace('¼','0.25');
     var m=clean.match(/^([\d.]+)\s*(oz|cup|cups|tbsp|tsp|clove|cloves|lb|lbs|scoop|can|block)?/i);
     if(!m)return null;
-    var unit=(m[2]||'').toLowerCase().replace('cups','cup').replace('cloves','clove').replace('lbs','lb');
+    var unit=(m[2]||'').toLowerCase().replace('cups','cup').replace('lbs','lb');
     return{num:parseFloat(m[1]),unit:unit};
   }
   function fmt(num,unit){
@@ -2220,7 +2223,7 @@ function parseQty(raw){
   s=s.replace('⅔','0.67').replace('⅓','0.33').replace('¾','0.75').replace('½','0.5').replace('¼','0.25');
   var m=s.match(/^([\d.]+)\s*(oz|cup|cups|tbsp|tsp|clove|cloves|lb|lbs|scoop|can|block)?/i);
   if(!m)return null;
-  var unit=(m[2]||'').toLowerCase().replace('cups','cup').replace('cloves','clove').replace('lbs','lb');
+  var unit=(m[2]||'').toLowerCase().replace('cups','cup').replace('lbs','lb');
   return{num:parseFloat(m[1]),unit:unit};
 }
 function addQty(existing,num,unit){
@@ -2253,7 +2256,7 @@ function getIngredientCategory(name){
   var sauces=['soy sauce','fish sauce','gochujang','rice vinegar','balsamic vinegar','red wine vinegar','oyster sauce','dark soy sauce','mirin','red curry paste','marinara','salsa','tomatillo sauce','tahini','broth concentrate','white miso','gochugaru'];
   var oils=['avocado oil','sesame oil','olive oil'];
   var supplements=['protein powder','creatine'];
-  var pantry=['chicken broth','egg noodles dry','oat flour','chia seeds','granola','granola strawberry','granola cinnamon','granola kind zero','rxbar','triscuit','udon noodles','whole wheat pasta cooked','baking powder','honey tbsp','maple syrup','peanut butter','almond butter','cashew milk (sweetened)','sugar','coconut milk'];
+  var pantry=['chicken broth','egg noodles dry','oat flour','chia seeds','granola','granola strawberry','granola cinnamon','granola kind zero','rxbar','triscuit','udon noodles','whole wheat pasta cooked','baking powder','honey tbsp','maple syrup','peanut butter','almond butter','cashew milk (sweetened)','sugar','coconut milk','black beans canned','black beans dried','cannellini beans canned','cannellini beans dried','lentils cooked','lentils dried','chickpeas roasted','chickpeas dried'];
   var dairy=['greek yogurt 0%','mozzarella','feta','butter'];
   var frozen=['mixed berries','edamame','acai'];
   var meat=['chicken breast','chicken thigh','ground turkey 93','ground chicken','filet mignon','shrimp'];
@@ -2292,7 +2295,11 @@ var SHOP_DISPLAY_NAMES={
   'garlic':'Garlic','dried rosemary':'Dried rosemary','dried thyme':'Dried thyme',
   'black pepper':'Black pepper','italian seasoning':'Italian seasoning',
   'garlic powder':'Garlic powder','onion powder':'Onion powder',
-  'chili flake':'Chili flakes','red pepper flake':'Red pepper flakes'
+  'chili flake':'Chili flakes','red pepper flake':'Red pepper flakes',
+  'black beans canned':'Black beans, canned','black beans dried':'Black beans, dried',
+  'cannellini beans canned':'Cannellini beans, canned','cannellini beans dried':'Cannellini beans, dried',
+  'lentils cooked':'Lentils, cooked','lentils dried':'Lentils, dried',
+  'chickpeas roasted':'Chickpeas','chickpeas dried':'Chickpeas, dried'
 };
 // Cups-to-count conversion for produce shopping (approximate)
 // cupsPerWhole: how many cups you get from 1 whole item
@@ -2309,12 +2316,40 @@ var PRODUCE_COUNTS={
 };
 function shopQtyWithCount(dbKey,qtyObj){
   var base=fmtQty(qtyObj);
+  if(!qtyObj)return base;
+  
+  // Produce count conversion
   var conv=PRODUCE_COUNTS[dbKey];
-  if(!conv||!qtyObj)return base;
-  var cups=qtyObj.num;
-  var count=Math.ceil(cups/conv.cupsPerWhole);
-  if(count<=0)count=1;
-  return count+' '+conv.label+(count>1&&!conv.label.match(/bunch|bag/)?'s':'');
+  if(conv){
+    var cups=qtyObj.num;
+    var count=Math.ceil(cups/conv.cupsPerWhole);
+    if(count<=0)count=1;
+    return count+' '+conv.label+(count>1&&!conv.label.match(/bunch|bag/)?'s':'');
+  }
+  
+  // Package conversion (cans, cartons, pouches)
+  var db=NUTRI_DB[dbKey];
+  if(db&&db.pkg){
+    var pkg=db.pkg;
+    if(pkg.drained&&qtyObj.unit==='cup'){
+      // Canned beans: cups → cans
+      var cans=Math.ceil(qtyObj.num/pkg.drained);
+      return cans+' can'+(cans>1?'s':'')+' ('+pkg.note+')';
+    }
+    if(pkg.cups&&qtyObj.unit==='cup'){
+      // Broth cartons, marinara jars, coconut milk cans
+      var units=Math.ceil(qtyObj.num/pkg.cups);
+      var label=pkg.note.match(/carton/)?'carton':pkg.note.match(/jar/)?'jar':'can';
+      return units+' '+label+(units>1?'s':'')+' ('+pkg.size+pkg.unit+')';
+    }
+    if(pkg.drained&&qtyObj.unit==='oz'){
+      // Canned tuna: oz → cans
+      var cans=Math.ceil(qtyObj.num/pkg.drained);
+      return cans+' can'+(cans>1?'s':'')+' ('+pkg.note+')';
+    }
+  }
+  
+  return base;
 }
 function shopDisplayName(dbKey){return SHOP_DISPLAY_NAMES[dbKey]||(dbKey.charAt(0).toUpperCase()+dbKey.slice(1));}
 
@@ -2984,10 +3019,10 @@ function renderMeals(){
         var slotEsc = s.replace(/'/g,"\\'");
         var amtId = 'amt_'+person+'_'+day+'_'+s+'_'+idx;
 
-        // Build qty options based on unit type
-        var qtyOpts = buildQtyOptions(unitLabel, ing.amt);
+        // Build qty options based on unit type — show multiplied amount for cook badge
+        var qtyOpts = buildQtyOptions(unitLabel, displayAmt);
         var qtyHtml = qtyOpts.map(function(q){
-          var sel = (Math.abs(q.val - ing.amt) < 0.02) ? ' selected' : '';
+          var sel = (Math.abs(q.val - displayAmt) < 0.02) ? ' selected' : '';
           return '<option value="'+q.val+'"'+sel+'>'+q.label+'</option>';
         }).join('');
 
