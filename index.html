@@ -3086,7 +3086,14 @@ function loadEatOutEntry(p,d,s,idx){
   renderMeals();
 }
 function deleteEatOutEntry(idx){EAT_OUT_DB.splice(idx,1);saveEatOutDB();renderMeals();}
-function changeMeal(slot,mealId){SEL[person+'_'+day+'_'+slot]=mealId;clearOverrides(person,day,slot);autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();}
+function changeMeal(slot,mealId){
+  var selKey=person+'_'+day+'_'+slot;
+  SEL[selKey]=mealId;
+  // Timestamp this change for sync merge
+  if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
+  weekData[activeWeek].ts[selKey]=Date.now();
+  clearOverrides(person,day,slot);autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
+}
 
 // ── Ingredient edit handlers ────────────────────────────────
 function onIngrAmt(p,d,s,idx,val){
@@ -3141,12 +3148,14 @@ function randomizeDay(){
   }
 
   if (bestSel) {
-    // Clear all overrides and adjustment flag for this person+day
     delete userAdjusted[person+'_'+day];
+    if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
+    var now=Date.now();
     SLOTS.forEach(function(s){
       clearOverrides(person,day,s);
-      if (bestSel[s]) SEL[person+'_'+day+'_'+s] = bestSel[s];
-      else delete SEL[person+'_'+day+'_'+s];
+      var selKey=person+'_'+day+'_'+s;
+      if (bestSel[s]){SEL[selKey]=bestSel[s];weekData[activeWeek].ts[selKey]=now;}
+      else delete SEL[selKey];
     });
   }
   renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
@@ -3189,12 +3198,14 @@ function randomizeWeek(){
       }
 
       if (bestSel) {
-        // Clear all overrides and adjustment flag
         delete userAdjusted[p+'_'+d];
+        if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
+        var now=Date.now();
         SLOTS.forEach(function(s){
           clearOverrides(p,d,s);
-          if (bestSel[s]) SEL[p+'_'+d+'_'+s] = bestSel[s];
-          else delete SEL[p+'_'+d+'_'+s];
+          var selKey=p+'_'+d+'_'+s;
+          if (bestSel[s]){SEL[selKey]=bestSel[s];weekData[activeWeek].ts[selKey]=now;}
+          else delete SEL[selKey];
         });
       }
     });
@@ -3289,10 +3300,10 @@ function renderShop(){
     var ai=CAT_ORDER.indexOf(a),bi=CAT_ORDER.indexOf(b);
     return(ai<0?999:ai)-(bi<0?999:bi);
   });
-  var sunLabel=activeWeek==='this'?'Next week\'s':'This week\'s';
+  var weekLabel=activeWeek==='this'?'This week':'Next week';
   var html='<div class="shop-trip-tabs">'
-    +'<div class="shop-trip-tab'+(shopTrip==='sun'?' on':'')+'" onclick="setShopTrip(\'sun\')">☀️ Sunday shop<br><span style="font-size:11px;font-weight:400">'+sunLabel+' Mon–Wed</span></div>'
-    +'<div class="shop-trip-tab'+(shopTrip==='wed'?' on':'')+'" onclick="setShopTrip(\'wed\')">📅 Wednesday shop<br><span style="font-size:11px;font-weight:400">This week\'s Thu–Sun</span></div>'
+    +'<div class="shop-trip-tab'+(shopTrip==='sun'?' on':'')+'" onclick="setShopTrip(\'sun\')">📋 Mon–Wed<br><span style="font-size:11px;font-weight:400">'+weekLabel+'</span></div>'
+    +'<div class="shop-trip-tab'+(shopTrip==='wed'?' on':'')+'" onclick="setShopTrip(\'wed\')">📋 Thu–Sun<br><span style="font-size:11px;font-weight:400">'+weekLabel+'</span></div>'
     +'<div class="shop-trip-tab'+(shopTrip==='custom'?' on':'')+'" onclick="setShopTrip(\'custom\')">🛒 Shop Now<br><span style="font-size:11px;font-weight:400">Pick meals</span></div></div>'
     +'<div class="shop-person-row">'
     +'<div class="shop-person-btn him'+(shopPerson==='him'?' on':'')+'" onclick="setShopPerson(\'him\')">Him only</div>'
@@ -3620,9 +3631,86 @@ var syncId=null;var syncStatus='';
 function loadSyncId(){try{syncId=localStorage.getItem('mealPlannerSyncId')||null;}catch(e){}}
 function saveSyncIdLocal(id){syncId=id;try{localStorage.setItem('mealPlannerSyncId',id);}catch(e){}}
 function setSyncStatus(msg,type){syncStatus='<span style="color:'+(type==='err'?'#DC2626':type==='ok'?'#059669':'var(--gray)')+'">'+msg+'</span>';var el=document.getElementById('syncStatusMsg');if(el)el.innerHTML=syncStatus;}
+function getSyncPayload(){
+  return {weekData:weekData,customMeals:customMeals,customIngredients:customIngredients,eatOutDB:EAT_OUT_DB,version:2};
+}
+// Get the default meal ID for a SEL key like "him_Monday_lunch"
+function getDefaultForSlot(selKey){
+  var parts=selKey.split('_');
+  var p=parts[0],d=parts[1],s=parts.slice(2).join('_');
+  return DEFAULTS[p]&&DEFAULTS[p][d]&&DEFAULTS[p][d][s]||null;
+}
+function mergeSyncData(remote){
+  // Week data: merge per-slot, last-write-wins using timestamps
+  if(remote.weekData){
+    ['this','next'].forEach(function(w){
+      if(!remote.weekData[w])return;
+      if(!weekData[w])weekData[w]={sel:{},ts:{},monday:''};
+      if(!weekData[w].ts)weekData[w].ts={};
+      var remoteSel=remote.weekData[w].sel||{};
+      var remoteTs=remote.weekData[w].ts||{};
+      var localSel=weekData[w].sel;
+      var localTs=weekData[w].ts;
+      
+      // All keys from both sides
+      var allKeys={};
+      Object.keys(remoteSel).forEach(function(k){allKeys[k]=true;});
+      Object.keys(localSel).forEach(function(k){allKeys[k]=true;});
+      
+      Object.keys(allKeys).forEach(function(k){
+        var localTime=localTs[k]||0;
+        var remoteTime=remoteTs[k]||0;
+        if(remoteTime>localTime){
+          // Remote is newer — take it
+          localSel[k]=remoteSel[k];
+          localTs[k]=remoteTime;
+        }
+        // Otherwise keep local (it's newer or same)
+      });
+      
+      weekData[w].sel=localSel;
+      weekData[w].ts=localTs;
+      if(remote.weekData[w].monday)weekData[w].monday=remote.weekData[w].monday;
+    });
+  }
+  
+  // Custom meals: merge by ID, don't overwrite existing
+  if(remote.customMeals){
+    Object.keys(remote.customMeals).forEach(function(k){
+      if(!customMeals[k])customMeals[k]=remote.customMeals[k];
+    });
+  }
+  
+  // Custom ingredients: merge by key, don't overwrite existing
+  if(remote.customIngredients){
+    Object.keys(remote.customIngredients).forEach(function(k){
+      if(!customIngredients[k]){
+        customIngredients[k]=remote.customIngredients[k];
+        NUTRI_DB[k]=remote.customIngredients[k];
+      }
+    });
+  }
+  
+  // Eat-out DB: merge by name+restaurant, don't duplicate
+  if(remote.eatOutDB){
+    remote.eatOutDB.forEach(function(entry){
+      var exists=EAT_OUT_DB.some(function(e){return e.name===entry.name&&e.restaurant===entry.restaurant;});
+      if(!exists)EAT_OUT_DB.push(entry);
+    });
+  }
+  
+  // Reload active week into SEL
+  var saved=weekData[activeWeek]&&weekData[activeWeek].sel||{};
+  Object.keys(SEL).forEach(function(k){delete SEL[k];});
+  Object.keys(saved).forEach(function(k){SEL[k]=saved[k];});
+  
+  saveWeeks();saveCustomMeals();saveCustomIngredients();saveEatOutDB();
+  injectCustomMeals();DB_KEYS_BY_ROLE=null;renderWeekBar();
+}
+
 function createSync(){
   setSyncStatus('Creating shared sync...','loading');
-  var payload={weekData:weekData,customMeals:customMeals,version:1};
+  var payload=getSyncPayload();
   fetch(JSONBLOB_BASE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);
     var loc=r.headers.get('Location')||r.headers.get('location')||'';
@@ -3636,24 +3724,27 @@ function createSync(){
 }
 function pushSync(){
   if(!syncId)return;
-  setSyncStatus('Pushing to cloud...','loading');
-  var payload={weekData:weekData,customMeals:customMeals,version:1};
-  fetch(JSONBLOB_BASE+'/'+syncId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){
-    if(!r.ok)throw new Error('HTTP '+r.status);setSyncStatus('Pushed successfully!','ok');
-  }).catch(function(e){setSyncStatus('Push failed: '+e.message,'err');});
+  setSyncStatus('Syncing...','loading');
+  // Pull first, merge, then push — prevents overwriting partner's additions
+  fetch(JSONBLOB_BASE+'/'+syncId).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
+  }).then(function(remote){
+    // Merge remote into local first
+    mergeSyncData(remote);
+    // Now push the merged result
+    var payload=getSyncPayload();
+    return fetch(JSONBLOB_BASE+'/'+syncId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  }).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    setSyncStatus('Synced successfully!','ok');renderMeals();
+  }).catch(function(e){setSyncStatus('Sync failed: '+e.message,'err');});
 }
 function pullSync(){
   if(!syncId)return;
   setSyncStatus('Pulling from cloud...','loading');
   fetch(JSONBLOB_BASE+'/'+syncId).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
-    if(data.weekData){weekData=data.weekData;}
-    if(data.customMeals){Object.keys(data.customMeals).forEach(function(k){customMeals[k]=data.customMeals[k];});}
-    // Reload active week's selections
-    var saved=weekData[activeWeek]&&weekData[activeWeek].sel||{};
-    Object.keys(SEL).forEach(function(k){delete SEL[k];});
-    Object.keys(saved).forEach(function(k){SEL[k]=saved[k];});
-    saveWeeks();saveCustomMeals();injectCustomMeals();renderWeekBar();
-    setSyncStatus('Pulled successfully!','ok');renderSyncView();
+    mergeSyncData(data);
+    setSyncStatus('Pulled successfully!','ok');renderMeals();renderSyncView();
   }).catch(function(e){setSyncStatus('Pull failed: '+e.message,'err');});
 }
 function connectSyncId(){var el=document.getElementById('syncIdInput');if(!el||!el.value.trim())return;saveSyncIdLocal(el.value.trim());setSyncStatus('Connected! Now pull to get data.','ok');renderSyncView();}
@@ -3894,6 +3985,13 @@ function updateFormMacros(prefix){
 }
 
 // Add a new ingredient to the DB from the form
+var customIngredients={}; // persisted custom DB additions
+function loadCustomIngredients(){
+  try{var raw=localStorage.getItem('mealPlannerCustomIngr');customIngredients=raw?JSON.parse(raw):{};}catch(e){customIngredients={};}
+  Object.keys(customIngredients).forEach(function(k){NUTRI_DB[k]=customIngredients[k];});
+}
+function saveCustomIngredients(){try{localStorage.setItem('mealPlannerCustomIngr',JSON.stringify(customIngredients));}catch(e){}}
+
 function addNewDbIngredient(){
   var name=document.getElementById('rf_new_name').value.trim().toLowerCase();
   var kcal=Math.max(0,parseFloat(document.getElementById('rf_new_kcal').value)||0);
@@ -3905,6 +4003,8 @@ function addNewDbIngredient(){
   if(!name){alert('Enter an ingredient name.');return;}
   if(NUTRI_DB[name]){alert(name+' already exists in the database.');return;}
   NUTRI_DB[name]={kcal:kcal,pro:pro,fat:fat,carb:carb,unit:unit};
+  customIngredients[name]={kcal:kcal,pro:pro,fat:fat,carb:carb,unit:unit};
+  saveCustomIngredients();
   DB_KEYS_BY_ROLE=null;
   // Add to role cache so it appears in filtered dropdowns immediately
   if(ROLE_INGR){
@@ -4015,7 +4115,7 @@ function renderRecipesView(){
 }
 
 // ── INIT ────────────────────────────────────────────────────
-loadSyncId();loadWeeks();renderWeekBar();
+loadSyncId();loadCustomIngredients();loadWeeks();renderWeekBar();
 loadCustomMeals();loadEatOutDB();
 MEALS.forEach(function(m){buildColorizedSteps(m);});
 renderDayTabs();renderMeals();
