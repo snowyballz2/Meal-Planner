@@ -2058,58 +2058,69 @@ function computeLeftovers(){
   var leftoverSlots=['post','lunch','dinner'];
   
   ['him','her'].forEach(function(p){
-    // Build a chronological list of all meals: [{day, dayIdx, slot, id}, ...]
-    var timeline=[];
+    // Collect all meals by meal ID
+    var byMealId={};
     DAYS.forEach(function(d,di){
       leftoverSlots.forEach(function(s){
         var id=getMealId(p,d,s);
-        if(id)timeline.push({day:d,dayIdx:di,slot:s,id:id});
+        if(!id)return;
+        if(!byMealId[id])byMealId[id]=[];
+        byMealId[id].push({day:d,dayIdx:di,slot:s});
       });
     });
     
-    // For each meal occurrence, look ahead for same meal ID on consecutive days (max 3 total)
-    var claimed={}; // keys already assigned as part of a leftover chain
+    var claimed={};
     
-    for(var i=0;i<timeline.length;i++){
-      var t=timeline[i];
-      var k=p+'_'+t.day+'_'+t.slot;
-      if(claimed[k])continue;
+    Object.keys(byMealId).forEach(function(mealId){
+      var entries=byMealId[mealId];
+      if(entries.length<2)return;
       
-      // Find subsequent occurrences of this meal on consecutive days
-      var chain=[t];
-      var lastDayIdx=t.dayIdx;
+      // Sort by day index
+      entries.sort(function(a,b){return a.dayIdx-b.dayIdx||(leftoverSlots.indexOf(a.slot)-leftoverSlots.indexOf(b.slot));});
       
-      for(var j=i+1;j<timeline.length&&chain.length<3;j++){
-        var next=timeline[j];
-        if(next.id!==t.id)continue;
-        var nk=p+'_'+next.day+'_'+next.slot;
-        if(claimed[nk])continue;
-        // Must be on the next day (consecutive), not same day
-        if(next.dayIdx===lastDayIdx+1){
-          chain.push(next);
-          lastDayIdx=next.dayIdx;
-        } else if(next.dayIdx>lastDayIdx+1){
-          break; // gap — stop looking
+      // Find groups within 3 consecutive days
+      var i=0;
+      while(i<entries.length){
+        var start=entries[i];
+        var k0=p+'_'+start.day+'_'+start.slot;
+        if(claimed[k0]){i++;continue;}
+        
+        // Determine max day span: breakfast-only meals max 1 day ahead, others max 2
+        var isBreakfastOnly=entries.every(function(e){return e.slot==='post';});
+        var maxSpan=isBreakfastOnly?1:2;
+        
+        // Gather all entries within the span (gaps allowed)
+        var group=[start];
+        var j=i+1;
+        while(j<entries.length){
+          var e=entries[j];
+          if(e.dayIdx>start.dayIdx+maxSpan)break;
+          if(!claimed[p+'_'+e.day+'_'+e.slot]){
+            group.push(e);
+          }
+          j++;
         }
-        // same day = skip, keep looking
-      }
-      
-      if(chain.length>1){
-        // First is cook, rest are leftovers
-        var cookKey=p+'_'+chain[0].day+'_'+chain[0].slot;
-        result[cookKey]={isLeftover:false,cookDay:chain[0].day,servings:chain.length};
-        claimed[cookKey]=true;
-        for(var c=1;c<chain.length;c++){
-          var loKey=p+'_'+chain[c].day+'_'+chain[c].slot;
-          result[loKey]={isLeftover:true,cookDay:chain[0].day,servings:chain.length};
-          claimed[loKey]=true;
+        
+        if(group.length>1){
+          // First entry is cook day, rest are leftovers
+          var cookKey=p+'_'+group[0].day+'_'+group[0].slot;
+          result[cookKey]={isLeftover:false,cookDay:group[0].day,servings:group.length};
+          claimed[cookKey]=true;
+          for(var g=1;g<group.length;g++){
+            var loKey=p+'_'+group[g].day+'_'+group[g].slot;
+            result[loKey]={isLeftover:true,cookDay:group[0].day,servings:group.length};
+            claimed[loKey]=true;
+          }
+          i=j; // skip past the group
+        } else {
+          i++;
         }
       }
-    }
+    });
   });
   
   // Detect shared meals: if him and her have the same meal in the same slot on the same day,
-  // combine into one cook — no need to shop for both separately
+  // combine into one cook
   DAYS.forEach(function(d){
     leftoverSlots.forEach(function(s){
       var himId=getMealId('him',d,s);
@@ -2739,6 +2750,7 @@ function getSlotAdjustment(p,d,s){
 
 // ── Meals render ────────────────────────────────────────────
 function renderMeals(){
+  invalidateLeftoverCache();
   var mealEl=document.getElementById('mealView');
   var prevHeight=mealEl.offsetHeight;
   mealEl.style.minHeight=prevHeight+'px';
@@ -2746,17 +2758,18 @@ function renderMeals(){
   var t=calcTotals(person,day);
   var cc=person==='him'?'him-c':person==='shared'?'him-c':'her-c';
 
-  var html='<div class="stats">'
-    +(person!=='shared'
-      ?'<div class="stat" data-p="'+person+'" onclick="openCalPopup(this.dataset.p)"><div class="v kcal-tap '+cc+'">'+t.kcal.toLocaleString()+'<div style="font-size:9px;opacity:.65;margin-top:1px">'+calZone(person,APPLIED_KCAL[person])+' ►</div></div><div class="l">kcal</div></div>'
-      :'<div class="stat"><div class="v '+cc+'">'+t.kcal.toLocaleString()+'</div><div class="l">kcal</div></div>')
-    +'<div class="stat"><div class="v '+cc+'">'+t.pro+'g</div><div class="l">protein</div></div>'
-    +'<div class="stat"><div class="v '+cc+'">'+t.fat+'g</div><div class="l">fat</div></div>'
-    +'<div class="stat"><div class="v '+cc+'">'+t.carb+'g</div><div class="l">carbs</div></div>'
-    +'</div>'
-    +'<div style="background:var(--bg-card);border-radius:var(--radius-sm);padding:8px 12px;border:1px solid var(--border);margin-bottom:10px;box-shadow:var(--shadow)">'
-    +macroBar(t.kcal,t.pro,t.fat,t.carb)
-    +'</div>';
+  var html='';
+  if(person!=='shared'){
+    html+='<div class="stats">'
+      +'<div class="stat" data-p="'+person+'" onclick="openCalPopup(this.dataset.p)"><div class="v kcal-tap '+cc+'">'+t.kcal.toLocaleString()+'<div style="font-size:9px;opacity:.65;margin-top:1px">'+calZone(person,APPLIED_KCAL[person])+' ►</div></div><div class="l">kcal</div></div>'
+      +'<div class="stat"><div class="v '+cc+'">'+t.pro+'g</div><div class="l">protein</div></div>'
+      +'<div class="stat"><div class="v '+cc+'">'+t.fat+'g</div><div class="l">fat</div></div>'
+      +'<div class="stat"><div class="v '+cc+'">'+t.carb+'g</div><div class="l">carbs</div></div>'
+      +'</div>'
+      +'<div style="background:var(--bg-card);border-radius:var(--radius-sm);padding:8px 12px;border:1px solid var(--border);margin-bottom:10px;box-shadow:var(--shadow)">'
+      +macroBar(t.kcal,t.pro,t.fat,t.carb)
+      +'</div>';
+  }
 
   if(person==='shared'){
     html+='<div class="shared-intro">Meals where you are both cooking the same dish. Combined portions for two.</div>';
@@ -2805,14 +2818,69 @@ function renderMeals(){
       }).join('');
       ingrHtml+='</div>';
       var stepsHtml=((meal.him&&meal.him._colorSteps)||combinedSteps).map(function(st){return'<li>'+st+'</li>'}).join('');
+      
+      // Leftover badges for shared tab — combine him+her servings
+      var leftovers=computeLeftovers();
+      var himLo=leftovers['him_'+day+'_'+s];
+      var herLo=leftovers['her_'+day+'_'+s];
+      var sharedLeftoverBadge='';
+      var sharedCookBadge='';
+      var sharedCookTotal=0;
+      if(himLo&&himLo.isLeftover){
+        sharedLeftoverBadge='<span class="leftover-badge">🍱 Leftovers from '+himLo.cookDay+'</span>';
+      } else if(himLo&&!himLo.isLeftover&&himLo.servings>1){
+        var combined=himLo.totalServings||((himLo.servings)+(herLo&&!herLo.isLeftover?herLo.servings:1));
+        sharedCookTotal=combined;
+        sharedCookBadge='<span class="cook-badge">🍳 Cook for '+combined+' meals</span>';
+      }
+      // If cook badge, multiply ingredients by each person's servings
+      var himMultiplier=(himLo&&!himLo.isLeftover&&himLo.servings>1)?himLo.servings:1;
+      var herMultiplier=(herLo&&!herLo.isLeftover&&herLo.servings>1)?herLo.servings:1;
+      if(himMultiplier>1||herMultiplier>1){
+        // Re-merge with multiplied amounts
+        var merged2={};
+        hIngr.forEach(function(i){if(i.dbKey)merged2[i.dbKey]={dbKey:i.dbKey,amt:i.amt*himMultiplier,hAmt:i.amt*himMultiplier,rAmt:0,role:i.role,displayText:i.displayText};});
+        rIngr.forEach(function(i){if(i.dbKey){if(merged2[i.dbKey]){merged2[i.dbKey].amt+=i.amt*herMultiplier;merged2[i.dbKey].rAmt=i.amt*herMultiplier;}else{merged2[i.dbKey]={dbKey:i.dbKey,amt:i.amt*herMultiplier,hAmt:0,rAmt:i.amt*herMultiplier,role:i.role,displayText:i.displayText};}}});
+        combinedIngr=Object.keys(merged2).map(function(k2){
+          var m2=merged2[k2],db2=NUTRI_DB[m2.dbKey],unit2=db2?db2.unit:'';
+          var amt2=Math.round(m2.amt*4)/4;
+          var ing2=I(m2.dbKey,amt2,amt2+' '+unit2+' '+m2.dbKey,m2.role);
+          ing2.hAmt=m2.hAmt;ing2.rAmt=m2.rAmt;
+          return ing2;
+        });
+        // Recompute macros
+        pm={kcal:0,pro:0,fat:0,carb:0};
+        combinedIngr.forEach(function(i){var db=NUTRI_DB[i.dbKey];if(db){pm.kcal+=Math.round(db.kcal*i.amt);pm.pro+=Math.round(db.pro*i.amt);pm.fat+=Math.round(db.fat*i.amt);pm.carb+=Math.round(db.carb*i.amt);}});
+        macroLine=pm.kcal+' kcal · P '+pm.pro+'g · C '+pm.carb+'g · F '+pm.fat+'g';
+        // Rebuild ingrHtml
+        ingrHtml='<div class="shared-ingr-grid">';
+        ingrHtml+=combinedIngr.map(function(i){
+          var db=NUTRI_DB[i.dbKey];var unit=db?db.unit:'';
+          var kcal=db?Math.round(db.kcal*i.amt):0;
+          var hFmt=i.hAmt?(Math.round(i.hAmt*4)/4):'—';
+          var rFmt=i.rAmt?(Math.round(i.rAmt*4)/4):'—';
+          var roleColors={protein:'#60A5FA',carb:'#4ADE80',fat:'#FBBF24',veg:'#4ADE80',sauce:'#C08B5C',fixed:'#C08B5C',liquid:'#A78BFA',fruit:'#F87171'};
+          var rc=roleColors[i.role]||'var(--border)';
+          return '<div class="sig-row">'
+            +'<span class="sig-name" style="border-left:3px solid '+rc+';padding-left:6px">'+i.displayText+'</span>'
+            +'<span class="sig-him">'+hFmt+'</span>'
+            +'<span class="sig-sep">/</span>'
+            +'<span class="sig-her">'+rFmt+'</span>'
+            +'<span class="sig-cal">'+kcal+'cal</span>'
+            +'</div>';
+        }).join('');
+        ingrHtml+='</div>';
+      }
+      var sharedServesLabel=sharedCookTotal>0?'🥗 Combined ingredients (serves '+sharedCookTotal+')':'🥗 Combined ingredients (serves 2)';
+
       html+='<div class="mc slot-'+s+(isOpen?' open':'')+'" id="mc_'+k+'">'
         +'<div class="mc-top"><div class="slot-label">'+SLOT_LABEL[s]+'</div>'
         +'<div style="font-size:15px;font-weight:600;padding:4px 0 6px">'+meal.label+' <span class="shared-badge">Both</span></div></div>'
-        +'<div class="mc-meta" onclick="toggleCard(\''+k+'\')"><div><div class="mc-macros">'+macroLine+'</div>'
+        +'<div class="mc-meta" onclick="toggleCard(\''+k+'\')"><div><div class="mc-macros">'+macroLine+sharedLeftoverBadge+sharedCookBadge+'</div>'
         +macroBar(pm.kcal,pm.pro,pm.fat,pm.carb)
         +'</div><div class="expand-btn">⌄</div></div>'
         +'<div class="mc-body">'
-        +'<div class="bsec"><div class="bsec-title ingr">🥗 Combined ingredients (serves 2)</div>'+ingrHtml+'</div>'
+        +'<div class="bsec"><div class="bsec-title ingr">'+sharedServesLabel+'</div>'+ingrHtml+'</div>'
         +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'
         +'</div></div>';
     });
@@ -2882,11 +2950,13 @@ function renderMeals(){
     var loKey=person+'_'+day+'_'+s;
     var loInfo=leftovers[loKey];
     var leftoverBadge=loInfo&&loInfo.isLeftover?'<span class="leftover-badge">🍱 Leftovers from '+loInfo.cookDay+'</span>':'';
-    var cookBadge=loInfo&&!loInfo.isLeftover&&loInfo.servings>1?'<span class="cook-badge">🍳 Cook for '+loInfo.servings+' days</span>':'';
+    var cookBadge=loInfo&&!loInfo.isLeftover&&loInfo.servings>1?'<span class="cook-badge">🍳 Cook for '+loInfo.servings+' meals</span>':'';
     var notePill=activeMeal.note?'<div class="note-pill">⏰ '+activeMeal.note+'</div>':'';
 
     // Ingredient display with per-ingredient nutrition — EDITABLE
     var ingrHtml='';
+    var cookServings=(loInfo&&!loInfo.isLeftover&&loInfo.servings>1)?loInfo.servings:1;
+    var ingrSectionTitle=cookServings>1?'🥗 Combined ingredients (serves '+cookServings+')':'🥗 Ingredients';
     if (port.ingredients && port.ingredients.length && port.ingredients[0].dbKey !== undefined) {
       // Get ingredients with overrides applied
       var ovrIngr = applyOverrides(port,person,day,s);
@@ -2896,8 +2966,9 @@ function renderMeals(){
       if(!DB_KEYS_BY_ROLE) DB_KEYS_BY_ROLE = getDbKeysByRole();
 
       ingrHtml = ovrIngr.map(function(ing, idx) {
+        var displayAmt=Math.round(ing.amt*cookServings*100)/100;
         var db = NUTRI_DB[ing.dbKey];
-        var pill = ingrMacroPill(ing, ing.amt);
+        var pill = ingrMacroPill(ing, displayAmt);
         var unitLabel = db ? db.unit : '';
         var isSwapped = port.ingredients[idx] && ing.dbKey !== port.ingredients[idx].dbKey;
         var isAmtChanged = port.ingredients[idx] && Math.abs(ing.amt - port.ingredients[idx].amt) > 0.01;
@@ -2920,6 +2991,9 @@ function renderMeals(){
           return '<option value="'+q.val+'"'+sel+'>'+q.label+'</option>';
         }).join('');
 
+        var displayCal=db?Math.round(db.kcal*displayAmt):0;
+        var displayPro=db?Math.round(db.pro*displayAmt):0;
+
         return '<div class="ingr-edit-row">'
           +'<select class="ingr-amt-select" id="'+amtId+'"'
           +' onchange="onIngrAmt(\''+person+'\',\''+day+'\',\''+slotEsc+'\','+idx+',this.value)">'
@@ -2927,8 +3001,8 @@ function renderMeals(){
           +'<span class="ingr-unit-label">'+unitLabel+'</span>'
           +'<select class="ingr-swap-select role-'+ing.role+'" onchange="onIngrSwap(\''+person+'\',\''+day+'\',\''+slotEsc+'\','+idx+',this.value)">'
           +optHtml+'</select>'
-          +'<span class="ingr-cal">'+(db?Math.round(db.kcal*ing.amt):0)+'cal</span>'
-          +'<span class="ingr-pro">'+(db&&Math.round(db.pro*ing.amt)>0?Math.round(db.pro*ing.amt)+'p':'')+'</span>'
+          +'<span class="ingr-cal">'+displayCal+'cal</span>'
+          +'<span class="ingr-pro">'+(displayPro>0?displayPro+'p':'')+'</span>'
           +'</div>';
       }).join('');
       ingrHtml='<div class="ingr-edit-grid">'+ingrHtml+'</div>';
@@ -3167,7 +3241,7 @@ function renderMeals(){
       +notePill
       +'<div class="mc-body">'
       +adjBanner
-      +'<div class="bsec"><div class="bsec-title ingr">🥗 Ingredients</div>'+ingrHtml+'</div>'
+      +'<div class="bsec"><div class="bsec-title ingr">'+ingrSectionTitle+'</div>'+ingrHtml+'</div>'
       +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'
       +'</div></div>';
     } // end else (not eat out)
