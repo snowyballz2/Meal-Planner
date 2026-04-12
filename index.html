@@ -105,6 +105,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .week-pill{padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;color:var(--gray);background:var(--bg-card);white-space:nowrap;transition:all .15s}
 .week-pill.on{background:var(--shop);color:#000}
 .week-pill:active{opacity:.7}
+.week-banner{padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;text-align:center;margin-bottom:10px}
+.week-banner.last{background:rgba(245,158,11,.12);color:#F59E0B;border:1.5px solid rgba(245,158,11,.3)}
+.week-banner.next{background:rgba(96,165,250,.12);color:#60A5FA;border:1.5px solid rgba(96,165,250,.3)}
 .sync-icon-btn{border:none;background:none;font-size:18px;cursor:pointer;padding:4px;border-radius:6px;line-height:1}
 .sync-icon-btn:active{opacity:.6}
 .week-select{flex:1;padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:11px;font-weight:600;background:var(--bg-surface);color:var(--text)}
@@ -1613,6 +1616,38 @@ function toggleAdjTarget(p,d,slot){
   ADJ_TARGETS[k][slot]=!ADJ_TARGETS[k][slot];
   renderMeals();
 }
+var SHARED_SCHEDULE = {}; // key: 'day_slot', true if shared. e.g. 'Monday_dinner':true
+var sharedSchedOpen = false; // collapsible panel state
+function initSharedSchedule(){
+  // Default: all dinners shared
+  if(!Object.keys(SHARED_SCHEDULE).length){
+    DAYS.forEach(function(d){ SHARED_SCHEDULE[d+'_dinner']=true; });
+  }
+}
+function toggleSharedSchedule(d,s){
+  var k=d+'_'+s;
+  SHARED_SCHEDULE[k]=!SHARED_SCHEDULE[k];
+  if(!SHARED_SCHEDULE[k])delete SHARED_SCHEDULE[k];
+  saveSharedSchedule();
+  renderMeals();
+}
+function setSharedPreset(preset){
+  SHARED_SCHEDULE={};
+  if(preset==='dinners'){
+    DAYS.forEach(function(d){SHARED_SCHEDULE[d+'_dinner']=true;});
+  } else if(preset==='all'){
+    DAYS.forEach(function(d){['breakfast','lunch','dinner'].forEach(function(s){SHARED_SCHEDULE[d+'_'+s]=true;});});
+  } else if(preset==='weekends'){
+    ['Saturday','Sunday'].forEach(function(d){['breakfast','lunch','dinner'].forEach(function(s){SHARED_SCHEDULE[d+'_'+s]=true;});});
+  }
+  // 'clear' just leaves SHARED_SCHEDULE empty
+  saveSharedSchedule();
+  renderMeals();
+}
+function saveSharedSchedule(){
+  try{localStorage.setItem('mealPlannerSharedSchedule',JSON.stringify(SHARED_SCHEDULE));}catch(e){}
+}
+
 var EAT_OUT_DB=[]; // saved eat-out meals for reuse
 function loadEatOutDB(){try{var raw=localStorage.getItem('eatOutDB');EAT_OUT_DB=raw?JSON.parse(raw):[];}catch(e){EAT_OUT_DB=[];}}
 function saveEatOutDB(){try{localStorage.setItem('eatOutDB',JSON.stringify(EAT_OUT_DB));}catch(e){}}
@@ -2809,7 +2844,50 @@ function renderMeals(){
   }
 
   // Normal him/her view
-  html+='<div class="reset-bar"><button class="reset-btn" onclick="randomizeWeek()">🔀 Randomize week</button></div>';
+  if(activeWeek==='last'){
+    html+='<div class="week-banner last">Last Week — View Only</div>';
+  }
+  if(activeWeek==='next'){
+    html+='<div class="week-banner next">Next Week — Planning Ahead</div>';
+  }
+  if(activeWeek!=='last'){
+    // Shared schedule panel
+    var ssIcon=sharedSchedOpen?'&#9662;':'&#9656;';
+    var ssCount=Object.keys(SHARED_SCHEDULE).length;
+    html+='<div style="background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border);padding:10px 12px;margin-bottom:10px;box-shadow:var(--shadow)">';
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="sharedSchedOpen=!sharedSchedOpen;renderMeals()">';
+    html+='<div style="font-size:13px;font-weight:700;color:var(--text)">Shared Meal Schedule</div>';
+    html+='<span style="font-size:11px;color:var(--gray);font-weight:600">'+ssIcon+' '+(ssCount?ssCount+' shared':'none')+'</span></div>';
+    if(sharedSchedOpen){
+      html+='<div style="font-size:11px;color:var(--gray);margin:6px 0 10px">Which meals will you cook and eat together?</div>';
+      DAYS.forEach(function(dd){
+        var count=0;
+        ['breakfast','lunch','dinner'].forEach(function(ss){if(SHARED_SCHEDULE[dd+'_'+ss])count++;});
+        var badge=count>0?'<span style="font-size:10px;color:#34D399;font-weight:700;margin-left:6px">'+count+' shared</span>':'';
+        html+='<div style="padding:8px 0;border-bottom:1px solid var(--border)">';
+        html+='<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">'+dd.slice(0,3)+badge+'</div>';
+        html+='<div style="display:flex;gap:6px">';
+        ['breakfast','lunch','dinner'].forEach(function(ss){
+          var on=!!SHARED_SCHEDULE[dd+'_'+ss];
+          var bg=on?'rgba(16,185,129,.15)':'var(--bg)';
+          var bdr=on?'rgba(16,185,129,.4)':'var(--border)';
+          var col=on?'#34D399':'var(--gray)';
+          html+='<div style="flex:1;padding:6px 8px;border-radius:8px;border:1.5px solid '+bdr+';background:'+bg+';text-align:center;font-size:11px;font-weight:600;color:'+col+';cursor:pointer" onclick="event.stopPropagation();toggleSharedSchedule(\''+dd+'\',\''+ss+'\')">'+SLOT_LABEL[ss]+'</div>';
+        });
+        html+='</div></div>';
+      });
+      // Preset buttons
+      html+='<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">';
+      var presets=[{id:'dinners',label:'All dinners'},{id:'all',label:'All meals'},{id:'weekends',label:'Weekends only'},{id:'clear',label:'Clear all'}];
+      presets.forEach(function(pr){
+        html+='<div style="padding:4px 10px;border-radius:16px;border:1.5px solid var(--border);font-size:10px;font-weight:600;color:var(--gray);cursor:pointer" onclick="event.stopPropagation();setSharedPreset(\''+pr.id+'\')">'+pr.label+'</div>';
+      });
+      html+='</div>';
+    }
+    html+='</div>';
+    // Randomize button
+    html+='<div class="reset-bar"><button class="reset-btn" onclick="randomizeWeek()">Randomize week</button></div>';
+  }
   const other=person==='him'?'her':'him';
 
   SLOTS.forEach(function(s){
@@ -2975,6 +3053,37 @@ function calcMealSetWaste(selections, p) {
 function randomPick(arr){return arr[Math.floor(Math.random()*arr.length)];}
 
 
+// Get meal IDs from the previous N days, including cross-week from last week
+function getRecentMealIds(dayIndex, days, p, lookback) {
+  var recent = [];
+  for (var b = 1; b <= lookback; b++) {
+    var prevIdx = dayIndex - b;
+    if (prevIdx >= 0) {
+      // Same week
+      var prevDay = days[prevIdx];
+      SLOTS.forEach(function(s) {
+        if (s === 'late_snack' || s === 'shake') return;
+        var id = getMealId(p, prevDay, s);
+        if (id && recent.indexOf(id) < 0) recent.push(id);
+      });
+    } else {
+      // Cross into last week
+      var lastWeekDayIdx = 7 + prevIdx; // e.g., -1 -> 6 (Sunday), -2 -> 5 (Saturday)
+      if (lastWeekDayIdx >= 0 && lastWeekDayIdx < 7) {
+        var lastDay = DAYS[lastWeekDayIdx];
+        var lastSel = weekData['last'] && weekData['last'].sel || {};
+        SLOTS.forEach(function(s) {
+          if (s === 'late_snack' || s === 'shake') return;
+          var key = p + '_' + lastDay + '_' + s;
+          var id = lastSel[key];
+          if (id && recent.indexOf(id) < 0) recent.push(id);
+        });
+      }
+    }
+  }
+  return recent;
+}
+
 function randomizeWeek(){
   const days = DAYS;
   const persons = person === 'shared' ? ['him','her'] : [person];
@@ -3001,8 +3110,10 @@ function randomizeWeek(){
 
     pkgSlots.forEach(function(s) {
       if (tripCaps[trip] >= PKG_CAP_PER_TRIP) return;
-      // Random pick from ALL meals for this slot
-      let candidates = getMealsForSlot(s).filter(function(m){ return m[persons[0]]; });
+      // Random pick from ALL meals for this slot, excluding recent
+      const anchorRecent = getRecentMealIds(di, days, persons[0], 2);
+      let candidates = getMealsForSlot(s).filter(function(m){ return m[persons[0]] && anchorRecent.indexOf(m.id) < 0; });
+      if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return m[persons[0]]; }); // fallback
       if (!candidates.length) return;
       const pick = randomPick(candidates);
       if (!mealUsesPkg(pick.id)) return; // not a pkg meal — skip, no anchor
@@ -3041,10 +3152,11 @@ function randomizeWeek(){
   persons.forEach(function(p) {
     const target = CAL_BASE[p];
 
-    days.forEach(function(d) {
+    days.forEach(function(d, di) {
       let bestSel = null;
       let bestScore = Infinity;
       const attempts = 60;
+      const recentIds = getRecentMealIds(di, days, p, 2);
 
       for (let a = 0; a < attempts; a++) {
         const used = [];
@@ -3064,7 +3176,7 @@ function randomizeWeek(){
             return;
           }
           // Non-pkg meals only — pkg meals come through Phase 1 anchors only
-          let candidates = getMealsForSlot(s).filter(function(m){ return m[p] && used.indexOf(m.id) < 0 && !mealUsesPkg(m.id); });
+          let candidates = getMealsForSlot(s).filter(function(m){ return m[p] && used.indexOf(m.id) < 0 && !mealUsesPkg(m.id) && recentIds.indexOf(m.id) < 0; });
           if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return m[p] && !mealUsesPkg(m.id); });
           if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return m[p]; }); // fallback
           if (!candidates.length) return;
@@ -3148,6 +3260,19 @@ function randomizeWeek(){
       });
     });
   }
+
+  // ── FINAL: Enforce shared schedule (runs absolutely last) ──
+  days.forEach(function(d) {
+    ['breakfast','lunch','dinner'].forEach(function(s) {
+      if (!SHARED_SCHEDULE[d + '_' + s]) return;
+      var himId = getMealId('him', d, s);
+      var herId = getMealId('her', d, s);
+      if (himId && himId !== herId) {
+        SEL['her_' + d + '_' + s] = himId;
+        weekData[activeWeek].ts['her_' + d + '_' + s] = now;
+      }
+    });
+  });
 
   invalidateLeftoverCache();renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
 }
@@ -3528,13 +3653,14 @@ function renderShop(){
 }
 
 // ── WEEK MANAGEMENT ─────────────────────────────────────────
-var activeWeek='this'; // 'this' or 'next'
-var weekData={this:{sel:{},monday:''},next:{sel:{},monday:''}};
+var activeWeek='this'; // 'last', 'this', or 'next'
+var weekData={last:{sel:{},monday:''},this:{sel:{},monday:''},next:{sel:{},monday:''}};
 
 function getMondayStr(d){var dt=new Date(d);var diff=dt.getDay()===0?-6:1-dt.getDay();dt.setDate(dt.getDate()+diff);return dt.toISOString().slice(0,10);}
 function fmtWeekLabel(mondayStr){var d=new Date(mondayStr+'T12:00:00');var end=new Date(d);end.setDate(d.getDate()+6);var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return mo[d.getMonth()]+' '+d.getDate()+' – '+mo[end.getMonth()]+' '+end.getDate();}
 function todayMonday(){return getMondayStr(new Date().toISOString().slice(0,10));}
 function nextMonday(){var d=new Date(todayMonday()+'T12:00:00');d.setDate(d.getDate()+7);return d.toISOString().slice(0,10);}
+function lastMonday(){var d=new Date(todayMonday()+'T12:00:00');d.setDate(d.getDate()-7);return d.toISOString().slice(0,10);}
 
 function loadWeeks(){
   try{
@@ -3542,6 +3668,11 @@ function loadWeeks(){
     if(raw)weekData=JSON.parse(raw);
   }catch(e){}
   
+  // Ensure all week slots exist (old localStorage may not have 'last')
+  if(!weekData['last'])weekData['last']={sel:{},monday:''};
+  if(!weekData['this'])weekData['this']={sel:{},monday:''};
+  if(!weekData['next'])weekData['next']={sel:{},monday:''};
+
   // Auto-rollover: check if the calendar has moved forward
   var currentMonday=todayMonday();
   var thisMonday=weekData['this'].monday||'';
@@ -3550,19 +3681,22 @@ function loadWeeks(){
   if(thisMonday && thisMonday!==currentMonday){
     // The real-world week has changed
     if(nextMon===currentMonday){
-      // Next week's plan is now this week — shift it over
+      // Shift: last <- this, this <- next, next <- empty
+      weekData['last']={sel:JSON.parse(JSON.stringify(weekData['this'].sel||{})),monday:weekData['this'].monday};
       weekData['this']={sel:JSON.parse(JSON.stringify(weekData['next'].sel||{})),monday:currentMonday};
       weekData['next']={sel:{},monday:nextMonday()};
     } else {
-      // More than a week has passed, or dates don't match — reset both
+      // More than a week has passed, or dates don't match — reset all
+      weekData['last']={sel:{},monday:lastMonday()};
       weekData['this']={sel:{},monday:currentMonday};
       weekData['next']={sel:{},monday:nextMonday()};
     }
     // Save the rollover
     try{localStorage.setItem('mealPlannerWeekData',JSON.stringify(weekData));}catch(e){}
   }
-  
+
   // Ensure monday stamps are set
+  if(!weekData['last'].monday)weekData['last'].monday=lastMonday();
   if(!weekData['this'].monday)weekData['this'].monday=currentMonday;
   if(!weekData['next'].monday)weekData['next'].monday=nextMonday();
   
@@ -3570,12 +3704,18 @@ function loadWeeks(){
   var saved=weekData[activeWeek]&&weekData[activeWeek].sel||{};
   Object.keys(SEL).forEach(function(k){delete SEL[k];});
   Object.keys(saved).forEach(function(k){SEL[k]=saved[k];});
+
+  // Load shared schedule
+  try{var ss=localStorage.getItem('mealPlannerSharedSchedule');if(ss)SHARED_SCHEDULE=JSON.parse(ss);}catch(e){}
+  initSharedSchedule();
 }
 function saveWeeks(){
   weekData[activeWeek].sel=JSON.parse(JSON.stringify(SEL));
+  weekData['last'].monday=lastMonday();
   weekData['this'].monday=todayMonday();
   weekData['next'].monday=nextMonday();
   try{localStorage.setItem('mealPlannerWeekData',JSON.stringify(weekData));}catch(e){}
+  try{localStorage.setItem('mealPlannerSharedSchedule',JSON.stringify(SHARED_SCHEDULE));}catch(e){}
 }
 function switchWeek(w){
   // Save current week's selections first
@@ -3593,6 +3733,7 @@ function renderWeekBar(){
   var thisLabel=fmtWeekLabel(todayMonday());
   var nextLabel=fmtWeekLabel(nextMonday());
   bar.innerHTML='<div class="week-toggle">'
+    +'<div class="week-pill'+(activeWeek==='last'?' on':'')+'" onclick="switchWeek(\'last\')">Last week</div>'
     +'<div class="week-pill'+(activeWeek==='this'?' on':'')+'" onclick="switchWeek(\'this\')">This week</div>'
     +'<div class="week-pill'+(activeWeek==='next'?' on':'')+'" onclick="switchWeek(\'next\')">Next week</div>'
     +'</div>';
@@ -3608,7 +3749,7 @@ function loadSyncId(){try{syncId=localStorage.getItem('mealPlannerSyncId')||null
 function saveSyncIdLocal(id){syncId=id;try{localStorage.setItem('mealPlannerSyncId',id);}catch(e){}}
 function setSyncStatus(msg,type){syncStatus='<span style="color:'+(type==='err'?'#DC2626':type==='ok'?'#059669':'var(--gray)')+'">'+msg+'</span>';var el=document.getElementById('syncStatusMsg');if(el)el.innerHTML=syncStatus;}
 function getSyncPayload(){
-  return {weekData:weekData,customMeals:customMeals,customIngredients:customIngredients,eatOutDB:EAT_OUT_DB,version:2};
+  return {weekData:weekData,customMeals:customMeals,customIngredients:customIngredients,eatOutDB:EAT_OUT_DB,sharedSchedule:SHARED_SCHEDULE,version:2};
 }
 // Get the default meal ID for a SEL key like "him_Monday_lunch"
 function getDefaultForSlot(selKey){
@@ -3619,7 +3760,7 @@ function getDefaultForSlot(selKey){
 function mergeSyncData(remote){
   // Week data: merge per-slot, last-write-wins using timestamps
   if(remote.weekData){
-    ['this','next'].forEach(function(w){
+    ['last','this','next'].forEach(function(w){
       if(!remote.weekData[w])return;
       if(!weekData[w])weekData[w]={sel:{},ts:{},monday:''};
       if(!weekData[w].ts)weekData[w].ts={};
@@ -3675,6 +3816,14 @@ function mergeSyncData(remote){
     });
   }
   
+  // Shared schedule: merge from remote
+  if(remote.sharedSchedule){
+    Object.keys(remote.sharedSchedule).forEach(function(k){
+      if(!SHARED_SCHEDULE[k])SHARED_SCHEDULE[k]=remote.sharedSchedule[k];
+    });
+    saveSharedSchedule();
+  }
+
   // Reload active week into SEL
   var saved=weekData[activeWeek]&&weekData[activeWeek].sel||{};
   Object.keys(SEL).forEach(function(k){delete SEL[k];});
