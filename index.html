@@ -3768,9 +3768,9 @@ function renderWeekBar(){
   var thisLabel=fmtWeekLabel(todayMonday());
   var nextLabel=fmtWeekLabel(nextMonday());
   bar.innerHTML='<div class="week-toggle">'
-    +'<div class="week-pill'+(activeWeek==='last'?' on':'')+'" onclick="switchWeek(\'last\')">Last week</div>'
-    +'<div class="week-pill'+(activeWeek==='this'?' on':'')+'" onclick="switchWeek(\'this\')">This week</div>'
-    +'<div class="week-pill'+(activeWeek==='next'?' on':'')+'" onclick="switchWeek(\'next\')">Next week</div>'
+    +'<div class="week-pill'+(activeWeek==='last'?' on':'')+'" onclick="switchWeek(\'last\')">Last</div>'
+    +'<div class="week-pill'+(activeWeek==='this'?' on':'')+'" onclick="switchWeek(\'this\')">This Week</div>'
+    +'<div class="week-pill'+(activeWeek==='next'?' on':'')+'" onclick="switchWeek(\'next\')">Next</div>'
     +'</div>';
 }
 // Auto-save selections when they change
