@@ -348,14 +348,14 @@ var NUTRI_DB = {
   'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each', wholeOnly:true},
   'chicken breast':        {kcal:31,  pro:5.8,fat:0.7, carb:0,   unit:'oz'},
   'chicken thigh':         {kcal:36,  pro:4.8,fat:1.8, carb:0,   unit:'oz'},
-  'ground turkey 93':      {kcal:38,  pro:5.3,fat:1.8, carb:0,   unit:'oz'},
+  'ground turkey 93':      {kcal:38,  pro:5.3,fat:1.8, carb:0,   unit:'oz',minAmt:8,pkg:{size:16,unit:'oz',drained:16}},
   'salmon':                {kcal:52,  pro:5.7,fat:3.1, carb:0,   unit:'oz'},
   'halibut':               {kcal:26,  pro:5.3,fat:0.4, carb:0,   unit:'oz'},
   'filet mignon':          {kcal:57,  pro:6.6,fat:3.2, carb:0,   unit:'oz'},
   'shrimp':                {kcal:24,  pro:5.7,fat:0.3, carb:0,   unit:'oz'},
   'canned tuna':{kcal:27.5,pro:6.5,fat:0.25,carb:0,unit:'oz',brand:'Starkist',altUnits:{can:4,g:113},pkg:{size:5,unit:'oz',drained:4}},
-  'tofu firm':             {kcal:20,  pro:2.2,fat:1.1, carb:0.5, unit:'oz'},
-  'silken tofu':           {kcal:15,  pro:1.7,fat:0.7, carb:0.3, unit:'oz', brand:'Nature\'s Tofu', altUnits:{g:85}},
+  'tofu firm':             {kcal:20,  pro:2.2,fat:1.1, carb:0.5, unit:'oz',minAmt:7,pkg:{size:14,unit:'oz',drained:14}},
+  'silken tofu':           {kcal:15,  pro:1.7,fat:0.7, carb:0.3, unit:'oz', brand:'Nature\'s Tofu', altUnits:{g:85},minAmt:3.5,pkg:{size:14,unit:'oz',drained:14}},
   // Dairy & alt
   'greek yogurt 0%':       {kcal:120, pro:24, fat:0,   carb:7,   unit:'cup', brand:'Fage', altUnits:{g:227}, minAmt:0.5},
   'cashew milk (sweetened)':{kcal:130, pro:4,  fat:10,  carb:8,   unit:'cup', brand:'Elmhurst', altUnits:{floz:8,ml:240}},
@@ -377,9 +377,9 @@ var NUTRI_DB = {
   'sweet potato':          {kcal:114, pro:2.1,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1.25,label:'large sweet potato'}},
   'yukon potato':          {kcal:118, pro:2.5,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1,label:'medium potato'}},
   // Beans & legumes (cooked/canned values)
-  'black beans canned':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'canned, drained',pkg:{size:15.5,unit:'oz',drained:1.75}},
+  'black beans canned':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'canned, drained',minAmt:0.5,pkg:{size:15.5,unit:'oz',drained:1.75}},
   'black beans dried':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)'},
-  'cannellini beans canned':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',brand:'Goya',altUnits:{g:244},pkg:{size:15.5,unit:'oz',drained:1.75}},
+  'cannellini beans canned':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',brand:'Goya',altUnits:{g:244},minAmt:0.5,pkg:{size:15.5,unit:'oz',drained:1.75}},
   'cannellini beans dried':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)'},
   'lentils cooked':               {kcal:230, pro:18, fat:0.8, carb:40,  unit:'cup', note:'cooked', altUnits:{g:198}},
   'lentils dried':{kcal:230,pro:18,fat:0.8,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked'},
@@ -451,7 +451,7 @@ var NUTRI_DB = {
   'lemon':                 {kcal:12,  pro:0.5,fat:0.1, carb:4,   unit:'each'},
   'ginger':                {kcal:6,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', halfSnap:true},
   'lemongrass':            {kcal:5,   pro:0,  fat:0,   carb:1.2, unit:'tbsp'},
-  'ground chicken':        {kcal:35,  pro:5.8,fat:1.3, carb:0,   unit:'oz'},
+  'ground chicken':        {kcal:35,  pro:5.8,fat:1.3, carb:0,   unit:'oz',minAmt:8,pkg:{size:16,unit:'oz',drained:16}},
   'oyster sauce':          {kcal:9,   pro:0.3,fat:0,   carb:2,   unit:'tbsp'},
   'dark soy sauce':        {kcal:10,  pro:0.9,fat:0,   carb:1.5, unit:'tbsp'},
   'tahini':                {kcal:89,  pro:2.6,fat:8,   carb:3,   unit:'tbsp'},
@@ -467,7 +467,7 @@ var NUTRI_DB = {
   'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz'}},
   'triscuit':              {kcal:20,  pro:0.4,fat:0.7, carb:3.3, unit:'each'},
   // Milks
-  'coconut milk':{kcal:420,pro:1,fat:14,carb:2,unit:'cup',brand:'Chaokoh',pkg:{size:13.5,unit:'oz',cups:1.7}},
+  'coconut milk':{kcal:420,pro:1,fat:14,carb:2,unit:'cup',brand:'Chaokoh',minAmt:0.25,pkg:{size:13.5,unit:'oz',cups:1.7}},
   'coconut water':         {kcal:50,  pro:0,  fat:0,   carb:12,  unit:'cup', brand:'H2C'},
   'oat milk':              {kcal:100, pro:3,  fat:2,   carb:17,  unit:'cup', brand:'Elmhurst'},
   '1% milk':               {kcal:110, pro:8,  fat:2.5, carb:13,  unit:'cup', brand:'Horizon Organic'},
@@ -825,44 +825,7 @@ function adjustIngredients(ingredients, targetDelta, slot) {
     });
   } while (Math.abs(remaining) > 25 && Math.abs(remaining) < Math.abs(prevRemaining) - 5);
 
-  // Package-aware nudge: for ingredients with pkg data, nudge amounts ±25% to reduce waste
-  ingredients.forEach(function(ing, idx) {
-    if (!ing.scalable) return;
-    const db = NUTRI_DB[ing.dbKey];
-    if (!db || !db.pkg) return;
-    const currentAmt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
-    if (currentAmt <= 0) return;
-    const perPkg = (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
-    if (perPkg <= 0) return;
-    // Try nudging up and down within ±25%
-    const maxNudge = currentAmt * 0.25;
-    let bestAmt = currentAmt;
-    let bestWaste = (Math.ceil(currentAmt / perPkg) * perPkg) - currentAmt;
-    for (let dir = -1; dir <= 1; dir += 2) {
-      for (let step = 1; step <= 4; step++) {
-        let tryAmt = currentAmt + dir * (maxNudge * step / 4);
-        if (tryAmt <= 0) continue;
-        // Snap to unit increments
-        if (db.unit === 'oz' || db.unit === 'each' || db.unit === 'slice') tryAmt = Math.round(tryAmt);
-        else if (db.halfSnap) tryAmt = Math.round(tryAmt * 2) / 2;
-        else tryAmt = Math.round(tryAmt * 4) / 4;
-        if (tryAmt <= 0) continue;
-        const tryWaste = (Math.ceil(tryAmt / perPkg) * perPkg) - tryAmt;
-        if (tryWaste < bestWaste - 0.01) {
-          bestWaste = tryWaste;
-          bestAmt = tryAmt;
-        }
-      }
-    }
-    if (bestAmt !== currentAmt) {
-      const calDelta = (bestAmt - currentAmt) * db.kcal;
-      // Only accept if the calorie impact is modest (max ~30 kcal per ingredient)
-      if (Math.abs(calDelta) <= 30) {
-        adjustments[idx] = bestAmt;
-        remaining -= calDelta;
-      }
-    }
-  });
+  // Package-aware nudge removed from adjustIngredients — handled at trip level in buildShoppingList
 
   // Second pass: if cutting and gap is still large, remove entire ingredients
   if (targetDelta < 0 && remaining < -25) {
@@ -1047,7 +1010,7 @@ const MEALS=[
   steps:['Press tofu and crumble. Heat avocado oil. Sauté carrots 2 min.','Add crumbled tofu. Cook 4–5 min until golden.','Add spinach, soy sauce. Stir until wilted. Serve with toast.'],
   him:{fv:'1.5c veg'},her:{fv:'1c veg'},
   ingredients:[
-    I('tofu firm',8,'protein'),
+    I('tofu firm',7,'protein'),
     I('baby spinach',1.5,'veg'),
     I('carrots',0.5,'veg'),
     I('whole wheat toast',2,'carb'),
@@ -1261,7 +1224,7 @@ const MEALS=[
   steps:['Bring broth to a simmer in a medium pot over medium heat.','Add sliced carrots and diced zucchini. Cook 3 min until beginning to soften.','Add sliced tofu, spinach, and soy sauce. Simmer 2 min until spinach is wilted and tofu is heated through.','Add cooked rice vermicelli. Stir gently to combine.','Drizzle with sesame oil. Serve in a bowl with a squeeze of lime and fresh herbs.'],
   him:{fv:'2c veg'},her:{fv:'1c veg'},
   ingredients:[
-    I('tofu firm',6,'protein'),
+    I('tofu firm',7,'protein'),
     I('rice vermicelli cooked',1.25,'carb'),
     I('baby spinach',1.5,'veg'),
     I('carrots',0.5,'veg'),
@@ -1393,10 +1356,10 @@ const MEALS=[
   steps:['Preheat oven to 400°F. Mix turkey, egg white, oat flour, Italian seasoning. Roll into balls. Bake 18–20 min.','Cook pasta. Add zucchini noodles to boiling water for last 2 min. Drain.','Heat marinara. Toss meatballs. Sauté kale. Plate.'],
   him:{fv:'2c veg'},her:{fv:'2c veg'},
   ingredients:[
-    I('ground turkey 93',6,'protein'),
+    I('ground turkey 93',8,'protein'),
     I('whole wheat pasta cooked',0.75,'carb'),
     I('zucchini',1.5,'veg'),
-    I('marinara',0.5,'condiment'),
+    I('marinara',0.75,'condiment'),
     I('kale',1,'veg'),
     I('egg white',1,'protein',false),
     I('italian seasoning',0.5,'fixed',false),
@@ -1470,7 +1433,7 @@ const MEALS=[
   ingredients:[
     I('water',1,'liquid'),
     I('white miso',1,'protein'),
-    I('silken tofu',2,'protein'),
+    I('silken tofu',3.5,'protein'),
     I('sesame seeds',1,'fat')
   ]},
 
@@ -1480,7 +1443,7 @@ const MEALS=[
   ingredients:[
     I('water',1,'liquid'),
     I('white miso',1,'protein'),
-    I('silken tofu',3,'protein'),
+    I('silken tofu',3.5,'protein'),
     I('sesame seeds',1,'fat')
   ]},
 
@@ -1529,7 +1492,7 @@ const MEALS=[
   steps:['Heat avocado oil in a large skillet over medium heat. Add shallots and cook 5 min until softened.','Add ginger and garlic, cook 2 min until fragrant.','Add bell peppers and sauté 2–3 min.','Add ground turkey and cook 7–8 min until no longer pink.','Add red curry paste and coconut milk. Stir. Add zucchini and simmer 5 min until tender.','Stir in spinach until wilted. Serve over jasmine rice. Garnish with cilantro, lime, red pepper flakes.'],
   him:{fv:'2c veg'},her:{fv:'2c veg'},
   ingredients:[
-    I('ground turkey 93',6,'protein'),
+    I('ground turkey 93',8,'protein'),
     I('zucchini',1,'veg'),
     I('bell pepper',0.5,'veg'),
     I('shallot',1,'veg'),
@@ -1566,8 +1529,8 @@ const MEALS=[
   steps:['Make sauce: blend silken tofu, tahini, soy sauce, miso, gochugaru, and rice vinegar until smooth. Set aside.','Cook chicken mince in a hot pan until coloured. Deglaze with mirin, add soy sauce, oyster sauce, ginger, garlic. Cook a few more min.','Cook udon noodles per package.','Julienne spring onions and slice cucumber.','Plate: noodles on bottom, pour sauce over, chicken on one side, cucumber salad on the other. Top with sesame seeds.'],
   him:{fv:'0.5c veg'},her:{fv:'0.5c veg'},
   ingredients:[
-    I('ground chicken',6,'protein'),
-    I('silken tofu',6,'protein'),
+    I('ground chicken',8,'protein'),
+    I('silken tofu',7,'protein'),
     I('udon noodles cooked',1,'carb'),
     I('garlic',2,'fixed',false),
     I('ginger',1,'condiment',false),
@@ -1992,6 +1955,7 @@ function buildShoppingList(trip,who){
   const days=trip==='custom'?DAYS:(TRIP_DAYS_STATIC[trip]||[]);
   const persons=who==='both'?['him','her']:who==='him'?['him']:['her'];
   const items={};
+
   persons.forEach(function(p){
     days.forEach(function(d){
       SLOTS.forEach(function(s){
@@ -2002,7 +1966,7 @@ function buildShoppingList(trip,who){
         // Skip eat-out and skipped meals
         if(SKIPPED[p+'_'+d+'_'+s])return;
         if(EAT_OUT[p+'_'+d+'_'+s])return;
-        
+
         const id=getMealId(p,d,s);
         if(!id)return;
         const m=getMeal(id);
@@ -2019,7 +1983,7 @@ function buildShoppingList(trip,who){
 
         // Get calorie adjustment for this slot
         const slotAdj = getSlotAdjustment(p,d,s);
-        
+
         // Use ingredients as source of truth for shopping when available
         if(port.ingredients && port.ingredients.length && port.ingredients[0].dbKey!==undefined){
           const ingr = applyOverrides(port,p,d,s);
@@ -2087,18 +2051,72 @@ function buildShoppingList(trip,who){
       } else {
         item.bothQty='';
       }
-      // Package waste calculation
+      // Package optimization: snap totals to clean package boundaries
+      // For packaged ingredients, find the nearest package multiple and adjust
+      // the total to hit it exactly — don't let per-serving snaps create waste
       var db=NUTRI_DB[item.dbKey];
       if(db&&db.pkg){
         var totalNum=(item.hisSum?item.hisSum.num:0)+(item.herSum?item.herSum.num:0);
         var unit=(item.hisSum||item.herSum||{}).unit;
         var perPkg=(db.pkg.drained&&(unit==='cup'||unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
         if(perPkg>0&&totalNum>0){
+          // Find the nearest clean package total (round down or up)
+          var roundDown=Math.floor(totalNum/perPkg)*perPkg;
+          var roundUp=Math.ceil(totalNum/perPkg)*perPkg;
+          // Per-ingredient scaling limits: some ingredients tolerate wider ranges
+          var maxDown=0.25, maxUp=0.25; // default ±25%
+          var flexIngr=['black beans canned','cannellini beans canned','marinara','chickpeas roasted'];
+          if(flexIngr.indexOf(item.dbKey)>=0){maxDown=0;maxUp=1.0;} // beans/marinara: no reduce, +100% up
+          if(item.dbKey==='coconut milk'){maxDown=0.50;maxUp=0.75;} // coconut: -50% down, +75% up (1.0 → 1.7 is +70%)
+          var bestTotal=totalNum;
+          var bestWaste=(Math.ceil(totalNum/perPkg)*perPkg)-totalNum;
+          // Try rounding down (buy fewer packages, use a bit less)
+          if(roundDown>0&&maxDown>0){
+            var downChange=Math.abs(totalNum-roundDown);
+            if(downChange>0.01&&downChange<=totalNum*maxDown){
+              var downWaste=0;
+              if(downWaste<bestWaste){bestTotal=roundDown;bestWaste=downWaste;}
+            }
+          }
+          // Try rounding up (buy same packages, use a bit more to fill them)
+          if(roundUp>totalNum){
+            var upChange=roundUp-totalNum;
+            if(upChange>0.01&&upChange<=totalNum*maxUp){
+              var upWaste=0;
+              if(upWaste<bestWaste){bestTotal=roundUp;bestWaste=upWaste;}
+            }
+          }
+
+          if(Math.abs(bestTotal-totalNum)>0.01){
+            // For packaged ingredients in shared meals, split evenly (same pot = same portions)
+            // Otherwise scale proportionally
+            var hasBoth=item.hisSum&&item.herSum;
+            if(hasBoth){
+              // Equal split — both people get the same amount from the shared cook
+              var half=bestTotal/2;
+              item.hisSum.num=half;
+              item.herSum.num=half;
+            } else {
+              var scale=bestTotal/totalNum;
+              if(item.hisSum)item.hisSum.num=item.hisSum.num*scale;
+              if(item.herSum)item.herSum.num=item.herSum.num*scale;
+            }
+            totalNum=bestTotal;
+            // Recompute display quantities — no per-serving snapping here,
+            // the total is what matters for shopping
+            item.hisQty=item.hisSum?fmtQty(item.hisSum):item.hisRaw;
+            item.herQty=item.herSum?fmtQty(item.herSum):item.herRaw;
+            if(item.hisSum&&item.herSum&&item.hisSum.unit===item.herSum.unit){
+              item.bothQty=shopQtyWithCount(item.dbKey,{num:item.hisSum.num+item.herSum.num,unit:item.hisSum.unit});
+            } else if(item.hisSum){item.bothQty=shopQtyWithCount(item.dbKey,item.hisSum);}
+            else if(item.herSum){item.bothQty=shopQtyWithCount(item.dbKey,item.herSum);}
+          }
+          // Calculate waste after optimization
           var pkgsNeeded=Math.ceil(totalNum/perPkg);
           var totalFromPkgs=pkgsNeeded*perPkg;
           var wasteAmt=totalFromPkgs-totalNum;
           var wastePct=(wasteAmt/totalFromPkgs)*100;
-          if(wastePct>15){
+          if(wasteAmt>0.01){
             var wasteInPkgs=wasteAmt/perPkg;
             var pkgType=db.pkg.type||'can';
             item.wasteLabel=fmtFrac(wasteInPkgs)+' '+pkgType+' unused';
@@ -2395,13 +2413,7 @@ function buildShopItemHtml(item, ck, checked){
   if(shopPerson==='him'){qtyText=item.hisQty&&item.hisQty!=='—'?item.hisQty:'';}
   else if(shopPerson==='her'){qtyText=item.herQty&&item.herQty!=='—'?item.herQty:'';}
   else {
-    var hv=item.hisQty&&item.hisQty!=='—'?item.hisQty:null;
-    var rv=item.herQty&&item.herQty!=='—'?item.herQty:null;
-    var parts=[];
-    if(hv)parts.push('<span class="qty-his">'+hv+'</span>');
-    if(rv)parts.push('<span class="qty-her">'+rv+'</span>');
-    if(item.bothQty)parts.push('<span class="qty-tot">'+item.bothQty+'</span>');
-    qtyText=parts.join('<span class="qty-sep"> / </span>');
+    qtyText=item.bothQty?'<span class="qty-tot">'+item.bothQty+'</span>':'';
   }
   var ckEsc=ck.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   return '<div class="shop-item'+(checked?' checked':'')+'" id="'+sid+'" onclick="toggleCheck(\''+ckEsc+'\')">'
@@ -3030,18 +3042,70 @@ function randomizeDay(){
 function randomizeWeek(){
   const days = DAYS;
   const persons = person === 'shared' ? ['him','her'] : [person];
+  const bothPersons = persons.length > 1 || person === 'shared';
+  const locked = {}; // key: 'person_day_slot', true if locked
 
-  // Track which day+slot combos have been locked by leftover pairing
-  const locked = {}; // key: 'person_day_slot', true if set by leftover pairing
+  if(!weekData[activeWeek].ts) weekData[activeWeek].ts={};
+  const now = Date.now();
 
-  persons.forEach(function(p){
-    const other = p === 'him' ? 'her' : 'him';
+  // ── PHASE 1: Anchor package meals as shared + leftover pairs ─
+  // Random pick for each day/slot. When a pkg meal comes up, lock it as:
+  //   - Shared (both people eat the same meal on cook day)
+  //   - Leftover-paired (each person eats it again the next day independently)
+  // Cap: max 3 pkg meals per shopping trip to maintain variety.
+  const pkgSlots = ['breakfast','lunch','dinner'];
+  const tripCaps = {sun:0, wed:0}; // count per trip
+  const PKG_CAP_PER_TRIP = 3;
+
+  days.forEach(function(d, di) {
+    // Determine which trip this day belongs to
+    const trip = TRIP_DAYS_STATIC.sun.indexOf(d) >= 0 ? 'sun' : 'wed';
+    if (tripCaps[trip] >= PKG_CAP_PER_TRIP) return; // already at cap for this trip
+    if (di + 1 >= days.length) return; // need next day for leftover
+
+    pkgSlots.forEach(function(s) {
+      if (tripCaps[trip] >= PKG_CAP_PER_TRIP) return;
+      // Random pick from ALL meals for this slot
+      let candidates = getMealsForSlot(s).filter(function(m){ return m[persons[0]]; });
+      if (!candidates.length) return;
+      const pick = randomPick(candidates);
+      if (!mealUsesPkg(pick.id)) return; // not a pkg meal — skip, no anchor
+      const m = getMeal(pick.id);
+      if (!m || m.noLeftover) return;
+
+      // Check no conflicts with already-locked slots
+      const nextDay = days[di + 1];
+      let conflict = false;
+      persons.forEach(function(p) {
+        if (locked[p + '_' + d + '_' + s] || locked[p + '_' + nextDay + '_' + s]) conflict = true;
+      });
+      if (conflict) return;
+
+      // Lock: cook day is SHARED (both people), leftover day is per-person
+      persons.forEach(function(p) {
+        if (!m[p]) return;
+        // Cook day — shared
+        const cookKey = p + '_' + d + '_' + s;
+        SEL[cookKey] = pick.id;
+        weekData[activeWeek].ts[cookKey] = now;
+        clearOverrides(p, d, s);
+        locked[cookKey] = true;
+        // Leftover day — per person (they eat it independently)
+        const loKey = p + '_' + nextDay + '_' + s;
+        SEL[loKey] = pick.id;
+        weekData[activeWeek].ts[loKey] = now;
+        clearOverrides(p, nextDay, s);
+        locked[loKey] = true;
+      });
+      tripCaps[trip]++;
+    });
+  });
+
+  // ── PHASE 2: Randomize remaining slots (no pkg meals) ──────
+  persons.forEach(function(p) {
     const target = CAL_BASE[p];
 
-    days.forEach(function(d, di){
-      // Skip slots that were already set as leftovers from a previous day
-      const dayLocked = SLOTS.some(function(s){ return locked[p+'_'+d+'_'+s]; });
-
+    days.forEach(function(d) {
       let bestSel = null;
       let bestScore = Infinity;
       const attempts = 60;
@@ -3051,10 +3115,10 @@ function randomizeWeek(){
         const trySel = {};
         let totalKcal = 0;
 
-        SLOTS.forEach(function(s){
-          // If this slot was locked by leftover pairing, use the locked meal
-          if (locked[p+'_'+d+'_'+s]) {
-            const lockedId = SEL[p+'_'+d+'_'+s];
+        SLOTS.forEach(function(s) {
+          // Locked slots — use the anchored meal
+          if (locked[p + '_' + d + '_' + s]) {
+            const lockedId = SEL[p + '_' + d + '_' + s];
             if (lockedId) {
               trySel[s] = lockedId;
               used.push(lockedId);
@@ -3063,8 +3127,10 @@ function randomizeWeek(){
             }
             return;
           }
-          let candidates = getMealsForSlot(s).filter(function(m){return m[p] && used.indexOf(m.id) < 0;});
-          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){return m[p];});
+          // Non-pkg meals only — pkg meals come through Phase 1 anchors only
+          let candidates = getMealsForSlot(s).filter(function(m){ return m[p] && used.indexOf(m.id) < 0 && !mealUsesPkg(m.id); });
+          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return m[p] && !mealUsesPkg(m.id); });
+          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return m[p]; }); // fallback
           if (!candidates.length) return;
           const pick = randomPick(candidates);
           trySel[s] = pick.id;
@@ -3074,61 +3140,79 @@ function randomizeWeek(){
         });
 
         const diff = Math.abs(totalKcal - target);
-        const wastePenalty = calcMealSetWaste(trySel, p);
-        const score = diff + wastePenalty * 0.5;
-        if (score < bestScore) {
-          bestScore = score;
+        if (diff < bestScore) {
+          bestScore = diff;
           bestSel = trySel;
-          if (diff <= 100 && wastePenalty < 20) break;
+          if (diff <= 100) break;
         }
       }
 
       if (bestSel) {
-        if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
-        const now=Date.now();
-        SLOTS.forEach(function(s){
-          clearOverrides(p,d,s);
-          const selKey=p+'_'+d+'_'+s;
-          if (bestSel[s]){SEL[selKey]=bestSel[s];weekData[activeWeek].ts[selKey]=now;}
+        SLOTS.forEach(function(s) {
+          if (locked[p + '_' + d + '_' + s]) return;
+          clearOverrides(p, d, s);
+          const selKey = p + '_' + d + '_' + s;
+          if (bestSel[s]) { SEL[selKey] = bestSel[s]; weekData[activeWeek].ts[selKey] = now; }
           else delete SEL[selKey];
         });
-
-        // Leftover pairing: if a meal uses packaged ingredients and there's a next day,
-        // schedule the same meal on the next day to trigger leftover detection
-        const leftoverSlots = ['breakfast','lunch','dinner'];
-        leftoverSlots.forEach(function(s){
-          if (!bestSel[s] || !mealUsesPkg(bestSel[s])) return;
-          if (locked[p+'_'+d+'_'+s]) return; // already a leftover itself
-          const nextDi = di + 1;
-          if (nextDi >= days.length) return; // no next day
-          const nextDay = days[nextDi];
-          const m = getMeal(bestSel[s]);
-          if (!m || m.noLeftover) return;
-          // Set next day same slot to same meal (creating a leftover pair)
-          const nextKey = p+'_'+nextDay+'_'+s;
-          SEL[nextKey] = bestSel[s];
-          weekData[activeWeek].ts[nextKey] = now;
-          clearOverrides(p, nextDay, s);
-          locked[nextKey] = true;
-        });
-
-        // Auto-share: for package-heavy meals, set the other person to the same meal
-        if (persons.length > 1 || person === 'shared') {
-          SLOTS.forEach(function(s){
-            if (!bestSel[s] || !mealUsesPkg(bestSel[s])) return;
-            const m = getMeal(bestSel[s]);
-            if (!m || !m[other]) return;
-            const otherKey = other + '_' + d + '_' + s;
-            SEL[otherKey] = bestSel[s];
-            weekData[activeWeek].ts[otherKey] = Date.now();
-            clearOverrides(other, d, s);
-          });
-        }
       }
     });
   });
+
   // Trip-level waste optimization pass
   optimizeTripWaste();
+
+  // ── PHASE 3: Force-share any unshared package meals (runs last) ──
+  if (bothPersons) {
+    days.forEach(function(d) {
+      ['breakfast','lunch','dinner'].forEach(function(s) {
+        const himId = getMealId('him', d, s);
+        const herId = getMealId('her', d, s);
+        if (!himId || himId === herId) return;
+        const himPkg = mealUsesPkg(himId);
+        const herPkg = herId && mealUsesPkg(herId);
+        if (!himPkg && !herPkg) return;
+        const shareId = himPkg ? himId : herId;
+        const m = getMeal(shareId);
+        if (m && m.him && m.her) {
+          SEL['him_' + d + '_' + s] = shareId;
+          SEL['her_' + d + '_' + s] = shareId;
+          weekData[activeWeek].ts['him_' + d + '_' + s] = now;
+          weekData[activeWeek].ts['her_' + d + '_' + s] = now;
+          clearOverrides('him', d, s);
+          clearOverrides('her', d, s);
+        }
+      });
+    });
+  }
+
+  // ── PHASE 4: Replace unpaired pkg meals with non-pkg alternatives ──
+  // If a pkg meal is shared but not leftover-paired (single cook, no consecutive day),
+  // the package won't be fully used. Replace with a non-pkg meal.
+  invalidateLeftoverCache();
+  const loCheck = computeLeftovers();
+  if (bothPersons) {
+    days.forEach(function(d) {
+      ['breakfast','lunch','dinner'].forEach(function(s) {
+        const himId = getMealId('him', d, s);
+        if (!himId || !mealUsesPkg(himId)) return;
+        if (himId !== getMealId('her', d, s)) return; // not shared
+        const loInfo = loCheck['him_' + d + '_' + s];
+        const isPaired = loInfo && !loInfo.isLeftover && loInfo.servings > 1;
+        const isLeftover = loInfo && loInfo.isLeftover;
+        if (isPaired || isLeftover) return; // has leftover coverage
+        // Unpaired pkg meal — swap for non-pkg
+        let candidates = getMealsForSlot(s).filter(function(m){ return m.him && m.her && !mealUsesPkg(m.id) && m.id !== himId; });
+        if (!candidates.length) return;
+        const pick = randomPick(candidates);
+        SEL['him_' + d + '_' + s] = pick.id;
+        SEL['her_' + d + '_' + s] = pick.id;
+        weekData[activeWeek].ts['him_' + d + '_' + s] = now;
+        weekData[activeWeek].ts['her_' + d + '_' + s] = now;
+      });
+    });
+  }
+
   invalidateLeftoverCache();renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
 }
 
