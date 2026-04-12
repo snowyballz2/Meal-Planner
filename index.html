@@ -2809,7 +2809,7 @@ function renderMeals(){
   }
 
   // Normal him/her view
-  html+='<div class="reset-bar"><button class="reset-btn" onclick="randomizeDay()">🎲 Randomize today</button><button class="reset-btn secondary" onclick="randomizeWeek()">🔀 Randomize week</button></div>';
+  html+='<div class="reset-bar"><button class="reset-btn" onclick="randomizeWeek()">🔀 Randomize week</button></div>';
   const other=person==='him'?'her':'him';
 
   SLOTS.forEach(function(s){
@@ -2973,71 +2973,7 @@ function calcMealSetWaste(selections, p) {
 }
 
 function randomPick(arr){return arr[Math.floor(Math.random()*arr.length)];}
-function randomizeDay(){
-  const p = person === 'shared' ? 'him' : person;
-  const other = p === 'him' ? 'her' : 'him';
-  const target = CAL_BASE[p];
-  let bestSel = null;
-  let bestScore = Infinity;
-  const attempts = 80;
 
-  for (let a = 0; a < attempts; a++) {
-    const used = [];
-    const trySel = {};
-    let totalKcal = 0;
-
-    SLOTS.forEach(function(s){
-      let candidates = getMealsForSlot(s).filter(function(m){return m[p] && used.indexOf(m.id) < 0;});
-      if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){return m[p];});
-      if (!candidates.length) return;
-      const pick = randomPick(candidates);
-      trySel[s] = pick.id;
-      used.push(pick.id);
-      const port = pick[p];
-      if (port) totalKcal += getPortMacros(port).kcal;
-    });
-
-    const diff = Math.abs(totalKcal - target);
-    const wastePenalty = calcMealSetWaste(trySel, p);
-    // Shared meal bonus: reward picks that match the other person's existing meals
-    let sharedBonus = 0;
-    Object.keys(trySel).forEach(function(s){
-      const otherKey = other + '_' + day + '_' + s;
-      if (SEL[otherKey] === trySel[s]) sharedBonus += 30;
-    });
-    const score = diff + wastePenalty * 0.5 - sharedBonus;
-    if (score < bestScore) {
-      bestScore = score;
-      bestSel = trySel;
-      if (diff <= 100 && wastePenalty < 20) break;
-    }
-  }
-
-  if (bestSel) {
-    if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
-    const now=Date.now();
-    SLOTS.forEach(function(s){
-      clearOverrides(person,day,s);
-      const selKey=person+'_'+day+'_'+s;
-      if (bestSel[s]){SEL[selKey]=bestSel[s];weekData[activeWeek].ts[selKey]=now;}
-      else delete SEL[selKey];
-    });
-    // Auto-share: if a selected meal uses packaged ingredients and the other person
-    // can eat it, set both people to the same meal for better package utilization
-    if (person !== 'shared') {
-      SLOTS.forEach(function(s){
-        if (!bestSel[s] || !mealUsesPkg(bestSel[s])) return;
-        const m = getMeal(bestSel[s]);
-        if (!m || !m[other]) return; // other person can't eat this meal
-        const otherKey = other + '_' + day + '_' + s;
-        SEL[otherKey] = bestSel[s];
-        weekData[activeWeek].ts[otherKey] = now;
-        clearOverrides(other, day, s);
-      });
-    }
-  }
-  invalidateLeftoverCache();renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
-}
 
 function randomizeWeek(){
   const days = DAYS;
