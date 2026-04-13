@@ -888,14 +888,15 @@ function computeAdjustedMacros(ingredients, targetDelta, slot) {
 // ══════════════════════════════════════════════════════════════
 
 const MEALS=[
- {id:'his_shake',label:'Protein, creatine & banana berry shake',slots:['shake'],
-  steps:['Add water to blender first.','Add banana, berries, protein, creatine, cinnamon.','Blend 30–45 sec until smooth.','Drink immediately before workout.'],
+ {id:'his_shake',label:'Protein, creatine & banana berry oat shake',slots:['shake'],
+  steps:['Add water to blender first.','Add banana, berries, oats, protein, creatine, cinnamon.','Blend 30–45 sec until smooth.','Drink immediately before workout.'],
   him:{fv:'1.5c fruit'},her:null,
   ingredients:[
     I('protein powder',1,'protein',false),
     I('creatine',1,'fixed',false),
     I('banana',1,'fruit',false),
     I('mixed berries',0.25,'fruit',false),
+    I('oats tbsp',1,'carb',false),
     I('water',1.25,'liquid'),
     I('cinnamon',0.5,'fixed',false)
   ]},
@@ -1596,7 +1597,7 @@ const SLOTS=['shake','breakfast','lunch','snack','dinner','late_snack'];
 const ADJ_SLOTS=['breakfast','lunch','snack','dinner'];
 const SLOT_LABEL={shake:'Shake',breakfast:'Breakfast',lunch:'Lunch',snack:'Snack',dinner:'Dinner',late_snack:'Late Night Snack'};
 // Calorie budget: percentage of (target - shake) for each slot
-const SLOT_BUDGET={breakfast:0.25,lunch:0.325,dinner:0.325,snack:0.10};
+const SLOT_BUDGET={breakfast:0.20,lunch:0.35,dinner:0.35,snack:0.10};
 const TRIP_DAYS_STATIC={sun:['Monday','Tuesday','Wednesday'],wed:['Thursday','Friday','Saturday','Sunday'],custom:[]};
 var CUSTOM_SHOP_SEL={}; // key: 'person_day_slot', true if selected for custom shop
 var CUSTOM_RECIPE_SEL={}; // key: 'mealId_person', true if selected for custom shop by recipe
@@ -1604,6 +1605,7 @@ var csGridOpen=false, csRecipesOpen=false;
 
 var SEL={},CHECKS={},openCards={};
 var OVERRIDES={}; // key: 'person_day_slot', value: [{idx, dbKey, amt},...] - per-ingredient overrides
+var MANUAL_SET={}; // key: 'person_day_slot', true if user manually touched this slot
 var SKIPPED={}; // key: 'person_day_slot', true if skipped — calories shift to dinner
 var EAT_OUT={}; // key: 'person_day_slot', value: {name,restaurant,kcal,pro,fat,carb}
 var LATE_SNACK={}; // key: 'person_day', value: {name,kcal,pro,fat,carb}
@@ -2642,7 +2644,7 @@ function renderSharedView(day, scrollY, mealEl){
 }
 
 // 3a. Eat-out form HTML
-function buildEatOutFormHtml(person, day, s, k, eo, topRowPills){
+function buildEatOutFormHtml(person, day, s, k, eo, topRowPills, setPill){
   // Build saved meals dropdown
   const savedOpts=EAT_OUT_DB.length?'<option value="">— Load from history —</option>'+EAT_OUT_DB.map(function(e,i){return'<option value="'+i+'">'+e.name+(e.restaurant?' ('+e.restaurant+')':'')+' · '+e.kcal+' kcal</option>';}).join('')
     +'<option disabled>──────────</option>'+EAT_OUT_DB.map(function(e,i){return'<option value="del_'+i+'">✕ Delete: '+e.name+'</option>';}).join('')
@@ -2673,7 +2675,7 @@ function buildEatOutFormHtml(person, day, s, k, eo, topRowPills){
   }
 
   return '<div class="mc slot-'+s+'" id="mc_'+k+'">'
-    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+'</div>'+topRowPills+'</div></div>'
+    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+setPill+'</div>'+topRowPills+'</div></div>'
     +'<div class="eo-form">'
     +savedDropdown
     +'<div class="eo-row"><div style="flex:1"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:2px">Meal Name</div><input id="eo_'+k+'_name" class="eo-input" placeholder="e.g. Chicken Burrito" value="'+(eo.name||'')+'" onchange="setEatOutField(\''+person+'\',\''+day+'\',\''+s+'\',\'name\',this.value)"></div>'
@@ -2697,6 +2699,8 @@ function buildMealCardHtml(s, person, day, other){
   const port=activeMeal[person];if(!port)return '';
   const k=person+'_'+day+'_'+s;
   const isOpen=openCards[k]||false;
+  const isManual=!!MANUAL_SET[k];
+  const setPill=isManual?'<span style="font-size:8px;font-weight:700;color:var(--shop);margin-left:5px;text-transform:uppercase;letter-spacing:.05em">Set</span>':'';
 
   const opts=(function(){
     const byProt={};
@@ -2857,11 +2861,11 @@ function buildMealCardHtml(s, person, day, other){
 
   if(isEatOut){
     const eo=EAT_OUT[eoKey];
-    return buildEatOutFormHtml(person, day, s, k, eo, topRowPills);
+    return buildEatOutFormHtml(person, day, s, k, eo, topRowPills, setPill);
   }
 
   return '<div class="mc slot-'+s+(isOpen?' open':'')+(isSkipped?' skipped':'')+'" id="mc_'+k+'">'
-    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+'</div>'+topRowPills+'</div>'
+    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+setPill+'</div>'+topRowPills+'</div>'
     +'<select class="meal-select" onchange="changeMeal(\''+s+'\',this.value)">'+opts+'</select></div>'
     +skipSummary
     +'<div class="mc-meta" onclick="toggleCard(\''+k+'\')"><div><div class="mc-macros">'+macroLine+'</div>'
@@ -2927,7 +2931,10 @@ function renderMeals(){
     html+='<div style="background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border);padding:10px 12px;margin-bottom:10px;box-shadow:var(--shadow)">';
     html+='<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="sharedSchedOpen=!sharedSchedOpen;renderMeals()">';
     html+='<div style="font-size:13px;font-weight:700;color:var(--text)">'+ssIcon+' Schedule Meals</div>';
-    html+='<div style="padding:5px 14px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--text);font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.02em" onclick="event.stopPropagation();randomizeWeek()">Randomize</div>';
+    html+='<div style="display:flex;gap:6px">'
+      +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();clearWeek()">Clear</div>'
+      +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--text);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();randomizeWeek()">Randomize</div>'
+      +'</div>';
     html+='</div>';
     if(sharedSchedOpen){
       // Grid header: Day + Breakfast + Lunch + Dinner
@@ -2998,7 +3005,7 @@ function setLateSnackField(p,d,field,val){
   if(field==='name')LATE_SNACK[k][field]=val;
   else{var n=Math.max(0,parseInt(val)||0);LATE_SNACK[k][field]=n;}
 }
-function toggleEatOut(p,d,s){var k=p+'_'+d+'_'+s;if(EAT_OUT[k]){delete EAT_OUT[k];}else{EAT_OUT[k]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};delete SKIPPED[k];}invalidateLeftoverCache();renderMeals();}
+function toggleEatOut(p,d,s){var k=p+'_'+d+'_'+s;if(EAT_OUT[k]){delete EAT_OUT[k];delete MANUAL_SET[k];}else{EAT_OUT[k]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};delete SKIPPED[k];MANUAL_SET[k]=true;}invalidateLeftoverCache();renderMeals();}
 function setEatOutField(p,d,s,field,val){
   var k=p+'_'+d+'_'+s;if(!EAT_OUT[k])return;
   if(field==='name'||field==='restaurant')EAT_OUT[k][field]=val;
@@ -3050,7 +3057,7 @@ function deleteEatOutEntry(idx){EAT_OUT_DB.splice(idx,1);saveEatOutDB();renderMe
 function changeMeal(slot,mealId){
   var selKey=person+'_'+day+'_'+slot;
   SEL[selKey]=mealId;
-  // Timestamp this change for sync merge
+  MANUAL_SET[selKey]=true;
   if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
   weekData[activeWeek].ts[selKey]=Date.now();
   clearOverrides(person,day,slot);invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
@@ -3089,14 +3096,17 @@ function onIngrAmt(p,d,s,idx,val){
   var amt=parseFloat(val);
   if(isNaN(amt)||amt<0)return;
   setOverride(p,d,s,idx,'amt',amt);
+  MANUAL_SET[p+'_'+d+'_'+s]=true;
   renderMeals();
 }
 function onIngrSwap(p,d,s,idx,newKey){
   setOverride(p,d,s,idx,'dbKey',newKey);
+  MANUAL_SET[p+'_'+d+'_'+s]=true;
   renderMeals();
 }
 function onIngrReset(p,d,s){
   clearOverrides(p,d,s);
+  delete MANUAL_SET[p+'_'+d+'_'+s];
   renderMeals();
 }
 // ── PACKAGE WASTE UTILITIES ─────────────────────────────────
@@ -3179,6 +3189,15 @@ function getRecentMealIds(dayIndex, days, p, lookback) {
   return recent;
 }
 
+function clearWeek(){
+  // Clear all manual overrides: skips, eat-outs, ingredient overrides, late snacks, manual set flags
+  Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
+  Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
+  Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
+  Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
+  Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+  invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();autoSaveWeek();
+}
 function randomizeWeek(){
   sharedSchedOpen=false; // close the schedule panel so the new meals are visible
   // Retry loop: keep randomizing until we get a zero-waste week (max 10 attempts)
@@ -3214,7 +3233,18 @@ function _randomizeWeekCore(){
   if(!weekData[activeWeek].ts) weekData[activeWeek].ts={};
   const now = Date.now();
 
-  // ── PRE-PHASE: Apply pre-planned skips from schedule ──
+  // ── PRE-PHASE: Lock eat-out slots (manual overrides), clear old skips ──
+  // Eat-outs are manual entries — don't randomize those slots
+  persons.forEach(function(p){
+    days.forEach(function(d){
+      SLOTS.forEach(function(s){
+        var k=p+'_'+d+'_'+s;
+        if(EAT_OUT[k]){locked[k]=true;}
+      });
+    });
+  });
+  // Clear all skips so previous randomizations don't leak
+  Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
   days.forEach(function(d){
     ['breakfast','lunch','dinner','shake','snack'].forEach(function(s){
       var state = SHARED_SCHEDULE[d+'_'+s];
@@ -3794,6 +3824,11 @@ function loadWeeks(){
       weekData['this']={sel:{},monday:currentMonday};
       weekData['next']={sel:{},monday:nextMonday()};
     }
+    // Clear manual overrides for the new week (skips, eat-outs, overrides, late snacks)
+    Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
+    Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
+    Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
+    Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
     // Save the rollover
     try{localStorage.setItem('mealPlannerWeekData',JSON.stringify(weekData));}catch(e){}
   }
