@@ -2942,7 +2942,7 @@ function renderMeals(){
       html+='<div style="display:grid;grid-template-columns:36px 1fr 1fr 1fr;gap:4px;margin-top:8px">';
       html+='<div></div>';
       ['breakfast','lunch','dinner'].forEach(function(ss){
-        html+='<div style="text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);padding:2px 0">'+SLOT_LABEL[ss]+'</div>';
+        html+='<div style="padding:2px 0"></div>';
       });
       // Day rows
       var slots3=['breakfast','lunch','dinner'];
@@ -2951,7 +2951,7 @@ function renderMeals(){
         var dayAllSkip=slots3.every(function(ss){return SHARED_SCHEDULE[dd+'_'+ss]==='skip-both';});
         var dayCol=dayAllShared?'#34D399':dayAllSkip?'#94A3B8':'var(--text)';
         var dde=dd.replace(/'/g,"\\'");
-        html+='<div style="font-size:11px;font-weight:700;color:'+dayCol+';display:flex;align-items:center;cursor:pointer" onclick="event.stopPropagation();schedTapDay(\''+dde+'\')">'+dd.slice(0,3)+'</div>';
+        html+='<div style="font-size:11px;font-weight:700;color:'+dayCol+';display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="event.stopPropagation();schedTapDay(\''+dde+'\')">'+dd.slice(0,3)+'</div>';
         ['breakfast','lunch','dinner'].forEach(function(ss){
           var state=SHARED_SCHEDULE[dd+'_'+ss]||'normal';
           var himSkip=(state==='skip-him'||state==='skip-both');
@@ -2972,17 +2972,18 @@ function renderMeals(){
           var rLabel=herShowSet?'Set':'Her';
           var midCol=(himShowSet||herShowSet||isShared||himSkip||herSkip)?((himShowSet||herShowSet)?prp+'.4)':(isShared)?grn+'.5)':gry+'.4)'):'transparent';
           var de=dd.replace(/'/g,"\\'");var se=ss.replace(/'/g,"\\'");
-          html+='<div style="display:flex;border-radius:6px;overflow:hidden;cursor:pointer;height:28px">'
+          html+='<div style="display:flex;border-radius:6px;overflow:hidden;cursor:pointer;height:28px;width:87px;margin:0 auto">'
             +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+lBg+';border:'+lBdr+';border-right:'+(lBg!==rBg?'1.5px solid '+midCol:'none')+';border-radius:6px 0 0 6px;font-size:9px;font-weight:700;color:'+lCol+';-webkit-user-select:none;user-select:none" onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'left\')">'+lLabel+'</div>'
             +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+rBg+';border:'+rBdr+';border-left:none;border-radius:0 6px 6px 0;font-size:9px;font-weight:700;color:'+rCol+';-webkit-user-select:none;user-select:none" onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'right\')">'+rLabel+'</div>'
             +'</div>';
         });
       });
       html+='</div>';
-      // Preset buttons — single row
-      html+='<div style="display:flex;gap:4px;margin-top:8px">';
-      [{id:'breakfasts',label:'Breakfast'},{id:'lunches',label:'Lunch'},{id:'dinners',label:'Dinner'},{id:'clear',label:'Clear'}].forEach(function(pr){
-        html+='<div style="flex:1;padding:4px 0;border-radius:12px;border:1.5px solid var(--border);font-size:9px;font-weight:600;color:var(--gray);cursor:pointer;text-align:center" onclick="event.stopPropagation();setSharedPreset(\''+pr.id+'\')">'+pr.label+'</div>';
+      // Preset row: same grid as the day rows so B/L/D align with columns
+      html+='<div style="display:grid;grid-template-columns:36px 1fr 1fr 1fr;gap:4px;margin-top:8px">';
+      html+='<div style="display:flex;align-items:center;justify-content:center"><div style="padding:3px 4px;border-radius:10px;border:1.5px solid var(--border);font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);cursor:pointer" onclick="event.stopPropagation();clearScheduleOnly()">Clear</div></div>';
+      [{id:'breakfasts',label:'Breakfast'},{id:'lunches',label:'Lunch'},{id:'dinners',label:'Dinner'}].forEach(function(pr){
+        html+='<div style="display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);cursor:pointer" onclick="event.stopPropagation();setSharedPreset(\''+pr.id+'\')">'+pr.label+'</div>';
       });
       html+='</div>';
     }
@@ -3196,6 +3197,16 @@ function getRecentMealIds(dayIndex, days, p, lookback) {
   return recent;
 }
 
+function clearScheduleOnly(){
+  // Clear schedule selections and non-manual skips, but preserve MANUAL_SET overrides
+  SHARED_SCHEDULE={};
+  saveSharedSchedule();
+  // Only clear skips that aren't manually set
+  Object.keys(SKIPPED).forEach(function(k){
+    if(!MANUAL_SET[k]) delete SKIPPED[k];
+  });
+  invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();
+}
 function setSchedule(){
   // Lock all current schedule selections as manual overrides
   // Skips and shares become "set" — can only be changed from meal card pills or Clear
