@@ -2700,7 +2700,7 @@ function buildMealCardHtml(s, person, day, other){
   const k=person+'_'+day+'_'+s;
   const isOpen=openCards[k]||false;
   const isManual=!!MANUAL_SET[k];
-  const setPill=isManual?'<span style="font-size:8px;font-weight:700;color:var(--shop);margin-left:5px;text-transform:uppercase;letter-spacing:.05em">Set</span>':'';
+  const setPill=isManual?'<span style="display:inline-flex;align-items:center;margin-left:5px;padding:1px 6px;border-radius:8px;background:rgba(245,158,11,.2);border:1px solid rgba(245,158,11,.4);font-size:8px;font-weight:700;color:#F59E0B;text-transform:uppercase;letter-spacing:.03em;vertical-align:middle">Set</span>':'';
 
   const opts=(function(){
     const byProt={};
@@ -2956,18 +2956,22 @@ function renderMeals(){
           var himSkip=(state==='skip-him'||state==='skip-both');
           var herSkip=(state==='skip-her'||state==='skip-both');
           var isShared=(state==='shared');
-          var grn='rgba(52,211,153,';var red='rgba(239,68,68,';
-          var lBg=isShared?grn+'.25)':himSkip?red+'.25)':'transparent';
-          var rBg=isShared?grn+'.25)':herSkip?red+'.25)':'transparent';
-          var lBdr=isShared?'1.5px solid '+grn+'.5)':himSkip?'1.5px solid '+red+'.5)':'1.5px solid var(--border)';
-          var rBdr=isShared?'1.5px solid '+grn+'.5)':herSkip?'1.5px solid '+red+'.5)':'1.5px solid var(--border)';
-          var lCol=isShared||himSkip?'#fff':'var(--gray)';
-          var rCol=isShared||herSkip?'#fff':'var(--gray)';
-          var midCol=(isShared||himSkip||herSkip)?((isShared)?grn+'.5)':red+'.5)'):'transparent';
+          var grn='rgba(52,211,153,';var red='rgba(239,68,68,';var ylw='rgba(245,158,11,';
+          var himManual=!!MANUAL_SET['him_'+dd+'_'+ss];
+          var herManual=!!MANUAL_SET['her_'+dd+'_'+ss];
+          var lBg=himManual?ylw+'.25)':isShared?grn+'.25)':himSkip?red+'.25)':'transparent';
+          var rBg=herManual?ylw+'.25)':isShared?grn+'.25)':herSkip?red+'.25)':'transparent';
+          var lBdr=himManual?'1.5px solid '+ylw+'.5)':isShared?'1.5px solid '+grn+'.5)':himSkip?'1.5px solid '+red+'.5)':'1.5px solid var(--border)';
+          var rBdr=herManual?'1.5px solid '+ylw+'.5)':isShared?'1.5px solid '+grn+'.5)':herSkip?'1.5px solid '+red+'.5)':'1.5px solid var(--border)';
+          var lCol=himManual||isShared||himSkip?'#fff':'var(--gray)';
+          var rCol=herManual||isShared||herSkip?'#fff':'var(--gray)';
+          var lLabel=himManual?'Set':'Him';
+          var rLabel=herManual?'Set':'Her';
+          var midCol=(himManual||herManual||isShared||himSkip||herSkip)?((himManual||herManual)?ylw+'.5)':(isShared)?grn+'.5)':red+'.5)'):'transparent';
           var de=dd.replace(/'/g,"\\'");var se=ss.replace(/'/g,"\\'");
           html+='<div style="display:flex;border-radius:6px;overflow:hidden;cursor:pointer;height:28px">'
-            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+lBg+';border:'+lBdr+';border-right:'+(lBg!==rBg?'1.5px solid '+(isShared?grn+'.5)':red+'.5)'):'none')+';border-radius:6px 0 0 6px;font-size:9px;font-weight:700;color:'+lCol+';-webkit-user-select:none;user-select:none" onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'left\')">Him</div>'
-            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+rBg+';border:'+rBdr+';border-left:'+(lBg!==rBg?'none':'none')+';border-radius:0 6px 6px 0;font-size:9px;font-weight:700;color:'+rCol+';-webkit-user-select:none;user-select:none" onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'right\')">Her</div>'
+            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+lBg+';border:'+lBdr+';border-right:'+(lBg!==rBg?'1.5px solid '+midCol:'none')+';border-radius:6px 0 0 6px;font-size:9px;font-weight:700;color:'+lCol+';-webkit-user-select:none;user-select:none" onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'left\')">'+lLabel+'</div>'
+            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+rBg+';border:'+rBdr+';border-left:none;border-radius:0 6px 6px 0;font-size:9px;font-weight:700;color:'+rCol+';-webkit-user-select:none;user-select:none" onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'right\')">'+rLabel+'</div>'
             +'</div>';
         });
       });
