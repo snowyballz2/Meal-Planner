@@ -3506,12 +3506,17 @@ function closeRandomizePopup(){
 }
 function runRandomizeFromPopup(){
   closeRandomizePopup();
-  if(_randHim&&_randHer){setPerson('shared');}
-  else if(_randHim){setPerson('him');}
-  else if(_randHer){setPerson('her');}
+  // Temporarily set person for randomization, then restore current tab
+  var origPerson=person;
+  if(_randHim&&_randHer) person='shared';
+  else if(_randHim) person='him';
+  else if(_randHer) person='her';
   else return;
-  setDay('Monday');
   randomizeWeek();
+  // Restore the tab the user was on and jump to Monday top
+  person=origPerson;
+  setDay('Monday');
+  setPerson(origPerson);
   requestAnimationFrame(function(){window.scrollTo(0,0);});
 }
 function setSchedule(){
