@@ -315,7 +315,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <body>
 <div class="hdr">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-    <div class="hdr-title"><img src="icon.jpeg" style="width:28px;height:28px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:4px"> Meal Planner</div>
+    <div class="hdr-title">Meal Planner</div>
     <div id="weekBar" class="week-bar" style="flex:1;margin:0 10px;justify-content:center"></div>
     <button class="sync-icon-btn" id="syncToggleBtn" onclick="toggleSyncPanel()">☁️</button>
   </div>
@@ -1618,41 +1618,65 @@ function toggleAdjTarget(p,d,slot){
 }
 var SHARED_SCHEDULE = {}; // key: 'day_slot', value: 'shared'|'skip-him'|'skip-her'|'skip-both' or absent (normal)
 var sharedSchedOpen = false; // collapsible panel state
-var SCHED_STATES = ['shared','skip-him','skip-her','skip-both']; // cycle order after normal
 function initSharedSchedule(){
-  // Default: all dinners shared
   if(!Object.keys(SHARED_SCHEDULE).length){
     DAYS.forEach(function(d){ SHARED_SCHEDULE[d+'_dinner']='shared'; });
   }
-  // Migrate old boolean true values to 'shared'
   Object.keys(SHARED_SCHEDULE).forEach(function(k){
     if(SHARED_SCHEDULE[k]===true) SHARED_SCHEDULE[k]='shared';
   });
 }
-function toggleSharedSchedule(d,s){
+// Split pill: left(♂) and right(♀) each cycle: normal → skip → shared → normal
+// When entering shared, other side joins. When leaving shared, other side restores.
+var _schedPreShare={}; // tracks what state the OTHER side had before sharing forced it
+function schedTapLeft(d,s){
   var k=d+'_'+s;
-  var cur=SHARED_SCHEDULE[k];
-  if(!cur){
+  var cur=SHARED_SCHEDULE[k]||'';
+  if(cur==='shared'){
+    // Leaving shared from left side — restore right side's pre-share state
+    var restore=_schedPreShare[k+'_r']||'';
+    delete _schedPreShare[k+'_r'];delete _schedPreShare[k+'_l'];
+    if(restore)SHARED_SCHEDULE[k]=restore;else delete SHARED_SCHEDULE[k];
+  } else if(cur==='skip-him'){
+    // skip → shared: save right side's current state, go shared
+    _schedPreShare[k+'_r']=''; // right was normal
+    _schedPreShare[k+'_l']='skip-him';
     SHARED_SCHEDULE[k]='shared';
   } else {
-    var idx=SCHED_STATES.indexOf(cur);
-    if(idx>=0 && idx<SCHED_STATES.length-1){
-      SHARED_SCHEDULE[k]=SCHED_STATES[idx+1];
-    } else {
-      delete SHARED_SCHEDULE[k]; // back to normal
-    }
+    // normal → skip him
+    SHARED_SCHEDULE[k]='skip-him';
   }
-  saveSharedSchedule();
-  renderMeals();
+  saveSharedSchedule();renderMeals();
+}
+function schedTapRight(d,s){
+  var k=d+'_'+s;
+  var cur=SHARED_SCHEDULE[k]||'';
+  if(cur==='shared'){
+    // Leaving shared from right side — restore left side's pre-share state
+    var restore=_schedPreShare[k+'_l']||'';
+    delete _schedPreShare[k+'_l'];delete _schedPreShare[k+'_r'];
+    if(restore)SHARED_SCHEDULE[k]=restore;else delete SHARED_SCHEDULE[k];
+  } else if(cur==='skip-her'){
+    // skip → shared: save left side's current state, go shared
+    _schedPreShare[k+'_l']=''; // left was normal
+    _schedPreShare[k+'_r']='skip-her';
+    SHARED_SCHEDULE[k]='shared';
+  } else {
+    // normal → skip her
+    SHARED_SCHEDULE[k]='skip-her';
+  }
+  saveSharedSchedule();renderMeals();
 }
 function setSharedPreset(preset){
   SHARED_SCHEDULE={};
-  if(preset==='dinners'){
+  if(preset==='breakfasts'){
+    DAYS.forEach(function(d){SHARED_SCHEDULE[d+'_breakfast']='shared';});
+  } else if(preset==='lunches'){
+    DAYS.forEach(function(d){SHARED_SCHEDULE[d+'_lunch']='shared';});
+  } else if(preset==='dinners'){
     DAYS.forEach(function(d){SHARED_SCHEDULE[d+'_dinner']='shared';});
   } else if(preset==='all'){
     DAYS.forEach(function(d){['breakfast','lunch','dinner'].forEach(function(s){SHARED_SCHEDULE[d+'_'+s]='shared';});});
-  } else if(preset==='weekends'){
-    ['Saturday','Sunday'].forEach(function(d){['breakfast','lunch','dinner'].forEach(function(s){SHARED_SCHEDULE[d+'_'+s]='shared';});});
   }
   // 'clear' just leaves SHARED_SCHEDULE empty
   saveSharedSchedule();
@@ -2867,54 +2891,52 @@ function renderMeals(){
   if(activeWeek!=='last'){
     // Shared schedule panel
     var ssIcon=sharedSchedOpen?'&#9662;':'&#9656;';
-    var ssKeys=Object.keys(SHARED_SCHEDULE);
-    var ssSharedCount=0,ssSkipCount=0;
-    ssKeys.forEach(function(k){if(SHARED_SCHEDULE[k]==='shared')ssSharedCount++;else ssSkipCount++;});
-    var ssSummary=[];
-    if(ssSharedCount)ssSummary.push(ssSharedCount+' shared');
-    if(ssSkipCount)ssSummary.push(ssSkipCount+' skip');
-    var ssLabel=ssSummary.length?ssSummary.join(', '):'none';
     html+='<div style="background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border);padding:10px 12px;margin-bottom:10px;box-shadow:var(--shadow)">';
     html+='<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="sharedSchedOpen=!sharedSchedOpen;renderMeals()">';
-    html+='<div style="font-size:13px;font-weight:700;color:var(--text)">Meal Schedule</div>';
-    html+='<span style="font-size:11px;color:var(--gray);font-weight:600">'+ssIcon+' '+ssLabel+'</span></div>';
+    html+='<div style="font-size:13px;font-weight:700;color:var(--text)">'+ssIcon+' Schedule Meals</div>';
+    html+='<div style="padding:5px 14px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--text);font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.02em" onclick="event.stopPropagation();randomizeWeek()">Randomize</div>';
+    html+='</div>';
     if(sharedSchedOpen){
-      html+='<div style="font-size:11px;color:var(--gray);margin:6px 0 10px">Set sharing and skip rules for each meal slot</div>';
+      // Grid header: Day + Breakfast + Lunch + Dinner
+      html+='<div style="display:grid;grid-template-columns:36px 1fr 1fr 1fr;gap:4px;margin-top:8px">';
+      html+='<div></div>';
+      ['breakfast','lunch','dinner'].forEach(function(ss){
+        html+='<div style="text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);padding:2px 0">'+SLOT_LABEL[ss]+'</div>';
+      });
+      // Day rows
       DAYS.forEach(function(dd){
-        var dayCounts={shared:0,'skip-him':0,'skip-her':0,'skip-both':0};
-        ['breakfast','lunch','dinner'].forEach(function(ss){var st=SHARED_SCHEDULE[dd+'_'+ss];if(st&&dayCounts.hasOwnProperty(st))dayCounts[st]++;});
-        var badgeParts=[];
-        if(dayCounts.shared)badgeParts.push(dayCounts.shared+' Shared');
-        if(dayCounts['skip-him'])badgeParts.push(dayCounts['skip-him']+' Skip Him');
-        if(dayCounts['skip-her'])badgeParts.push(dayCounts['skip-her']+' Skip Her');
-        if(dayCounts['skip-both'])badgeParts.push(dayCounts['skip-both']+' Skip Both');
-        var badge=badgeParts.length?'<span style="font-size:10px;color:var(--gray);font-weight:600;margin-left:6px">'+badgeParts.join(', ')+'</span>':'';
-        html+='<div style="padding:8px 0;border-bottom:1px solid var(--border)">';
-        html+='<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">'+dd.slice(0,3)+badge+'</div>';
-        html+='<div style="display:flex;gap:6px">';
+        html+='<div style="font-size:11px;font-weight:700;color:var(--text);display:flex;align-items:center">'+dd.slice(0,3)+'</div>';
         ['breakfast','lunch','dinner'].forEach(function(ss){
           var state=SHARED_SCHEDULE[dd+'_'+ss]||'normal';
-          var bg,bdr,col,label;
-          if(state==='shared'){bg='rgba(52,211,153,.15)';bdr='rgba(52,211,153,.5)';col='#34D399';label='\uD83E\uDD1D '+SLOT_LABEL[ss];}
-          else if(state==='skip-him'){bg='rgba(96,165,250,.15)';bdr='rgba(96,165,250,.5)';col='#60A5FA';label='\uD83D\uDEAB\u2642 '+SLOT_LABEL[ss];}
-          else if(state==='skip-her'){bg='rgba(244,114,182,.15)';bdr='rgba(244,114,182,.5)';col='#F472B6';label='\uD83D\uDEAB\u2640 '+SLOT_LABEL[ss];}
-          else if(state==='skip-both'){bg='rgba(156,163,175,.15)';bdr='rgba(156,163,175,.5)';col='#9CA3AF';label='\uD83D\uDEAB '+SLOT_LABEL[ss];}
-          else{bg='var(--bg)';bdr='var(--border)';col='var(--gray)';label=SLOT_LABEL[ss];}
-          html+='<div style="flex:1;padding:6px 8px;border-radius:8px;border:1.5px solid '+bdr+';background:'+bg+';text-align:center;font-size:11px;font-weight:600;color:'+col+';cursor:pointer" onclick="event.stopPropagation();toggleSharedSchedule(\''+dd+'\',\''+ss+'\')">'+label+'</div>';
+          var himSkip=(state==='skip-him'||state==='skip-both');
+          var herSkip=(state==='skip-her'||state==='skip-both');
+          var isShared=(state==='shared');
+          var grn='rgba(52,211,153,';var red='rgba(239,68,68,';
+          var lBg=isShared?grn+'.25)':himSkip?red+'.25)':'transparent';
+          var rBg=isShared?grn+'.25)':herSkip?red+'.25)':'transparent';
+          var lBdr=isShared?'1.5px solid '+grn+'.5)':himSkip?'1.5px solid '+red+'.5)':'1.5px solid var(--border)';
+          var rBdr=isShared?'1.5px solid '+grn+'.5)':herSkip?'1.5px solid '+red+'.5)':'1.5px solid var(--border)';
+          var lCol=isShared||himSkip?'#fff':'var(--gray)';
+          var rCol=isShared||herSkip?'#fff':'var(--gray)';
+          var midCol=(isShared||himSkip||herSkip)?((isShared)?grn+'.5)':red+'.5)'):'transparent';
+          var de=dd.replace(/'/g,"\\'");var se=ss.replace(/'/g,"\\'");
+          html+='<div style="display:flex;border-radius:6px;overflow:hidden;cursor:pointer;height:28px">'
+            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+lBg+';border:'+lBdr+';border-right:'+(lBg!==rBg?'1.5px solid '+(isShared?grn+'.5)':red+'.5)'):'none')+';border-radius:6px 0 0 6px;font-size:9px;font-weight:700;color:'+lCol+'" onclick="event.stopPropagation();schedTapLeft(\''+de+'\',\''+se+'\')">Him</div>'
+            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+rBg+';border:'+rBdr+';border-left:'+(lBg!==rBg?'none':'none')+';border-radius:0 6px 6px 0;font-size:9px;font-weight:700;color:'+rCol+'" onclick="event.stopPropagation();schedTapRight(\''+de+'\',\''+se+'\')">Her</div>'
+            +'</div>';
         });
-        html+='</div></div>';
       });
-      // Preset buttons
-      html+='<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">';
-      var presets=[{id:'dinners',label:'All dinners'},{id:'all',label:'All meals'},{id:'weekends',label:'Weekends only'},{id:'clear',label:'Clear all'}];
-      presets.forEach(function(pr){
-        html+='<div style="padding:4px 10px;border-radius:16px;border:1.5px solid var(--border);font-size:10px;font-weight:600;color:var(--gray);cursor:pointer" onclick="event.stopPropagation();setSharedPreset(\''+pr.id+'\')">'+pr.label+'</div>';
+      html+='</div>';
+      // Preset buttons — single row
+      html+='<div style="display:flex;gap:4px;margin-top:8px">';
+      [{id:'breakfasts',label:'Breakfast'},{id:'lunches',label:'Lunch'},{id:'dinners',label:'Dinner'},{id:'clear',label:'Clear'}].forEach(function(pr){
+        html+='<div style="flex:1;padding:4px 0;border-radius:12px;border:1.5px solid var(--border);font-size:9px;font-weight:600;color:var(--gray);cursor:pointer;text-align:center" onclick="event.stopPropagation();setSharedPreset(\''+pr.id+'\')">'+pr.label+'</div>';
       });
       html+='</div>';
     }
     html+='</div>';
     // Randomize button
-    html+='<div class="reset-bar"><button class="reset-btn" onclick="randomizeWeek()">Randomize week</button></div>';
+    // Randomize button is now in the Schedule Meals header
   }
   const other=person==='him'?'her':'him';
 
