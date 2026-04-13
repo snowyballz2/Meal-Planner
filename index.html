@@ -1713,6 +1713,31 @@ function setSharedPreset(preset){
   saveSharedSchedule();
   renderMeals();
 }
+function setSharedPresetSide(preset,side){
+  var slot=preset==='breakfasts'?'breakfast':preset==='lunches'?'lunch':preset==='dinners'?'dinner':null;
+  if(!slot) return;
+  // Toggle eat-out for this person on all days for this slot
+  var skipKey=side==='him'?'skip-him':'skip-her';
+  var allOn=DAYS.every(function(d){
+    var st=SHARED_SCHEDULE[d+'_'+slot];
+    return st===skipKey||st==='skip-both';
+  });
+  DAYS.forEach(function(d){
+    if(MANUAL_SET[side+'_'+d+'_'+slot]) return;
+    var k=d+'_'+slot;
+    var cur=SHARED_SCHEDULE[k]||'';
+    if(allOn){
+      // Remove this side's eat-out
+      if(cur==='skip-both') SHARED_SCHEDULE[k]=(side==='him'?'skip-her':'skip-him');
+      else if(cur===skipKey) delete SHARED_SCHEDULE[k];
+    } else {
+      // Add this side's eat-out
+      if(cur===(side==='him'?'skip-her':'skip-him')) SHARED_SCHEDULE[k]='skip-both';
+      else if(cur!=='shared') SHARED_SCHEDULE[k]=skipKey;
+    }
+  });
+  saveSharedSchedule();renderMeals();
+}
 function saveSharedSchedule(){
   try{localStorage.setItem('mealPlannerSharedSchedule',JSON.stringify(SHARED_SCHEDULE));}catch(e){}
 }
@@ -2931,7 +2956,7 @@ function renderMeals(){
       html+='<div style="display:flex;gap:6px">'
         +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:#A78BFA;font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();setSchedule()">Set</div>'
         +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();if(confirm(\'Clear all manually set meals?\')){clearWeek();}">Clear</div>'
-        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();randomizeWeek()">Randomize</div>'
+        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();showRandomizePopup()">Randomize</div>'
         +'</div>';
     }
     html+='</div>';
@@ -2949,7 +2974,11 @@ function renderMeals(){
         var dayAllSkip=slots3.every(function(ss){return SHARED_SCHEDULE[dd+'_'+ss]==='skip-both';});
         var dayCol=dayAllShared?'#34D399':dayAllSkip?'#EF4444':'var(--text)';
         var dde=dd.replace(/'/g,"\\'");
-        html+='<div style="font-size:11px;font-weight:700;color:'+dayCol+';display:flex;align-items:center;cursor:pointer" onclick="event.stopPropagation();schedTapDay(\''+dde+'\')">'+dd.slice(0,3)+'</div>';
+        if(_paintMode){
+          html+='<div style="font-size:11px;font-weight:700;color:var(--gray);display:flex;align-items:center;opacity:0.5">'+dd.slice(0,3)+'</div>';
+        } else {
+          html+='<div style="font-size:11px;font-weight:700;color:'+dayCol+';display:flex;align-items:center;cursor:pointer" onclick="event.stopPropagation();schedTapDay(\''+dde+'\')">'+dd.slice(0,3)+'</div>';
+        }
         ['breakfast','lunch','dinner'].forEach(function(ss){
           var state=SHARED_SCHEDULE[dd+'_'+ss]||'normal';
           var himSkip=(state==='skip-him'||state==='skip-both');
@@ -2972,23 +3001,91 @@ function renderMeals(){
           var rLabel='Her';
           var midCol=(himManual||herManual||isShared||himSkip||herSkip)?((himManual&&lNormal)||(herManual&&rNormal)?prp+'.4)':(isShared)?grn+'.5)':red+'.4)'):'transparent';
           var de=dd.replace(/'/g,"\\'");var se=ss.replace(/'/g,"\\'");
-          html+='<div style="display:flex;border-radius:6px;overflow:hidden;cursor:pointer;height:28px;width:92px;margin:0 auto">'
-            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+lBg+';border:'+lBdr+';border-right:'+(lBg!==rBg?'1.5px solid '+midCol:'none')+';border-radius:6px 0 0 6px;font-size:9px;font-weight:700;color:'+lCol+';-webkit-user-select:none;user-select:none" onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'left\')">'+lLabel+'</div>'
-            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+rBg+';border:'+rBdr+';border-left:none;border-radius:0 6px 6px 0;font-size:9px;font-weight:700;color:'+rCol+';-webkit-user-select:none;user-select:none" onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'right\')">'+rLabel+'</div>'
+          // Paint mode: override colors and clicks for the target slot column
+          var isPaintCol=_paintMode&&ss===_paintSlot;
+          var isPaintDim=_paintMode&&ss!==_paintSlot;
+          var himQueued=_paintQueued['him_'+dd];
+          var herQueued=_paintQueued['her_'+dd];
+          if(isPaintCol){
+            lBg=himQueued?'rgba(245,158,11,.3)':lBg;
+            rBg=herQueued?'rgba(245,158,11,.3)':rBg;
+            lBdr=himQueued?'2px solid rgba(245,158,11,.6)':lBdr;
+            rBdr=herQueued?'2px solid rgba(245,158,11,.6)':rBdr;
+            lCol=himQueued?'#fff':lCol;
+            rCol=herQueued?'#fff':rCol;
+          }
+          var dimStyle=isPaintDim?'opacity:0.3;pointer-events:none;':'';
+          var lClick=isPaintCol?'onclick="event.stopPropagation();paintTap(\''+de+'\',\'left\')"':'onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'left\')"';
+          var rClick=isPaintCol?'onclick="event.stopPropagation();paintTap(\''+de+'\',\'right\')"':'onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'right\')"';
+          html+='<div style="display:flex;border-radius:6px;overflow:hidden;cursor:pointer;height:28px;width:92px;margin:0 auto;'+dimStyle+'">'
+            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+lBg+';border:'+lBdr+';border-right:'+(lBg!==rBg?'1.5px solid '+midCol:'none')+';border-radius:6px 0 0 6px;font-size:9px;font-weight:700;color:'+lCol+';-webkit-user-select:none;user-select:none" '+lClick+'>'+lLabel+'</div>'
+            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+rBg+';border:'+rBdr+';border-left:none;border-radius:0 6px 6px 0;font-size:9px;font-weight:700;color:'+rCol+';-webkit-user-select:none;user-select:none" '+rClick+'>'+rLabel+'</div>'
             +'</div>';
         });
       });
       html+='</div>';
-      // Preset row: same grid as the day rows so B/L/D align with columns
+      // Preset row: B/L/D — in paint mode these queue all Him+Her for that column
       html+='<div style="display:grid;grid-template-columns:36px 1fr 1fr 1fr;gap:4px;margin-top:8px">';
-      html+='<div></div>'; // empty cell in day column
+      html+='<div></div>';
+      var paintSlots={breakfasts:'breakfast',lunches:'lunch',dinners:'dinner'};
       [{id:'breakfasts',label:'Breakfast'},{id:'lunches',label:'Lunch'},{id:'dinners',label:'Dinner'}].forEach(function(pr){
-        html+='<div style="display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);cursor:pointer" onclick="event.stopPropagation();setSharedPreset(\''+pr.id+'\')">'+pr.label+'</div>';
+        var slotMatch=paintSlots[pr.id];
+        if(_paintMode&&slotMatch===_paintSlot){
+          // Paint mode: 3-zone — left=him, center=both, right=her
+          html+='<div style="display:flex;align-items:center;justify-content:center;position:relative;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--shop);cursor:pointer">'
+            +'<div style="position:absolute;left:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();paintToggleHim()"></div>'
+            +'<div style="position:absolute;left:33%;top:0;bottom:0;width:34%" onclick="event.stopPropagation();paintToggleAll()"></div>'
+            +'<div style="position:absolute;right:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();paintToggleHer()"></div>'
+            +pr.label+'</div>';
+        } else if(_paintMode){
+          html+='<div style="display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);opacity:0.3">'+pr.label+'</div>';
+        } else {
+          // Normal mode: 3-zone — left=him preset, center=both preset, right=her preset
+          html+='<div style="display:flex;align-items:center;justify-content:center;position:relative;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);cursor:pointer">'
+            +'<div style="position:absolute;left:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();setSharedPresetSide(\''+pr.id+'\',\'him\')"></div>'
+            +'<div style="position:absolute;left:33%;top:0;bottom:0;width:34%" onclick="event.stopPropagation();setSharedPreset(\''+pr.id+'\')"></div>'
+            +'<div style="position:absolute;right:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();setSharedPresetSide(\''+pr.id+'\',\'her\')"></div>'
+            +pr.label+'</div>';
+        }
       });
+      html+='</div>';
+      // Meal painting UI
+      html+='<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">';
+      if(_paintMode){
+        var paintMeal=getMeal(_paintMealId);
+        html+='<div style="font-size:11px;color:var(--shop);font-weight:600;margin-bottom:6px">Assigning: '+((paintMeal||{}).label||'?')+' → '+SLOT_LABEL[_paintSlot]+'</div>';
+        html+='<div style="font-size:10px;color:var(--gray);margin-bottom:8px">Tap Him/Her cells above to queue, then Assign</div>';
+        html+='<div style="display:flex;gap:6px">';
+        html+='<div style="padding:5px 12px;border-radius:6px;border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();togglePaintMode()">Cancel</div>';
+        html+='<div style="padding:5px 12px;border-radius:6px;background:var(--shop);color:#000;font-size:11px;font-weight:700;cursor:pointer" onclick="event.stopPropagation();paintAccept()">Assign</div>';
+        html+='</div>';
+      } else {
+        html+='<div style="display:flex;gap:4px;align-items:center">';
+        var ss1=_paintSavedSlot;
+        html+='<select id="paintSlotSel" style="padding:4px 4px;border-radius:6px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:11px;flex-shrink:0" onchange="onPaintSlotChange()">';
+        html+='<option value="">Slot</option>';
+        [{v:'breakfast',l:'Bkfst'},{v:'lunch',l:'Lunch'},{v:'dinner',l:'Dinner'}].forEach(function(o){
+          html+='<option value="'+o.v+'"'+(ss1===o.v?' selected':'')+'>'+o.l+'</option>';
+        });
+        html+='</select>';
+        // Build meal options for saved slot
+        var mealOpts='<option value="">— Meal —</option>';
+        if(ss1){
+          var slotMeals=getMealsForSlot(ss1);
+          slotMeals.sort(function(a,b){return a.label<b.label?-1:1;});
+          slotMeals.forEach(function(m){
+            mealOpts+='<option value="'+m.id+'"'+(_paintSavedMeal===m.id?' selected':'')+'>'+m.label+'</option>';
+          });
+        }
+        html+='<select id="paintMealSel" style="flex:1;min-width:0;padding:4px 4px;border-radius:6px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:11px;text-overflow:ellipsis" onchange="onPaintMealChange()">';
+        html+=mealOpts+'</select>';
+        var selBtnCol=_paintSavedMeal?'var(--text)':'var(--gray)';
+        html+='<div id="paintSelectBtn" style="padding:4px 10px;border-radius:6px;border:1.5px solid var(--border);color:'+selBtnCol+';font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0" onclick="event.stopPropagation();togglePaintMode()">Select</div>';
+        html+='</div>';
+      }
       html+='</div>';
     }
     html+='</div>';
-    // Randomize button
     // Randomize button is now in the Schedule Meals header
   }
   const other=person==='him'?'her':'him';
@@ -3066,6 +3163,19 @@ function changeMeal(slot,mealId){
   var selKey=person+'_'+day+'_'+slot;
   SEL[selKey]=mealId;
   MANUAL_SET[selKey]=true;
+  // Clear schedule state — manual choice overrides the plan
+  var schedKey=day+'_'+slot;
+  var schedState=SHARED_SCHEDULE[schedKey];
+  if(schedState){
+    // If shared, clear it (manual pick breaks sharing)
+    // If eat-out for this person, clear it (they're now eating a home meal)
+    if(schedState==='shared') delete SHARED_SCHEDULE[schedKey];
+    else if(person==='him'&&(schedState==='skip-him')) delete SHARED_SCHEDULE[schedKey];
+    else if(person==='her'&&(schedState==='skip-her')) delete SHARED_SCHEDULE[schedKey];
+    else if(person==='him'&&schedState==='skip-both') SHARED_SCHEDULE[schedKey]='skip-her';
+    else if(person==='her'&&schedState==='skip-both') SHARED_SCHEDULE[schedKey]='skip-him';
+    saveSharedSchedule();
+  }
   if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
   weekData[activeWeek].ts[selKey]=Date.now();
   clearOverrides(person,day,slot);invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
@@ -3073,7 +3183,7 @@ function changeMeal(slot,mealId){
 function toggleShared(slot,checked){
   var other=person==='him'?'her':'him';
   if(checked){
-    // Set the other person's meal to match
+    // Set the other person's meal to match — manual shared
     var myId=getMealId(person,day,slot);
     if(myId){
       var otherKey=other+'_'+day+'_'+slot;
@@ -3081,6 +3191,11 @@ function toggleShared(slot,checked){
       if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
       weekData[activeWeek].ts[otherKey]=Date.now();
       clearOverrides(other,day,slot);
+      // Mark both as manual set and update schedule to shared
+      MANUAL_SET[person+'_'+day+'_'+slot]=true;
+      MANUAL_SET[otherKey]=true;
+      SHARED_SCHEDULE[day+'_'+slot]='shared';
+      saveSharedSchedule();
     }
   } else {
     // Unshare — randomize the other person's meal for that slot
@@ -3206,6 +3321,163 @@ function clearScheduleOnly(){
     if(!MANUAL_SET[k]) delete SKIPPED[k];
   });
   invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();
+}
+// ── MEAL PAINTING MODE ──────────────────────────────────────
+var _paintMode=false;
+var _paintSlot='';      // 'breakfast','lunch','dinner'
+var _paintMealId='';    // selected meal ID
+var _paintQueued={};    // key: 'person_day', true if queued
+var _paintSavedSlot=''; // persisted slot selection across re-renders
+var _paintSavedMeal=''; // persisted meal selection across re-renders
+
+function togglePaintMode(){
+  if(_paintMode){
+    // Cancel painting mode
+    _paintMode=false;_paintSlot='';_paintMealId='';_paintQueued={};
+  } else {
+    var slotSel=document.getElementById('paintSlotSel');
+    var mealSel=document.getElementById('paintMealSel');
+    if(!slotSel||!mealSel||!slotSel.value||!mealSel.value) return;
+    _paintSlot=slotSel.value;
+    _paintMealId=mealSel.value;
+    _paintMode=true;
+    _paintQueued={};
+  }
+  renderMeals();
+}
+function paintTap(d,side){
+  if(!_paintMode) return;
+  var p=(side==='left')?'him':'her';
+  var k=p+'_'+d;
+  if(_paintQueued[k]) delete _paintQueued[k];
+  else _paintQueued[k]=true;
+  renderMeals();
+}
+function paintAccept(){
+  if(!_paintMode) return;
+  var now=Date.now();
+  if(!weekData[activeWeek].ts) weekData[activeWeek].ts={};
+  Object.keys(_paintQueued).forEach(function(k){
+    var parts=k.split('_');
+    var p=parts[0],d=parts[1];
+    var selKey=p+'_'+d+'_'+_paintSlot;
+    SEL[selKey]=_paintMealId;
+    MANUAL_SET[selKey]=true;
+    weekData[activeWeek].ts[selKey]=now;
+    clearOverrides(p,d,_paintSlot);
+  });
+  // Update schedule: if both him+her got painted on same day, set shared
+  // Otherwise clear any conflicting schedule state
+  var slot=_paintSlot;
+  DAYS.forEach(function(d){
+    var himQ=_paintQueued['him_'+d], herQ=_paintQueued['her_'+d];
+    var schedKey=d+'_'+slot;
+    if(himQ&&herQ){
+      SHARED_SCHEDULE[schedKey]='shared';
+    } else if(himQ||herQ){
+      var schedState=SHARED_SCHEDULE[schedKey];
+      if(schedState==='shared') delete SHARED_SCHEDULE[schedKey];
+      else if(himQ&&schedState==='skip-him') delete SHARED_SCHEDULE[schedKey];
+      else if(herQ&&schedState==='skip-her') delete SHARED_SCHEDULE[schedKey];
+      else if(himQ&&schedState==='skip-both') SHARED_SCHEDULE[schedKey]='skip-her';
+      else if(herQ&&schedState==='skip-both') SHARED_SCHEDULE[schedKey]='skip-him';
+    }
+  });
+  saveSharedSchedule();
+  _paintMode=false;_paintSlot='';_paintMealId='';_paintQueued={};
+  invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
+}
+function onPaintSlotChange(){
+  var slotSel=document.getElementById('paintSlotSel');
+  var mealSel=document.getElementById('paintMealSel');
+  if(!slotSel||!mealSel) return;
+  var slot=slotSel.value;
+  _paintSavedSlot=slot;
+  _paintSavedMeal='';
+  var meals=getMealsForSlot(slot);
+  var html='<option value="">— Meal —</option>';
+  meals.sort(function(a,b){return a.label<b.label?-1:1;});
+  meals.forEach(function(m){
+    html+='<option value="'+m.id+'">'+m.label+'</option>';
+  });
+  mealSel.innerHTML=html;
+  var btn=document.getElementById('paintSelectBtn');
+  if(btn) btn.style.color='var(--gray)';
+}
+
+function paintToggleAll(){
+  var allQueued=DAYS.every(function(d){return _paintQueued['him_'+d]&&_paintQueued['her_'+d];});
+  DAYS.forEach(function(d){
+    if(allQueued){delete _paintQueued['him_'+d];delete _paintQueued['her_'+d];}
+    else{_paintQueued['him_'+d]=true;_paintQueued['her_'+d]=true;}
+  });
+  renderMeals();
+}
+function paintToggleHim(){
+  var allHim=DAYS.every(function(d){return !!_paintQueued['him_'+d];});
+  DAYS.forEach(function(d){
+    if(allHim) delete _paintQueued['him_'+d];
+    else _paintQueued['him_'+d]=true;
+  });
+  renderMeals();
+}
+function paintToggleHer(){
+  var allHer=DAYS.every(function(d){return !!_paintQueued['her_'+d];});
+  DAYS.forEach(function(d){
+    if(allHer) delete _paintQueued['her_'+d];
+    else _paintQueued['her_'+d]=true;
+  });
+  renderMeals();
+}
+function onPaintMealChange(){
+  var btn=document.getElementById('paintSelectBtn');
+  var mealSel=document.getElementById('paintMealSel');
+  if(mealSel) _paintSavedMeal=mealSel.value;
+  if(btn&&mealSel) btn.style.color=mealSel.value?'var(--text)':'var(--gray)';
+}
+
+var _randHim=true,_randHer=true;
+function showRandomizePopup(){
+  var overlay=document.getElementById('calPopupOverlay');
+  if(!overlay)return;
+  _randHim=true;_randHer=true;
+  renderRandomizePopup();
+}
+function renderRandomizePopup(){
+  var overlay=document.getElementById('calPopupOverlay');
+  var himOn=_randHim,herOn=_randHer;
+  var himBg=himOn?'rgba(96,165,250,.2)':'var(--bg)';
+  var himBdr=himOn?'1.5px solid rgba(96,165,250,.5)':'1.5px solid var(--border)';
+  var himCol=himOn?'#60A5FA':'var(--gray)';
+  var herBg=herOn?'rgba(244,114,182,.2)':'var(--bg)';
+  var herBdr=herOn?'1.5px solid rgba(244,114,182,.5)':'1.5px solid var(--border)';
+  var herCol=herOn?'#F472B6':'var(--gray)';
+  overlay.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:999" onclick="if(event.target===this)closeRandomizePopup()">'
+    +'<div style="background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border);padding:20px;min-width:240px;box-shadow:0 8px 32px rgba(0,0,0,.4)">'
+    +'<div style="font-size:15px;font-weight:700;color:var(--text);text-align:center;margin-bottom:16px">Randomize Week</div>'
+    +'<div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px">'
+    +'<div style="padding:10px 24px;border-radius:8px;background:'+himBg+';border:'+himBdr+';color:'+himCol+';font-size:13px;font-weight:700;cursor:pointer;text-align:center" onclick="_randHim=!_randHim;renderRandomizePopup()">Him</div>'
+    +'<div style="padding:10px 24px;border-radius:8px;background:'+herBg+';border:'+herBdr+';color:'+herCol+';font-size:13px;font-weight:700;cursor:pointer;text-align:center" onclick="_randHer=!_randHer;renderRandomizePopup()">Her</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;justify-content:center">'
+    +'<div style="padding:8px 24px;border-radius:6px;border:1.5px solid var(--border);color:var(--gray);font-size:12px;font-weight:600;cursor:pointer;text-align:center" onclick="closeRandomizePopup()">No</div>'
+    +'<div style="padding:8px 24px;border-radius:6px;background:var(--shop);color:#000;font-size:12px;font-weight:700;cursor:pointer;text-align:center" onclick="runRandomizeFromPopup()">Go</div>'
+    +'</div>'
+    +'</div></div>';
+  overlay.style.display='';
+}
+function closeRandomizePopup(){
+  var o=document.getElementById('calPopupOverlay');
+  if(o)o.style.display='none';
+}
+function runRandomizeFromPopup(){
+  closeRandomizePopup();
+  // Set person based on selection
+  if(_randHim&&_randHer){setPerson('shared');}
+  else if(_randHim){setPerson('him');}
+  else if(_randHer){setPerson('her');}
+  else return; // nothing selected
+  randomizeWeek();
 }
 function setSchedule(){
   // Lock all current schedule selections as manual overrides
