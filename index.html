@@ -4260,14 +4260,19 @@ function renderWeekBar(){
 var _selSaveTimer=null;
 function autoSaveWeek(){clearTimeout(_selSaveTimer);_selSaveTimer=setTimeout(function(){saveWeeks();},500);}
 
-// ── CLOUD SYNC ──────────────────────────────────────────────
-var JSONBLOB_BASE='https://jsonblob.com/api/jsonBlob';
-var syncId=null;var syncStatus='';
-function loadSyncId(){try{syncId=localStorage.getItem('mealPlannerSyncId')||null;}catch(e){}}
+// ── CLOUD SYNC (GitHub Gist) ────────────────────────────────
+var GIST_API='https://api.github.com/gists';
+var syncId=null;var syncToken=null;var syncStatus='';
+function loadSyncId(){
+  try{syncId=localStorage.getItem('mealPlannerSyncId')||null;}catch(e){}
+  try{syncToken=localStorage.getItem('mealPlannerSyncToken')||null;}catch(e){}
+}
 function saveSyncIdLocal(id){syncId=id;try{localStorage.setItem('mealPlannerSyncId',id);}catch(e){}}
+function saveSyncToken(token){syncToken=token;try{localStorage.setItem('mealPlannerSyncToken',token);}catch(e){}}
 function setSyncStatus(msg,type){syncStatus='<span style="color:'+(type==='err'?'#DC2626':type==='ok'?'#059669':'var(--gray)')+'">'+msg+'</span>';var el=document.getElementById('syncStatusMsg');if(el)el.innerHTML=syncStatus;}
+function gistHeaders(){return {'Content-Type':'application/json','Authorization':'token '+syncToken};}
 function getSyncPayload(){
-  return {weekData:weekData,customMeals:customMeals,customIngredients:customIngredients,eatOutDB:EAT_OUT_DB,sharedSchedule:SHARED_SCHEDULE,version:2};
+  return {weekData:weekData,customMeals:customMeals,customIngredients:customIngredients,eatOutDB:EAT_OUT_DB,version:3};
 }
 function mergeSyncData(remote){
   // Week data: merge per-slot, last-write-wins using timestamps
@@ -4359,47 +4364,63 @@ function mergeSyncData(remote){
 }
 
 function createSync(){
-  setSyncStatus('Creating shared sync...','loading');
+  if(!syncToken){setSyncStatus('Enter your GitHub token first.','err');return;}
+  setSyncStatus('Creating sync...','loading');
+  saveWeeks();
   var payload=getSyncPayload();
-  fetch(JSONBLOB_BASE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    var loc=r.headers.get('Location')||r.headers.get('location')||'';
-    var id=loc.split('/').pop();
-    if(!id)return r.json().then(function(d){return d.id||''});
-    return id;
-  }).then(function(id){
-    if(!id){setSyncStatus('Could not get ID.','err');return;}
-    saveSyncIdLocal(id);setSyncStatus('Sync created! Share the ID with your partner.','ok');renderSyncView();
+  fetch(GIST_API,{method:'POST',headers:gistHeaders(),body:JSON.stringify({
+    description:'Meal Planner Sync',public:false,
+    files:{'meal-planner-sync.json':{content:JSON.stringify(payload)}}
+  })}).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
+  }).then(function(d){
+    if(!d.id){setSyncStatus('Could not create.','err');return;}
+    saveSyncIdLocal(d.id);
+    setSyncStatus('Sync created! Share the Gist ID with your partner.','ok');
+    renderSyncView();
   }).catch(function(e){setSyncStatus('Error: '+e.message,'err');});
 }
 function pushSync(){
-  if(!syncId)return;
-  saveWeeks(); // bundle latest state before syncing
+  if(!syncId||!syncToken)return;
+  saveWeeks();
   setSyncStatus('Syncing...','loading');
-  // Pull first, merge, then push — prevents overwriting partner's additions
-  fetch(JSONBLOB_BASE+'/'+syncId).then(function(r){
+  // Pull first, merge, then push
+  fetch(GIST_API+'/'+syncId,{headers:gistHeaders()}).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
-  }).then(function(remote){
-    // Merge remote into local first
+  }).then(function(gist){
+    var content=gist.files['meal-planner-sync.json'].content;
+    var remote=JSON.parse(content);
     mergeSyncData(remote);
-    // Now push the merged result
     var payload=getSyncPayload();
-    return fetch(JSONBLOB_BASE+'/'+syncId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    return fetch(GIST_API+'/'+syncId,{method:'PATCH',headers:gistHeaders(),body:JSON.stringify({
+      files:{'meal-planner-sync.json':{content:JSON.stringify(payload)}}
+    })});
   }).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);
-    setSyncStatus('Synced successfully!','ok');renderMeals();
+    setSyncStatus('Synced!','ok');renderMeals();
   }).catch(function(e){setSyncStatus('Sync failed: '+e.message,'err');});
 }
 function pullSync(){
-  if(!syncId)return;
-  setSyncStatus('Pulling from cloud...','loading');
-  fetch(JSONBLOB_BASE+'/'+syncId).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(data){
+  if(!syncId||!syncToken)return;
+  setSyncStatus('Pulling...','loading');
+  fetch(GIST_API+'/'+syncId,{headers:gistHeaders()}).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
+  }).then(function(gist){
+    var content=gist.files['meal-planner-sync.json'].content;
+    var data=JSON.parse(content);
     mergeSyncData(data);
-    setSyncStatus('Pulled successfully!','ok');renderMeals();renderSyncView();
+    setSyncStatus('Pulled!','ok');renderMeals();renderSyncView();
   }).catch(function(e){setSyncStatus('Pull failed: '+e.message,'err');});
 }
-function connectSyncId(){var el=document.getElementById('syncIdInput');if(!el||!el.value.trim())return;saveSyncIdLocal(el.value.trim());setSyncStatus('Connected! Now pull to get data.','ok');renderSyncView();}
-function clearSyncId(){syncId=null;try{localStorage.removeItem('mealPlannerSyncId');}catch(e){}setSyncStatus('Disconnected.','ok');renderSyncView();}
+function connectSync(){
+  var tokenEl=document.getElementById('syncTokenInput');
+  var idEl=document.getElementById('syncIdInput');
+  if(tokenEl&&tokenEl.value.trim()) saveSyncToken(tokenEl.value.trim());
+  if(idEl&&idEl.value.trim()) saveSyncIdLocal(idEl.value.trim());
+  if(syncToken) setSyncStatus('Connected!','ok');
+  renderSyncView();
+}
+function clearSyncId(){syncId=null;syncToken=null;try{localStorage.removeItem('mealPlannerSyncId');localStorage.removeItem('mealPlannerSyncToken');}catch(e){}setSyncStatus('Disconnected.','ok');renderSyncView();}
 function copyId(){if(syncId){navigator.clipboard.writeText(syncId).then(function(){setSyncStatus('ID copied!','ok');});}}
 function toggleSyncPanel(){
   var sv=document.getElementById('syncView');
@@ -4423,20 +4444,25 @@ function toggleSyncPanel(){
 function renderSyncView(){
   var el=document.getElementById('syncView');if(!el)return;
   var html='<div style="padding:0 0 80px"><div class="sync-panel"><div class="sync-title">☁️ Cloud Sync</div>'
-    +'<p style="font-size:13px;color:var(--gray);margin-bottom:10px">Create a shared sync ID once, share with your partner, then push/pull to keep both devices in sync.</p>';
-  if(syncId){
-    html+='<div style="font-size:12px;color:var(--gray);margin-bottom:4px">Your Sync ID (tap to copy):</div>'
+    +'<p style="font-size:13px;color:var(--gray);margin-bottom:10px">Sync via GitHub Gist. Create a token at github.com/settings/tokens (gist scope only).</p>';
+  if(syncId&&syncToken){
+    html+='<div style="font-size:12px;color:var(--gray);margin-bottom:4px">Gist ID (tap to copy):</div>'
       +'<div class="sync-id-display" onclick="copyId()">'+syncId+'</div>'
+      +'<div style="font-size:11px;color:var(--gray);margin-top:6px">Token: ••••'+syncToken.slice(-4)+'</div>'
       +'<div style="display:flex;gap:8px;margin-top:10px">'
-      +'<button class="sync-btn primary" onclick="pushSync()">⬆ Push to cloud</button>'
-      +'<button class="sync-btn primary" onclick="pullSync()">⬇ Pull from cloud</button>'
+      +'<button class="sync-btn primary" onclick="pushSync()">⬆ Sync</button>'
+      +'<button class="sync-btn primary" onclick="pullSync()">⬇ Pull</button>'
       +'<button class="sync-btn secondary" onclick="clearSyncId()">Disconnect</button></div>';
   } else {
-    html+='<div class="sync-row"><button class="sync-btn primary" onclick="createSync()">✦ Create new Sync ID</button></div>'
+    html+='<div style="font-size:12px;color:var(--gray);margin-bottom:4px">GitHub Token:</div>'
+      +'<div class="sync-row"><input class="sync-input" id="syncTokenInput" type="password" placeholder="ghp_xxxx..." value="'+(syncToken||'')+'"></div>'
+      +'<div style="margin-top:8px">'
+      +'<div class="sync-row"><button class="sync-btn primary" onclick="connectSync();createSync()">✦ Create New Sync</button></div>'
       +'<hr class="sync-divider">'
-      +'<div style="font-size:12px;color:var(--gray);margin-bottom:6px">Have a Sync ID from your partner? Enter it:</div>'
-      +'<div class="sync-row"><input class="sync-input" id="syncIdInput" placeholder="Paste Sync ID here">'
-      +'<button class="sync-btn primary" onclick="connectSyncId()">Connect</button></div>';
+      +'<div style="font-size:12px;color:var(--gray);margin-bottom:4px">Or connect to existing Gist ID:</div>'
+      +'<div class="sync-row"><input class="sync-input" id="syncIdInput" placeholder="Paste Gist ID here" value="'+(syncId||'')+'">'
+      +'<button class="sync-btn primary" onclick="connectSync()">Connect</button></div>'
+      +'</div>';
   }
   html+='<div id="syncStatusMsg" class="sync-status">'+syncStatus+'</div></div></div>';
   el.innerHTML=html;
