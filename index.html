@@ -72,12 +72,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .eo-saved{width:100%;padding:7px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg);color:var(--text);margin-bottom:8px;appearance:none;-webkit-appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%239CA3AF'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:20px}
 .eo-row{display:flex;gap:6px;margin-bottom:8px}
-.eo-input{flex:1;padding:7px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)}
+.eo-input{flex:1;padding:7px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:16px;background:var(--bg);color:var(--text)}
 .eo-input:focus{outline:none;border-color:var(--shop)}
 .eo-macros-row{display:flex;gap:6px;margin-bottom:10px}
 .eo-field{flex:1;display:flex;flex-direction:column;gap:2px}
 .eo-field label{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray)}
-.eo-field input{width:100%;padding:6px 4px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;text-align:center;background:var(--bg);color:var(--text)}
+.eo-field input{width:100%;padding:6px 4px;border:1.5px solid var(--border);border-radius:6px;font-size:16px;text-align:center;background:var(--bg);color:var(--text)}
 .eo-field input:focus{outline:none;border-color:var(--shop)}
 .eo-save-btn{width:100%;padding:8px;border:1.5px dashed var(--border);border-radius:6px;background:none;color:var(--gray);font-size:12px;font-weight:600;cursor:pointer}
 .eo-save-btn:active{color:var(--shop);border-color:var(--shop)}
@@ -2953,14 +2953,14 @@ function renderMeals(){
 
 function toggleCard(k){openCards[k]=!openCards[k];var card=document.getElementById('mc_'+k);if(card)card.classList.toggle('open',openCards[k]);}
 function toggleSkip(p,d,s){var k=p+'_'+d+'_'+s;SKIPPED[k]=!SKIPPED[k];if(!SKIPPED[k])delete SKIPPED[k];else delete EAT_OUT[k];invalidateLeftoverCache();renderMeals();}
-function addLateSnack(p,d){LATE_SNACK[p+'_'+d]={name:'',kcal:0,pro:0,fat:0,carb:0};renderMeals();}
+function addLateSnack(p,d){LATE_SNACK[p+'_'+d]={name:'',kcal:null,pro:null,fat:null,carb:null};renderMeals();}
 function removeLateSnack(p,d){delete LATE_SNACK[p+'_'+d];renderMeals();}
 function setLateSnackField(p,d,field,val){
   var k=p+'_'+d;if(!LATE_SNACK[k])return;
   if(field==='name')LATE_SNACK[k][field]=val;
   else{var n=Math.max(0,parseInt(val)||0);LATE_SNACK[k][field]=n;}
 }
-function toggleEatOut(p,d,s){var k=p+'_'+d+'_'+s;if(EAT_OUT[k]){delete EAT_OUT[k];}else{EAT_OUT[k]={name:'',restaurant:'',kcal:0,pro:0,fat:0,carb:0};delete SKIPPED[k];}invalidateLeftoverCache();renderMeals();}
+function toggleEatOut(p,d,s){var k=p+'_'+d+'_'+s;if(EAT_OUT[k]){delete EAT_OUT[k];}else{EAT_OUT[k]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};delete SKIPPED[k];}invalidateLeftoverCache();renderMeals();}
 function setEatOutField(p,d,s,field,val){
   var k=p+'_'+d+'_'+s;if(!EAT_OUT[k])return;
   if(field==='name'||field==='restaurant')EAT_OUT[k][field]=val;
