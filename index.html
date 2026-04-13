@@ -2996,7 +2996,7 @@ function renderMeals(){
       html+='<div style="display:grid;grid-template-columns:36px 1fr 1fr 1fr;gap:4px;margin-top:8px">';
       html+='<div></div>';
       ['breakfast','lunch','dinner'].forEach(function(ss){
-        html+='<div style="padding:2px 0"></div>';
+        html+='<div style="text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);padding:2px 0">'+SLOT_LABEL[ss]+'</div>';
       });
       // Day rows
       var slots3=['breakfast','lunch','dinner'];
