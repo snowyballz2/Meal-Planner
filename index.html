@@ -2987,7 +2987,7 @@ function renderMeals(){
       html+='<div style="display:flex;gap:6px">'
         +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();if(confirm(\'Clear all manually set meals?\')){clearWeek();}">Clear</div>'
         +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:#A78BFA;font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();setSchedule()">Set</div>'
-        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();showRandomizePopup()">Create Plan</div>'
+        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:'+(person==='her'?'var(--her)':person==='shared'?'#34D399':'var(--his)')+';font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();showRandomizePopup()">Create Plan</div>'
         +'</div>';
     }
     html+='</div>';
