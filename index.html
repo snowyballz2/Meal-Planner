@@ -4185,11 +4185,12 @@ function loadWeeks(){
       weekData['this']={sel:{},monday:currentMonday};
       weekData['next']={sel:{},monday:nextMonday()};
     }
-    // Clear manual overrides for the new week (skips, eat-outs, overrides, late snacks)
+    // Clear manual overrides for the new week
     Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
     Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
     Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
     Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
+    Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
     // Save the rollover
     try{localStorage.setItem('mealPlannerWeekData',JSON.stringify(weekData));}catch(e){}
   }
@@ -4199,31 +4200,42 @@ function loadWeeks(){
   if(!weekData['this'].monday)weekData['this'].monday=currentMonday;
   if(!weekData['next'].monday)weekData['next'].monday=nextMonday();
   
-  // Load active week's selections into SEL
-  var saved=weekData[activeWeek]&&weekData[activeWeek].sel||{};
-  Object.keys(SEL).forEach(function(k){delete SEL[k];});
-  Object.keys(saved).forEach(function(k){SEL[k]=saved[k];});
+  // Load active week's state into globals
+  loadWeekState(activeWeek);
 
   // Load shared schedule
   try{var ss=localStorage.getItem('mealPlannerSharedSchedule');if(ss)SHARED_SCHEDULE=JSON.parse(ss);}catch(e){}
   initSharedSchedule();
 }
 function saveWeeks(){
+  // Bundle per-week state into weekData
   weekData[activeWeek].sel=JSON.parse(JSON.stringify(SEL));
+  weekData[activeWeek].skipped=JSON.parse(JSON.stringify(SKIPPED));
+  weekData[activeWeek].eatOut=JSON.parse(JSON.stringify(EAT_OUT));
+  weekData[activeWeek].overrides=JSON.parse(JSON.stringify(OVERRIDES));
+  weekData[activeWeek].lateSnack=JSON.parse(JSON.stringify(LATE_SNACK));
+  weekData[activeWeek].manualSet=JSON.parse(JSON.stringify(MANUAL_SET));
   weekData['last'].monday=lastMonday();
   weekData['this'].monday=todayMonday();
   weekData['next'].monday=nextMonday();
   try{localStorage.setItem('mealPlannerWeekData',JSON.stringify(weekData));}catch(e){}
   try{localStorage.setItem('mealPlannerSharedSchedule',JSON.stringify(SHARED_SCHEDULE));}catch(e){}
 }
+function loadWeekState(w){
+  // Load all per-week state from weekData into globals
+  var wd=weekData[w]||{};
+  function loadInto(target,source){Object.keys(target).forEach(function(k){delete target[k];});Object.keys(source||{}).forEach(function(k){target[k]=source[k];});}
+  loadInto(SEL,wd.sel);
+  loadInto(SKIPPED,wd.skipped);
+  loadInto(EAT_OUT,wd.eatOut);
+  loadInto(OVERRIDES,wd.overrides);
+  loadInto(LATE_SNACK,wd.lateSnack);
+  loadInto(MANUAL_SET,wd.manualSet);
+}
 function switchWeek(w){
-  // Save current week's selections first
   saveWeeks();
   activeWeek=w;
-  // Load the target week's selections
-  var saved=weekData[activeWeek]&&weekData[activeWeek].sel||{};
-  Object.keys(SEL).forEach(function(k){delete SEL[k];});
-  Object.keys(saved).forEach(function(k){SEL[k]=saved[k];});
+  loadWeekState(w);
   renderWeekBar();renderDayTabs();renderMeals();
   if(topTab==='shop')renderShop();
 }
@@ -4267,17 +4279,32 @@ function mergeSyncData(remote){
       Object.keys(remoteSel).forEach(function(k){allKeys[k]=true;});
       Object.keys(localSel).forEach(function(k){allKeys[k]=true;});
       
+      // Bundled per-week state from remote
+      var remoteState={skipped:remote.weekData[w].skipped||{},eatOut:remote.weekData[w].eatOut||{},overrides:remote.weekData[w].overrides||{},lateSnack:remote.weekData[w].lateSnack||{},manualSet:remote.weekData[w].manualSet||{}};
+      if(!weekData[w].skipped)weekData[w].skipped={};
+      if(!weekData[w].eatOut)weekData[w].eatOut={};
+      if(!weekData[w].overrides)weekData[w].overrides={};
+      if(!weekData[w].lateSnack)weekData[w].lateSnack={};
+      if(!weekData[w].manualSet)weekData[w].manualSet={};
+
       Object.keys(allKeys).forEach(function(k){
         var localTime=localTs[k]||0;
         var remoteTime=remoteTs[k]||0;
         if(remoteTime>localTime){
-          // Remote is newer — take it
           localSel[k]=remoteSel[k];
           localTs[k]=remoteTime;
+          // Take remote's bundled state for this slot
+          if(remoteState.skipped[k]!==undefined) weekData[w].skipped[k]=remoteState.skipped[k]; else delete weekData[w].skipped[k];
+          if(remoteState.eatOut[k]!==undefined) weekData[w].eatOut[k]=remoteState.eatOut[k]; else delete weekData[w].eatOut[k];
+          if(remoteState.overrides[k]!==undefined) weekData[w].overrides[k]=remoteState.overrides[k]; else delete weekData[w].overrides[k];
+          if(remoteState.manualSet[k]!==undefined) weekData[w].manualSet[k]=remoteState.manualSet[k]; else delete weekData[w].manualSet[k];
         }
-        // Otherwise keep local (it's newer or same)
       });
-      
+      // Late snack uses person_day key, merge separately
+      Object.keys(remoteState.lateSnack).forEach(function(k){
+        if(!weekData[w].lateSnack[k]) weekData[w].lateSnack[k]=remoteState.lateSnack[k];
+      });
+
       weekData[w].sel=localSel;
       weekData[w].ts=localTs;
       if(remote.weekData[w].monday)weekData[w].monday=remote.weekData[w].monday;
@@ -4317,10 +4344,8 @@ function mergeSyncData(remote){
     saveSharedSchedule();
   }
 
-  // Reload active week into SEL
-  var saved=weekData[activeWeek]&&weekData[activeWeek].sel||{};
-  Object.keys(SEL).forEach(function(k){delete SEL[k];});
-  Object.keys(saved).forEach(function(k){SEL[k]=saved[k];});
+  // Reload active week's state into globals
+  loadWeekState(activeWeek);
   
   saveWeeks();saveCustomMeals();saveCustomIngredients();saveEatOutDB();
   injectCustomMeals();renderWeekBar();
@@ -4342,6 +4367,7 @@ function createSync(){
 }
 function pushSync(){
   if(!syncId)return;
+  saveWeeks(); // bundle latest state before syncing
   setSyncStatus('Syncing...','loading');
   // Pull first, merge, then push — prevents overwriting partner's additions
   fetch(JSONBLOB_BASE+'/'+syncId).then(function(r){
