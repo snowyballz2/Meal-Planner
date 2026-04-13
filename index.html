@@ -189,50 +189,53 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sync-status{font-size:12px;color:var(--gray);margin-top:10px;min-height:18px}
 .sync-id-display{font-family:monospace;font-size:12px;background:var(--bg);padding:8px 10px;border-radius:var(--radius-sm);word-break:break-all;cursor:pointer;border:1px solid var(--border);color:var(--text-mid)}
 /* Recipe form */
-.recipe-form{background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border);padding:16px;box-shadow:var(--shadow);color:var(--text)}
+.recipe-form{color:var(--text)}
 .recipe-list-item{display:flex;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--gray-light)}
 .rli-label{font-size:14px;font-weight:700;color:var(--text)}.rli-meta{font-size:11px;color:var(--gray);margin-top:2px}
 .rli-btn{padding:6px 12px;border-radius:var(--radius-sm);font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--bg-surface);color:var(--gray)}
 .rli-btn.del{color:#F87171;border-color:rgba(248,113,113,.3)}
-/* rf-section replaced by rf-section-hdr */
-.rf-row{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start}
-.rf-label{font-size:12px;font-weight:600;color:var(--text-mid);min-width:52px;padding-top:8px}
-.rf-input{flex:1;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
-  font-size:13px;background:var(--bg);color:var(--text)}
+.rf-row{display:flex;gap:6px;margin-bottom:6px;align-items:center}
+.rf-label{font-size:11px;font-weight:600;color:var(--gray);min-width:42px;flex-shrink:0}
+.rf-input{flex:1;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;
+  font-size:11px;background:var(--bg);color:var(--text)}
 .rf-input:focus{outline:none;border-color:var(--shop)}
-.rf-ta{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
-  font-size:13px;resize:vertical;min-height:80px;font-family:inherit;background:var(--bg);color:var(--text)}
+.rf-ta{width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;
+  font-size:11px;resize:vertical;min-height:60px;font-family:inherit;background:var(--bg);color:var(--text)}
 .rf-ta:focus{outline:none;border-color:var(--shop)}
-.rf-actions{display:flex;gap:8px;margin-top:14px}
-.rf-ingr-row{display:flex;align-items:center;gap:6px;padding:8px 6px;margin-bottom:4px;border-radius:8px;background:var(--bg);transition:background .15s}
-.rf-ingr-row:hover{background:var(--bg-surface)}
-.rf-ingr-row .rf-ingr-amt{width:40px;padding:6px 2px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center;background:var(--bg-card);color:var(--text);appearance:none;-webkit-appearance:none;flex-shrink:0;
+.rf-actions{display:flex;gap:6px;margin-top:10px}
+.rf-ingr-row{display:flex;align-items:center;gap:4px;padding:3px 0;border-bottom:1px solid var(--border);font-size:11px}
+.rf-ingr-row .rf-ingr-amt{width:40px;padding:2px;border:1.5px solid var(--border);border-radius:4px;font-size:11px;text-align:center;background:var(--bg);color:var(--text);appearance:none;-webkit-appearance:none;flex-shrink:0;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%239CA3AF'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 3px center;padding-right:12px}
 .rf-role-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-right:-2px}
-.rf-ingr-row .rf-ingr-unit{font-size:11px;color:var(--text-dim);width:30px;flex-shrink:0;text-align:center}
-.rf-ingr-row .rf-ingr-select{width:100px;min-width:100px;padding:6px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg-card);color:var(--text);appearance:none;-webkit-appearance:none;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%239CA3AF'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 6px center;padding-right:16px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
-.rf-ingr-row .rf-ingr-role{width:58px;padding:6px 2px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg-card);color:var(--text);appearance:none;-webkit-appearance:none;flex-shrink:0;text-align:center;
+.rf-ingr-row .rf-ingr-unit{font-size:11px;color:var(--gray);min-width:24px;flex-shrink:0}
+.rf-ingr-row .rf-ingr-select{flex:1;min-width:0;padding:2px 4px;border:1.5px solid var(--border);border-radius:4px;font-size:11px;background:var(--bg);color:var(--text);appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%239CA3AF'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 4px center;padding-right:14px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.rf-ingr-row .rf-ingr-role{width:54px;padding:2px;border:1.5px solid var(--border);border-radius:4px;font-size:11px;background:var(--bg);color:var(--text);appearance:none;-webkit-appearance:none;flex-shrink:0;text-align:center;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%239CA3AF'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 4px center;padding-right:14px}
-.rf-ingr-row .rf-ingr-cal{font-size:10px;font-weight:600;color:var(--shop);white-space:nowrap;width:38px;flex-shrink:0;text-align:right}
-.rf-ingr-row .rf-ingr-del{padding:2px 4px;border:none;background:none;color:var(--gray);font-size:14px;cursor:pointer;flex-shrink:0}
+.rf-ingr-row .rf-ingr-cal{font-size:10px;font-weight:600;color:var(--shop);white-space:nowrap;width:34px;flex-shrink:0;text-align:right}
+.rf-ingr-row .rf-ingr-del{padding:1px 3px;border:none;background:none;color:var(--gray);font-size:13px;cursor:pointer;flex-shrink:0}
 .rf-ingr-row .rf-ingr-del:active{color:#EF4444}
-.rf-add-ingr-btn{width:100%;padding:10px;margin-top:6px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);background:none;color:var(--shop);font-size:13px;font-weight:600;cursor:pointer}
+.rf-add-ingr-btn{width:100%;padding:6px;margin-top:4px;border:1.5px dashed var(--border);border-radius:6px;background:none;color:var(--shop);font-size:11px;font-weight:600;cursor:pointer}
 .rf-add-ingr-btn:active{opacity:.7}
-.rf-macro-total{font-size:13px;font-weight:700;color:var(--text);padding:10px 12px;margin-bottom:10px;text-align:center;background:var(--bg);border-radius:10px;border:1px solid var(--border)}
-.rf-save{flex:1;padding:10px;border:none;border-radius:var(--radius-sm);background:var(--shop);
-  color:var(--bg);font-size:14px;font-weight:700;cursor:pointer}
-.rf-cancel{padding:10px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);
-  background:var(--bg-surface);color:var(--gray);font-size:13px;font-weight:600;cursor:pointer}
-.rf-slot-grid{display:flex;flex-wrap:nowrap;gap:5px;margin-bottom:8px;justify-content:center}
-.rf-slot-chip{padding:4px 8px;border-radius:20px;border:1.5px solid var(--border);font-size:11px;
+.rf-macro-total{font-size:12px;color:var(--gray);margin-bottom:6px}
+.rf-save{padding:6px 14px;border:none;border-radius:6px;background:var(--shop);
+  color:#000;font-size:12px;font-weight:700;cursor:pointer;display:inline-block}
+.rf-cancel{padding:6px 14px;border:1.5px solid var(--border);border-radius:6px;
+  background:none;color:var(--gray);font-size:11px;font-weight:600;cursor:pointer}
+.rf-slot-grid{display:flex;flex-wrap:nowrap;gap:4px;margin-bottom:6px}
+.rf-slot-chip{padding:3px 7px;border-radius:20px;border:1.5px solid var(--border);font-size:10px;
   font-weight:600;cursor:pointer;background:var(--bg-surface);color:var(--gray)}
 .rf-slot-chip.on{background:var(--shop);color:var(--bg);border-color:var(--shop)}
-.rf-section-hdr{display:flex;align-items:center;gap:8px;margin:18px 0 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray)}
-.rf-section-hdr::after{content:'';flex:1;height:1px;background:var(--border)}
-.rf-person-grid{display:flex;gap:0;margin-bottom:12px;border-radius:8px;overflow:hidden;border:1.5px solid var(--border)}
-.rf-person-chip{flex:1;padding:7px 0;font-size:12px;font-weight:700;cursor:pointer;background:var(--bg-surface);color:var(--gray);text-align:center;border:none;transition:all .15s}
-.rf-person-chip.on{background:var(--shop);color:var(--bg)}
+.rf-section-hdr{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray);margin:10px 0 4px}
+.rf-person-grid{display:flex;gap:4px;margin-bottom:8px}
+.rf-person-chip{padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;background:var(--bg-surface);color:var(--gray);text-align:center;border:1.5px solid var(--border);border-radius:20px;transition:all .15s}
+.rf-person-chip.on{}
+/* New Ingredient compact form */
+.ni-row{display:flex;gap:6px;margin-bottom:6px;align-items:flex-end}
+.ni-field{display:flex;flex-direction:column;gap:1px;min-width:0}
+.ni-field label{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray)}
+.ni-field input,.ni-field select{padding:4px 4px;border:1.5px solid var(--border);border-radius:4px;font-size:11px;background:var(--bg);color:var(--text);width:100%;min-width:0}
+.ni-field input:focus,.ni-field select:focus{outline:none;border-color:var(--shop)}
 /* Cal popup */
 .cal-popup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;
   display:flex;align-items:flex-end;justify-content:center}
@@ -4633,10 +4636,14 @@ function toggleSlotGroup(i){
 }
 function setRecipePersons(val){
   selectedRecipePersons=val;
+  var colors={both:{bg:'rgba(16,185,129,.15)',bdr:'#34D399',col:'#34D399'},him:{bg:'var(--his-light)',bdr:'var(--his)',col:'var(--his)'},her:{bg:'var(--her-light)',bdr:'var(--her)',col:'var(--her)'}};
   var btns=document.querySelectorAll('.rf-person-chip');
   btns.forEach(function(b,i){
     var bval=['both','him','her'][i];
-    b.classList.toggle('on',bval===val);
+    var isOn=bval===val;
+    b.classList.toggle('on',isOn);
+    if(isOn){var c=colors[bval];b.style.background=c.bg;b.style.borderColor=c.bdr;b.style.color=c.col;}
+    else{b.style.background='';b.style.borderColor='';b.style.color='';}
   });
 }
 function renderPersonChips(){
@@ -4717,41 +4724,43 @@ function renderRecipesView(){
     +'<div style="background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border);margin:10px 12px;box-shadow:var(--shadow)">'
     +'<div style="padding:10px 14px;cursor:pointer;font-size:14px;font-weight:700;color:var(--text)" onclick="_newRecipeOpen=!_newRecipeOpen;renderRecipesView()">'+nrIcon+' New Recipe</div>'
     +(_newRecipeOpen?'<div style="padding:0 14px 14px"><div class="recipe-form">'
-    +'<div style="font-size:16px;font-weight:800;margin-bottom:14px;letter-spacing:-.02em">'+(editingRecipeId?'Edit Recipe':'New Recipe')+'</div>'
-    +'<div class="rf-section-hdr">Basic Info</div>'
     +'<div class="rf-row"><div class="rf-label">Name</div><input class="rf-input" id="rf_label" placeholder="e.g. Teriyaki Salmon Bowl"></div>'
     +'<div class="rf-row"><div class="rf-label">Source</div><input class="rf-input" id="rf_url" type="url" placeholder="https://... (optional)"></div>'
-    +'<div class="rf-section-hdr">Meal Slot</div><div id="rf_slots" class="rf-slot-grid"></div>'
-    +'<div class="rf-section-hdr" style="margin-top:4px">Who Eats This?</div>'
-    +'<div class="rf-person-grid" id="rf_persons">'
-    +'<button class="rf-person-chip on" onclick="setRecipePersons(\'both\')">Both</button>'
-    +'<button class="rf-person-chip" onclick="setRecipePersons(\'him\')">Him Only</button>'
-    +'<button class="rf-person-chip" onclick="setRecipePersons(\'her\')">Her Only</button>'
-    +'</div>'
-    +'<div class="rf-section-hdr" style="margin-top:4px">Ingredients</div>'
+    +'<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">'
+    +'<div id="rf_slots" class="rf-slot-grid" style="margin-bottom:0"></div>'
+    +'<div style="width:1px;height:14px;background:var(--border);flex-shrink:0"></div>'
+    +'<div class="rf-person-grid" id="rf_persons" style="margin-bottom:0">'
+    +'<button class="rf-person-chip'+(selectedRecipePersons==='both'?' on':'')+'" style="'+(selectedRecipePersons==='both'?'background:rgba(16,185,129,.15);border-color:#34D399;color:#34D399':'')+'" onclick="setRecipePersons(\'both\')">Both</button>'
+    +'<button class="rf-person-chip'+(selectedRecipePersons==='him'?' on':'')+'" style="'+(selectedRecipePersons==='him'?'background:var(--his-light);border-color:var(--his);color:var(--his)':'')+'" onclick="setRecipePersons(\'him\')">Him</button>'
+    +'<button class="rf-person-chip'+(selectedRecipePersons==='her'?' on':'')+'" style="'+(selectedRecipePersons==='her'?'background:var(--her-light);border-color:var(--her);color:var(--her)':'')+'" onclick="setRecipePersons(\'her\')">Her</button>'
+    +'</div></div>'
     +'<div class="rf-macro-total" id="rf_macros">0 kcal · P 0g · F 0g · C 0g</div>'
+    +'<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 8px;margin-bottom:6px">'
     +'<div id="rf_ingr_list"></div>'
-    +'<button class="rf-add-ingr-btn" onclick="addIngrRow()">+ Add Ingredient</button>'
-    +'<div class="rf-section-hdr" style="margin-top:16px">Instructions <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:var(--text-dim)">(one per line)</span></div>'
+    +'<button class="rf-add-ingr-btn" onclick="addIngrRow()">+ Add Ingredient</button></div>'
+    +'<div class="rf-section-hdr">Steps <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px;color:var(--text-dim)">(one per line)</span></div>'
     +'<textarea class="rf-ta" id="rf_steps" placeholder="Preheat oven to 400°F."></textarea>'
-    +'<div class="rf-actions"><button class="rf-cancel" onclick="closeRecipeForm()">Clear</button>'
-    +'<button class="rf-save" onclick="saveRecipe()">Save Recipe</button></div></div></div>':'')
+    +'<div style="display:flex;gap:6px;margin-top:10px;align-items:center">'
+    +'<button class="rf-save" onclick="saveRecipe()">Save</button>'
+    +'<button class="rf-cancel" onclick="closeRecipeForm()">Clear</button>'
+    +'</div></div></div>':'')
     +'</div>'
     // New Ingredient collapsible
     +'<div style="background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border);margin:10px 12px;box-shadow:var(--shadow)">'
     +'<div style="padding:10px 14px;cursor:pointer;font-size:14px;font-weight:700;color:var(--text)" onclick="_newIngredientOpen=!_newIngredientOpen;renderRecipesView()">'+((_newIngredientOpen?'&#9662;':'&#9656;')+' New Ingredient')+'</div>'
     +(_newIngredientOpen?'<div style="padding:0 14px 14px">'
-    +'<div style="font-size:12px;color:var(--text-mid);margin-bottom:10px">Add an ingredient that isn\'t already in the dropdown.</div>'
-    +'<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Ingredient Name</div><input class="rf-input" id="rf_new_name" placeholder="e.g. tempeh" style="width:100%"></div>'
-    +'<div style="display:flex;gap:8px;margin-bottom:8px">'
-    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Unit</div><select class="rf-input" id="rf_new_unit" style="width:100%"><option value="oz">oz</option><option value="cup">cup</option><option value="tbsp">tbsp</option><option value="each">each</option><option value="scoop">scoop</option><option value="slice">slice</option></select></div>'
-    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Role</div><select class="rf-input" id="rf_new_role" style="width:100%"><option value="protein">protein</option><option value="carb">carb</option><option value="fat">fat</option><option value="veg">veg</option><option value="condiment">condiment</option><option value="fixed">fixed</option></select></div></div>'
-    +'<div style="display:flex;gap:8px;margin-bottom:10px">'
-    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Kcal</div><input class="rf-input" id="rf_new_kcal" type="number" min="0" placeholder="0" style="width:100%"></div>'
-    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Protein</div><input class="rf-input" id="rf_new_pro" type="number" min="0" placeholder="0" style="width:100%"></div>'
-    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Fat</div><input class="rf-input" id="rf_new_fat" type="number" min="0" placeholder="0" style="width:100%"></div>'
-    +'<div style="flex:1"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-mid);margin-bottom:3px">Carbs</div><input class="rf-input" id="rf_new_carb" type="number" min="0" placeholder="0" style="width:100%"></div></div>'
-    +'<button class="rf-save" style="width:100%;padding:10px;font-size:13px" onclick="addNewDbIngredient()">+ Add to Database</button>'
+    +'<div class="ni-row">'
+    +'<div class="ni-field" style="flex:2"><label>Name</label><input id="rf_new_name" placeholder="e.g. tempeh"></div>'
+    +'<div class="ni-field" style="flex:1"><label>Unit</label><select id="rf_new_unit"><option value="oz">oz</option><option value="cup">cup</option><option value="tbsp">tbsp</option><option value="each">each</option><option value="scoop">scoop</option><option value="slice">slice</option></select></div>'
+    +'<div class="ni-field" style="flex:1"><label>Role</label><select id="rf_new_role"><option value="protein">protein</option><option value="carb">carb</option><option value="fat">fat</option><option value="veg">veg</option><option value="condiment">condiment</option><option value="fixed">fixed</option></select></div>'
+    +'</div>'
+    +'<div class="ni-row">'
+    +'<div class="ni-field" style="flex:1"><label>Kcal</label><input id="rf_new_kcal" type="number" min="0" placeholder="0"></div>'
+    +'<div class="ni-field" style="flex:1"><label>Pro</label><input id="rf_new_pro" type="number" min="0" placeholder="0"></div>'
+    +'<div class="ni-field" style="flex:1"><label>Fat</label><input id="rf_new_fat" type="number" min="0" placeholder="0"></div>'
+    +'<div class="ni-field" style="flex:1"><label>Carb</label><input id="rf_new_carb" type="number" min="0" placeholder="0"></div>'
+    +'</div>'
+    +'<button class="rf-save" style="padding:5px 14px;font-size:11px;margin-top:4px" onclick="addNewDbIngredient()">Add to Database</button>'
     +'</div>':'')
     +'</div>'
     // Edit Recipes collapsible
