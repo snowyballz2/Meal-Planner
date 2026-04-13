@@ -4420,7 +4420,7 @@ function connectSync(){
   if(syncToken) setSyncStatus('Connected!','ok');
   renderSyncView();
 }
-function clearSyncId(){syncId=null;syncToken=null;try{localStorage.removeItem('mealPlannerSyncId');localStorage.removeItem('mealPlannerSyncToken');}catch(e){}setSyncStatus('Disconnected.','ok');renderSyncView();}
+function clearSyncId(){syncId=null;try{localStorage.removeItem('mealPlannerSyncId');}catch(e){}setSyncStatus('Disconnected. Token saved.','ok');renderSyncView();}
 function copyId(){if(syncId){navigator.clipboard.writeText(syncId).then(function(){setSyncStatus('ID copied!','ok');});}}
 function toggleSyncPanel(){
   var sv=document.getElementById('syncView');
