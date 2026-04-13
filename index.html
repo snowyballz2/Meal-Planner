@@ -2806,7 +2806,7 @@ function buildMealCardHtml(s, person, day, other){
   const topRowPills='<div class="mc-pills">'+(isSkipped||isEatOut?'':leftoverPill+cookPill)
     +(isSkipped?'':isEatOut?'':sharedPill)
     +skipPill
-    +(isSkipped?'':eoPill)
+    +eoPill
     +'</div>';
 
   // Build skip summary when skipped
@@ -3135,6 +3135,7 @@ function getRecentMealIds(dayIndex, days, p, lookback) {
 }
 
 function randomizeWeek(){
+  sharedSchedOpen=false; // close the schedule panel so the new meals are visible
   // Retry loop: keep randomizing until we get a zero-waste week (max 10 attempts)
   const savedSel = JSON.parse(JSON.stringify(SEL));
   const maxRetries = 10;
