@@ -4468,22 +4468,22 @@ function renderSyncView(){
   var html='<div style="padding:0 0 80px"><div class="sync-panel"><div class="sync-title">☁️ Cloud Sync</div>'
     +'<p style="font-size:13px;color:var(--gray);margin-bottom:10px">Sync via GitHub Gist. Create a token at github.com/settings/tokens (gist scope only).</p>';
   if(syncId&&syncToken){
-    html+='<div style="font-size:12px;color:var(--gray);margin-bottom:4px">Gist ID (tap to copy):</div>'
-      +'<div class="sync-id-display" onclick="copyId()">'+syncId+'</div>'
-      +'<div style="font-size:11px;color:var(--gray);margin-top:6px">Token: ••••'+syncToken.slice(-4)+'</div>'
-      +'<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
-      +'<button class="sync-btn primary" onclick="pushSync()">⬆ Sync</button>'
-      +'<button class="sync-btn primary" onclick="pullSync()">⬇ Pull</button>'
-      +'<button class="sync-btn primary" onclick="shareSync()">📤 Share</button>'
-      +'<button class="sync-btn secondary" onclick="clearSyncId()">Disconnect</button></div>';
+    html+='<div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--gray);margin-bottom:3px">Gist ID</div>'
+      +'<div style="font-size:12px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:8px;word-break:break-all;cursor:pointer" onclick="copyId()">'+syncId+'</div>'
+      +'<div style="font-size:10px;color:var(--gray);margin-bottom:12px">Token: ••••'+syncToken.slice(-4)+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+      +'<button class="sync-btn primary" onclick="pushSync()">Sync</button>'
+      +'<button class="sync-btn primary" onclick="pullSync()">Pull</button>'
+      +'<button class="sync-btn primary" onclick="shareSync()">Share</button>'
+      +'</div>'
+      +'<div style="margin-top:8px"><button class="sync-btn secondary" style="width:100%" onclick="clearSyncId()">Disconnect</button></div>';
   } else {
-    html+='<div style="font-size:12px;color:var(--gray);margin-bottom:4px">GitHub Token:</div>'
-      +'<div class="sync-row"><input class="sync-input" id="syncTokenInput" type="password" placeholder="ghp_xxxx..." value="'+(syncToken||'')+'"></div>'
-      +'<div style="margin-top:8px">'
-      +'<div class="sync-row"><button class="sync-btn primary" onclick="connectSync();createSync()">✦ Create New Sync</button></div>'
-      +'<hr class="sync-divider">'
-      +'<div style="font-size:12px;color:var(--gray);margin-bottom:4px">Or connect to existing Gist ID:</div>'
-      +'<div class="sync-row"><input class="sync-input" id="syncIdInput" placeholder="Paste Gist ID here" value="'+(syncId||'')+'">'
+    html+='<div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--gray);margin-bottom:3px">GitHub Token</div>'
+      +'<input class="sync-input" id="syncTokenInput" type="password" placeholder="ghp_xxxx..." value="'+(syncToken||'')+'" style="width:100%;margin-bottom:10px">'
+      +'<button class="sync-btn primary" style="width:100%;margin-bottom:12px" onclick="connectSync();createSync()">Create New Sync</button>'
+      +'<div style="border-top:1px solid var(--border);padding-top:10px">'
+      +'<div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--gray);margin-bottom:3px">Or connect to existing Gist ID</div>'
+      +'<div style="display:flex;gap:6px"><input class="sync-input" id="syncIdInput" placeholder="Paste Gist ID" value="'+(syncId||'')+'" style="flex:1">'
       +'<button class="sync-btn primary" onclick="connectSync()">Connect</button></div>'
       +'</div>';
   }
