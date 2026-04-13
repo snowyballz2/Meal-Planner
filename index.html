@@ -3506,12 +3506,13 @@ function closeRandomizePopup(){
 }
 function runRandomizeFromPopup(){
   closeRandomizePopup();
-  // Set person based on selection
   if(_randHim&&_randHer){setPerson('shared');}
   else if(_randHim){setPerson('him');}
   else if(_randHer){setPerson('her');}
-  else return; // nothing selected
+  else return;
+  setDay('Monday');
   randomizeWeek();
+  requestAnimationFrame(function(){window.scrollTo(0,0);});
 }
 function setSchedule(){
   // Apply schedule immediately: shared meals get matched, eat-outs applied, all marked manual
