@@ -1668,17 +1668,17 @@ function schedTapRight(d,s){
   saveSharedSchedule();renderMeals();
 }
 function setSharedPreset(preset){
-  SHARED_SCHEDULE={};
-  if(preset==='breakfasts'){
-    DAYS.forEach(function(d){SHARED_SCHEDULE[d+'_breakfast']='shared';});
-  } else if(preset==='lunches'){
-    DAYS.forEach(function(d){SHARED_SCHEDULE[d+'_lunch']='shared';});
-  } else if(preset==='dinners'){
-    DAYS.forEach(function(d){SHARED_SCHEDULE[d+'_dinner']='shared';});
-  } else if(preset==='all'){
-    DAYS.forEach(function(d){['breakfast','lunch','dinner'].forEach(function(s){SHARED_SCHEDULE[d+'_'+s]='shared';});});
+  if(preset==='clear'){SHARED_SCHEDULE={};saveSharedSchedule();renderMeals();return;}
+  // Toggle: if all days for this slot are already shared, remove them. Otherwise add them.
+  var slot=preset==='breakfasts'?'breakfast':preset==='lunches'?'lunch':preset==='dinners'?'dinner':null;
+  if(slot){
+    var allOn=DAYS.every(function(d){return SHARED_SCHEDULE[d+'_'+slot]==='shared';});
+    DAYS.forEach(function(d){
+      var k=d+'_'+slot;
+      if(allOn) delete SHARED_SCHEDULE[k];
+      else SHARED_SCHEDULE[k]='shared';
+    });
   }
-  // 'clear' just leaves SHARED_SCHEDULE empty
   saveSharedSchedule();
   renderMeals();
 }
