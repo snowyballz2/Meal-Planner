@@ -2970,15 +2970,22 @@ function eoFieldChanged(p,d,s,field,val){
   setEatOutField(p,d,s,field,val);
   updateStatsBar();
 }
+var _blurTimer=null;
 function eoFieldBlur(p,d,s){
-  renderMeals();
+  clearTimeout(_blurTimer);
+  _blurTimer=setTimeout(function(){
+    if(!document.activeElement||!document.activeElement.closest||!document.activeElement.closest('.eo-form'))renderMeals();
+  },150);
 }
 function lsFieldChanged(p,d,field,val){
   setLateSnackField(p,d,field,val);
   updateStatsBar();
 }
 function lsFieldBlur(p,d){
-  renderMeals();
+  clearTimeout(_blurTimer);
+  _blurTimer=setTimeout(function(){
+    if(!document.activeElement||!document.activeElement.closest||!document.activeElement.closest('.eo-form'))renderMeals();
+  },150);
 }
 function updateStatsBar(){
   var t=calcTotals(person,day);
