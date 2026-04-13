@@ -1736,9 +1736,9 @@ function setSharedPresetSide(preset,side){
       if(cur==='skip-both') SHARED_SCHEDULE[k]=(side==='him'?'skip-her':'skip-him');
       else if(cur===skipKey) delete SHARED_SCHEDULE[k];
     } else {
-      // Add this side's eat-out
+      // Add this side's eat-out (overrides shared — can't share if one person is eating out)
       if(cur===(side==='him'?'skip-her':'skip-him')) SHARED_SCHEDULE[k]='skip-both';
-      else if(cur!=='shared') SHARED_SCHEDULE[k]=skipKey;
+      else SHARED_SCHEDULE[k]=skipKey;
     }
   });
   updateSchedule();
