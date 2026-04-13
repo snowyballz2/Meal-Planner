@@ -2985,11 +2985,6 @@ function renderMeals(){
     html+='<div style="font-size:13px;font-weight:700;color:var(--text);cursor:pointer">'+ssIcon+' Schedule Meals</div>';
     html+='</div>';
     if(sharedSchedOpen){
-      html+='<div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px">'
-        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();if(confirm(\'Clear all manually set meals?\')){clearWeek();}">Clear</div>'
-        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid rgba(167,139,250,.5);color:#A78BFA;font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();setSchedule()">Set</div>'
-        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid '+(person==='her'?'rgba(244,114,182,.5)':person==='shared'?'rgba(52,211,153,.5)':'rgba(96,165,250,.5)')+';color:'+(person==='her'?'var(--her)':person==='shared'?'#34D399':'var(--his)')+';font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();showRandomizePopup()">Create Plan</div>'
-        +'</div>';
       // Grid header: Day + Breakfast + Lunch + Dinner
       html+='<div style="display:grid;grid-template-columns:36px 1fr 1fr 1fr;gap:4px;margin-top:8px">';
       html+='<div></div>';
@@ -3070,7 +3065,12 @@ function renderMeals(){
         });
       });
       html+='</div>';
-      // B/L/D buttons moved to column headers above
+      // Clear / Set / Create Plan buttons
+      html+='<div style="display:flex;gap:6px;justify-content:center;margin-top:10px">'
+        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();if(confirm(\'Clear all manually set meals?\')){clearWeek();}">Clear</div>'
+        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid rgba(167,139,250,.5);color:#A78BFA;font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();setSchedule()">Set</div>'
+        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid '+(person==='her'?'rgba(244,114,182,.5)':person==='shared'?'rgba(52,211,153,.5)':'rgba(96,165,250,.5)')+';color:'+(person==='her'?'var(--her)':person==='shared'?'#34D399':'var(--his)')+';font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();showRandomizePopup()">Create Plan</div>'
+        +'</div>';
       // Meal painting UI
       html+='<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">';
       if(_paintMode){
