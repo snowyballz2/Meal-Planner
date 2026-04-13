@@ -4433,6 +4433,14 @@ function connectSync(){
 }
 function clearSyncId(){syncId=null;try{localStorage.removeItem('mealPlannerSyncId');}catch(e){}setSyncStatus('Disconnected. Token saved.','ok');renderSyncView();}
 function copyId(){if(syncId){navigator.clipboard.writeText(syncId).then(function(){setSyncStatus('ID copied!','ok');});}}
+function shareSync(){
+  var text='Meal Planner Sync\nToken: '+syncToken+'\nGist ID: '+syncId;
+  if(navigator.share){
+    navigator.share({title:'Meal Planner Sync',text:text}).catch(function(){});
+  } else {
+    navigator.clipboard.writeText(text).then(function(){setSyncStatus('Copied to clipboard!','ok');});
+  }
+}
 function toggleSyncPanel(){
   var sv=document.getElementById('syncView');
   var isVisible=sv.style.display!=='none';
@@ -4463,6 +4471,7 @@ function renderSyncView(){
       +'<div style="display:flex;gap:8px;margin-top:10px">'
       +'<button class="sync-btn primary" onclick="pushSync()">⬆ Sync</button>'
       +'<button class="sync-btn primary" onclick="pullSync()">⬇ Pull</button>'
+      +'<button class="sync-btn primary" onclick="shareSync()">📤 Share</button>'
       +'<button class="sync-btn secondary" onclick="clearSyncId()">Disconnect</button></div>';
   } else {
     html+='<div style="font-size:12px;color:var(--gray);margin-bottom:4px">GitHub Token:</div>'
