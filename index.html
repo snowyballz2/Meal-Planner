@@ -2960,19 +2960,20 @@ function renderMeals(){
           var herSkip=(state==='skip-her'||state==='skip-both');
           var isShared=(state==='shared');
           var grn='rgba(52,211,153,';var gry='rgba(148,163,184,';var prp='rgba(167,139,250,';
-          // Only show Set when not already skip or eat-out (those are self-evident)
-          var himShowSet=!!MANUAL_SET['him_'+dd+'_'+ss]&&!himSkip&&!EAT_OUT['him_'+dd+'_'+ss];
-          var herShowSet=!!MANUAL_SET['her_'+dd+'_'+ss]&&!herSkip&&!EAT_OUT['her_'+dd+'_'+ss];
-          // Background: Set(purple) > Shared(green) > Skip(gray)
-          var lBg=himShowSet?prp+'.2)':isShared?grn+'.25)':himSkip?gry+'.2)':'transparent';
-          var rBg=herShowSet?prp+'.2)':isShared?grn+'.25)':herSkip?gry+'.2)':'transparent';
-          var lBdr=himShowSet?'1.5px solid '+(isShared?grn+'.5)':prp+'.5)'):isShared?'1.5px solid '+grn+'.5)':himSkip?'1.5px solid '+gry+'.4)':'1.5px solid var(--border)';
-          var rBdr=herShowSet?'1.5px solid '+(isShared?grn+'.5)':prp+'.5)'):isShared?'1.5px solid '+grn+'.5)':herSkip?'1.5px solid '+gry+'.4)':'1.5px solid var(--border)';
-          var lCol=himShowSet?'#A78BFA':isShared?'#fff':himSkip?'#94A3B8':'var(--gray)';
-          var rCol=herShowSet?'#A78BFA':isShared?'#fff':herSkip?'#94A3B8':'var(--gray)';
-          var lLabel=himShowSet?'Set':'Him';
-          var rLabel=herShowSet?'Set':'Her';
-          var midCol=(himShowSet||herShowSet||isShared||himSkip||herSkip)?((himShowSet||herShowSet)?prp+'.4)':(isShared)?grn+'.5)':gry+'.4)'):'transparent';
+          // Manual set = purple outline, keeps normal text/colors underneath
+          var himManual=!!MANUAL_SET['him_'+dd+'_'+ss];
+          var herManual=!!MANUAL_SET['her_'+dd+'_'+ss];
+          // Background: normal state colors
+          var lBg=isShared?grn+'.25)':himSkip?gry+'.2)':'transparent';
+          var rBg=isShared?grn+'.25)':herSkip?gry+'.2)':'transparent';
+          // Border: purple if manual set, otherwise normal state color
+          var lBdr=himManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':himSkip?'1.5px solid '+gry+'.4)':'1.5px solid var(--border)';
+          var rBdr=herManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':herSkip?'1.5px solid '+gry+'.4)':'1.5px solid var(--border)';
+          var lCol=isShared?'#fff':himSkip?'#94A3B8':'var(--gray)';
+          var rCol=isShared?'#fff':herSkip?'#94A3B8':'var(--gray)';
+          var lLabel='Him';
+          var rLabel='Her';
+          var midCol=(isShared||himSkip||herSkip)?((isShared)?grn+'.5)':gry+'.4)'):'transparent';
           var de=dd.replace(/'/g,"\\'");var se=ss.replace(/'/g,"\\'");
           html+='<div style="display:flex;border-radius:6px;overflow:hidden;cursor:pointer;height:28px;width:87px;margin:0 auto">'
             +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+lBg+';border:'+lBdr+';border-right:'+(lBg!==rBg?'1.5px solid '+midCol:'none')+';border-radius:6px 0 0 6px;font-size:9px;font-weight:700;color:'+lCol+';-webkit-user-select:none;user-select:none" onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'left\')">'+lLabel+'</div>'
