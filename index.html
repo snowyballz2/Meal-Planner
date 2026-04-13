@@ -229,7 +229,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .rf-section-hdr{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray);margin:10px 0 4px}
 .rf-person-grid{display:flex;gap:4px;margin-bottom:8px}
 .rf-person-chip{padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;background:var(--bg-surface);color:var(--gray);text-align:center;border:1.5px solid var(--border);border-radius:20px;transition:all .15s}
-.rf-person-chip.on{}
 /* New Ingredient compact form */
 .ni-row{display:flex;gap:6px;margin-bottom:6px;align-items:flex-end}
 .ni-field{display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -715,7 +714,7 @@ function buildAdjCheckboxes(person, day, startIdx, label) {
   var hasAny = false;
   for (var ci = startIdx; ci < ADJ_SLOTS.length; ci++) {
     var sl = ADJ_SLOTS[ci];
-    if (SKIPPED[person+'_'+day+'_'+sl] || (EAT_OUT[person+'_'+day+'_'+sl] && EAT_OUT[person+'_'+day+'_'+sl].kcal > 0)) continue;
+    if (SKIPPED[sk(person,day,sl)] || (EAT_OUT[sk(person,day,sl)] && EAT_OUT[sk(person,day,sl)].kcal > 0)) continue;
     var checked = adjTargets[sl] ? 'checked ' : '';
     hasAny = true;
     html += '<label class="adj-target-cb" onclick="event.stopPropagation()"><input type="checkbox" ' + checked + ' onchange="toggleAdjTarget(\'' + person + '\',\'' + day + '\',\'' + sl + '\')"> ' + SLOT_LABEL[sl] + '</label>';
@@ -1614,9 +1613,9 @@ var EAT_OUT={}; // key: 'person_day_slot', value: {name,restaurant,kcal,pro,fat,
 var LATE_SNACK={}; // key: 'person_day', value: {name,kcal,pro,fat,carb}
 var ADJ_TARGETS={}; // key: 'person_day', value: per-slot bools for which meals absorb redistributed calories
 function _defaultAdjTargets(){var o={};ADJ_SLOTS.forEach(function(s){o[s]=true;});return o;}
-function getAdjTargets(p,d){return ADJ_TARGETS[p+'_'+d]||_defaultAdjTargets();}
+function getAdjTargets(p,d){return ADJ_TARGETS[pk(p,d)]||_defaultAdjTargets();}
 function toggleAdjTarget(p,d,slot){
-  var k=p+'_'+d;
+  var k=pk(p,d);
   if(!ADJ_TARGETS[k])ADJ_TARGETS[k]=_defaultAdjTargets();
   ADJ_TARGETS[k][slot]=!ADJ_TARGETS[k][slot];
   renderMeals();
@@ -1625,7 +1624,7 @@ var SHARED_SCHEDULE = {}; // key: 'day_slot', value: 'shared'|'skip-him'|'skip-h
 var sharedSchedOpen = false; // collapsible panel state
 function initSharedSchedule(){
   if(!Object.keys(SHARED_SCHEDULE).length){
-    DAYS.forEach(function(d){ SHARED_SCHEDULE[d+'_dinner']='shared'; });
+    DAYS.forEach(function(d){ SHARED_SCHEDULE[dk(d,'dinner')]='shared'; });
   }
   Object.keys(SHARED_SCHEDULE).forEach(function(k){
     if(SHARED_SCHEDULE[k]===true) SHARED_SCHEDULE[k]='shared';
@@ -1636,12 +1635,12 @@ function initSharedSchedule(){
 // Long press either side: toggle shared for the whole cell.
 var _schedLongPress=null;
 function schedLongPress(d,s){
-  if(MANUAL_SET['him_'+d+'_'+s]||MANUAL_SET['her_'+d+'_'+s]) return; // locked by manual set
-  var k=d+'_'+s;
+  if(MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)]) return; // locked by manual set
+  var k=dk(d,s);
   var cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared') delete SHARED_SCHEDULE[k];
   else SHARED_SCHEDULE[k]='shared';
-  saveSharedSchedule();renderMeals();
+  updateSchedule();
 }
 function schedStartPress(d,s){
   _schedLongPress=setTimeout(function(){_schedLongPress='fired';schedLongPress(d,s);},500);
@@ -1653,8 +1652,8 @@ function schedEndPress(d,s,side){
   else schedTapRight(d,s);
 }
 function schedTapLeft(d,s){
-  if(MANUAL_SET['him_'+d+'_'+s]) return; // locked by manual set
-  var k=d+'_'+s;
+  if(MANUAL_SET[sk('him',d,s)]) return; // locked by manual set
+  var k=dk(d,s);
   var cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
     delete SHARED_SCHEDULE[k];
@@ -1667,11 +1666,11 @@ function schedTapLeft(d,s){
   } else {
     SHARED_SCHEDULE[k]='skip-him'; // him eats out
   }
-  saveSharedSchedule();renderMeals();
+  updateSchedule();
 }
 function schedTapRight(d,s){
-  if(MANUAL_SET['her_'+d+'_'+s]) return; // locked by manual set
-  var k=d+'_'+s;
+  if(MANUAL_SET[sk('her',d,s)]) return; // locked by manual set
+  var k=dk(d,s);
   var cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
     delete SHARED_SCHEDULE[k];
@@ -1684,31 +1683,31 @@ function schedTapRight(d,s){
   } else {
     SHARED_SCHEDULE[k]='skip-her'; // her eats out
   }
-  saveSharedSchedule();renderMeals();
+  updateSchedule();
 }
 function schedTapDay(d){
   var slots=['breakfast','lunch','dinner'];
-  var allShared=slots.every(function(s){return SHARED_SCHEDULE[d+'_'+s]==='shared';});
-  var allEO=slots.every(function(s){return SHARED_SCHEDULE[d+'_'+s]==='skip-both';});
+  var allShared=slots.every(function(s){return SHARED_SCHEDULE[dk(d,s)]==='shared';});
+  var allEO=slots.every(function(s){return SHARED_SCHEDULE[dk(d,s)]==='skip-both';});
   slots.forEach(function(s){
-    if(MANUAL_SET['him_'+d+'_'+s]||MANUAL_SET['her_'+d+'_'+s]) return;
-    var k=d+'_'+s;
+    if(MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)]) return;
+    var k=dk(d,s);
     if(allShared) SHARED_SCHEDULE[k]='skip-both'; // shared → eat out
     else if(allEO) delete SHARED_SCHEDULE[k];      // eat out → normal
     else SHARED_SCHEDULE[k]='shared';               // normal → shared
   });
-  saveSharedSchedule();renderMeals();
+  updateSchedule();
 }
 function setSharedPreset(preset){
   if(preset==='clear'){SHARED_SCHEDULE={};saveSharedSchedule();renderMeals();return;}
   // Toggle: if all days for this slot are already shared, remove them. Otherwise add them.
   var slot=preset==='breakfasts'?'breakfast':preset==='lunches'?'lunch':preset==='dinners'?'dinner':null;
   if(slot){
-    var allOn=DAYS.every(function(d){return SHARED_SCHEDULE[d+'_'+slot]==='shared';});
+    var allOn=DAYS.every(function(d){return SHARED_SCHEDULE[dk(d,slot)]==='shared';});
     DAYS.forEach(function(d){
-      var k=d+'_'+slot;
+      var k=dk(d,slot);
       // Don't modify manually-set slots
-      if(MANUAL_SET['him_'+d+'_'+slot]||MANUAL_SET['her_'+d+'_'+slot]) return;
+      if(MANUAL_SET[sk('him',d,slot)]||MANUAL_SET[sk('her',d,slot)]) return;
       if(allOn) delete SHARED_SCHEDULE[k];
       else SHARED_SCHEDULE[k]='shared';
     });
@@ -1722,12 +1721,12 @@ function setSharedPresetSide(preset,side){
   // Toggle eat-out for this person on all days for this slot
   var skipKey=side==='him'?'skip-him':'skip-her';
   var allOn=DAYS.every(function(d){
-    var st=SHARED_SCHEDULE[d+'_'+slot];
+    var st=SHARED_SCHEDULE[dk(d,slot)];
     return st===skipKey||st==='skip-both';
   });
   DAYS.forEach(function(d){
-    if(MANUAL_SET[side+'_'+d+'_'+slot]) return;
-    var k=d+'_'+slot;
+    if(MANUAL_SET[sk(side,d,slot)]) return;
+    var k=dk(d,slot);
     var cur=SHARED_SCHEDULE[k]||'';
     if(allOn){
       // Remove this side's eat-out
@@ -1739,7 +1738,7 @@ function setSharedPresetSide(preset,side){
       else if(cur!=='shared') SHARED_SCHEDULE[k]=skipKey;
     }
   });
-  saveSharedSchedule();renderMeals();
+  updateSchedule();
 }
 function saveSharedSchedule(){
   try{localStorage.setItem('mealPlannerSharedSchedule',JSON.stringify(SHARED_SCHEDULE));}catch(e){}
@@ -1756,15 +1755,15 @@ function addToEatOutDB(entry){
 let topTab='meals',person='him',day='Monday',shopTrip='sun',shopPerson='both';
 
 // Get overrides for a specific meal slot
-function getOverrides(p,d,s){return OVERRIDES[p+'_'+d+'_'+s]||null;}
+function getOverrides(p,d,s){return OVERRIDES[sk(p,d,s)]||null;}
 function setOverride(p,d,s,idx,field,value){
-  var key=p+'_'+d+'_'+s;
+  var key=sk(p,d,s);
   if(!OVERRIDES[key])OVERRIDES[key]=[];
   var existing=OVERRIDES[key].find(function(o){return o.idx===idx;});
   if(!existing){existing={idx:idx};OVERRIDES[key].push(existing);}
   existing[field]=value;
 }
-function clearOverrides(p,d,s){delete OVERRIDES[p+'_'+d+'_'+s];}
+function clearOverrides(p,d,s){delete OVERRIDES[sk(p,d,s)];}
 
 // Apply overrides to a port's ingredients, returns new array
 function applyOverrides(port,p,d,s){
@@ -1791,7 +1790,7 @@ function isIfLow(name){var n=name.toLowerCase();return IF_LOW_ITEMS.some(functio
 const CAT_ORDER=['Meat','Seafood','Dairy','Dairy alt','Refrigerated','Produce','Frozen','Bread','Pantry','Grab & go','If Low'];
 const CAT_ICONS={Meat:'🥩',Seafood:'🐟',Dairy:'🥛','Dairy alt':'🥛',Refrigerated:'❄️',Produce:'🥦',Frozen:'🧊',Bread:'🍞',Pantry:'🫙','Grab & go':'🧃','If Low':'📦',Spices:'🧂',Supplements:'💊',Sauces:'🫙',Oils:'🫒'};
 
-function getMealId(p,d,s){return SEL[p+'_'+d+'_'+s]||(DEFAULTS[p][d]&&DEFAULTS[p][d][s])||null}
+function getMealId(p,d,s){return SEL[sk(p,d,s)]||(DEFAULTS[p][d]&&DEFAULTS[p][d][s])||null}
 function getMeal(id){return MEALS.find(function(m){return m.id===id})}
 function getActiveMeal(p,d,s){var id=getMealId(p,d,s);return id?getMeal(id):null}
 
@@ -1817,7 +1816,7 @@ function computeLeftovers(){
         const id=getMealId(p,d,s);
         if(!id||noLeftoverIds[id])return;
         // Skip meals that are skipped or eat-out — they break the leftover chain
-        const stateKey=p+'_'+d+'_'+s;
+        const stateKey=sk(p,d,s);
         if(SKIPPED[stateKey]||EAT_OUT[stateKey])return;
         if(!byMealId[id])byMealId[id]=[];
         byMealId[id].push({day:d,dayIdx:di,slot:s});
@@ -1835,7 +1834,7 @@ function computeLeftovers(){
       let i=0;
       while(i<entries.length){
         const start=entries[i];
-        const k0=p+'_'+start.day+'_'+start.slot;
+        const k0=sk(p,start.day,start.slot);
         if(result[k0]){i++;continue;}
 
         // Determine max day span: breakfast-only meals max 1 day ahead, others max 2
@@ -1848,7 +1847,7 @@ function computeLeftovers(){
         while(j<entries.length){
           const e=entries[j];
           if(e.dayIdx>start.dayIdx+maxSpan)break;
-          if(!result[p+'_'+e.day+'_'+e.slot]){
+          if(!result[sk(p,e.day,e.slot)]){
             group.push(e);
           }
           j++;
@@ -1856,10 +1855,10 @@ function computeLeftovers(){
         
         if(group.length>1){
           // First entry is cook day, rest are leftovers
-          const cookKey=p+'_'+group[0].day+'_'+group[0].slot;
+          const cookKey=sk(p,group[0].day,group[0].slot);
           result[cookKey]={isLeftover:false,cookDay:group[0].day,servings:group.length};
           for(let g=1;g<group.length;g++){
-            const loKey=p+'_'+group[g].day+'_'+group[g].slot;
+            const loKey=sk(p,group[g].day,group[g].slot);
             result[loKey]={isLeftover:true,cookDay:group[0].day,servings:group.length};
           }
           i=j; // skip past the group
@@ -1877,8 +1876,8 @@ function computeLeftovers(){
       const himId=getMealId('him',d,s);
       const herId=getMealId('her',d,s);
       if(!himId||himId!==herId)return;
-      const himKey='him_'+d+'_'+s;
-      const herKey='her_'+d+'_'+s;
+      const himKey=sk('him',d,s);
+      const herKey=sk('her',d,s);
       const himLo=result[himKey];
       const herLo=result[herKey];
       if((!himLo||!himLo.isLeftover)&&(!herLo||!herLo.isLeftover)){
@@ -1895,7 +1894,7 @@ function computeLeftovers(){
   DAYS.forEach(function(d,di){
     leftoverSlots.forEach(function(s){
       ['him','her'].forEach(function(p){
-        const key=p+'_'+d+'_'+s;
+        const key=sk(p,d,s);
         if(result[key])return; // already claimed by within-person or shared detection
         const id=getMealId(p,d,s);
         if(!id||noLeftoverIds[id])return;
@@ -1908,7 +1907,7 @@ function computeLeftovers(){
             const prevSlot=leftoverSlots[si];
             const prevId=getMealId(otherP,prevDay,prevSlot);
             if(prevId!==id)continue;
-            const prevKey=otherP+'_'+prevDay+'_'+prevSlot;
+            const prevKey=sk(otherP,prevDay,prevSlot);
             const prevLo=result[prevKey];
             // The other person's meal must be a cook day (not itself a leftover)
             if(prevLo&&prevLo.isLeftover)continue;
@@ -2094,10 +2093,10 @@ function buildShoppingList(trip,who){
         // Late night snack is not in shopping list
         if(s==='late_snack')return;
         // Custom mode: only include selected meals
-        if(trip==='custom'&&!CUSTOM_SHOP_SEL[p+'_'+d+'_'+s])return;
+        if(trip==='custom'&&!CUSTOM_SHOP_SEL[sk(p,d,s)])return;
         // Skip eat-out and skipped meals
-        if(SKIPPED[p+'_'+d+'_'+s])return;
-        if(EAT_OUT[p+'_'+d+'_'+s])return;
+        if(SKIPPED[sk(p,d,s)])return;
+        if(EAT_OUT[sk(p,d,s)])return;
 
         const id=getMealId(p,d,s);
         if(!id)return;
@@ -2108,7 +2107,7 @@ function buildShoppingList(trip,who){
         // Leftover handling: skip ALL leftovers (within-person AND cross-person)
         // Cook day handles qty for all servings it feeds
         const leftovers=computeLeftovers();
-        const loKey=p+'_'+d+'_'+s;
+        const loKey=sk(p,d,s);
         const loInfo=leftovers[loKey];
         if(loInfo&&loInfo.isLeftover)return;
         const leftoverMultiplier=(loInfo&&!loInfo.isLeftover&&loInfo.servings>1)?loInfo.servings:1;
@@ -2260,6 +2259,19 @@ function buildShoppingList(trip,who){
   return grouped;
 }
 
+// Key-building helpers for composite state keys
+function sk(p,d,s){return p+'_'+d+'_'+s;} // person_day_slot (e.g. 'him_Monday_lunch')
+function dk(d,s){return d+'_'+s;}           // day_slot (e.g. 'Monday_dinner')
+function pk(p,d){return p+'_'+d;}           // person_day (e.g. 'him_Monday')
+
+// Common patterns extracted as helpers
+function stampSel(key,mealId){
+  SEL[key]=mealId;
+  if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
+  weekData[activeWeek].ts[key]=Date.now();
+}
+function updateSchedule(){saveSharedSchedule();renderMeals();}
+
 function safeId(s){return s.replace(/[^a-zA-Z0-9_-]/g,'_')}
 
 // ── Macro display helpers ─────────────────────────────────────
@@ -2401,12 +2413,12 @@ function computeSlotBudgets(p,d){
   const targets=getAdjTargets(p,d);
   
   // If shake is skipped, redistribute its calories to checked slots
-  if(SKIPPED[p+'_'+d+'_shake']&&shakeKcal>0){
+  if(SKIPPED[sk(p,d,'shake')]&&shakeKcal>0){
     const shakeTargets=[];
     let shakePctTotal=0;
     ADJ_SLOTS.forEach(function(s){
-      const sk=p+'_'+d+'_'+s;
-      if(targets[s]&&!SKIPPED[sk]&&!(EAT_OUT[sk]&&EAT_OUT[sk].kcal>0)){
+      const sKey=sk(p,d,s);
+      if(targets[s]&&!SKIPPED[sKey]&&!(EAT_OUT[sKey]&&EAT_OUT[sKey].kcal>0)){
         shakeTargets.push(s);
         shakePctTotal+=(SLOT_BUDGET[s]||0);
       }
@@ -2420,7 +2432,7 @@ function computeSlotBudgets(p,d){
   
   // For each skipped or under-budget eat-out slot, redistribute to checked later slots
   ADJ_SLOTS.forEach(function(s,si){
-    const key=p+'_'+d+'_'+s;
+    const key=sk(p,d,s);
     let diff=0;
     if(SKIPPED[key]){
       diff=budgets[s]; // freed calories (positive = redistribute forward)
@@ -2436,7 +2448,7 @@ function computeSlotBudgets(p,d){
     let laterPctTotal=0;
     for(let j=si+1;j<ADJ_SLOTS.length;j++){
       const ls=ADJ_SLOTS[j];
-      const lk=p+'_'+d+'_'+ls;
+      const lk=sk(p,d,ls);
       if(targets[ls]&&!SKIPPED[lk]&&!(EAT_OUT[lk]&&EAT_OUT[lk].kcal>0)){
         laterSlots.push(ls);
         laterPctTotal+=(SLOT_BUDGET[ls]||0);
@@ -2459,11 +2471,11 @@ function calcTotals(p,d){
 
   SLOTS.forEach(function(s){
     if(s==='late_snack'){
-      const ls=LATE_SNACK[p+'_'+d];
+      const ls=LATE_SNACK[pk(p,d)];
       if(ls){kcal+=(ls.kcal||0);pro+=(ls.pro||0);fat+=(ls.fat||0);carb+=(ls.carb||0);}
       return;
     }
-    const eoKey=p+'_'+d+'_'+s;
+    const eoKey=sk(p,d,s);
     // Skipped meals contribute nothing
     if(SKIPPED[eoKey])return;
     // Eat out uses entered values directly
@@ -2507,8 +2519,8 @@ function calcTotals(p,d){
 // Get the per-slot adjustment delta for rendering ingredient changes
 function getSlotAdjustment(p,d,s){
   if(p!=='him'&&p!=='her')return 0;
-  if(EAT_OUT[p+'_'+d+'_'+s])return 0;
-  if(SKIPPED[p+'_'+d+'_'+s])return 0;
+  if(EAT_OUT[sk(p,d,s)])return 0;
+  if(SKIPPED[sk(p,d,s)])return 0;
   if(!SLOT_BUDGET[s])return 0;
 
   const port=getPort(p,d,s);
@@ -2641,8 +2653,8 @@ function renderSharedView(day, scrollY, mealEl){
     const meal=getMeal(hisId);
     if(!meal||(!meal.him&&!meal.her))return;
     hasShared=true;
-    const himLo=leftovers['him_'+day+'_'+s];
-    const herLo=leftovers['her_'+day+'_'+s];
+    const himLo=leftovers[sk('him',day,s)];
+    const herLo=leftovers[sk('her',day,s)];
     const himMult=(himLo&&!himLo.isLeftover&&himLo.servings>1)?himLo.servings:1;
     const herMult=(herLo&&!herLo.isLeftover&&herLo.servings>1)?herLo.servings:1;
     let badges='';
@@ -2734,7 +2746,7 @@ function buildMealCardHtml(s, person, day, other){
   const activeId=getMealId(person,day,s);
   const activeMeal=getMeal(activeId)||slotMeals[0];
   const port=activeMeal[person];if(!port)return '';
-  const k=person+'_'+day+'_'+s;
+  const k=sk(person,day,s);
   const isOpen=openCards[k]||false;
   const isManual=!!MANUAL_SET[k];
   const setPill=isManual?'<span style="display:inline-flex;align-items:center;margin-left:5px;padding:2px 6px;border-radius:8px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.4);font-size:7px;font-weight:700;color:#A78BFA;text-transform:uppercase;letter-spacing:.03em;line-height:1;position:relative;top:-0.5px">Set</span>':'';
@@ -2765,7 +2777,7 @@ function buildMealCardHtml(s, person, day, other){
   const isSharedSlot=(otherId&&otherId===activeId);
   const sharedPill='<div class="mc-pill mc-pill-shared'+(isSharedSlot?' on':'')+'" onclick="event.stopPropagation();toggleShared(\''+s+'\','+(!isSharedSlot)+')">Shared</div>';
   const leftovers=computeLeftovers();
-  const loKey=person+'_'+day+'_'+s;
+  const loKey=sk(person,day,s);
   const loInfo=leftovers[loKey];
   let leftoverBadge='';
   let leftoverPill='';
@@ -2809,10 +2821,10 @@ function buildMealCardHtml(s, person, day, other){
   // Always adjust ingredients to match CAL_BASE
   const ovrMacros = getPortMacrosOvr(port,person,day,s);
   const slotAdj = getSlotAdjustment(person,day,s);
-  const isSkipped = !!SKIPPED[person+'_'+day+'_'+s];
+  const isSkipped = !!SKIPPED[sk(person,day,s)];
   // Banner only for user-driven changes (skips, eat-out, ingredient overrides)
-  const hasSkips = SLOTS.some(function(sl){return !!SKIPPED[person+'_'+day+'_'+sl];});
-  const hasAnyEatOut = SLOTS.some(function(sl){const eo=EAT_OUT[person+'_'+day+'_'+sl];return eo&&eo.kcal>0;});
+  const hasSkips = SLOTS.some(function(sl){return !!SKIPPED[sk(person,day,sl)];});
+  const hasAnyEatOut = SLOTS.some(function(sl){const eo=EAT_OUT[sk(person,day,sl)];return eo&&eo.kcal>0;});
   const showBanner = hasSkips || hasAnyEatOut || hasOverrides;
   let pm, adjBanner='';
   if(isSkipped){
@@ -2874,7 +2886,7 @@ function buildMealCardHtml(s, person, day, other){
 
   const skipPill='<div class="mc-pill mc-pill-skip'+(isSkipped?' on':'')+'" onclick="event.stopPropagation();toggleSkip(\''+person+'\',\''+day+'\',\''+s+'\')">Skip</div>';
 
-  const eoKey=person+'_'+day+'_'+s;
+  const eoKey=sk(person,day,s);
   const isEatOut=!!EAT_OUT[eoKey];
   const eoPill='<div class="mc-pill mc-pill-eo'+(isEatOut?' on':'')+'" onclick="event.stopPropagation();toggleEatOut(\''+person+'\',\''+day+'\',\''+s+'\')">Eat Out</div>';
   const topRowPills='<div class="mc-pills">'+(isSkipped||isEatOut?'':leftoverPill+cookPill)
@@ -2918,7 +2930,7 @@ function buildMealCardHtml(s, person, day, other){
 
 // 4. Late night snack section
 function buildLateSnackHtml(person, day){
-  const lsKey=person+'_'+day;
+  const lsKey=pk(person,day);
   const ls=LATE_SNACK[lsKey];
   if(ls){
     return '<div class="mc slot-late_snack">'
@@ -2986,8 +2998,8 @@ function renderMeals(){
       // Day rows
       var slots3=['breakfast','lunch','dinner'];
       DAYS.forEach(function(dd){
-        var dayAllShared=slots3.every(function(ss){return SHARED_SCHEDULE[dd+'_'+ss]==='shared';});
-        var dayAllSkip=slots3.every(function(ss){return SHARED_SCHEDULE[dd+'_'+ss]==='skip-both';});
+        var dayAllShared=slots3.every(function(ss){return SHARED_SCHEDULE[dk(dd,ss)]==='shared';});
+        var dayAllSkip=slots3.every(function(ss){return SHARED_SCHEDULE[dk(dd,ss)]==='skip-both';});
         var dayCol=dayAllShared?'#34D399':dayAllSkip?'#EF4444':'var(--text)';
         var dde=dd.replace(/'/g,"\\'");
         if(_paintMode){
@@ -2996,13 +3008,13 @@ function renderMeals(){
           html+='<div style="font-size:11px;font-weight:700;color:'+dayCol+';display:flex;align-items:center;cursor:pointer" onclick="event.stopPropagation();schedTapDay(\''+dde+'\')">'+dd.slice(0,3)+'</div>';
         }
         ['breakfast','lunch','dinner'].forEach(function(ss){
-          var state=SHARED_SCHEDULE[dd+'_'+ss]||'normal';
+          var state=SHARED_SCHEDULE[dk(dd,ss)]||'normal';
           var himSkip=(state==='skip-him'||state==='skip-both');
           var herSkip=(state==='skip-her'||state==='skip-both');
           var isShared=(state==='shared');
           var grn='rgba(52,211,153,';var red='rgba(239,68,68,';var prp='rgba(167,139,250,';
-          var himManual=!!MANUAL_SET['him_'+dd+'_'+ss];
-          var herManual=!!MANUAL_SET['her_'+dd+'_'+ss];
+          var himManual=!!MANUAL_SET[sk('him',dd,ss)];
+          var herManual=!!MANUAL_SET[sk('her',dd,ss)];
           // Background: manual+normal=purple, shared=green, eat-out=red
           var lNormal=!isShared&&!himSkip;
           var rNormal=!isShared&&!herSkip;
@@ -3020,8 +3032,8 @@ function renderMeals(){
           // Paint mode: override colors and clicks for the target slot column
           var isPaintCol=_paintMode&&ss===_paintSlot;
           var isPaintDim=_paintMode&&ss!==_paintSlot;
-          var himQueued=_paintQueued['him_'+dd];
-          var herQueued=_paintQueued['her_'+dd];
+          var himQueued=_paintQueued[pk('him',dd)];
+          var herQueued=_paintQueued[pk('her',dd)];
           if(isPaintCol){
             lBg=himQueued?'rgba(245,158,11,.3)':lBg;
             rBg=herQueued?'rgba(245,158,11,.3)':rBg;
@@ -3118,17 +3130,17 @@ function renderMeals(){
 }
 
 function toggleCard(k){openCards[k]=!openCards[k];var card=document.getElementById('mc_'+k);if(card)card.classList.toggle('open',openCards[k]);}
-function toggleSkip(p,d,s){var k=p+'_'+d+'_'+s;SKIPPED[k]=!SKIPPED[k];if(!SKIPPED[k]){delete SKIPPED[k];delete MANUAL_SET[k];}else{delete EAT_OUT[k];MANUAL_SET[k]=true;}invalidateLeftoverCache();renderMeals();}
-function addLateSnack(p,d){LATE_SNACK[p+'_'+d]={name:'',kcal:null,pro:null,fat:null,carb:null};renderMeals();}
-function removeLateSnack(p,d){delete LATE_SNACK[p+'_'+d];renderMeals();}
+function toggleSkip(p,d,s){var k=sk(p,d,s);SKIPPED[k]=!SKIPPED[k];if(!SKIPPED[k]){delete SKIPPED[k];delete MANUAL_SET[k];}else{delete EAT_OUT[k];MANUAL_SET[k]=true;}invalidateLeftoverCache();renderMeals();}
+function addLateSnack(p,d){LATE_SNACK[pk(p,d)]={name:'',kcal:null,pro:null,fat:null,carb:null};renderMeals();}
+function removeLateSnack(p,d){delete LATE_SNACK[pk(p,d)];renderMeals();}
 function setLateSnackField(p,d,field,val){
-  var k=p+'_'+d;if(!LATE_SNACK[k])return;
+  var k=pk(p,d);if(!LATE_SNACK[k])return;
   if(field==='name')LATE_SNACK[k][field]=val;
   else{var n=Math.max(0,parseInt(val)||0);LATE_SNACK[k][field]=n;}
 }
-function toggleEatOut(p,d,s){var k=p+'_'+d+'_'+s;if(EAT_OUT[k]){delete EAT_OUT[k];delete MANUAL_SET[k];}else{EAT_OUT[k]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};delete SKIPPED[k];MANUAL_SET[k]=true;}invalidateLeftoverCache();renderMeals();}
+function toggleEatOut(p,d,s){var k=sk(p,d,s);if(EAT_OUT[k]){delete EAT_OUT[k];delete MANUAL_SET[k];}else{EAT_OUT[k]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};delete SKIPPED[k];MANUAL_SET[k]=true;}invalidateLeftoverCache();renderMeals();}
 function setEatOutField(p,d,s,field,val){
-  var k=p+'_'+d+'_'+s;if(!EAT_OUT[k])return;
+  var k=sk(p,d,s);if(!EAT_OUT[k])return;
   if(field==='name'||field==='restaurant')EAT_OUT[k][field]=val;
   else{var n=Math.max(0,parseInt(val)||0);EAT_OUT[k][field]=n;}
 }
@@ -3165,22 +3177,22 @@ function updateStatsBar(){
   }
 }
 function saveEatOut(p,d,s){
-  var k=p+'_'+d+'_'+s;var eo=EAT_OUT[k];if(!eo||!eo.name)return;
+  var k=sk(p,d,s);var eo=EAT_OUT[k];if(!eo||!eo.name)return;
   addToEatOutDB({name:eo.name,restaurant:eo.restaurant,kcal:eo.kcal,pro:eo.pro,fat:eo.fat,carb:eo.carb});
   renderMeals();
 }
 function loadEatOutEntry(p,d,s,idx){
-  var k=p+'_'+d+'_'+s;var entry=EAT_OUT_DB[idx];if(!entry)return;
+  var k=sk(p,d,s);var entry=EAT_OUT_DB[idx];if(!entry)return;
   EAT_OUT[k]={name:entry.name,restaurant:entry.restaurant,kcal:entry.kcal,pro:entry.pro,fat:entry.fat,carb:entry.carb};
   renderMeals();
 }
 function deleteEatOutEntry(idx){EAT_OUT_DB.splice(idx,1);saveEatOutDB();renderMeals();}
 function changeMeal(slot,mealId){
-  var selKey=person+'_'+day+'_'+slot;
-  SEL[selKey]=mealId;
+  var selKey=sk(person,day,slot);
+  stampSel(selKey,mealId);
   MANUAL_SET[selKey]=true;
   // Clear schedule state — manual choice overrides the plan
-  var schedKey=day+'_'+slot;
+  var schedKey=dk(day,slot);
   var schedState=SHARED_SCHEDULE[schedKey];
   if(schedState){
     // If shared, clear it (manual pick breaks sharing)
@@ -3192,8 +3204,6 @@ function changeMeal(slot,mealId){
     else if(person==='her'&&schedState==='skip-both') SHARED_SCHEDULE[schedKey]='skip-him';
     saveSharedSchedule();
   }
-  if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
-  weekData[activeWeek].ts[selKey]=Date.now();
   clearOverrides(person,day,slot);invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
 }
 function toggleShared(slot,checked){
@@ -3202,15 +3212,13 @@ function toggleShared(slot,checked){
     // Set the other person's meal to match — manual shared
     var myId=getMealId(person,day,slot);
     if(myId){
-      var otherKey=other+'_'+day+'_'+slot;
-      SEL[otherKey]=myId;
-      if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
-      weekData[activeWeek].ts[otherKey]=Date.now();
+      var otherKey=sk(other,day,slot);
+      stampSel(otherKey,myId);
       clearOverrides(other,day,slot);
       // Mark both as manual set and update schedule to shared
-      MANUAL_SET[person+'_'+day+'_'+slot]=true;
+      MANUAL_SET[sk(person,day,slot)]=true;
       MANUAL_SET[otherKey]=true;
-      SHARED_SCHEDULE[day+'_'+slot]='shared';
+      SHARED_SCHEDULE[dk(day,slot)]='shared';
       saveSharedSchedule();
     }
   } else {
@@ -3220,10 +3228,8 @@ function toggleShared(slot,checked){
     var others=candidates.filter(function(m){return m.id!==myId;});
     if(others.length){
       var pick=others[Math.floor(Math.random()*others.length)];
-      var otherKey=other+'_'+day+'_'+slot;
-      SEL[otherKey]=pick.id;
-      if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
-      weekData[activeWeek].ts[otherKey]=Date.now();
+      var otherKey=sk(other,day,slot);
+      stampSel(otherKey,pick.id);
       clearOverrides(other,day,slot);
     }
   }
@@ -3235,17 +3241,17 @@ function onIngrAmt(p,d,s,idx,val){
   var amt=parseFloat(val);
   if(isNaN(amt)||amt<0)return;
   setOverride(p,d,s,idx,'amt',amt);
-  MANUAL_SET[p+'_'+d+'_'+s]=true;
+  MANUAL_SET[sk(p,d,s)]=true;
   renderMeals();
 }
 function onIngrSwap(p,d,s,idx,newKey){
   setOverride(p,d,s,idx,'dbKey',newKey);
-  MANUAL_SET[p+'_'+d+'_'+s]=true;
+  MANUAL_SET[sk(p,d,s)]=true;
   renderMeals();
 }
 function onIngrReset(p,d,s){
   clearOverrides(p,d,s);
-  delete MANUAL_SET[p+'_'+d+'_'+s];
+  delete MANUAL_SET[sk(p,d,s)];
   renderMeals();
 }
 // ── PACKAGE WASTE UTILITIES ─────────────────────────────────
@@ -3364,7 +3370,7 @@ function togglePaintMode(){
 function paintTap(d,side){
   if(!_paintMode) return;
   var p=(side==='left')?'him':'her';
-  var k=p+'_'+d;
+  var k=pk(p,d);
   if(_paintQueued[k]) delete _paintQueued[k];
   else _paintQueued[k]=true;
   renderMeals();
@@ -3376,7 +3382,7 @@ function paintAccept(){
   Object.keys(_paintQueued).forEach(function(k){
     var parts=k.split('_');
     var p=parts[0],d=parts[1];
-    var selKey=p+'_'+d+'_'+_paintSlot;
+    var selKey=sk(p,d,_paintSlot);
     SEL[selKey]=_paintMealId;
     MANUAL_SET[selKey]=true;
     weekData[activeWeek].ts[selKey]=now;
@@ -3386,8 +3392,8 @@ function paintAccept(){
   // Otherwise clear any conflicting schedule state
   var slot=_paintSlot;
   DAYS.forEach(function(d){
-    var himQ=_paintQueued['him_'+d], herQ=_paintQueued['her_'+d];
-    var schedKey=d+'_'+slot;
+    var himQ=_paintQueued[pk('him',d)], herQ=_paintQueued[pk('her',d)];
+    var schedKey=dk(d,slot);
     if(himQ&&herQ){
       SHARED_SCHEDULE[schedKey]='shared';
     } else if(himQ||herQ){
@@ -3500,22 +3506,22 @@ function setSchedule(){
   // Skips and shares become "set" — can only be changed from meal card pills or Clear
   DAYS.forEach(function(d){
     ['breakfast','lunch','dinner'].forEach(function(s){
-      var state=SHARED_SCHEDULE[d+'_'+s];
+      var state=SHARED_SCHEDULE[dk(d,s)];
       if(!state) return;
-      if(state==='skip-him'||state==='skip-both') MANUAL_SET['him_'+d+'_'+s]=true;
-      if(state==='skip-her'||state==='skip-both') MANUAL_SET['her_'+d+'_'+s]=true;
-      if(state==='shared'){MANUAL_SET['him_'+d+'_'+s]=true;MANUAL_SET['her_'+d+'_'+s]=true;}
+      if(state==='skip-him'||state==='skip-both') MANUAL_SET[sk('him',d,s)]=true;
+      if(state==='skip-her'||state==='skip-both') MANUAL_SET[sk('her',d,s)]=true;
+      if(state==='shared'){MANUAL_SET[sk('him',d,s)]=true;MANUAL_SET[sk('her',d,s)]=true;}
     });
   });
   // Apply eat-outs immediately
   DAYS.forEach(function(d){
     ['breakfast','lunch','dinner'].forEach(function(s){
-      var state=SHARED_SCHEDULE[d+'_'+s];
+      var state=SHARED_SCHEDULE[dk(d,s)];
       if(state==='skip-him'||state==='skip-both'){
-        if(!EAT_OUT['him_'+d+'_'+s]) EAT_OUT['him_'+d+'_'+s]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+        if(!EAT_OUT[sk('him',d,s)]) EAT_OUT[sk('him',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
       }
       if(state==='skip-her'||state==='skip-both'){
-        if(!EAT_OUT['her_'+d+'_'+s]) EAT_OUT['her_'+d+'_'+s]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+        if(!EAT_OUT[sk('her',d,s)]) EAT_OUT[sk('her',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
       }
     });
   });
@@ -3570,7 +3576,7 @@ function _randomizeWeekCore(){
   persons.forEach(function(p){
     days.forEach(function(d){
       SLOTS.forEach(function(s){
-        var k=p+'_'+d+'_'+s;
+        var k=sk(p,d,s);
         if(EAT_OUT[k]){locked[k]=true;}
       });
     });
@@ -3580,12 +3586,12 @@ function _randomizeWeekCore(){
   // Apply schedule eat-outs (skip-him/her/both are planned eat-outs)
   days.forEach(function(d){
     ['breakfast','lunch','dinner','shake','snack'].forEach(function(s){
-      var state = SHARED_SCHEDULE[d+'_'+s];
+      var state = SHARED_SCHEDULE[dk(d,s)];
       if(state==='skip-him'||state==='skip-both'){
-        if(!EAT_OUT['him_'+d+'_'+s]) EAT_OUT['him_'+d+'_'+s]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+        if(!EAT_OUT[sk('him',d,s)]) EAT_OUT[sk('him',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
       }
       if(state==='skip-her'||state==='skip-both'){
-        if(!EAT_OUT['her_'+d+'_'+s]) EAT_OUT['her_'+d+'_'+s]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+        if(!EAT_OUT[sk('her',d,s)]) EAT_OUT[sk('her',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
       }
     });
   });
@@ -3853,9 +3859,9 @@ function setShopTrip(t){shopTrip=t;renderShop();}
 function setShopPerson(p){shopPerson=p;renderShop();}
 function toggleCustomMeal(d,s){
   var persons=getShopPersons();
-  var allChecked=persons.every(function(p){return !!CUSTOM_SHOP_SEL[p+'_'+d+'_'+s];});
+  var allChecked=persons.every(function(p){return !!CUSTOM_SHOP_SEL[sk(p,d,s)];});
   persons.forEach(function(p){
-    var k=p+'_'+d+'_'+s;
+    var k=sk(p,d,s);
     if(allChecked)delete CUSTOM_SHOP_SEL[k];
     else CUSTOM_SHOP_SEL[k]=true;
   });
@@ -3868,14 +3874,14 @@ function toggleCustomDay(d){
     SLOTS.forEach(function(s){
       if(s==='late_snack')return;
       var id=getMealId(p,d,s);if(!id)return;
-      if(!CUSTOM_SHOP_SEL[p+'_'+d+'_'+s])allChecked=false;
+      if(!CUSTOM_SHOP_SEL[sk(p,d,s)])allChecked=false;
     });
   });
   persons.forEach(function(p){
     SLOTS.forEach(function(s){
       if(s==='late_snack')return;
       var id=getMealId(p,d,s);if(!id)return;
-      var k=p+'_'+d+'_'+s;
+      var k=sk(p,d,s);
       if(allChecked)delete CUSTOM_SHOP_SEL[k];
       else CUSTOM_SHOP_SEL[k]=true;
     });
@@ -3887,7 +3893,7 @@ function customShopSelectAll(){
   persons.forEach(function(p){DAYS.forEach(function(d){SLOTS.forEach(function(s){
     if(s==='late_snack')return;
     var id=getMealId(p,d,s);if(!id)return;
-    CUSTOM_SHOP_SEL[p+'_'+d+'_'+s]=true;
+    CUSTOM_SHOP_SEL[sk(p,d,s)]=true;
   });});});
   renderShop();
 }
@@ -3972,7 +3978,7 @@ function renderShop(){
         SLOTS.forEach(function(s){
           if(s==='late_snack')return;
           const id=getMealId(p,d,s);if(!id)return;
-          if(!CUSTOM_SHOP_SEL[p+'_'+d+'_'+s])allDaySelected=false;
+          if(!CUSTOM_SHOP_SEL[sk(p,d,s)])allDaySelected=false;
         });
       });
       html+='<div class="cs-day-col'+(allDaySelected?' on':'')+'" onclick="toggleCustomDay(\''+d+'\')">'+d.substring(0,3)+'</div>';
@@ -3991,7 +3997,7 @@ function renderShop(){
           html+='<div class="cs-cell empty"></div>';
           return;
         }
-        const selKeys=persons.map(function(p){return p+'_'+d+'_'+s;});
+        const selKeys=persons.map(function(p){return sk(p,d,s);});
         const isChecked=selKeys.every(function(k){return !!CUSTOM_SHOP_SEL[k];});
         html+='<div class="cs-cell'+(isChecked?' on':'')+'" onclick="toggleCustomMeal(\''+d+'\',\''+s+'\')"></div>';
       });
@@ -4225,12 +4231,6 @@ function saveSyncIdLocal(id){syncId=id;try{localStorage.setItem('mealPlannerSync
 function setSyncStatus(msg,type){syncStatus='<span style="color:'+(type==='err'?'#DC2626':type==='ok'?'#059669':'var(--gray)')+'">'+msg+'</span>';var el=document.getElementById('syncStatusMsg');if(el)el.innerHTML=syncStatus;}
 function getSyncPayload(){
   return {weekData:weekData,customMeals:customMeals,customIngredients:customIngredients,eatOutDB:EAT_OUT_DB,sharedSchedule:SHARED_SCHEDULE,version:2};
-}
-// Get the default meal ID for a SEL key like "him_Monday_lunch"
-function getDefaultForSlot(selKey){
-  var parts=selKey.split('_');
-  var p=parts[0],d=parts[1],s=parts.slice(2).join('_');
-  return DEFAULTS[p]&&DEFAULTS[p][d]&&DEFAULTS[p][d][s]||null;
 }
 function mergeSyncData(remote){
   // Week data: merge per-slot, last-write-wins using timestamps
