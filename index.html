@@ -2996,7 +2996,24 @@ function renderMeals(){
       html+='<div style="display:grid;grid-template-columns:36px 1fr 1fr 1fr;gap:4px;margin-top:8px">';
       html+='<div></div>';
       ['breakfast','lunch','dinner'].forEach(function(ss){
-        html+='<div style="text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);padding:2px 0">'+SLOT_LABEL[ss]+'</div>';
+        var _prId=ss==='breakfast'?'breakfasts':ss==='lunch'?'lunches':'dinners';
+        var _paintMatch=_paintMode&&ss===_paintSlot;
+        var _paintDim=_paintMode&&ss!==_paintSlot;
+        if(_paintMatch){
+          html+='<div style="display:flex;align-items:center;justify-content:center;position:relative;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--shop);cursor:pointer;padding:2px 0">'
+            +'<div style="position:absolute;left:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();paintToggleHim()"></div>'
+            +'<div style="position:absolute;left:33%;top:0;bottom:0;width:34%" onclick="event.stopPropagation();paintToggleAll()"></div>'
+            +'<div style="position:absolute;right:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();paintToggleHer()"></div>'
+            +SLOT_LABEL[ss]+'</div>';
+        } else if(_paintDim){
+          html+='<div style="text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);padding:2px 0;opacity:0.3">'+SLOT_LABEL[ss]+'</div>';
+        } else {
+          html+='<div style="display:flex;align-items:center;justify-content:center;position:relative;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);cursor:pointer;padding:2px 0">'
+            +'<div style="position:absolute;left:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();setSharedPresetSide(\''+_prId+'\',\'him\')"></div>'
+            +'<div style="position:absolute;left:33%;top:0;bottom:0;width:34%" onclick="event.stopPropagation();setSharedPreset(\''+_prId+'\')"></div>'
+            +'<div style="position:absolute;right:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();setSharedPresetSide(\''+_prId+'\',\'her\')"></div>'
+            +SLOT_LABEL[ss]+'</div>';
+        }
       });
       // Day rows
       var slots3=['breakfast','lunch','dinner'];
@@ -3055,31 +3072,7 @@ function renderMeals(){
         });
       });
       html+='</div>';
-      // Preset row: B/L/D — in paint mode these queue all Him+Her for that column
-      html+='<div style="display:grid;grid-template-columns:36px 1fr 1fr 1fr;gap:4px;margin-top:8px">';
-      html+='<div></div>';
-      var paintSlots={breakfasts:'breakfast',lunches:'lunch',dinners:'dinner'};
-      [{id:'breakfasts',label:'Breakfast'},{id:'lunches',label:'Lunch'},{id:'dinners',label:'Dinner'}].forEach(function(pr){
-        var slotMatch=paintSlots[pr.id];
-        if(_paintMode&&slotMatch===_paintSlot){
-          // Paint mode: 3-zone — left=him, center=both, right=her
-          html+='<div style="display:flex;align-items:center;justify-content:center;position:relative;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--shop);cursor:pointer">'
-            +'<div style="position:absolute;left:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();paintToggleHim()"></div>'
-            +'<div style="position:absolute;left:33%;top:0;bottom:0;width:34%" onclick="event.stopPropagation();paintToggleAll()"></div>'
-            +'<div style="position:absolute;right:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();paintToggleHer()"></div>'
-            +pr.label+'</div>';
-        } else if(_paintMode){
-          html+='<div style="display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);opacity:0.3">'+pr.label+'</div>';
-        } else {
-          // Normal mode: 3-zone — left=him preset, center=both preset, right=her preset
-          html+='<div style="display:flex;align-items:center;justify-content:center;position:relative;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);cursor:pointer">'
-            +'<div style="position:absolute;left:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();setSharedPresetSide(\''+pr.id+'\',\'him\')"></div>'
-            +'<div style="position:absolute;left:33%;top:0;bottom:0;width:34%" onclick="event.stopPropagation();setSharedPreset(\''+pr.id+'\')"></div>'
-            +'<div style="position:absolute;right:0;top:0;bottom:0;width:33%" onclick="event.stopPropagation();setSharedPresetSide(\''+pr.id+'\',\'her\')"></div>'
-            +pr.label+'</div>';
-        }
-      });
-      html+='</div>';
+      // B/L/D buttons moved to column headers above
       // Meal painting UI
       html+='<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">';
       if(_paintMode){
