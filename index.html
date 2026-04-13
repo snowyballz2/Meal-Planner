@@ -3271,39 +3271,6 @@ function mealUsesPkg(mealId) {
 
 // Calculate package waste penalty for a set of meal selections
 // selections: {slotKey: mealId} map
-// p: 'him' or 'her'
-// Returns numeric penalty (0 = no waste, higher = more waste)
-function calcMealSetWaste(selections, p) {
-  const totals = {};
-  const slotKeys = Object.keys(selections);
-  for (let i = 0; i < slotKeys.length; i++) {
-    const m = getMeal(selections[slotKeys[i]]);
-    if (!m || !m.ingredients) continue;
-    for (let j = 0; j < m.ingredients.length; j++) {
-      const ing = m.ingredients[j];
-      const amt = ing.amt || 0;
-      if (amt <= 0) continue;
-      const db = NUTRI_DB[ing.dbKey];
-      if (!db || !db.pkg) continue;
-      if (!totals[ing.dbKey]) totals[ing.dbKey] = 0;
-      totals[ing.dbKey] += amt;
-    }
-  }
-  let penalty = 0;
-  const keys = Object.keys(totals);
-  for (let i = 0; i < keys.length; i++) {
-    const db = NUTRI_DB[keys[i]];
-    const pkg = db.pkg;
-    const perPkg = (pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? pkg.drained : (pkg.cups || 0);
-    if (perPkg <= 0) continue;
-    const needed = totals[keys[i]];
-    const pkgsNeeded = Math.ceil(needed / perPkg);
-    const waste = (pkgsNeeded * perPkg) - needed;
-    penalty += (waste / perPkg) * 100;
-  }
-  return penalty;
-}
-
 function randomPick(arr){return arr[Math.floor(Math.random()*arr.length)];}
 
 
@@ -3338,16 +3305,6 @@ function getRecentMealIds(dayIndex, days, p, lookback) {
   return recent;
 }
 
-function clearScheduleOnly(){
-  // Clear schedule selections and non-manual skips, but preserve MANUAL_SET overrides
-  SHARED_SCHEDULE={};
-  saveSharedSchedule();
-  // Only clear skips that aren't manually set
-  Object.keys(SKIPPED).forEach(function(k){
-    if(!MANUAL_SET[k]) delete SKIPPED[k];
-  });
-  invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();
-}
 // ── MEAL PAINTING MODE ──────────────────────────────────────
 var _paintMode=false;
 var _paintSlot='';      // 'breakfast','lunch','dinner'
@@ -4705,8 +4662,6 @@ function addNewDbIngredient(){
   document.getElementById('rf_new_role').value='protein';
 }
 function saveRecipe(){var meal=buildCustomMeal();if(!meal)return;customMeals[meal.id]=meal;saveCustomMeals();injectCustomMeals();closeRecipeForm();renderRecipesView();}
-function editRecipe(id){editingRecipeId=id;var m=customMeals[id];if(!m)return;showRecipeForm(m);}
-function deleteRecipe(id){if(!confirm('Delete "'+customMeals[id].label+'"?'))return;delete customMeals[id];saveCustomMeals();injectCustomMeals();renderRecipesView();}
 function closeRecipeForm(){editingRecipeId=null;selectedSlots=[];selectedRecipePersons='both';renderRecipesView();}
 var RECIPE_SLOTS=[
   {label:'Shake',slots:['shake']},
