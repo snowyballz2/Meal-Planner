@@ -2283,7 +2283,14 @@ function macroBar(kcal,pro,fat,carb,p){
 // ── Nav ──────────────────────────────────────────────────────
 function setTopTab(t){
   topTab=t;
-  document.getElementById('ttMeals').className='top-tab'+(t==='meals'?' on-meals':'');
+  var mealsTab=document.getElementById('ttMeals');
+  mealsTab.className='top-tab'+(t==='meals'?' on-meals':'');
+  if(t==='meals'){
+    var col=person==='her'?'var(--her)':person==='shared'?'#34D399':'var(--his)';
+    mealsTab.style.color=col;mealsTab.style.borderBottomColor=col;
+  } else {
+    mealsTab.style.color='';mealsTab.style.borderBottomColor='';
+  }
   document.getElementById('ttShop').className='top-tab'+(t==='shop'?' on-shop':'');
   document.getElementById('ttRecipes').className='top-tab'+(t==='recipes'?' on-recipes':'');
   document.getElementById('mealHdrExtra').style.display=t==='meals'?'':'none';
@@ -2299,6 +2306,12 @@ function setPerson(p){
   document.querySelectorAll('.ptab').forEach(function(t){t.classList.remove('on')});
   var el=document.querySelector('.ptab.'+p);
   if(el)el.classList.add('on');
+  // Update Meals tab color to match person theme
+  var mealsTab=document.getElementById('ttMeals');
+  if(mealsTab&&mealsTab.className.indexOf('on-meals')>=0){
+    var col=p==='her'?'var(--her)':p==='shared'?'#34D399':'var(--his)';
+    mealsTab.style.color=col;mealsTab.style.borderBottomColor=col;
+  }
   renderDayTabs();renderMeals();
 }
 function setDay(d){day=d;renderDayTabs();renderMeals();}
@@ -2560,8 +2573,8 @@ function renderStatsBar(person, day){
   return '<div class="stats">'
     +'<div class="stat" data-p="'+person+'" onclick="openCalPopup(this.dataset.p)"><div class="v kcal-tap '+cc+'">'+t.kcal.toLocaleString()+'</div><div class="l">kcal</div></div>'
     +'<div class="stat"><div class="v '+cc+'">'+t.pro+'g</div><div class="l">protein</div></div>'
-    +'<div class="stat"><div class="v '+cc+'">'+t.fat+'g</div><div class="l">fat</div></div>'
-    +'<div class="stat"><div class="v '+cc+'">'+t.carb+'g</div><div class="l">carbs</div></div>'
+    +'<div class="stat"><div class="v" style="color:#4ADE80">'+t.carb+'g</div><div class="l">carbs</div></div>'
+    +'<div class="stat"><div class="v" style="color:#FBBF24">'+t.fat+'g</div><div class="l">fat</div></div>'
     +'</div>'
     +'<div style="background:var(--bg-card);border-radius:var(--radius-sm);padding:8px 12px;border:1px solid var(--border);margin-bottom:10px;box-shadow:var(--shadow)">'
     +macroBar(t.kcal,t.pro,t.fat,t.carb,person)
