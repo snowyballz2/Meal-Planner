@@ -2327,6 +2327,7 @@ function setPerson(p){
     var col=p==='her'?'var(--her)':p==='shared'?'#34D399':'var(--his)';
     mealsTab.style.color=col;mealsTab.style.borderBottomColor=col;
   }
+  if(p==='shared') window._scrollTopOnShared=true;
   renderDayTabs();renderMeals();
 }
 function setDay(d){day=d;renderDayTabs();renderMeals();}
@@ -2640,8 +2641,8 @@ function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day){
 }
 
 // 2b. Shared cooking view
-function renderSharedView(day, scrollY, mealEl){
-  let html='<div class="shared-intro">Shared cooking: same-day meals + cross-person leftovers. Combined amounts for shopping & prep.</div>';
+function renderSharedView(day, scrollY, mealEl, prefixHtml){
+  let html=(prefixHtml||'')+'<div class="shared-intro">Shared cooking. Combined amounts for shopping & prep.</div>';
   let hasShared=false;
   const leftovers=computeLeftovers();
 
@@ -2962,12 +2963,7 @@ function renderMeals(){
     html+=renderStatsBar(person, day);
   }
 
-  if(person==='shared'){
-    renderSharedView(day, scrollY, mealEl);
-    return;
-  }
-
-  // Normal him/her view
+  // Week banners (all views)
   if(activeWeek==='last'){
     html+='<div class="week-banner last">Last Week — View Only</div>';
   }
@@ -2982,9 +2978,9 @@ function renderMeals(){
     html+='<div style="font-size:13px;font-weight:700;color:var(--text)">'+ssIcon+' Schedule Meals</div>';
     if(sharedSchedOpen){
       html+='<div style="display:flex;gap:6px">'
-        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:#A78BFA;font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();setSchedule()">Set</div>'
         +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();if(confirm(\'Clear all manually set meals?\')){clearWeek();}">Clear</div>'
-        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();showRandomizePopup()">Randomize</div>'
+        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:#A78BFA;font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();setSchedule()">Set</div>'
+        +'<div style="padding:5px 10px;border-radius:6px;background:var(--bg);border:1.5px solid var(--border);color:var(--gray);font-size:11px;font-weight:600;cursor:pointer" onclick="event.stopPropagation();showRandomizePopup()">Create Plan</div>'
         +'</div>';
     }
     html+='</div>';
@@ -3116,6 +3112,15 @@ function renderMeals(){
     html+='</div>';
     // Randomize button is now in the Schedule Meals header
   }
+
+  // Shared view — render shared cards and return
+  if(person==='shared'){
+    var sharedScroll=window._scrollTopOnShared?0:scrollY;
+    window._scrollTopOnShared=false;
+    renderSharedView(day, sharedScroll, mealEl, html);
+    return;
+  }
+
   const other=person==='him'?'her':'him';
 
   SLOTS.forEach(function(s){
@@ -3476,7 +3481,7 @@ function renderRandomizePopup(){
   var herCol=herOn?'#F472B6':'var(--gray)';
   overlay.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:999" onclick="if(event.target===this)closeRandomizePopup()">'
     +'<div style="background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border);padding:20px;min-width:240px;box-shadow:0 8px 32px rgba(0,0,0,.4)">'
-    +'<div style="font-size:15px;font-weight:700;color:var(--text);text-align:center;margin-bottom:16px">Randomize Week</div>'
+    +'<div style="font-size:15px;font-weight:700;color:var(--text);text-align:center;margin-bottom:16px">Create Plan</div>'
     +'<div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px">'
     +'<div style="padding:10px 24px;border-radius:8px;background:'+himBg+';border:'+himBdr+';color:'+himCol+';font-size:13px;font-weight:700;cursor:pointer;text-align:center" onclick="_randHim=!_randHim;renderRandomizePopup()">Him</div>'
     +'<div style="padding:10px 24px;border-radius:8px;background:'+herBg+';border:'+herBdr+';color:'+herCol+';font-size:13px;font-weight:700;cursor:pointer;text-align:center" onclick="_randHer=!_randHer;renderRandomizePopup()">Her</div>'
@@ -3502,21 +3507,24 @@ function runRandomizeFromPopup(){
   randomizeWeek();
 }
 function setSchedule(){
-  // Lock all current schedule selections as manual overrides
-  // Skips and shares become "set" — can only be changed from meal card pills or Clear
+  // Apply schedule immediately: shared meals get matched, eat-outs applied, all marked manual
   DAYS.forEach(function(d){
     ['breakfast','lunch','dinner'].forEach(function(s){
       var state=SHARED_SCHEDULE[dk(d,s)];
       if(!state) return;
       if(state==='skip-him'||state==='skip-both') MANUAL_SET[sk('him',d,s)]=true;
       if(state==='skip-her'||state==='skip-both') MANUAL_SET[sk('her',d,s)]=true;
-      if(state==='shared'){MANUAL_SET[sk('him',d,s)]=true;MANUAL_SET[sk('her',d,s)]=true;}
-    });
-  });
-  // Apply eat-outs immediately
-  DAYS.forEach(function(d){
-    ['breakfast','lunch','dinner'].forEach(function(s){
-      var state=SHARED_SCHEDULE[dk(d,s)];
+      if(state==='shared'){
+        MANUAL_SET[sk('him',d,s)]=true;
+        MANUAL_SET[sk('her',d,s)]=true;
+        // Match her to him's meal immediately
+        var himId=getMealId('him',d,s);
+        if(himId){
+          stampSel(sk('her',d,s),himId);
+          clearOverrides('her',d,s);
+        }
+      }
+      // Apply eat-outs
       if(state==='skip-him'||state==='skip-both'){
         if(!EAT_OUT[sk('him',d,s)]) EAT_OUT[sk('him',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
       }
@@ -3741,12 +3749,22 @@ function _randomizeWeekCore(){
   // ── FINAL: Enforce shared schedule (runs absolutely last) ──
   days.forEach(function(d) {
     ['breakfast','lunch','dinner'].forEach(function(s) {
-      if (SHARED_SCHEDULE[d + '_' + s] !== 'shared') return;
       var himId = getMealId('him', d, s);
       var herId = getMealId('her', d, s);
-      if (himId && himId !== herId) {
-        SEL['her_' + d + '_' + s] = himId;
-        weekData[activeWeek].ts['her_' + d + '_' + s] = now;
+      if (SHARED_SCHEDULE[dk(d,s)] === 'shared') {
+        // Force share
+        if (himId && himId !== herId) {
+          SEL[sk('her',d,s)] = himId;
+          weekData[activeWeek].ts[sk('her',d,s)] = now;
+        }
+      } else if (himId && himId === herId && !MANUAL_SET[sk('him',d,s)] && !MANUAL_SET[sk('her',d,s)]) {
+        // Not scheduled as shared and not manually set — un-share by giving her a different meal
+        var candidates = getMealsForSlot(s).filter(function(m){ return m.her && m.id !== himId && !mealUsesPkg(m.id); });
+        if (candidates.length) {
+          var pick = randomPick(candidates);
+          SEL[sk('her',d,s)] = pick.id;
+          weekData[activeWeek].ts[sk('her',d,s)] = now;
+        }
       }
     });
   });
