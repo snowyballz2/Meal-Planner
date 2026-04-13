@@ -1626,24 +1626,43 @@ function initSharedSchedule(){
     if(SHARED_SCHEDULE[k]===true) SHARED_SCHEDULE[k]='shared';
   });
 }
-// Split pill: left(♂) and right(♀) each cycle: normal → skip → shared → normal
-// When entering shared, other side joins. When leaving shared, other side restores.
-var _schedPreShare={}; // tracks what state the OTHER side had before sharing forced it
+// Split pill: tap toggles skip, long press toggles shared
+// Left tap: normal ↔ skip-him. Right tap: normal ↔ skip-her.
+// Long press either side: toggle shared for the whole cell.
+var _schedLongPress=null;
+function schedLongPress(d,s){
+  var k=d+'_'+s;
+  var cur=SHARED_SCHEDULE[k]||'';
+  if(cur==='shared') delete SHARED_SCHEDULE[k];
+  else SHARED_SCHEDULE[k]='shared';
+  saveSharedSchedule();renderMeals();
+}
+function schedStartPress(d,s){
+  _schedLongPress=setTimeout(function(){_schedLongPress='fired';schedLongPress(d,s);},500);
+}
+function schedEndPress(d,s,side){
+  if(_schedLongPress==='fired'){_schedLongPress=null;return;} // long press already handled
+  clearTimeout(_schedLongPress);_schedLongPress=null;
+  if(side==='left') schedTapLeft(d,s);
+  else schedTapRight(d,s);
+}
 function schedTapLeft(d,s){
   var k=d+'_'+s;
   var cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
-    // Leaving shared from left side — restore right side's pre-share state
-    var restore=_schedPreShare[k+'_r']||'';
-    delete _schedPreShare[k+'_r'];delete _schedPreShare[k+'_l'];
-    if(restore)SHARED_SCHEDULE[k]=restore;else delete SHARED_SCHEDULE[k];
+    // Clear shared, both go normal
+    delete SHARED_SCHEDULE[k];
   } else if(cur==='skip-him'){
-    // skip → shared: save right side's current state, go shared
-    _schedPreShare[k+'_r']=''; // right was normal
-    _schedPreShare[k+'_l']='skip-him';
-    SHARED_SCHEDULE[k]='shared';
+    // Remove him skip — check if her is also normal
+    delete SHARED_SCHEDULE[k];
+  } else if(cur==='skip-her'){
+    // Her is skipped, now him skips too = skip-both
+    SHARED_SCHEDULE[k]='skip-both';
+  } else if(cur==='skip-both'){
+    // Remove him skip, her stays skipped
+    SHARED_SCHEDULE[k]='skip-her';
   } else {
-    // normal → skip him
+    // Normal → skip him
     SHARED_SCHEDULE[k]='skip-him';
   }
   saveSharedSchedule();renderMeals();
@@ -1652,19 +1671,33 @@ function schedTapRight(d,s){
   var k=d+'_'+s;
   var cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
-    // Leaving shared from right side — restore left side's pre-share state
-    var restore=_schedPreShare[k+'_l']||'';
-    delete _schedPreShare[k+'_l'];delete _schedPreShare[k+'_r'];
-    if(restore)SHARED_SCHEDULE[k]=restore;else delete SHARED_SCHEDULE[k];
+    // Clear shared, both go normal
+    delete SHARED_SCHEDULE[k];
   } else if(cur==='skip-her'){
-    // skip → shared: save left side's current state, go shared
-    _schedPreShare[k+'_l']=''; // left was normal
-    _schedPreShare[k+'_r']='skip-her';
-    SHARED_SCHEDULE[k]='shared';
+    // Remove her skip
+    delete SHARED_SCHEDULE[k];
+  } else if(cur==='skip-him'){
+    // Him is skipped, now her skips too = skip-both
+    SHARED_SCHEDULE[k]='skip-both';
+  } else if(cur==='skip-both'){
+    // Remove her skip, him stays skipped
+    SHARED_SCHEDULE[k]='skip-him';
   } else {
-    // normal → skip her
+    // Normal → skip her
     SHARED_SCHEDULE[k]='skip-her';
   }
+  saveSharedSchedule();renderMeals();
+}
+function schedTapDay(d){
+  var slots=['breakfast','lunch','dinner'];
+  var allShared=slots.every(function(s){return SHARED_SCHEDULE[d+'_'+s]==='shared';});
+  var allSkip=slots.every(function(s){return SHARED_SCHEDULE[d+'_'+s]==='skip-both';});
+  slots.forEach(function(s){
+    var k=d+'_'+s;
+    if(allShared) SHARED_SCHEDULE[k]='skip-both';       // shared → skip-both
+    else if(allSkip) delete SHARED_SCHEDULE[k];           // skip-both → normal
+    else SHARED_SCHEDULE[k]='shared';                     // anything else → shared
+  });
   saveSharedSchedule();renderMeals();
 }
 function setSharedPreset(preset){
@@ -2904,8 +2937,13 @@ function renderMeals(){
         html+='<div style="text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);padding:2px 0">'+SLOT_LABEL[ss]+'</div>';
       });
       // Day rows
+      var slots3=['breakfast','lunch','dinner'];
       DAYS.forEach(function(dd){
-        html+='<div style="font-size:11px;font-weight:700;color:var(--text);display:flex;align-items:center">'+dd.slice(0,3)+'</div>';
+        var dayAllShared=slots3.every(function(ss){return SHARED_SCHEDULE[dd+'_'+ss]==='shared';});
+        var dayAllSkip=slots3.every(function(ss){return SHARED_SCHEDULE[dd+'_'+ss]==='skip-both';});
+        var dayCol=dayAllShared?'#34D399':dayAllSkip?'#EF4444':'var(--text)';
+        var dde=dd.replace(/'/g,"\\'");
+        html+='<div style="font-size:11px;font-weight:700;color:'+dayCol+';display:flex;align-items:center;cursor:pointer" onclick="event.stopPropagation();schedTapDay(\''+dde+'\')">'+dd.slice(0,3)+'</div>';
         ['breakfast','lunch','dinner'].forEach(function(ss){
           var state=SHARED_SCHEDULE[dd+'_'+ss]||'normal';
           var himSkip=(state==='skip-him'||state==='skip-both');
@@ -2921,8 +2959,8 @@ function renderMeals(){
           var midCol=(isShared||himSkip||herSkip)?((isShared)?grn+'.5)':red+'.5)'):'transparent';
           var de=dd.replace(/'/g,"\\'");var se=ss.replace(/'/g,"\\'");
           html+='<div style="display:flex;border-radius:6px;overflow:hidden;cursor:pointer;height:28px">'
-            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+lBg+';border:'+lBdr+';border-right:'+(lBg!==rBg?'1.5px solid '+(isShared?grn+'.5)':red+'.5)'):'none')+';border-radius:6px 0 0 6px;font-size:9px;font-weight:700;color:'+lCol+'" onclick="event.stopPropagation();schedTapLeft(\''+de+'\',\''+se+'\')">Him</div>'
-            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+rBg+';border:'+rBdr+';border-left:'+(lBg!==rBg?'none':'none')+';border-radius:0 6px 6px 0;font-size:9px;font-weight:700;color:'+rCol+'" onclick="event.stopPropagation();schedTapRight(\''+de+'\',\''+se+'\')">Her</div>'
+            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+lBg+';border:'+lBdr+';border-right:'+(lBg!==rBg?'1.5px solid '+(isShared?grn+'.5)':red+'.5)'):'none')+';border-radius:6px 0 0 6px;font-size:9px;font-weight:700;color:'+lCol+';-webkit-user-select:none;user-select:none" onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'left\')">Him</div>'
+            +'<div style="flex:1;display:flex;align-items:center;justify-content:center;background:'+rBg+';border:'+rBdr+';border-left:'+(lBg!==rBg?'none':'none')+';border-radius:0 6px 6px 0;font-size:9px;font-weight:700;color:'+rCol+';-webkit-user-select:none;user-select:none" onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchstart="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'right\')">Her</div>'
             +'</div>';
         });
       });
