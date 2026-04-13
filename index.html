@@ -4417,8 +4417,19 @@ function connectSync(){
   var idEl=document.getElementById('syncIdInput');
   if(tokenEl&&tokenEl.value.trim()) saveSyncToken(tokenEl.value.trim());
   if(idEl&&idEl.value.trim()) saveSyncIdLocal(idEl.value.trim());
-  if(syncToken) setSyncStatus('Connected!','ok');
-  renderSyncView();
+  if(!syncToken){setSyncStatus('Enter your GitHub token.','err');renderSyncView();return;}
+  if(!syncId){setSyncStatus('Enter a Gist ID or create a new sync.','err');renderSyncView();return;}
+  // Verify the connection works
+  setSyncStatus('Connecting...','loading');
+  fetch(GIST_API+'/'+syncId,{headers:gistHeaders()}).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
+  }).then(function(gist){
+    if(!gist.files||!gist.files['meal-planner-sync.json']){throw new Error('Not a Meal Planner sync gist');}
+    setSyncStatus('Connected!','ok');renderSyncView();
+  }).catch(function(e){
+    syncId=null;try{localStorage.removeItem('mealPlannerSyncId');}catch(x){}
+    setSyncStatus('Connection failed: '+e.message,'err');renderSyncView();
+  });
 }
 function clearSyncId(){syncId=null;try{localStorage.removeItem('mealPlannerSyncId');}catch(e){}setSyncStatus('Disconnected. Token saved.','ok');renderSyncView();}
 function copyId(){if(syncId){navigator.clipboard.writeText(syncId).then(function(){setSyncStatus('ID copied!','ok');});}}
