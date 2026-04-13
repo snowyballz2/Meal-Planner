@@ -3506,17 +3506,14 @@ function closeRandomizePopup(){
 }
 function runRandomizeFromPopup(){
   closeRandomizePopup();
-  // Temporarily set person for randomization, then restore current tab
-  var origPerson=person;
-  if(_randHim&&_randHer) person='shared';
-  else if(_randHim) person='him';
-  else if(_randHer) person='her';
+  var randTarget;
+  if(_randHim&&_randHer) randTarget='shared';
+  else if(_randHim) randTarget='him';
+  else if(_randHer) randTarget='her';
   else return;
-  randomizeWeek();
-  // Restore the tab the user was on and jump to Monday top
-  person=origPerson;
+  randomizeWeek(randTarget);
   setDay('Monday');
-  setPerson(origPerson);
+  renderMeals();
   requestAnimationFrame(function(){window.scrollTo(0,0);});
 }
 function setSchedule(){
@@ -3557,19 +3554,17 @@ function clearWeek(){
   Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
   invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();autoSaveWeek();
 }
-function randomizeWeek(){
-  sharedSchedOpen=false; // close the schedule panel so the new meals are visible
-  // Retry loop: keep randomizing until we get a zero-waste week (max 10 attempts)
+function randomizeWeek(target){
+  sharedSchedOpen=false;
+  var randTarget=target||person; // use passed target or current person tab
   const savedSel = JSON.parse(JSON.stringify(SEL));
   const maxRetries = 10;
   for (let retry = 0; retry < maxRetries; retry++) {
-    // Restore clean state for each attempt
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
     Object.keys(savedSel).forEach(function(k){SEL[k]=savedSel[k];});
 
-    _randomizeWeekCore();
+    _randomizeWeekCore(randTarget);
 
-    // Check waste — if zero, we're done
     invalidateLeftoverCache();
     let totalWaste = 0;
     ['sun','wed'].forEach(function(trip){
@@ -3583,10 +3578,10 @@ function randomizeWeek(){
   invalidateLeftoverCache();renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
 }
 
-function _randomizeWeekCore(){
+function _randomizeWeekCore(randTarget){
   const days = DAYS;
-  const persons = person === 'shared' ? ['him','her'] : [person];
-  const bothPersons = persons.length > 1 || person === 'shared';
+  const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  const bothPersons = persons.length > 1 || randTarget === 'shared';
   const locked = {};
 
   if(!weekData[activeWeek].ts) weekData[activeWeek].ts={};
