@@ -1741,7 +1741,7 @@ function setSharedPresetSide(preset,side){
   updateSchedule();
 }
 function saveSharedSchedule(){
-  try{localStorage.setItem('mealPlannerSharedSchedule',JSON.stringify(SHARED_SCHEDULE));}catch(e){}
+  autoSaveWeek(); // bundled into weekData now
 }
 
 var EAT_OUT_DB=[]; // saved eat-out meals for reuse
@@ -4175,10 +4175,14 @@ function loadWeeks(){
   if(thisMonday && thisMonday!==currentMonday){
     // The real-world week has changed
     if(nextMon===currentMonday){
-      // Shift: last <- this, this <- next, next <- empty
-      weekData['last']={sel:JSON.parse(JSON.stringify(weekData['this'].sel||{})),monday:weekData['this'].monday};
-      weekData['this']={sel:JSON.parse(JSON.stringify(weekData['next'].sel||{})),monday:currentMonday};
-      weekData['next']={sel:{},monday:nextMonday()};
+      // Shift: last <- this (full state), this <- next (with schedule copied forward), next <- empty
+      var prevSchedule=JSON.parse(JSON.stringify(weekData['this'].sharedSchedule||{}));
+      weekData['last']=JSON.parse(JSON.stringify(weekData['this']));
+      weekData['last'].monday=weekData['this'].monday;
+      weekData['this']=JSON.parse(JSON.stringify(weekData['next']));
+      weekData['this'].monday=currentMonday;
+      weekData['this'].sharedSchedule=prevSchedule; // carry schedule forward
+      weekData['next']={sel:{},monday:nextMonday(),sharedSchedule:JSON.parse(JSON.stringify(prevSchedule))};
     } else {
       // More than a week has passed, or dates don't match — reset all
       weekData['last']={sel:{},monday:lastMonday()};
@@ -4203,9 +4207,10 @@ function loadWeeks(){
   // Load active week's state into globals
   loadWeekState(activeWeek);
 
-  // Load shared schedule
-  try{var ss=localStorage.getItem('mealPlannerSharedSchedule');if(ss)SHARED_SCHEDULE=JSON.parse(ss);}catch(e){}
-  initSharedSchedule();
+  // Migrate old shared schedule from separate localStorage into this week's weekData
+  if(!weekData[activeWeek].sharedSchedule){
+    try{var ss=localStorage.getItem('mealPlannerSharedSchedule');if(ss)weekData[activeWeek].sharedSchedule=JSON.parse(ss);}catch(e){}
+  }
 }
 function saveWeeks(){
   // Bundle per-week state into weekData
@@ -4215,11 +4220,11 @@ function saveWeeks(){
   weekData[activeWeek].overrides=JSON.parse(JSON.stringify(OVERRIDES));
   weekData[activeWeek].lateSnack=JSON.parse(JSON.stringify(LATE_SNACK));
   weekData[activeWeek].manualSet=JSON.parse(JSON.stringify(MANUAL_SET));
+  weekData[activeWeek].sharedSchedule=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
   weekData['last'].monday=lastMonday();
   weekData['this'].monday=todayMonday();
   weekData['next'].monday=nextMonday();
   try{localStorage.setItem('mealPlannerWeekData',JSON.stringify(weekData));}catch(e){}
-  try{localStorage.setItem('mealPlannerSharedSchedule',JSON.stringify(SHARED_SCHEDULE));}catch(e){}
 }
 function loadWeekState(w){
   // Load all per-week state from weekData into globals
@@ -4231,6 +4236,8 @@ function loadWeekState(w){
   loadInto(OVERRIDES,wd.overrides);
   loadInto(LATE_SNACK,wd.lateSnack);
   loadInto(MANUAL_SET,wd.manualSet);
+  loadInto(SHARED_SCHEDULE,wd.sharedSchedule);
+  initSharedSchedule(); // ensure defaults if empty
 }
 function switchWeek(w){
   saveWeeks();
@@ -4308,6 +4315,12 @@ function mergeSyncData(remote){
       weekData[w].sel=localSel;
       weekData[w].ts=localTs;
       if(remote.weekData[w].monday)weekData[w].monday=remote.weekData[w].monday;
+      // Merge shared schedule per-week: take remote entries that local doesn't have
+      var remSched=remote.weekData[w].sharedSchedule||{};
+      if(!weekData[w].sharedSchedule)weekData[w].sharedSchedule={};
+      Object.keys(remSched).forEach(function(k){
+        if(!weekData[w].sharedSchedule[k])weekData[w].sharedSchedule[k]=remSched[k];
+      });
     });
   }
   
@@ -4336,13 +4349,7 @@ function mergeSyncData(remote){
     });
   }
   
-  // Shared schedule: merge from remote
-  if(remote.sharedSchedule){
-    Object.keys(remote.sharedSchedule).forEach(function(k){
-      if(!SHARED_SCHEDULE[k])SHARED_SCHEDULE[k]=remote.sharedSchedule[k];
-    });
-    saveSharedSchedule();
-  }
+  // Shared schedule now per-week in weekData — merged with other bundled state above
 
   // Reload active week's state into globals
   loadWeekState(activeWeek);
