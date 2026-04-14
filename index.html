@@ -1039,12 +1039,19 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
   // This reduces waste at the source instead of relying on trip-level rounding.
   ingredients.forEach(function(ing, idx) {
     const db = NUTRI_DB[ing.dbKey];
-    if (!db || !db.pkg || db.pkg.type === 'bulk') return;
+    if (!db) return;
+    if (!ing.scalable) return;
     const currentAmt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
     if (currentAmt <= 0) return;
 
+    // For unit:'each' items (eggs), nudge so total servings = whole number
+    // Treat as a "package" of size 1
+    const isEachItem = (db.unit === 'each' && !db.wholeOnly && !db.pkg);
+    if (!isEachItem && (!db.pkg || db.pkg.type === 'bulk')) return;
+
     // Get package size in the ingredient's unit
-    const perPkg = (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
+    // For 'each' items (eggs), package size = 1 (one whole egg)
+    const perPkg = isEachItem ? 1 : ((db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0));
     if (perPkg <= 0) return;
 
     // Estimate total servings from leftovers (shared cook = both people × leftover days)
