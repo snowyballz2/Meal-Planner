@@ -831,8 +831,10 @@ function adjustIngredients(ingredients, targetDelta, slot) {
       // Don't let any ingredient go below 25% of original or negative
       const minAmt = item.ing.amt * 0.25;
       if (newAmt < minAmt) newAmt = minAmt;
-      // Cap veg at 1.5x original to avoid ridiculous amounts
+      // Cap ingredients to avoid ridiculous amounts
+      // Veg: max 1.5x, everything else: max 2x original
       if (item.role==='veg' && newAmt > item.ing.amt * 1.5) newAmt = item.ing.amt * 1.5;
+      else if (item.role!=='veg' && newAmt > item.ing.amt * 2) newAmt = item.ing.amt * 2;
       // Snap based on unit: whole numbers for oz/each/slice/scoop, quarters for cup/tbsp/tsp
       const db = NUTRI_DB[item.ing.dbKey];
       const unit = db ? db.unit : '';
