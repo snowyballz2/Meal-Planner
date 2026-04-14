@@ -832,9 +832,19 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     const isPkg = db && db.pkg && db.pkg.type !== 'bulk';
     if (!isPkg) {
       const unit = db ? db.unit : '';
-      if (unit==='oz'||unit==='each'||unit==='slice'||unit==='scoop'||unit==='serving') {
+      if (unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving') {
         newAmt = Math.round(newAmt);
         if (newAmt < 1) newAmt = 1;
+      } else if (unit === 'each') {
+        // Eggs: whole for solo, 0.5 for shared. Everything else: 0.5 always.
+        const isEggStep2 = (item.ing.dbKey === 'egg white' || item.ing.dbKey === 'egg whole');
+        if (isEggStep2 && !isSharedOrLeftover) {
+          newAmt = Math.round(newAmt);
+          if (newAmt < 1) newAmt = 1;
+        } else {
+          newAmt = Math.round(newAmt * 2) / 2;
+          if (newAmt < 0.5) newAmt = 0.5;
+        }
       } else if (unit==='clove'||unit==='cloves') {
         // Cloves can be halved when minced for shared meals — snap to 0.5
         newAmt = Math.round(newAmt * 2) / 2;
