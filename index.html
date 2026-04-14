@@ -2796,9 +2796,37 @@ function renderSharedView(day, scrollY, mealEl, prefixHtml){
 // 2b. Prep for tomorrow banner (shared view only)
 function buildPrepBanner(day){
   const di=DAYS.indexOf(day);
-  const tomorrowDay=DAYS[(di+1)%7];
+  const tomorrowDay=DAYS[(di+1)%7]; // Sunday wraps to Monday
   const items=[];
   const seenMeals={};
+
+  // For Sunday, tomorrow (Monday) is on the next week — look up from next week's data
+  const isCrossWeek=(di===6);
+  function getTomorrowMealId(p,d,s){
+    if(isCrossWeek){
+      // Look in next week's selections
+      const nextWeekKey=activeWeek==='last'?'this':activeWeek==='this'?'next':null;
+      if(nextWeekKey&&weekData[nextWeekKey]&&weekData[nextWeekKey].sel){
+        const val=weekData[nextWeekKey].sel[sk(p,d,s)];
+        if(val)return val;
+      }
+    }
+    return getMealId(p,d,s);
+  }
+  function isTomorrowSkipped(p,d,s){
+    if(isCrossWeek){
+      const nextWeekKey=activeWeek==='last'?'this':activeWeek==='this'?'next':null;
+      if(nextWeekKey&&weekData[nextWeekKey]&&weekData[nextWeekKey].skipped)return !!weekData[nextWeekKey].skipped[sk(p,d,s)];
+    }
+    return !!SKIPPED[sk(p,d,s)];
+  }
+  function isTomorrowEatOut(p,d,s){
+    if(isCrossWeek){
+      const nextWeekKey=activeWeek==='last'?'this':activeWeek==='this'?'next':null;
+      if(nextWeekKey&&weekData[nextWeekKey]&&weekData[nextWeekKey].eatOut)return !!weekData[nextWeekKey].eatOut[sk(p,d,s)];
+    }
+    return !!EAT_OUT[sk(p,d,s)];
+  }
 
   // Meat/seafood dbKeys that might need thawing
   const meatKeys={'chicken breast':1,'chicken thigh':1,'ground turkey 93':1,'ground chicken':1,
@@ -2816,8 +2844,8 @@ function buildPrepBanner(day){
   ['him','her'].forEach(function(p){
     ['breakfast','lunch','dinner'].forEach(function(s){
       const key=sk(p,tomorrowDay,s);
-      if(SKIPPED[key]||EAT_OUT[key])return;
-      const id=getMealId(p,tomorrowDay,s);
+      if(isTomorrowSkipped(p,tomorrowDay,s)||isTomorrowEatOut(p,tomorrowDay,s))return;
+      const id=getTomorrowMealId(p,tomorrowDay,s);
       if(!id)return;
       const meal=getMeal(id);
       if(!meal)return;
