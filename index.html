@@ -1046,7 +1046,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
     if (unit==='oz'||unit==='each'||unit==='slice'||unit==='scoop'||unit==='clove'||unit==='cloves') {
       amt = Math.round(amt);
       if (amt < 1) amt = 1;
-    } else if (db.halfSnap) {
+    } else if (db.halfSnap || db.unit === 'tbsp') {
       amt = Math.round(amt * 2) / 2;
       if (amt < 0.5) amt = 0.5;
     } else {
