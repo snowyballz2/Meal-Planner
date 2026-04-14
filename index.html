@@ -867,6 +867,8 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
             if (newAmt < item.ing.amt) newAmt = item.ing.amt;
             if (newAmt > item.ing.amt * 1.5) newAmt = item.ing.amt * 1.5;
           }
+          // Protect carbs: don't go below 50% of original (no zeroing out rice)
+          if (item.role === 'carb' && newAmt < item.ing.amt * 0.5) newAmt = item.ing.amt * 0.5;
           if (db && db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
           if (newAmt < item.ing.amt * 0.25) newAmt = item.ing.amt * 0.25;
           const actualDelta = (newAmt - currentAmt) * item.calPerUnit;
@@ -885,7 +887,16 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     if (ing.role === 'protein') { origProKcal += db.kcal * ing.amt; adjProKcal += db.kcal * (adjustments[idx] !== undefined ? adjustments[idx] : ing.amt); }
     if (ing.role === 'carb') { origCarbKcal += db.kcal * ing.amt; adjCarbKcal += db.kcal * (adjustments[idx] !== undefined ? adjustments[idx] : ing.amt); }
   });
-  if (origProKcal > 0 && origCarbKcal > 0 && adjProKcal > 0 && adjCarbKcal > 0) {
+  if (origProKcal > 0 && origCarbKcal > 0) {
+    // If carbs were zeroed, restore to 50% of original
+    if (adjCarbKcal <= 0) {
+      ingredients.forEach(function(ing, idx) {
+        if (ing.role !== 'carb') return;
+        adjustments[idx] = ing.amt * 0.5;
+        const db = NUTRI_DB[ing.dbKey]; if (db) adjCarbKcal += db.kcal * adjustments[idx];
+      });
+    }
+    if (adjProKcal > 0 && adjCarbKcal > 0) {
     const origRatio = origProKcal / origCarbKcal;
     const adjRatio = adjProKcal / adjCarbKcal;
     const drift = adjRatio / origRatio;
@@ -904,6 +915,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
         if (adjustments[idx] !== undefined) adjustments[idx] = adjustments[idx] * scale;
       });
     }
+    } // close adjProKcal > 0 && adjCarbKcal > 0
   }
 
   // Macro-aware adjustment: honor protein target and C/F limits
@@ -952,7 +964,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
                   const cAmt = adjustments[ci.idx] !== undefined ? adjustments[ci.idx] : ci.ing.amt;
                   const reduceKcal = extraKcal / carbItems.length;
                   let cNew = cAmt - reduceKcal / cdb.kcal;
-                  if (cNew < ci.ing.amt * 0.6) cNew = ci.ing.amt * 0.6;
+                  if (cNew < ci.ing.amt * 0.5) cNew = ci.ing.amt * 0.5;
                   if (cdb.minAmt && cNew < cdb.minAmt) cNew = cdb.minAmt;
                   adjustments[ci.idx] = cNew;
                 });
@@ -973,7 +985,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
             const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
             const reduceKcal = excessCarbKcal / carbItems.length;
             let newAmt = curAmt - reduceKcal / db.kcal;
-            if (newAmt < item.ing.amt * 0.6) newAmt = item.ing.amt * 0.6;
+            if (newAmt < item.ing.amt * 0.5) newAmt = item.ing.amt * 0.5;
             if (db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
             adjustments[item.idx] = newAmt;
           });
@@ -1222,6 +1234,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
       const isSnackSlot = (slot==='snack');
       if (ing.role === 'protein' && !isSnackSlot) return;
       if (ing.role === 'veg') return; // never remove veg
+      if (ing.role === 'carb') return; // never remove carbs (reduce, don't delete)
       const db = NUTRI_DB[ing.dbKey];
       if (!db || db.kcal === 0) return;
       const currentAmt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
