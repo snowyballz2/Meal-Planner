@@ -9,6 +9,10 @@
 <title>Family Meal Planner</title>
 <link rel="icon" type="image/jpeg" href="icon.jpeg">
 <link rel="apple-touch-icon" href="icon.jpeg">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F172A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -4925,6 +4929,9 @@ loadCustomMeals();loadEatOutDB();
 MEALS.forEach(function(m){expandMealIngredients(m);});
 MEALS.forEach(function(m){buildColorizedSteps(m);});
 renderDayTabs();renderMeals();
+
+// Register service worker for offline PWA support
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 
 </script>
 </body>

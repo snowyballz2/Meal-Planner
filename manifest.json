@@ -1,0 +1,17 @@
+{
+  "name": "Family Meal Planner",
+  "short_name": "Meals",
+  "start_url": "/Meal-Planner/",
+  "scope": "/Meal-Planner/",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#0F172A",
+  "icons": [
+    {
+      "src": "icon.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
