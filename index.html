@@ -1034,26 +1034,42 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
     }
   }
 
-  // Final snap pass: re-snap all non-package ingredients after all adjustments
+  // Final snap pass: snap ALL ingredients to practical amounts
   scalable.forEach(function(item) {
     const db = NUTRI_DB[item.ing.dbKey];
     if (!db) return;
-    const isPkg = db.pkg && db.pkg.type !== 'bulk';
-    const isEach = db.unit === 'each' && !db.wholeOnly && !isPkg;
-    if (isPkg || isEach) return; // package nudge handles these
     let amt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
-    const unit = db.unit || '';
-    if (unit==='oz'||unit==='each'||unit==='slice'||unit==='scoop'||unit==='clove'||unit==='cloves') {
+
+    // wholeOnly always rounds to whole numbers (toast, tortilla, rxbar, tuna pouch)
+    if (db.wholeOnly) {
       amt = Math.round(amt);
       if (amt < 1) amt = 1;
-    } else if (db.halfSnap || db.unit === 'tbsp') {
+    }
+    // Package items that aren't wholeOnly: leave for package nudge (beans, coconut etc)
+    else if (db.pkg && db.pkg.type !== 'bulk') {
+      // skip — package nudge handles precision
+    }
+    // unit:each without wholeOnly (avocado, banana, fruits, veg): snap to 0.5
+    else if (db.unit === 'each') {
       amt = Math.round(amt * 2) / 2;
       if (amt < 0.5) amt = 0.5;
-    } else {
+    }
+    // oz/slice/scoop/clove: whole numbers
+    else if (db.unit==='oz'||db.unit==='slice'||db.unit==='scoop'||db.unit==='clove'||db.unit==='cloves') {
+      amt = Math.round(amt);
+      if (amt < 1) amt = 1;
+    }
+    // tbsp: 0.5 increments
+    else if (db.halfSnap || db.unit === 'tbsp') {
+      amt = Math.round(amt * 2) / 2;
+      if (amt < 0.5) amt = 0.5;
+    }
+    // cup and others: 0.25 increments
+    else {
       amt = Math.round(amt * 4) / 4;
       if (amt < 0.25) amt = 0.25;
     }
-    if (db.wholeOnly) { amt = Math.round(amt); if (amt < 1) amt = 1; }
+
     if (db.minAmt && amt < db.minAmt) amt = db.minAmt;
     adjustments[item.idx] = amt;
   });
@@ -1068,14 +1084,14 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
     const currentAmt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
     if (currentAmt <= 0) return;
 
-    // For unit:'each' items (eggs), nudge so total servings = whole number
-    // Treat as a "package" of size 1
-    const isEachItem = (db.unit === 'each' && !db.wholeOnly && !db.pkg);
-    if (!isEachItem && (!db.pkg || db.pkg.type === 'bulk')) return;
+    // For eggs specifically, nudge so total servings = whole number
+    // Only egg white and egg whole — not avocado, banana, etc. which can be halved
+    const isEggItem = (ing.dbKey === 'egg white' || ing.dbKey === 'egg whole');
+    if (!isEggItem && (!db.pkg || db.pkg.type === 'bulk')) return;
 
     // Get package size in the ingredient's unit
-    // For 'each' items (eggs), package size = 1 (one whole egg)
-    const perPkg = isEachItem ? 1 : ((db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0));
+    // For eggs, package size = 1 (one whole egg)
+    const perPkg = isEggItem ? 1 : ((db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0));
     if (perPkg <= 0) return;
 
     // Estimate total servings from leftovers (shared cook = both people × leftover days)
