@@ -4625,6 +4625,7 @@ function pushSync(){
     const content=gist.files['meal-planner-sync.json'].content;
     const remote=JSON.parse(content);
     mergeSyncData(remote);
+    saveWeeks(); // Re-save to ensure correct monday dates after merge
     const payload=getSyncPayload();
     return fetch(GIST_API+'/'+syncId,{method:'PATCH',headers:gistHeaders(),body:JSON.stringify({
       files:{'meal-planner-sync.json':{content:JSON.stringify(payload)}}
