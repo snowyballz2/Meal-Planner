@@ -102,7 +102,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .week-bar{display:flex;gap:0;align-items:center}
 .week-toggle{display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden}
 .week-pill{padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;color:var(--gray);background:var(--bg-card);white-space:nowrap;transition:all .15s}
-.week-pill.on{background:var(--shop);color:#000}
+.week-pill.on{color:#000}
+.week-pill.on-him{background:var(--his)}
+.week-pill.on-her{background:var(--her)}
+.week-pill.on-shared{background:#10B981}
+.week-pill.on-shop{background:var(--shop)}
+.week-pill.on-recipes{background:var(--shop)}
 .week-pill:active{opacity:.7}
 .week-banner{padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;text-align:center;margin-bottom:10px}
 .week-banner.last{background:rgba(245,158,11,.12);color:#F59E0B;border:1.5px solid rgba(245,158,11,.3)}
@@ -2407,6 +2412,7 @@ function setTopTab(t){
   document.getElementById('shopView').style.display=t==='shop'?'':'none';
   document.getElementById('syncView').style.display='none';
   document.getElementById('recipesView').style.display=t==='recipes'?'':'none';
+  renderWeekBar();
   if(t==='shop')renderShop();
   if(t==='recipes'){renderRecipesView();restoreRecipeFormState();}
 }
@@ -2422,7 +2428,7 @@ function setPerson(p){
     mealsTab.style.color=col;mealsTab.style.borderBottomColor=col;
   }
   if(p==='shared') window._scrollTopOnShared=true;
-  renderDayTabs();renderMeals();
+  renderWeekBar();renderDayTabs();renderMeals();
 }
 function setDay(d){day=d;renderDayTabs();renderMeals();}
 function renderDayTabs(){
@@ -4462,10 +4468,15 @@ function switchWeek(w){
 function renderWeekBar(){
   const bar=document.getElementById('weekBar');if(!bar)return;
   const thisLabel=fmtWeekLabel(todayMonday());
+  const theme=topTab==='shop'?'shop':topTab==='recipes'?'recipes':person==='shared'?'shared':person==='her'?'her':'him';
+  function pill(w,label){
+    const isOn=activeWeek===w;
+    return '<div class="week-pill'+(isOn?' on on-'+theme:'')+'" onclick="switchWeek(\''+w+'\')">'+label+'</div>';
+  }
   bar.innerHTML='<div class="week-toggle">'
-    +'<div class="week-pill'+(activeWeek==='last'?' on':'')+'" onclick="switchWeek(\'last\')">Last</div>'
-    +'<div class="week-pill'+(activeWeek==='this'?' on':'')+'" onclick="switchWeek(\'this\')">'+thisLabel+'</div>'
-    +'<div class="week-pill'+(activeWeek==='next'?' on':'')+'" onclick="switchWeek(\'next\')">Next</div>'
+    +pill('last','Last')
+    +pill('this',thisLabel)
+    +pill('next','Next')
     +'</div>';
 }
 // Auto-save selections when they change
