@@ -2333,13 +2333,11 @@ function saveRecipeFormState(){
   const label=document.getElementById('rf_label');
   const url=document.getElementById('rf_url');
   const steps=document.getElementById('rf_steps');
-  const fv=document.getElementById('rf_fv');
   const note=document.getElementById('rf_note');
   const noLo=document.getElementById('rf_noLeftover');
   if(label)_rfSaved.label=label.value;
   if(url)_rfSaved.url=url.value;
   if(steps)_rfSaved.steps=steps.value;
-  if(fv)_rfSaved.fv=fv.value;
   if(note)_rfSaved.note=note.value;
   if(noLo)_rfSaved.noLeftover=noLo.value;
   // Save ingredient rows
@@ -2357,13 +2355,11 @@ function restoreRecipeFormState(){
     const label=document.getElementById('rf_label');
     const url=document.getElementById('rf_url');
     const steps=document.getElementById('rf_steps');
-    const fv=document.getElementById('rf_fv');
     const note=document.getElementById('rf_note');
     const noLo=document.getElementById('rf_noLeftover');
     if(label&&_rfSaved.label)label.value=_rfSaved.label;
     if(url&&_rfSaved.url)url.value=_rfSaved.url;
     if(steps&&_rfSaved.steps)steps.value=_rfSaved.steps;
-    if(fv&&_rfSaved.fv)fv.value=_rfSaved.fv;
     if(note&&_rfSaved.note)note.value=_rfSaved.note;
     if(noLo&&_rfSaved.noLeftover)noLo.value=_rfSaved.noLeftover;
     // Restore ingredient rows
@@ -4575,11 +4571,24 @@ function buildCustomMeal(){
   if(!ingr.length){alert('Please add at least one ingredient.');return null;}
   const hasAmt=ingr.some(function(i){return(i.amt||0)>0;});
   if(!hasAmt){alert('Please add amounts for at least one ingredient.');return null;}
-  const fv=document.getElementById('rf_fv').value.trim();
+  // Auto-compute fv from veg + fruit ingredients
+  let vegCups=0,fruitCups=0;
+  ingr.forEach(function(i){
+    const db=NUTRI_DB[i.dbKey];
+    if(!db)return;
+    if(i.role==='veg'&&db.unit==='cup')vegCups+=i.amt;
+    if(i.role==='fruit'){
+      if(db.unit==='cup')fruitCups+=i.amt;
+      else if(db.unit==='each')fruitCups+=0.5*i.amt; // rough: 1 fruit ≈ 0.5c
+    }
+  });
+  let fv='';
+  if(vegCups>0)fv+=vegCups+'c veg';
+  if(fruitCups>0)fv+=(fv?' + ':'')+fruitCups+'c fruit';
   const note=document.getElementById('rf_note').value.trim();
   const noLeftover=document.getElementById('rf_noLeftover').value==='yes';
-  const him=selectedRecipePersons==='her'?null:{fv:fv||''};
-  const her=selectedRecipePersons==='him'?null:{fv:fv||''};
+  const him=selectedRecipePersons==='her'?null:{fv:fv};
+  const her=selectedRecipePersons==='him'?null:{fv:fv};
   const meal={id:editingRecipeId||customMealId(label),label:label,slots:selectedSlots.slice(),steps:sharedSteps,him:him,her:her,ingredients:ingr,_custom:true};
   if(url)meal.sourceUrl=url;
   if(note)meal.note=note;
@@ -4924,7 +4933,6 @@ function renderRecipesView(){
     +'<div id="rf_ingr_list"></div>'
     +'<button class="rf-add-ingr-btn" onclick="addIngrRow()">+ Add Ingredient</button></div>'
     +'<div style="display:flex;gap:6px;margin-bottom:6px">'
-    +'<div class="ni-field" style="flex:2"><label>Veg/Fruit Note</label><input class="rf-input" id="rf_fv" placeholder="e.g. 1.5c veg (optional)"></div>'
     +'<div class="ni-field" style="flex:2"><label>Timing Note</label><input class="rf-input" id="rf_note" placeholder="e.g. prep night before (optional)"></div>'
     +'<div class="ni-field" style="flex:1"><label>No Leftover</label><select id="rf_noLeftover" style="font-size:16px;padding:4px"><option value="no">No</option><option value="yes">Yes</option></select></div>'
     +'</div>'
