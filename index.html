@@ -4461,12 +4461,19 @@ function switchWeek(w){
 }
 function renderWeekBar(){
   const bar=document.getElementById('weekBar');if(!bar)return;
+  const lastLabel=fmtWeekLabel(lastMonday());
   const thisLabel=fmtWeekLabel(todayMonday());
   const nextLabel=fmtWeekLabel(nextMonday());
+  function pill(w,label,dateLabel){
+    return '<div class="week-pill'+(activeWeek===w?' on':'')+'" onclick="switchWeek(\''+w+'\')">'
+      +'<div>'+label+'</div>'
+      +'<div style="font-size:7px;opacity:0.7;margin-top:1px">'+dateLabel+'</div>'
+      +'</div>';
+  }
   bar.innerHTML='<div class="week-toggle">'
-    +'<div class="week-pill'+(activeWeek==='last'?' on':'')+'" onclick="switchWeek(\'last\')">Last</div>'
-    +'<div class="week-pill'+(activeWeek==='this'?' on':'')+'" onclick="switchWeek(\'this\')">This Week</div>'
-    +'<div class="week-pill'+(activeWeek==='next'?' on':'')+'" onclick="switchWeek(\'next\')">Next</div>'
+    +pill('last','Last',lastLabel)
+    +pill('this','This Week',thisLabel)
+    +pill('next','Next',nextLabel)
     +'</div>';
 }
 // Auto-save selections when they change
