@@ -3049,7 +3049,7 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner){
         pm.carb+=Math.round(db.carb*a.newAmt);
       });
       ingrHtml = adjResult.map(function(a, idx) {
-        return buildIngrEditRow(a.ing, a.newAmt, person, day, s, idx);
+        return buildIngrEditRow(a.ing, a.newAmt*cookServings, person, day, s, idx);
       }).join('');
       ingrHtml='<div class="ingr-edit-grid">'+ingrHtml+'</div>';
       if(showBanner){
@@ -3138,11 +3138,15 @@ function buildMealCardHtml(s, person, day, other){
   }
 
   // Compute macros: base from overridden ingredients, then with calorie adjustment
+  // Leftover days: use the COOK DAY's adjusted amounts (not re-adjust for this day's budget)
+  const isLeftoverDay=!!(loInfo&&loInfo.isLeftover);
   const isSkipped = !!SKIPPED[sk(person,day,s)];
   const hasSkips = SLOTS.some(function(sl){return !!SKIPPED[sk(person,day,sl)];});
   const hasAnyEatOut = SLOTS.some(function(sl){const eo=EAT_OUT[sk(person,day,sl)];return eo&&eo.kcal>0;});
-  const showBanner = hasSkips || hasAnyEatOut || hasOverrides;
-  const macroResult = computeCardMacros(port, person, day, s, cookServings, showBanner);
+  const showBanner = !isLeftoverDay && (hasSkips || hasAnyEatOut || hasOverrides);
+  // For leftovers, compute macros using the cook day's adjustment instead of this day's
+  const cookDay=isLeftoverDay?loInfo.cookDay:day;
+  const macroResult = computeCardMacros(port, person, cookDay, s, cookServings, showBanner);
   const pm = macroResult.pm;
   const adjBanner = macroResult.adjBanner;
   if(macroResult.ingrHtml) ingrHtml = macroResult.ingrHtml;
