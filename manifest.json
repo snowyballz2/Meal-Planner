@@ -1,6 +1,6 @@
 {
   "name": "Family Meal Planner",
-  "short_name": "Meals",
+  "short_name": "Meal Planner",
   "start_url": "/Meal-Planner/",
   "scope": "/Meal-Planner/",
   "display": "standalone",
