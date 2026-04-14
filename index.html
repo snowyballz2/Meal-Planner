@@ -776,7 +776,8 @@ function getPrimaryProtein(m, titleCase) {
 // calorie delta. Priority: protein sources first for + calories,
 // carb sources for moderate changes, fat sources last.
 // macroHints (optional): {proTarget, slotKcalBudget, maxCarbPct, maxFatPct}
-function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
+// isSharedOrLeftover: if true, unit:each items snap to 0.5 (divisible portions); if false, whole numbers
+function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedOrLeftover) {
   if (Math.abs(targetDelta) < 5) return ingredients.map(function(i){return {ing:i,newAmt:i.amt};});
 
   // Classify scalable ingredients by role
@@ -1049,10 +1050,17 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
     else if (db.pkg && db.pkg.type !== 'bulk') {
       // skip — package nudge handles precision
     }
-    // unit:each without wholeOnly (avocado, banana, fruits, veg): snap to 0.5
+    // unit:each without wholeOnly: eggs snap to whole for solo meals, 0.5 for shared
+    // Other each items (avocado, banana): always 0.5 OK (can physically halve)
     else if (db.unit === 'each') {
-      amt = Math.round(amt * 2) / 2;
-      if (amt < 0.5) amt = 0.5;
+      const isEgg = (ing.dbKey === 'egg white' || ing.dbKey === 'egg whole');
+      if (isEgg && !isSharedOrLeftover) {
+        amt = Math.round(amt);
+        if (amt < 1) amt = 1;
+      } else {
+        amt = Math.round(amt * 2) / 2;
+        if (amt < 0.5) amt = 0.5;
+      }
     }
     // oz/slice/scoop/clove: whole numbers
     else if (db.unit==='oz'||db.unit==='slice'||db.unit==='scoop'||db.unit==='clove'||db.unit==='cloves') {
@@ -2449,7 +2457,8 @@ function buildShoppingList(trip,who){
           let finalIngr;
           if(slotAdj!==0){
             const hints=buildMacroHints(p,d,s);
-            const adjResult = adjustIngredients(ingr, slotAdj, s, hints);
+            const shopShared=!!(loInfo&&(loInfo.shared||loInfo.servings>1||loInfo.crossPersonCook));
+            const adjResult = adjustIngredients(ingr, slotAdj, s, hints, shopShared);
             finalIngr = adjResult.map(function(a){return {dbKey:a.ing.dbKey,amt:a.newAmt,role:a.ing.role};});
           } else {
             finalIngr = ingr.map(function(i){return {dbKey:i.dbKey,amt:i.amt,role:i.role};});
@@ -3392,7 +3401,7 @@ function buildMealSelectOpts(slotMeals, activeId){
 }
 
 // Compute adjusted macros and ingredient HTML for a meal card
-function computeCardMacros(port, person, day, s, cookServings, showBanner){
+function computeCardMacros(port, person, day, s, cookServings, showBanner, isSharedOrLeftover){
   const ovrMacros = getPortMacrosOvr(port,person,day,s);
   const slotAdj = getSlotAdjustment(person,day,s);
   const isSkipped = !!SKIPPED[sk(person,day,s)];
@@ -3405,7 +3414,7 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner){
     const adjIngr = applyOverrides(port,person,day,s);
     if(adjIngr && adjIngr.length && adjIngr[0].dbKey!==undefined){
       const hints=buildMacroHints(person,day,s);
-      const adjResult = adjustIngredients(adjIngr, slotAdj, s, hints);
+      const adjResult = adjustIngredients(adjIngr, slotAdj, s, hints, isSharedOrLeftover);
       pm = {kcal:0,pro:0,fat:0,carb:0};
       adjResult.forEach(function(a){
         const db = NUTRI_DB[a.ing.dbKey];
@@ -3516,7 +3525,8 @@ function buildMealCardHtml(s, person, day, other){
   const showBanner = !isLeftoverDay && (hasSkips || hasAnyEatOut || hasOverrides);
   // For leftovers, compute macros using the cook day's adjustment instead of this day's
   const cookDay=isLeftoverDay?loInfo.cookDay:day;
-  const macroResult = computeCardMacros(port, person, cookDay, s, cookServings, showBanner);
+  const isSharedOrLo = !!(loInfo && (loInfo.shared || loInfo.isLeftover || loInfo.servings > 1 || loInfo.crossPersonCook));
+  const macroResult = computeCardMacros(port, person, cookDay, s, cookServings, showBanner, isSharedOrLo);
   const pm = macroResult.pm;
   const adjBanner = macroResult.adjBanner;
   if(macroResult.ingrHtml) ingrHtml = macroResult.ingrHtml;
