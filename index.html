@@ -826,8 +826,13 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
       newAmt = item.ing.amt;
     }
 
-    // Enforce minAmt
-    if (db && db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
+    // Enforce minAmt — but only when scaling UP or for non-package items
+    // When scaling down, packaged items (tofu, beans) can go below minAmt
+    // since the package system handles waste separately
+    const isPkgItem = db && db.pkg && db.pkg.type !== 'bulk';
+    if (db && db.minAmt && newAmt < db.minAmt && !(isPkgItem && uniformScale < 1)) {
+      newAmt = db.minAmt;
+    }
 
     adjustments[item.idx] = newAmt;
   });
@@ -1024,40 +1029,8 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     }
   });
 
-  // Second pass: if cutting and gap is still large, remove entire ingredients
-  if (targetDelta < 0 && remaining < -25) {
-    const candidates = [];
-    ingredients.forEach(function(ing, idx) {
-      if (!ing.scalable) return;
-      // Protect protein in main meals, allow removal in snacks
-      const isSnackSlot = (slot==='snack');
-      if (ing.role === 'protein' && !isSnackSlot) return;
-      if (ing.role === 'veg') return; // never remove veg
-      if (ing.role === 'carb') return; // never remove carbs (reduce, don't delete)
-      const db = NUTRI_DB[ing.dbKey];
-      if (!db || db.kcal === 0) return;
-      const currentAmt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
-      if (currentAmt <= 0) return;
-      const kcal = Math.round(db.kcal * currentAmt);
-      if (kcal < 50) return; // not worth removing small contributors
-      candidates.push({ idx: idx, kcal: kcal, role: ing.role });
-    });
-    // Remove fats first, then carbs, then others. Within each, smallest kcal first.
-    const removeOrder = { fat:0, carb:1, condiment:2, fruit:3, liquid:4, fixed:5 };
-    candidates.sort(function(a, b) {
-      const ra = removeOrder[a.role] !== undefined ? removeOrder[a.role] : 9;
-      const rb = removeOrder[b.role] !== undefined ? removeOrder[b.role] : 9;
-      if (ra !== rb) return ra - rb;
-      return a.kcal - b.kcal;
-    });
-    for (let r = 0; r < candidates.length && remaining < -25; r++) {
-      // Allow removal if it doesn't overshoot by more than 3x the gap
-      if (candidates[r].kcal <= Math.abs(remaining) * 3) {
-        adjustments[candidates[r].idx] = 0;
-        remaining += candidates[r].kcal;
-      }
-    }
-  }
+  // No second pass removal — the uniform scale + constraints handle everything.
+  // Any remaining gap is accepted rather than deleting ingredients.
 
   return ingredients.map(function(ing, idx) {
     return { ing:ing, newAmt: adjustments[idx] !== undefined ? adjustments[idx] : ing.amt };
