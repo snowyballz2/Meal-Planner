@@ -4520,18 +4520,16 @@ function renderSyncView(){
       +'</div>'
       +'<div style="margin-top:8px"><button class="sync-btn secondary" style="width:100%" onclick="clearSyncId()">Disconnect</button></div>';
   } else {
-    html+='<form id="syncForm" autocomplete="on" onsubmit="event.preventDefault();connectSync();createSync()">'
-      +'<div class="sync-field-label">GitHub Token</div>'
-      +'<input class="sync-input" id="syncTokenInput" name="username" autocomplete="username" type="text" placeholder="ghp_xxxx..." value="'+(syncToken||'')+'" style="width:100%;margin-bottom:10px;font-size:16px">'
-      +'<button type="submit" class="sync-btn primary" style="width:100%;margin-bottom:12px">Create New Sync</button>'
-      +'</form>'
-      +'<div style="border-top:1px solid var(--border);padding-top:10px">'
-      +'<form id="syncConnectForm" autocomplete="on" onsubmit="event.preventDefault();connectSync()">'
-      +'<div class="sync-field-label">Or connect to existing Gist ID</div>'
-      +'<div style="display:flex;gap:6px"><input class="sync-input" id="syncIdInput" name="password" autocomplete="current-password" placeholder="Paste Gist ID" value="'+(syncId||'')+'" style="flex:1;font-size:16px">'
-      +'<button type="submit" class="sync-btn primary">Connect</button></div>'
-      +'</form>'
-      +'</div>';
+    html+='<form id="syncForm" autocomplete="on" onsubmit="event.preventDefault();connectSync()">'
+      +'<div class="sync-field-label">GitHub Token (password)</div>'
+      +'<input class="sync-input" id="syncTokenInput" name="password" autocomplete="current-password" type="password" placeholder="ghp_xxxx..." value="'+(syncToken||'')+'" style="width:100%;margin-bottom:10px;font-size:16px">'
+      +'<button type="button" class="sync-btn primary" style="width:100%;margin-bottom:12px" onclick="connectSync();createSync()">Create New Sync</button>'
+      +'<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">'
+      +'<div class="sync-field-label">Gist ID (username)</div>'
+      +'<input class="sync-input" id="syncIdInput" name="username" autocomplete="username" type="text" placeholder="Paste Gist ID" value="'+(syncId||'')+'" style="width:100%;margin-bottom:10px;font-size:16px">'
+      +'<button type="submit" class="sync-btn primary" style="width:100%">Connect</button>'
+      +'</div>'
+      +'</form>';
   }
   html+='<div id="syncStatusMsg" class="sync-status">'+syncStatus+'</div></div></div>';
   el.innerHTML=html;
