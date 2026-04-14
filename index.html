@@ -893,29 +893,26 @@ function adjustIngredients(ingredients, targetDelta, slot) {
 
     // Flex ranges matching shopping optimizer
     const flexIngr = ['black beans canned', 'cannellini beans canned', 'marinara', 'chickpeas roasted'];
-    let maxUp = 0.25; // default +25%
-    if (flexIngr.indexOf(ing.dbKey) >= 0) maxUp = 1.0; // beans/marinara +100%
-    if (ing.dbKey === 'coconut milk') maxUp = 0.75;
+    let maxDown = 0.25, maxUp = 0.25; // default ±25%
+    if (flexIngr.indexOf(ing.dbKey) >= 0) { maxDown = 0; maxUp = 1.0; } // beans/marinara: no reduce, +100% up
+    if (ing.dbKey === 'coconut milk') { maxDown = 0.50; maxUp = 0.75; }
 
-    // Only nudge up (never reduce below what calorie adjuster set)
+    // Nudge up or down to hit clean package boundary — NO SNAPPING
+    // The exact fraction (e.g. 0.4375) is the right amount to eliminate waste
     const nudgeChange = targetPerServing - currentAmt;
-    if (nudgeChange > 0.01 && nudgeChange <= currentAmt * maxUp) {
+    const absChange = Math.abs(nudgeChange);
+    const isUp = nudgeChange > 0;
+    const withinFlex = isUp ? (absChange <= currentAmt * maxUp) : (absChange <= currentAmt * maxDown);
+    if (absChange > 0.01 && withinFlex) {
       // Check calorie impact — only nudge if within ±75 kcal
-      const kcalImpact = Math.abs(nudgeChange * db.kcal);
+      const kcalImpact = absChange * db.kcal;
       if (kcalImpact <= 75) {
-        // Snap the nudged amount
+        // Enforce minAmt
         let nudged = targetPerServing;
-        if (db.unit === 'oz' || db.unit === 'each' || db.unit === 'slice' || db.unit === 'scoop') {
-          nudged = Math.round(nudged);
-          if (nudged < 1) nudged = 1;
-        } else if (db.halfSnap) {
-          nudged = Math.round(nudged * 2) / 2;
-        } else {
-          nudged = Math.round(nudged * 4) / 4;
-        }
-        if (nudged > currentAmt) {
-          adjustments[idx] = nudged;
+        if (db.minAmt && nudged < db.minAmt) nudged = db.minAmt;
+        if (nudged > 0) {
           remaining -= (nudged - currentAmt) * db.kcal;
+          adjustments[idx] = nudged;
         }
       }
     }
