@@ -4507,6 +4507,18 @@ function mergeSyncData(remote){
         remoteByDate[remote.weekData[w].monday]=remote.weekData[w];
       }
     });
+    // Fuzzy match: if remote date is off by 1 day (timezone bug migration),
+    // also index under the corrected date
+    Object.keys(remoteByDate).forEach(function(dateStr){
+      const d=new Date(dateStr+'T12:00:00');
+      // Check day before and after
+      for(let offset=-1;offset<=1;offset++){
+        if(offset===0)continue;
+        const adj=new Date(d);adj.setDate(adj.getDate()+offset);
+        const adjStr=adj.getFullYear()+'-'+String(adj.getMonth()+1).padStart(2,'0')+'-'+String(adj.getDate()).padStart(2,'0');
+        if(!remoteByDate[adjStr])remoteByDate[adjStr]=remoteByDate[dateStr];
+      }
+    });
     // For each local week, find the matching remote week by date and merge
     ['last','this','next'].forEach(function(w){
       if(!weekData[w])weekData[w]={sel:{},ts:{},monday:''};
