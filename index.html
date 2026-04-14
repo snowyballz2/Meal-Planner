@@ -377,8 +377,8 @@ var NUTRI_DB = {
   // Proteins
   'protein powder':        {kcal:97.5,pro:21, fat:1,   carb:2,   unit:'scoop', brand:'Raw Grass Fed Whey', altUnits:{tbsp:5}},
   'creatine':              {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'scoop', brand:'Promix'},
-  'egg white':             {kcal:17,  pro:3.6,fat:0.1, carb:0.2, unit:'each', wholeOnly:true},
-  'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each', wholeOnly:true},
+  'egg white':             {kcal:17,  pro:3.6,fat:0.1, carb:0.2, unit:'each'},
+  'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each'},
   'chicken breast':        {kcal:31,  pro:5.8,fat:0.7, carb:0,   unit:'oz'},
   'chicken thigh':         {kcal:36,  pro:4.8,fat:1.8, carb:0,   unit:'oz'},
   'ground turkey 93':      {kcal:38,  pro:5.3,fat:1.8, carb:0,   unit:'oz',minAmt:8,pkg:{size:16,unit:'oz',drained:16,type:'bulk'}},
@@ -1293,7 +1293,7 @@ const MEALS=[
   steps:['Soft-boil eggs: simmer 6–7 min, ice bath, peel.','Soak vermicelli in hot water 5 min. Drain.','Wilt spinach + carrots in sesame oil 1–2 min.','Assemble: noodles, veg, halved eggs. Drizzle soy, vinegar.'],
   him:{fv:'1.5c veg'},her:{fv:'1c veg'},
   ingredients:[
-    I('egg whole',3,'protein'),
+    I('egg whole',3,'protein',false),
     I('rice vermicelli cooked',1.25,'carb'),
     I('baby spinach',1,'veg'),
     I('carrots',0.5,'veg'),
@@ -1525,7 +1525,7 @@ const MEALS=[
   steps:['Batch-cook eggs: simmer 10–11 min, ice bath 5 min. Grab 2 eggs and an apple.'],
   him:{fv:'1 fruit'},her:{fv:'1 fruit'},
   ingredients:[
-    I('egg whole',2,'protein'),
+    I('egg whole',2,'protein',false),
     I('apple',1,'fruit',false)
   ]},
 
@@ -1533,7 +1533,7 @@ const MEALS=[
   steps:['Pre-boiled eggs. Grab 2 eggs and an orange.'],
   him:{fv:'1 fruit'},her:{fv:'1 fruit'},
   ingredients:[
-    I('egg whole',2,'protein'),
+    I('egg whole',2,'protein',false),
     I('orange',1,'fruit',false)
   ]},
 
@@ -1559,7 +1559,7 @@ const MEALS=[
   steps:['Pre-boiled eggs. Pour chickpeas from bag. Peel orange.'],
   him:{fv:'1 fruit'},her:{fv:'1 fruit'},
   ingredients:[
-    I('egg whole',2,'protein'),
+    I('egg whole',2,'protein',false),
     I('chickpeas roasted',0.25,'carb'),
     I('orange',1,'fruit',false)
   ]},
