@@ -1084,14 +1084,11 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
     const currentAmt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
     if (currentAmt <= 0) return;
 
-    // For eggs specifically, nudge so total servings = whole number
-    // Only egg white and egg whole — not avocado, banana, etc. which can be halved
-    const isEggItem = (ing.dbKey === 'egg white' || ing.dbKey === 'egg whole');
-    if (!isEggItem && (!db.pkg || db.pkg.type === 'bulk')) return;
+    // Package nudge only — eggs handled by the final snap pass
+    if (!db.pkg || db.pkg.type === 'bulk') return;
 
     // Get package size in the ingredient's unit
-    // For eggs, package size = 1 (one whole egg)
-    const perPkg = isEggItem ? 1 : ((db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0));
+    const perPkg = (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
     if (perPkg <= 0) return;
 
     // Estimate total servings from leftovers (shared cook = both people × leftover days)
