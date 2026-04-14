@@ -4641,13 +4641,21 @@ function pushSync(){
     saveWeeks(); // Re-save to ensure correct monday dates after merge
     const payload=getSyncPayload();
     console.log('[pushSync] payload this.sel keys='+Object.keys(payload.weekData['this'].sel).length+', this.monday='+payload.weekData['this'].monday);
+    const jsonStr=JSON.stringify(payload);
+    console.log('[pushSync] payload size='+jsonStr.length+' chars');
+    console.log('[pushSync] first 200 of this.sel='+JSON.stringify(payload.weekData['this'].sel).substring(0,200));
     return fetch(GIST_API+'/'+syncId,{method:'PATCH',headers:gistHeaders(),body:JSON.stringify({
       files:{'meal-planner-sync.json':{content:JSON.stringify(payload)}}
     })});
   }).then(function(r){
-    if(!r.ok)throw new Error('HTTP '+r.status);
+    if(!r.ok){return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});}
+    return r.json();
+  }).then(function(result){
+    // Verify the push worked by checking returned data
+    const returnedSel=result.files&&result.files['meal-planner-sync.json']?JSON.parse(result.files['meal-planner-sync.json'].content).weekData['this'].sel:{};
+    console.log('[pushSync] returned sel keys='+Object.keys(returnedSel).length);
     setSyncStatus('Synced!','ok');renderMeals();
-  }).catch(function(e){setSyncStatus('Sync failed: '+e.message,'err');});
+  }).catch(function(e){console.error('[pushSync] ERROR:',e);setSyncStatus('Sync failed: '+e.message,'err');});
 }
 function pullSync(){
   if(!syncId||!syncToken)return;
