@@ -1,4 +1,4 @@
-const CACHE = 'meal-planner-v3';
+const CACHE = 'meal-planner-v4';
 const ASSETS = ['./', 'index.html', 'icon.jpeg', 'manifest.json'];
 
 self.addEventListener('install', e => {
