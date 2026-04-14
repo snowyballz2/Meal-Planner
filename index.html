@@ -1653,20 +1653,23 @@ function initSharedSchedule(){
 // Left tap: normal ↔ skip-him. Right tap: normal ↔ skip-her.
 // Long press either side: toggle shared for the whole cell.
 var _schedLongPress=null;
+var _schedLongFired=false;
 function schedLongPress(d,s){
   if(MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)]) return; // locked by manual set
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared') delete SHARED_SCHEDULE[k];
   else SHARED_SCHEDULE[k]='shared';
+  _schedLongFired=true;
   updateSchedule();
 }
 function schedStartPress(d,s){
+  _schedLongFired=false;
   _schedLongPress=setTimeout(function(){_schedLongPress='fired';schedLongPress(d,s);},500);
 }
 function schedEndPress(d,s,side){
-  if(_schedLongPress==='fired'){_schedLongPress=null;return;} // long press already handled
-  clearTimeout(_schedLongPress);_schedLongPress=null;
+  if(_schedLongPress==='fired'||_schedLongFired){_schedLongPress=null;_schedLongFired=false;return;}
+  clearTimeout(_schedLongPress);_schedLongPress=null;_schedLongFired=false;
   if(side==='left') schedTapLeft(d,s);
   else schedTapRight(d,s);
 }
