@@ -314,10 +314,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .paint-select{padding:4px 4px;border-radius:6px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:11px}
 /* Randomize popup */
 .rand-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:999}
-.rand-box{background:var(--bg-card);border-radius:10px;border:1px solid var(--border);padding:12px 16px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
-.rand-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray);text-align:center;margin-bottom:8px}
-.rand-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.rand-btn{padding:5px 20px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;text-align:center}
+.rand-box{background:var(--bg-card);border-radius:14px;border:1px solid var(--border);padding:24px 28px;box-shadow:0 10px 40px rgba(0,0,0,.5);width:85%;max-width:320px}
+.rand-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray);text-align:center;margin-bottom:16px}
+.rand-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rand-btn{padding:12px 24px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;text-align:center}
 /* Shared view */
 .sv-card{background:var(--bg-card);border-radius:var(--radius-sm);padding:8px 12px;border:1px solid var(--border);margin-bottom:10px;box-shadow:var(--shadow)}
 .sv-meal-title{font-size:15px;font-weight:600;padding:4px 0 6px}
@@ -3523,7 +3523,7 @@ function renderRandomizePopup(){
   overlay.innerHTML='<div class="rand-overlay" onclick="if(event.target===this)closeRandomizePopup()">'
     +'<div class="rand-box">'
     +'<div class="rand-title">Randomize Other Meals</div>'
-    +'<div class="rand-grid" style="margin-bottom:6px">'
+    +'<div class="rand-grid" style="margin-bottom:12px">'
     +'<div class="rand-btn" style="background:'+himBg+';border:'+himBdr+';color:'+himCol+'" onclick="_randHim=!_randHim;renderRandomizePopup()">Him</div>'
     +'<div class="rand-btn" style="background:'+herBg+';border:'+herBdr+';color:'+herCol+'" onclick="_randHer=!_randHer;renderRandomizePopup()">Her</div>'
     +'</div>'
