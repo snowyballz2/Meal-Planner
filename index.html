@@ -1034,6 +1034,30 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
     }
   }
 
+  // Final snap pass: re-snap all non-package ingredients after all adjustments
+  scalable.forEach(function(item) {
+    const db = NUTRI_DB[item.ing.dbKey];
+    if (!db) return;
+    const isPkg = db.pkg && db.pkg.type !== 'bulk';
+    const isEach = db.unit === 'each' && !db.wholeOnly && !isPkg;
+    if (isPkg || isEach) return; // package nudge handles these
+    let amt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
+    const unit = db.unit || '';
+    if (unit==='oz'||unit==='each'||unit==='slice'||unit==='scoop'||unit==='clove'||unit==='cloves') {
+      amt = Math.round(amt);
+      if (amt < 1) amt = 1;
+    } else if (db.halfSnap) {
+      amt = Math.round(amt * 2) / 2;
+      if (amt < 0.5) amt = 0.5;
+    } else {
+      amt = Math.round(amt * 4) / 4;
+      if (amt < 0.25) amt = 0.25;
+    }
+    if (db.wholeOnly) { amt = Math.round(amt); if (amt < 1) amt = 1; }
+    if (db.minAmt && amt < db.minAmt) amt = db.minAmt;
+    adjustments[item.idx] = amt;
+  });
+
   // Package-aware nudge: after calorie scaling, nudge packaged ingredients toward
   // clean package boundaries. Uses the same flex ranges as the shopping optimizer.
   // This reduces waste at the source instead of relying on trip-level rounding.
