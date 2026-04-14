@@ -775,28 +775,31 @@ function getPrimaryProtein(m, titleCase) {
 // intelligently adjusts specific ingredients to hit a target
 // calorie delta. Priority: protein sources first for + calories,
 // carb sources for moderate changes, fat sources last.
-// macroHints (optional): {proTarget, slotKcalBudget, maxCarbPct, maxFatPct}
-// isSharedOrLeftover: if true, unit:each items snap to 0.5 (divisible portions); if false, whole numbers
+// Calorie adjuster: scales a recipe uniformly to hit a calorie target.
+// Preserves ingredient ratios exactly via uniform multiplier.
+// Fat-heavy items freeze when scaling UP. Veg never reduced below original.
+// Egg whole→white swap is the only post-scale macro correction.
+// Final snap, package nudge, and second-pass removal run after this.
 function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedOrLeftover) {
   if (Math.abs(targetDelta) < 5) return ingredients.map(function(i){return {ing:i,newAmt:i.amt};});
 
-  // Classify scalable ingredients by role
+  // Classify scalable ingredients
   const scalable = [];
   ingredients.forEach(function(ing, idx) {
-    if (!ing.scalable) { return; }
+    if (!ing.scalable) return;
     if (targetDelta < 0 && ing.role === 'veg') return; // don't cut vegetables
     const db = NUTRI_DB[ing.dbKey];
     if (!db || db.kcal === 0) return;
-    if (ing.amt <= 0) return; // user removed this ingredient
+    if (ing.amt <= 0) return;
     const calPerUnit = db.kcal;
-    const proRatio = (db.pro * 4) / db.kcal; // fraction of calories from protein
+    const proRatio = (db.pro * 4) / db.kcal;
     scalable.push({ idx:idx, ing:ing, calPerUnit:calPerUnit, proRatio:proRatio, role:ing.role });
   });
 
   if (!scalable.length) return ingredients.map(function(i){return {ing:i,newAmt:i.amt};});
 
-  // Step 1: Calculate uniform scale factor to hit calorie target
-  // All scalable ingredients scale by the same multiplier (0% ratio drift)
+  // ── STEP 1: Uniform scale ──
+  // Single multiplier for ALL scalable ingredients — preserves ratios perfectly.
   const adjustments = {};
   let totalScalableKcal = 0;
   scalable.forEach(function(item) {
@@ -807,273 +810,75 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
   let uniformScale = totalScalableKcal > 0 ? targetKcal / totalScalableKcal : 1;
   if (uniformScale < 0.1) uniformScale = 0.1; // safety floor
 
-  // Step 2: Apply uniform scale with constraints
+  // Apply uniform scale with per-role constraints
   scalable.forEach(function(item) {
     let newAmt = item.ing.amt * uniformScale;
     const db = NUTRI_DB[item.ing.dbKey];
 
-    // Veg: never reduce, max +50%
-    if (item.role === 'veg') {
-      if (newAmt < item.ing.amt) newAmt = item.ing.amt;
-      if (newAmt > item.ing.amt * 1.5) newAmt = item.ing.amt * 1.5;
-    }
-    // Fat-heavy items: don't scale UP, but DO scale down
+    // Fat-heavy items (role:fat OR >25% fat calories): freeze when scaling UP
     const fatFrac = db && db.kcal > 0 ? (db.fat * 9 / db.kcal) : 0;
     if ((item.role === 'fat' || fatFrac > 0.25) && uniformScale > 1) {
-      newAmt = item.ing.amt; // freeze at original when scaling up
+      newAmt = item.ing.amt;
+    }
+
+    // Veg: never reduce below original
+    if (item.role === 'veg' && newAmt < item.ing.amt) {
+      newAmt = item.ing.amt;
     }
 
     // Enforce minAmt
     if (db && db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
 
-    // Don't go below 25% of original
-    if (newAmt < item.ing.amt * 0.25) newAmt = item.ing.amt * 0.25;
-
-    // No snapping here — the final snap pass handles all snapping in one place
-    // Debug: trace brown rice
-    if(item.ing.dbKey==='brown rice cooked')console.log('[adjuster step2] brown rice: orig='+item.ing.amt+', scale='+uniformScale+', newAmt='+newAmt);
-
     adjustments[item.idx] = newAmt;
   });
 
-  // Step 3: Calculate remaining gap after uniform scale + constraints
+  // ── STEP 2: Egg whole → egg white swap (fat reduction) ──
+  // Only if macroHints.maxFatPct is set and current fat% exceeds it.
+  // This is the ONLY post-scale modification.
+  if (macroHints && macroHints.maxFatPct) {
+    // Calculate current adjusted macros
+    let adjFat = 0, adjKcal = 0;
+    ingredients.forEach(function(ing, idx) {
+      const db = NUTRI_DB[ing.dbKey]; if (!db) return;
+      const amt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
+      adjFat += db.fat * amt;
+      adjKcal += db.kcal * amt;
+    });
+    const fatPct = adjKcal > 0 ? (adjFat * 9) / adjKcal : 0;
+
+    if (fatPct > macroHints.maxFatPct) {
+      let eggWholeIdx = -1, eggWhiteIdx = -1;
+      ingredients.forEach(function(ing, idx) {
+        if (ing.dbKey === 'egg whole') eggWholeIdx = idx;
+        if (ing.dbKey === 'egg white') eggWhiteIdx = idx;
+      });
+      if (eggWholeIdx >= 0) {
+        const wholeAmt = adjustments[eggWholeIdx] !== undefined ? adjustments[eggWholeIdx] : ingredients[eggWholeIdx].amt;
+        if (wholeAmt > 0) {
+          const wholeDb = NUTRI_DB['egg whole'];
+          const whiteDb = NUTRI_DB['egg white'];
+          const fatSavedPerSwap = (wholeDb.fat * 9) - (whiteDb.fat * 9);
+          const excessFatCal = (fatPct - macroHints.maxFatPct) * adjKcal;
+          const swapsNeeded = Math.ceil(excessFatCal / fatSavedPerSwap);
+          const swapsToMake = Math.min(swapsNeeded, wholeAmt);
+          if (swapsToMake > 0) {
+            adjustments[eggWholeIdx] = wholeAmt - swapsToMake;
+            if (eggWhiteIdx >= 0) {
+              const whiteAmt = adjustments[eggWhiteIdx] !== undefined ? adjustments[eggWhiteIdx] : ingredients[eggWhiteIdx].amt;
+              adjustments[eggWhiteIdx] = whiteAmt + swapsToMake;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Calculate remaining calorie gap (needed by second-pass removal and package nudge)
   let remaining = targetDelta;
   scalable.forEach(function(item) {
     const newAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
     remaining -= (newAmt - item.ing.amt) * item.calPerUnit;
   });
-
-  // Step 4: If remaining gap is large, distribute residual to protein/carb
-  // while keeping ratio drift minimal (iterate small adjustments)
-  if (Math.abs(remaining) > 25) {
-    const mainItems = scalable.filter(function(item) {
-      return item.role === 'protein' || item.role === 'carb';
-    });
-    if (mainItems.length) {
-      let prevRem;
-      let iterations = 0;
-      do {
-        prevRem = remaining;
-        mainItems.forEach(function(item) {
-          if (Math.abs(remaining) < 10) return;
-          const db = NUTRI_DB[item.ing.dbKey];
-          const currentAmt = adjustments[item.idx];
-          // Give each item an equal share of the residual
-          const share = remaining / mainItems.length;
-          const unitsToAdd = share / item.calPerUnit;
-          let newAmt = currentAmt + unitsToAdd;
-          // Veg guard
-          if (item.role === 'veg') {
-            if (newAmt < item.ing.amt) newAmt = item.ing.amt;
-            if (newAmt > item.ing.amt * 1.5) newAmt = item.ing.amt * 1.5;
-          }
-          // Protect carbs: don't go below 50% of original (no zeroing out rice)
-          if (item.role === 'carb' && newAmt < item.ing.amt * 0.5) newAmt = item.ing.amt * 0.5;
-          if (db && db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
-          if (newAmt < item.ing.amt * 0.25) newAmt = item.ing.amt * 0.25;
-          const actualDelta = (newAmt - currentAmt) * item.calPerUnit;
-          adjustments[item.idx] = newAmt;
-          remaining -= actualDelta;
-        });
-        iterations++;
-      } while (Math.abs(remaining) > 25 && Math.abs(remaining) < Math.abs(prevRem) - 5 && iterations < 10);
-    }
-  }
-
-  // Step 5: Ratio enforcement — if drift exceeded ±40%, pull back
-  let origProKcal=0, origCarbKcal=0, adjProKcal=0, adjCarbKcal=0;
-  ingredients.forEach(function(ing, idx) {
-    const db = NUTRI_DB[ing.dbKey]; if (!db) return;
-    if (ing.role === 'protein') { origProKcal += db.kcal * ing.amt; adjProKcal += db.kcal * (adjustments[idx] !== undefined ? adjustments[idx] : ing.amt); }
-    if (ing.role === 'carb') { origCarbKcal += db.kcal * ing.amt; adjCarbKcal += db.kcal * (adjustments[idx] !== undefined ? adjustments[idx] : ing.amt); }
-  });
-  if (origProKcal > 0 && origCarbKcal > 0) {
-    // If carbs were zeroed, restore to 50% of original
-    if (adjCarbKcal <= 0) {
-      ingredients.forEach(function(ing, idx) {
-        if (ing.role !== 'carb') return;
-        adjustments[idx] = ing.amt * 0.5;
-        const db = NUTRI_DB[ing.dbKey]; if (db) adjCarbKcal += db.kcal * adjustments[idx];
-      });
-    }
-    if (adjProKcal > 0 && adjCarbKcal > 0) {
-    const origRatio = origProKcal / origCarbKcal;
-    const adjRatio = adjProKcal / adjCarbKcal;
-    const drift = adjRatio / origRatio;
-    if (drift > 1.4) {
-      const scale = (origRatio * 1.4 * adjCarbKcal) / adjProKcal;
-      ingredients.forEach(function(ing, idx) {
-        if (ing.role !== 'protein') return;
-        const db = NUTRI_DB[ing.dbKey]; if (!db) return;
-        if (adjustments[idx] !== undefined) adjustments[idx] = adjustments[idx] * scale;
-      });
-    } else if (drift < 0.6) {
-      const scale = (adjProKcal / (origRatio * 0.6)) / adjCarbKcal;
-      ingredients.forEach(function(ing, idx) {
-        if (ing.role !== 'carb') return;
-        const db = NUTRI_DB[ing.dbKey]; if (!db) return;
-        if (adjustments[idx] !== undefined) adjustments[idx] = adjustments[idx] * scale;
-      });
-    }
-    } // close adjProKcal > 0 && adjCarbKcal > 0
-  }
-
-  // Macro-aware adjustment: honor protein target and C/F limits
-  if (macroHints) {
-    // Calculate current adjusted macros
-    let adjPro=0, adjCarb=0, adjFat=0, adjKcal=0;
-    ingredients.forEach(function(ing, idx) {
-      const db = NUTRI_DB[ing.dbKey]; if (!db) return;
-      const amt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
-      adjPro += db.pro * amt;
-      adjCarb += db.carb * amt;
-      adjFat += db.fat * amt;
-      adjKcal += db.kcal * amt;
-    });
-    if (adjKcal > 0) {
-      let carbPct = (adjCarb * 4) / adjKcal;
-      let fatPct = (adjFat * 9) / adjKcal;
-      const proGrams = adjPro;
-      const slotProTarget = macroHints.proTarget || 0;
-      const maxCarbPct = macroHints.maxCarbPct || 1;
-      const maxFatPct = macroHints.maxFatPct || 1;
-
-      // If protein is below target for this slot, boost protein ingredients
-      // and compensate by slightly reducing carbs (within ±40% ratio limit)
-      if (slotProTarget > 0 && proGrams < slotProTarget) {
-        const proDeficit = slotProTarget - proGrams; // grams needed
-        const proItems = scalable.filter(function(item) { return item.role === 'protein'; });
-        if (proItems.length) {
-          const proKcalPerG = 4; // rough: 1g protein ≈ 4 kcal
-          proItems.forEach(function(item) {
-            const db = NUTRI_DB[item.ing.dbKey]; if (!db || db.pro <= 0) return;
-            const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
-            const shareG = proDeficit / proItems.length;
-            const unitsToAdd = shareG / db.pro;
-            let newAmt = curAmt + unitsToAdd;
-            // Don't exceed ±40% ratio drift overall
-            if (newAmt > item.ing.amt * 1.4) newAmt = item.ing.amt * 1.4;
-            if (newAmt > curAmt) {
-              const extraKcal = (newAmt - curAmt) * db.kcal;
-              adjustments[item.idx] = newAmt;
-              // Compensate extra kcal by reducing carbs proportionally
-              const carbItems = scalable.filter(function(ci) { return ci.role === 'carb'; });
-              if (carbItems.length && extraKcal > 5) {
-                carbItems.forEach(function(ci) {
-                  const cdb = NUTRI_DB[ci.ing.dbKey]; if (!cdb) return;
-                  const cAmt = adjustments[ci.idx] !== undefined ? adjustments[ci.idx] : ci.ing.amt;
-                  const reduceKcal = extraKcal / carbItems.length;
-                  let cNew = cAmt - reduceKcal / cdb.kcal;
-                  if (cNew < ci.ing.amt * 0.5) cNew = ci.ing.amt * 0.5;
-                  if (cdb.minAmt && cNew < cdb.minAmt) cNew = cdb.minAmt;
-                  adjustments[ci.idx] = cNew;
-                });
-              }
-            }
-          });
-        }
-      }
-
-      // If carb% exceeds limit, reduce carbs and shift to protein
-      if (carbPct > maxCarbPct) {
-        const excessCarbKcal = (carbPct - maxCarbPct) * adjKcal;
-        const carbItems = scalable.filter(function(item) { return item.role === 'carb'; });
-        const proItems = scalable.filter(function(item) { return item.role === 'protein'; });
-        if (carbItems.length) {
-          carbItems.forEach(function(item) {
-            const db = NUTRI_DB[item.ing.dbKey]; if (!db) return;
-            const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
-            const reduceKcal = excessCarbKcal / carbItems.length;
-            let newAmt = curAmt - reduceKcal / db.kcal;
-            if (newAmt < item.ing.amt * 0.5) newAmt = item.ing.amt * 0.5;
-            if (db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
-            adjustments[item.idx] = newAmt;
-          });
-          // Shift freed kcal to protein
-          if (proItems.length) {
-            proItems.forEach(function(item) {
-              const db = NUTRI_DB[item.ing.dbKey]; if (!db) return;
-              const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
-              const addKcal = excessCarbKcal / proItems.length;
-              adjustments[item.idx] = curAmt + addKcal / db.kcal;
-            });
-          }
-        }
-      }
-
-      // First: if fat% exceeds limit and meal has egg wholes, swap to egg whites
-      if (fatPct > maxFatPct) {
-        let eggWholeIdx = -1, eggWhiteIdx = -1;
-        ingredients.forEach(function(ing, idx) {
-          if (ing.dbKey === 'egg whole') eggWholeIdx = idx;
-          if (ing.dbKey === 'egg white') eggWhiteIdx = idx;
-        });
-        if (eggWholeIdx >= 0) {
-          const wholeAmt = adjustments[eggWholeIdx] !== undefined ? adjustments[eggWholeIdx] : ingredients[eggWholeIdx].amt;
-          if (wholeAmt > 0) {
-            // Calculate how many egg wholes to swap to whites to get fat under limit
-            const wholeDb = NUTRI_DB['egg whole'];
-            const whiteDb = NUTRI_DB['egg white'];
-            const fatPerWhole = wholeDb.fat * 9; // fat calories per egg whole
-            const fatPerWhite = whiteDb.fat * 9; // fat calories per egg white
-            const fatSavedPerSwap = fatPerWhole - fatPerWhite; // ~42 fat cal saved per swap
-            const excessFatCal = (fatPct - maxFatPct) * adjKcal;
-            const swapsNeeded = Math.ceil(excessFatCal / fatSavedPerSwap);
-            const swapsToMake = Math.min(swapsNeeded, wholeAmt);
-            if (swapsToMake > 0) {
-              adjustments[eggWholeIdx] = wholeAmt - swapsToMake;
-              if (eggWhiteIdx >= 0) {
-                const whiteAmt = adjustments[eggWhiteIdx] !== undefined ? adjustments[eggWhiteIdx] : ingredients[eggWhiteIdx].amt;
-                adjustments[eggWhiteIdx] = whiteAmt + swapsToMake;
-              }
-              // Recalculate fat% after swap
-              adjFat = 0; adjKcal = 0;
-              ingredients.forEach(function(ing, idx) {
-                const db = NUTRI_DB[ing.dbKey]; if (!db) return;
-                const amt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
-                adjFat += db.fat * amt;
-                adjKcal += db.kcal * amt;
-              });
-              fatPct = adjKcal > 0 ? (adjFat * 9) / adjKcal : 0;
-            }
-          }
-        }
-      }
-
-      // If fat% still exceeds limit, reduce fat-role items and also reduce
-      // high-fat protein/condiment items, shift freed kcal to lean protein/carbs
-      if (fatPct > maxFatPct) {
-        const excessFatKcal = (fatPct - maxFatPct) * adjKcal;
-        // Include fat-role AND any scalable item where >40% of its kcal comes from fat
-        const fatItems = scalable.filter(function(item) {
-          if (item.role === 'fat') return true;
-          const db = NUTRI_DB[item.ing.dbKey];
-          return db && db.fat > 0 && db.kcal > 0 && (db.fat * 9 / db.kcal) > 0.25;
-        });
-        const proItems = scalable.filter(function(item) { return item.role === 'protein'; });
-        if (fatItems.length) {
-          fatItems.forEach(function(item) {
-            const db = NUTRI_DB[item.ing.dbKey]; if (!db) return;
-            const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
-            const reduceKcal = excessFatKcal / fatItems.length;
-            let newAmt = curAmt - reduceKcal / db.kcal;
-            // Allow reducing fat items down to 40% of original (more aggressive than other roles)
-            if (newAmt < item.ing.amt * 0.4) newAmt = item.ing.amt * 0.4;
-            if (db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
-            adjustments[item.idx] = newAmt;
-          });
-          if (proItems.length) {
-            proItems.forEach(function(item) {
-              const db = NUTRI_DB[item.ing.dbKey]; if (!db) return;
-              const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
-              const addKcal = excessFatKcal / proItems.length;
-              adjustments[item.idx] = curAmt + addKcal / db.kcal;
-            });
-          }
-        }
-      }
-    }
-  }
 
   // Final snap pass
   // For shared/leftover: snap the TOTAL cook amount, per-person is just math
@@ -1095,7 +900,6 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     }
     // Shared/leftover: snap total cook amount, then divide back
     else if (isSharedOrLeftover) {
-      // Estimate total servings (same as package nudge)
       const leftovers = typeof computeLeftovers === 'function' ? computeLeftovers() : {};
       let totalServings = 2;
       Object.keys(leftovers).forEach(function(k) {
@@ -1105,7 +909,6 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
         }
       });
       let totalAmt = amt * totalServings;
-      // Snap the TOTAL to practical values
       const unit = db.unit || '';
       if (unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving') {
         totalAmt = Math.round(totalAmt);
@@ -1123,7 +926,6 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
         totalAmt = Math.round(totalAmt * 4) / 4;
         if (totalAmt < 0.25) totalAmt = 0.25;
       }
-      // Divide back to per-person (no additional snap — just math)
       amt = totalAmt / totalServings;
     }
     // Solo meal: snap per-person directly
@@ -1134,11 +936,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
         amt = Math.round(amt);
         if (amt < 1) amt = 1;
       } else if (unit === 'each' && isEgg) {
-        // Eggs: whole numbers for solo (can't crack half an egg)
         amt = Math.round(amt);
         if (amt < 1) amt = 1;
       } else if (unit === 'each') {
-        // Other each items (avocado, banana): 0.5 increments (can physically halve)
         amt = Math.round(amt * 2) / 2;
         if (amt < 0.5) amt = 0.5;
       } else if (unit==='clove'||unit==='cloves') {
@@ -1154,7 +954,6 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     }
 
     if (db.minAmt && amt < db.minAmt) amt = db.minAmt;
-    if(item.ing.dbKey==='brown rice cooked')console.log('[adjuster snap] brown rice: pre-snap='+( adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt)+', post-snap='+amt+', shared='+isSharedOrLeftover);
     adjustments[item.idx] = amt;
   });
 
