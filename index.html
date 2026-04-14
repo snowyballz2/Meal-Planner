@@ -2071,6 +2071,10 @@ function computeLeftovers(){
   if(_leftoverCache)return _leftoverCache;
   const result={};
   const leftoverSlots=['breakfast','lunch','dinner'];
+  // For auto leftover detection, breakfast is excluded as a TARGET
+  // (breakfast is made fresh). Breakfast CAN be shared (same day) and
+  // CAN be manually set as a leftover by the user.
+  const leftoverTargetSlots=['lunch','dinner'];
 
   // Build set of meal IDs excluded from leftover detection
   const noLeftoverIds={};
@@ -2107,15 +2111,20 @@ function computeLeftovers(){
 
         // Determine max day span: breakfast-only meals max 1 day ahead, others max 2
         const isBreakfastOnly=entries.every(function(e){return e.slot==='breakfast';});
-        const maxSpan=isBreakfastOnly?1:2;
+        if(isBreakfastOnly){i++;continue;} // Skip breakfast-only — breakfast doesn't auto-leftover
+        const maxSpan=2;
 
         // Gather all entries within the span (gaps allowed)
+        // First entry = cook day (any slot except breakfast)
+        // Subsequent entries = leftovers (lunch/dinner only, not breakfast)
+        if(start.slot==='breakfast'){i++;continue;} // cook source can't be breakfast
         const group=[start];
         let j=i+1;
         while(j<entries.length){
           const e=entries[j];
           if(e.dayIdx>start.dayIdx+maxSpan)break;
-          if(!result[sk(p,e.day,e.slot)]){
+          // Leftover targets must be lunch or dinner (not breakfast)
+          if(leftoverTargetSlots.indexOf(e.slot)>=0&&!result[sk(p,e.day,e.slot)]){
             group.push(e);
           }
           j++;
@@ -2160,22 +2169,21 @@ function computeLeftovers(){
   // Cross-person leftover detection: if one person has a meal within 2 days
   // after the other person has the same meal, mark it as a cross-person leftover
   DAYS.forEach(function(d,di){
-    leftoverSlots.forEach(function(s){
+    // Cross-person leftover targets: lunch/dinner only (not breakfast)
+    leftoverTargetSlots.forEach(function(s){
       ['him','her'].forEach(function(p){
         const key=sk(p,d,s);
         if(result[key])return; // already claimed by within-person or shared detection
         const id=getMealId(p,d,s);
         if(!id||noLeftoverIds[id])return;
         const otherP=p==='him'?'her':'him';
-        // Look back 1-2 days for the other person having the same meal in any slot
-        // Only the COOK slot matters (not breakfast — breakfast is always made fresh)
+        // Look back 1-2 days for the other person having the same meal
+        // Cook source: lunch/dinner only (not breakfast)
         for(let back=1;back<=2;back++){
           if(di-back<0)continue;
           const prevDay=DAYS[di-back];
-          for(let si=0;si<leftoverSlots.length;si++){
-            const prevSlot=leftoverSlots[si];
-            // Skip if the cook slot is breakfast — breakfast doesn't produce leftovers
-            if(prevSlot==='breakfast')continue;
+          for(let si=0;si<leftoverTargetSlots.length;si++){
+            const prevSlot=leftoverTargetSlots[si];
             const prevId=getMealId(otherP,prevDay,prevSlot);
             if(prevId!==id)continue;
             const prevKey=sk(otherP,prevDay,prevSlot);
