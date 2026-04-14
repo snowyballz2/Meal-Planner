@@ -4371,9 +4371,9 @@ function renderShop(){
 var activeWeek='this'; // 'last', 'this', or 'next'
 var weekData={last:{sel:{},monday:''},this:{sel:{},monday:''},next:{sel:{},monday:''}};
 
-function getMondayStr(d){const dt=new Date(d);const diff=dt.getDay()===0?-6:1-dt.getDay();dt.setDate(dt.getDate()+diff);return dt.toISOString().slice(0,10);}
+function getMondayStr(d){const dt=new Date(d+'T12:00:00');const diff=dt.getDay()===0?-6:1-dt.getDay();dt.setDate(dt.getDate()+diff);return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');}
 function fmtWeekLabel(mondayStr){const d=new Date(mondayStr+'T12:00:00');const end=new Date(d);end.setDate(d.getDate()+6);const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return mo[d.getMonth()]+' '+d.getDate()+' – '+mo[end.getMonth()]+' '+end.getDate();}
-function todayMonday(){return getMondayStr(new Date().toISOString().slice(0,10));}
+function todayMonday(){const d=new Date();return getMondayStr(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));}
 function nextMonday(){const d=new Date(todayMonday()+'T12:00:00');d.setDate(d.getDate()+7);return d.toISOString().slice(0,10);}
 function lastMonday(){const d=new Date(todayMonday()+'T12:00:00');d.setDate(d.getDate()-7);return d.toISOString().slice(0,10);}
 
