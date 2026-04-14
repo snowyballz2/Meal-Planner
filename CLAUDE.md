@@ -1,6 +1,6 @@
 # Family Meal Planner — Architecture Summary
 
-Single-file HTML/JS app (`index.html`, ~4800 lines) for two people ("Him"/"Her") with nutrition tracking, shopping lists, package waste elimination, and cloud sync.
+Single-file HTML/JS PWA (`index.html`, ~4935 lines) for two people ("Him"/"Her") with nutrition tracking, shopping lists, package waste elimination, and cloud sync. Installable on mobile via `manifest.json` + `sw.js` service worker.
 
 ## Data Layer
 
@@ -122,10 +122,31 @@ Three collapsible sections:
 
 ## Cloud Sync
 
-JSONBlob-based push/pull with timestamp merge. Syncs weekData (all 3 weeks), customMeals, customIngredients, eatOutDB, SHARED_SCHEDULE.
+GitHub Gist API push/pull with per-slot timestamp merge (last-write-wins). Syncs weekData (all 3 weeks), customMeals, customIngredients, eatOutDB. Connect via GitHub token + Gist ID. Share button for easy device pairing.
+
+## CSS Architecture
+
+Uses CSS custom properties (`:root` vars) for theming. Key reusable classes:
+- Layout: `macro-bar`, `macro-labels`, `hdr-row`, `sched-grid`, `sched-panel`, `paint-bar`
+- Schedule pills: `sched-pill-wrap`, `sched-pill-half`, `sched-zone` (l/c/r)
+- Buttons: `sched-btn`, `sched-btn-set`, `rand-btn`
+- Cards: `sv-card`, `sv-meal-title`, `set-pill`, `day-badge`
+- Sync: `sync-desc`, `sync-field-label`, `sync-id-box`, `sync-btn-grid`
+
+Function-scoped variables use `const`/`let` (only ~40 top-level globals remain as `var`).
+
+## Key Helper Functions
+
+- `buildMealSelectOpts(slotMeals, activeId)` — grouped `<option>` HTML for meal selector
+- `computeCardMacros(port, person, day, s, cookServings, showBanner)` — adjusted macros + ingredient HTML
+- `lsGet(key, fallback)` / `lsSet(key, val)` — localStorage with JSON parse/stringify
+- `lsGetRaw(key)` / `lsSetRaw(key, val)` — localStorage raw string access
 
 ## Key Files
 
-- `index.html` — the entire app (single file, ~4800 lines)
-- `icon.jpeg` — app icon (favicon + apple-touch-icon)
+- `index.html` — the entire app (single file, ~4935 lines)
+- `manifest.json` — PWA manifest (standalone, dark theme)
+- `sw.js` — service worker (network-first caching, GitHub API passthrough)
+- `icon.jpeg` — app icon (favicon + apple-touch-icon + PWA icon)
 - `CLAUDE.md` — this architecture doc
+- `Archive/` — backup copies of previous versions
