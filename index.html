@@ -429,15 +429,15 @@ var NUTRI_DB = {
   'zucchini':              {kcal:20,  pro:1.5,fat:0.2, carb:3.5, unit:'cup', produce:{perWhole:1.5,label:'medium zucchini'}},
   'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup'},
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}},
-  'celery':                {kcal:6,   pro:0.3,fat:0.1, carb:1.2, unit:'each'},
+  'celery':                {kcal:6,   pro:0.3,fat:0.1, carb:1.2, unit:'each', cupsEach:0.5},
   'egg noodles dry':       {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup'},
   'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',pkg:{size:32,unit:'oz',cups:4,type:'carton'}},
-  'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each'},
-  'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each'},
+  'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75},
+  'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each', cupsEach:0.125},
   // Fruits
-  'banana':                {kcal:105, pro:1.3,fat:0.4, carb:27,  unit:'each'},
-  'apple':                 {kcal:95,  pro:0.5,fat:0.3, carb:25,  unit:'each'},
-  'orange':                {kcal:62,  pro:1.2,fat:0.2, carb:15,  unit:'each'},
+  'banana':                {kcal:105, pro:1.3,fat:0.4, carb:27,  unit:'each', cupsEach:1},
+  'apple':                 {kcal:95,  pro:0.5,fat:0.3, carb:25,  unit:'each', cupsEach:1.5},
+  'orange':                {kcal:62,  pro:1.2,fat:0.2, carb:15,  unit:'each', cupsEach:0.75},
   'mixed berries':         {kcal:70,  pro:1,  fat:0.5, carb:17,  unit:'cup', brand:'Giant', altUnits:{g:140}},
   'acai':                  {kcal:70,  pro:1,  fat:1.5, carb:13,  unit:'cup', brand:'Sambazon', altUnits:{g:115}},
   'lime':                  {kcal:20,  pro:0.5,fat:0.1, carb:7,   unit:'each'},
@@ -491,8 +491,8 @@ var NUTRI_DB = {
   'mirin':                 {kcal:35,  pro:0,  fat:0,   carb:7,   unit:'tbsp'},
   'gochugaru':             {kcal:10,  pro:0.3,fat:0.1, carb:2,   unit:'tbsp'},
   'sugar':                 {kcal:48,  pro:0,  fat:0,   carb:12,  unit:'tbsp'},
-  'shallot':               {kcal:30,  pro:1,  fat:0,   carb:7,   unit:'each'},
-  'cucumber':              {kcal:16,  pro:0.7,fat:0.1, carb:3.6, unit:'each'},
+  'shallot':               {kcal:30,  pro:1,  fat:0,   carb:7,   unit:'each', cupsEach:0.25},
+  'cucumber':              {kcal:16,  pro:0.7,fat:0.1, carb:3.6, unit:'each', cupsEach:1.5},
   'red curry paste':{kcal:20,pro:0,fat:0,carb:4,unit:'tbsp',brand:'Maesri'},
   'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup'},
   // Packaged / grab-and-go
@@ -5138,10 +5138,14 @@ function buildCustomMeal(){
   ingr.forEach(function(i){
     const db=NUTRI_DB[i.dbKey];
     if(!db)return;
-    if(i.role==='veg'&&db.unit==='cup')vegCups+=i.amt;
+    if(i.role==='veg'){
+      if(db.unit==='cup')vegCups+=i.amt;
+      else if(db.unit==='each'&&db.cupsEach)vegCups+=db.cupsEach*i.amt;
+    }
     if(i.role==='fruit'){
       if(db.unit==='cup')fruitCups+=i.amt;
-      else if(db.unit==='each')fruitCups+=0.5*i.amt; // rough: 1 fruit ≈ 0.5c
+      else if(db.unit==='each'&&db.cupsEach)fruitCups+=db.cupsEach*i.amt;
+      else if(db.unit==='each')fruitCups+=1*i.amt; // fallback: 1 fruit ≈ 1c
     }
   });
   let fv='';
