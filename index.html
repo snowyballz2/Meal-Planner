@@ -816,6 +816,10 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
       if (newAmt < item.ing.amt) newAmt = item.ing.amt;
       if (newAmt > item.ing.amt * 1.5) newAmt = item.ing.amt * 1.5;
     }
+    // Fat-role: don't scale up with uniform scaling (oils/butter shouldn't double)
+    if (item.role === 'fat' && uniformScale > 1) {
+      newAmt = item.ing.amt; // keep original
+    }
 
     // Enforce minAmt
     if (db && db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
@@ -995,10 +999,16 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
         }
       }
 
-      // If fat% exceeds limit, reduce fat and shift to protein
+      // If fat% exceeds limit, reduce fat-role items and also reduce
+      // high-fat protein/condiment items, shift freed kcal to lean protein/carbs
       if (fatPct > maxFatPct) {
         const excessFatKcal = (fatPct - maxFatPct) * adjKcal;
-        const fatItems = scalable.filter(function(item) { return item.role === 'fat'; });
+        // Include fat-role AND any scalable item where >40% of its kcal comes from fat
+        const fatItems = scalable.filter(function(item) {
+          if (item.role === 'fat') return true;
+          const db = NUTRI_DB[item.ing.dbKey];
+          return db && db.fat > 0 && (db.fat * 9 / db.kcal) > 0.4;
+        });
         const proItems = scalable.filter(function(item) { return item.role === 'protein'; });
         if (fatItems.length) {
           fatItems.forEach(function(item) {
@@ -1006,7 +1016,8 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
             const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
             const reduceKcal = excessFatKcal / fatItems.length;
             let newAmt = curAmt - reduceKcal / db.kcal;
-            if (newAmt < item.ing.amt * 0.6) newAmt = item.ing.amt * 0.6;
+            // Allow reducing fat items down to 40% of original (more aggressive than other roles)
+            if (newAmt < item.ing.amt * 0.4) newAmt = item.ing.amt * 0.4;
             if (db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
             adjustments[item.idx] = newAmt;
           });
@@ -2664,7 +2675,7 @@ function renderDayTabs(){
 var CAL_BASE=lsGet('mealPlannerCalBase',{him:2800,her:1900});
 var PRO_TARGET=lsGet('mealPlannerProTarget',{him:180,her:120});
 // Macro ratio limits: carbs < 50% of kcal calories, fat < 30% of kcal calories
-var MACRO_LIMITS={maxCarbPct:0.50,maxFatPct:0.30};
+var MACRO_LIMITS={maxCarbPct:0.55,maxFatPct:0.30};
 
 // Build macro hints for the calorie adjuster based on person, day, slot
 function buildMacroHints(p,d,s){
