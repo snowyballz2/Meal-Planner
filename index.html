@@ -284,6 +284,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   border-radius:var(--radius-sm);background:var(--bg);color:var(--text-dim);font-size:11px;
   font-weight:600;cursor:pointer;text-align:center}
 .ingr-reset-btn:active{opacity:.7}
+/* Prep for tomorrow banner */
+.prep-banner{background:rgba(251,191,36,.08);border:1.5px solid rgba(251,191,36,.2);border-radius:var(--radius);padding:12px 14px;margin-top:12px}
+.prep-banner-title{font-size:13px;font-weight:700;color:#FBBF24;margin-bottom:8px}
+.prep-banner-item{font-size:12px;color:var(--text-mid);line-height:1.6;padding-left:4px}
 /* Macro bar */
 .macro-bar{display:flex;gap:3px;height:6px;border-radius:3px;overflow:hidden;margin-top:5px;margin-bottom:2px}
 .macro-seg{border-radius:0}.macro-seg:first-child{border-radius:2px 0 0 2px}.macro-seg:last-child{border-radius:0 2px 2px 0}
@@ -2782,9 +2786,137 @@ function renderSharedView(day, scrollY, mealEl, prefixHtml){
   });
 
   if(!hasShared)html+='<div class="empty-shop" style="padding:40px 20px;text-align:center;color:var(--gray)">No shared meals on '+day+'.</div>';
+  // Prep for tomorrow banner
+  html+=buildPrepBanner(day);
   mealEl.innerHTML=html;
   window.scrollTo(0,scrollY);
   requestAnimationFrame(function(){window.scrollTo(0,scrollY);mealEl.style.minHeight='';});
+}
+
+// 2b. Prep for tomorrow banner (shared view only)
+function buildPrepBanner(day){
+  const di=DAYS.indexOf(day);
+  const tomorrowDay=DAYS[(di+1)%7];
+  const items=[];
+  const seenMeals={};
+
+  // Meat/seafood dbKeys that might need thawing
+  const meatKeys={'chicken breast':1,'chicken thigh':1,'ground turkey 93':1,'ground chicken':1,
+    'salmon':1,'halibut':1,'filet mignon':1,'shrimp':1,'tofu firm':1,'silken tofu':1};
+
+  // Bean dbKeys that need overnight soaking (NOT lentils)
+  const soakBeans={'black beans canned':'black beans','cannellini beans canned':'cannellini beans','chickpeas roasted':'chickpeas'};
+
+  // Veggie prep keywords
+  const vegPrepRe=/\b(dice|chop|cut|slice|mince|julienne)\b/i;
+
+  // Aggregate beans per type
+  const beanTotals={};
+
+  ['him','her'].forEach(function(p){
+    ['breakfast','lunch','dinner'].forEach(function(s){
+      const key=sk(p,tomorrowDay,s);
+      if(SKIPPED[key]||EAT_OUT[key])return;
+      const id=getMealId(p,tomorrowDay,s);
+      if(!id)return;
+      const meal=getMeal(id);
+      if(!meal)return;
+
+      // Check if this is a leftover day (skip — cook day handles prep)
+      const lo=computeLeftovers()[key];
+      if(lo&&lo.isLeftover)return;
+
+      const mealKey=id+'_'+s;
+      const alreadySeen=seenMeals[mealKey];
+      seenMeals[mealKey]=true;
+
+      // 1. Meat thaw
+      if(!alreadySeen){
+        meal.ingredients.forEach(function(ing){
+          if(meatKeys[ing.dbKey]&&ing.amt>0){
+            const already=items.some(function(it){return it.type==='thaw'&&it.dbKey===ing.dbKey;});
+            if(!already){
+              items.push({type:'thaw',emoji:'🥩',text:'Thaw '+ing.dbKey+' ('+SLOT_LABEL[s]+': '+meal.label+')'});
+            }
+          }
+        });
+      }
+
+      // 2. Bean soak (aggregate per type)
+      meal.ingredients.forEach(function(ing){
+        if(soakBeans[ing.dbKey]&&ing.amt>0){
+          const beanName=soakBeans[ing.dbKey];
+          if(!beanTotals[beanName])beanTotals[beanName]={cups:0,meals:[]};
+          beanTotals[beanName].cups+=ing.amt;
+          const mealLabel=SLOT_LABEL[s]+': '+meal.label;
+          if(beanTotals[beanName].meals.indexOf(mealLabel)<0)beanTotals[beanName].meals.push(mealLabel);
+        }
+      });
+
+      // 3. Veggie prep from steps
+      if(!alreadySeen&&meal.steps){
+        meal.steps.forEach(function(step){
+          const match=step.match(vegPrepRe);
+          if(!match)return;
+          const verb=match[1].charAt(0).toUpperCase()+match[1].slice(1).toLowerCase();
+          // Find which veg ingredient is referenced
+          meal.ingredients.forEach(function(ing){
+            if(ing.role!=='veg')return;
+            const words=ing.dbKey.toLowerCase().split(/\s+/);
+            const stepLower=step.toLowerCase();
+            const mentioned=words.some(function(w){return w.length>2&&stepLower.indexOf(w)>=0;});
+            if(mentioned){
+              const already=items.some(function(it){return it.type==='veg'&&it.dbKey===ing.dbKey&&it.verb===verb;});
+              if(!already){
+                items.push({type:'veg',emoji:'🥬',dbKey:ing.dbKey,verb:verb,
+                  text:verb+' '+ing.dbKey+' ('+SLOT_LABEL[s]+': '+meal.label+')'});
+              }
+            }
+          });
+        });
+      }
+
+      // 4. Advance prep from steps (marinate, overnight, refrigerate)
+      if(!alreadySeen&&meal.steps){
+        meal.steps.forEach(function(step){
+          const lower=step.toLowerCase();
+          if(lower.indexOf('marinate')>=0||lower.indexOf('overnight')>=0||lower.indexOf('refrigerate')>=0){
+            const already=items.some(function(it){return it.type==='advance'&&it.mealId===id;});
+            if(!already){
+              // Extract a short description
+              let desc=step;
+              if(desc.length>80)desc=desc.substring(0,77)+'...';
+              items.push({type:'advance',emoji:'⏰',mealId:id,
+                text:desc+' ('+SLOT_LABEL[s]+': '+meal.label+')'});
+            }
+          }
+        });
+      }
+    });
+  });
+
+  // Convert aggregated bean totals to soak items
+  Object.keys(beanTotals).forEach(function(beanName){
+    const bt=beanTotals[beanName];
+    const driedCups=bt.cups*0.429; // 0.75 dried / 1.75 cooked
+    const displayAmt=fmtFrac(Math.round(driedCups*4)/4); // snap to nearest ¼
+    items.push({type:'bean',emoji:'🫘',
+      text:'Soak '+displayAmt+' cup dried '+beanName+' overnight ('+bt.meals.join(', ')+')'});
+  });
+
+  if(!items.length)return '';
+
+  // Sort: thaw first, then veg, then beans, then advance
+  const order={thaw:0,veg:1,bean:2,advance:3};
+  items.sort(function(a,b){return(order[a.type]||9)-(order[b.type]||9);});
+
+  let html='<div class="prep-banner">';
+  html+='<div class="prep-banner-title">🔔 Prep for tomorrow ('+tomorrowDay+')</div>';
+  items.forEach(function(it){
+    html+='<div class="prep-banner-item">'+it.emoji+' '+it.text+'</div>';
+  });
+  html+='</div>';
+  return html;
 }
 
 // 3a. Eat-out form HTML
