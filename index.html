@@ -2548,7 +2548,10 @@ function renderDayTabs(){
 }
 
 // ── Calorie Adjustment ──────────────────────────────────────
-var CAL_BASE={him:2800,her:1900};
+var CAL_BASE=lsGet('mealPlannerCalBase',{him:2800,her:1900});
+var PRO_TARGET=lsGet('mealPlannerProTarget',{him:180,her:120});
+// Macro ratio limits: carbs < 50% of kcal, fat < 30% of kcal
+var MACRO_LIMITS={maxCarbPct:0.50,maxFatPct:0.30};
 
 function openCalPopup(p){
   const overlay=document.getElementById('calPopupOverlay');
@@ -2596,10 +2599,66 @@ function confirmCal(){
   if(!d||!p)return;
   const idx=Math.max(0,Math.min(Math.round(d.scrollTop/52),50));
   CAL_BASE[p]=idx*100;
+  lsSet('mealPlannerCalBase',CAL_BASE);
   closeCalPopup();
   renderMeals();
 }
 function closeCalPopup(){
+  const o=document.getElementById('calPopupOverlay');
+  if(o)o.style.display='none';
+}
+function openProPopup(p){
+  const overlay=document.getElementById('calPopupOverlay');
+  if(!overlay)return;
+  const current=PRO_TARGET[p];
+  const curIdx=Math.round(current/5); // 5g increments
+  window._proP=p;
+  let items='';
+  for(let i=0;i<=80;i++){ // 0 to 400g
+    const g=i*5;
+    items+='<div class="cal-drum-item'+(i===curIdx?' on':'')+'" data-i="'+i+'">'
+      +'<span class="dk">'+g+'g protein</span></div>';
+  }
+  const col=p==='him'?'var(--his)':'var(--her)';
+  overlay.innerHTML='<div class="cal-popup-overlay" onclick="if(event.target===this)closeProPopup()">'
+    +'<div class="cal-popup">'
+    +'<div class="cal-popup-title">'+(p==='him'?'His':'Her')+' Daily Protein Target</div>'
+    +'<div class="cal-drum-wrap">'
+    +'<div class="cal-drum-selector '+p+'"></div>'
+    +'<div class="cal-drum" id="proDrum" onscroll="onProDrumScroll()">'
+    +'<div style="height:64px"></div>'+items+'<div style="height:64px"></div>'
+    +'</div></div>'
+    +'<div class="cal-popup-btns">'
+    +'<button class="cal-popup-cancel" onclick="closeProPopup()">Cancel</button>'
+    +'<button class="cal-popup-ok '+p+'" onclick="confirmPro()">OK</button>'
+    +'</div></div></div>';
+  overlay.style.display='';
+  setTimeout(function(){
+    const d=document.getElementById('proDrum');
+    if(d){d.scrollTop=curIdx*52;highlightProDrum(curIdx);}
+  },40);
+}
+function highlightProDrum(idx){
+  const d=document.getElementById('proDrum');
+  if(!d)return;
+  d.querySelectorAll('.cal-drum-item').forEach(function(el,i){el.classList.toggle('on',i===idx);});
+}
+function onProDrumScroll(){
+  const d=document.getElementById('proDrum');
+  if(!d)return;
+  highlightProDrum(Math.round(d.scrollTop/52));
+}
+function confirmPro(){
+  const d=document.getElementById('proDrum');
+  const p=window._proP;
+  if(!d||!p)return;
+  const idx=Math.max(0,Math.min(Math.round(d.scrollTop/52),80));
+  PRO_TARGET[p]=idx*5;
+  lsSet('mealPlannerProTarget',PRO_TARGET);
+  closeProPopup();
+  renderMeals();
+}
+function closeProPopup(){
   const o=document.getElementById('calPopupOverlay');
   if(o)o.style.display='none';
 }
@@ -2797,7 +2856,7 @@ function renderStatsBar(person, day){
   const cc=person==='him'?'him-c':'her-c';
   return '<div class="stats">'
     +'<div class="stat" data-p="'+person+'" onclick="openCalPopup(this.dataset.p)"><div class="v kcal-tap '+cc+'">'+t.kcal.toLocaleString()+'</div><div class="l">kcal</div></div>'
-    +'<div class="stat"><div class="v '+cc+'">'+t.pro+'g</div><div class="l">protein</div></div>'
+    +'<div class="stat" data-p="'+person+'" onclick="openProPopup(this.dataset.p)" style="cursor:pointer"><div class="v kcal-tap '+cc+'">'+t.pro+'g</div><div class="l">protein</div></div>'
     +'<div class="stat"><div class="v" style="color:#4ADE80">'+t.carb+'g</div><div class="l">carbs</div></div>'
     +'<div class="stat"><div class="v" style="color:#FBBF24">'+t.fat+'g</div><div class="l">fat</div></div>'
     +'</div>'
@@ -4609,7 +4668,7 @@ function saveSyncToken(token){syncToken=token;lsSetRaw('mealPlannerSyncToken',to
 function setSyncStatus(msg,type){const c=type==='err'?'#DC2626':type==='ok'?'#059669':'var(--gray)';syncStatus='<span style="color:'+c+'">'+msg+'</span>';const el=document.getElementById('syncStatusMsg');if(el)el.innerHTML=syncStatus;}
 function gistHeaders(){return {'Content-Type':'application/json','Authorization':'token '+syncToken};}
 function getSyncPayload(){
-  return {weekData:weekData,customMeals:customMeals,customIngredients:customIngredients,eatOutDB:EAT_OUT_DB,version:3};
+  return {weekData:weekData,customMeals:customMeals,customIngredients:customIngredients,eatOutDB:EAT_OUT_DB,calBase:CAL_BASE,proTarget:PRO_TARGET,version:3};
 }
 function mergeSyncData(remote){
   // Week data: merge by MONDAY DATE, not by position name.
@@ -4689,6 +4748,10 @@ function mergeSyncData(remote){
     });
   }
   
+  // Calorie and protein targets: take remote if present
+  if(remote.calBase){CAL_BASE=remote.calBase;lsSet('mealPlannerCalBase',CAL_BASE);}
+  if(remote.proTarget){PRO_TARGET=remote.proTarget;lsSet('mealPlannerProTarget',PRO_TARGET);}
+
   // Custom meals: merge by ID, don't overwrite existing
   if(remote.customMeals){
     Object.keys(remote.customMeals).forEach(function(k){
