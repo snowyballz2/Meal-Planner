@@ -1039,52 +1039,73 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     }
   }
 
-  // Final snap pass: snap ALL ingredients to practical amounts
+  // Final snap pass
+  // For shared/leftover: snap the TOTAL cook amount, per-person is just math
+  // For solo: snap per-person directly (that IS the cook amount)
+  // wholeOnly items: always whole per-person regardless of context
   scalable.forEach(function(item) {
     const db = NUTRI_DB[item.ing.dbKey];
     if (!db) return;
     let amt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
 
-    // wholeOnly always rounds to whole numbers (toast, tortilla, rxbar, tuna pouch)
+    // wholeOnly: always whole per-person (toast, tortilla, rxbar, tuna pouch, fish oil)
     if (db.wholeOnly) {
       amt = Math.round(amt);
       if (amt < 1) amt = 1;
     }
-    // Package items that aren't wholeOnly: leave for package nudge (beans, coconut etc)
+    // Package items: skip — package nudge handles these
     else if (db.pkg && db.pkg.type !== 'bulk') {
-      // skip — package nudge handles precision
+      // no snap
     }
-    // unit:each without wholeOnly: eggs snap to whole for solo meals, 0.5 for shared
-    // Other each items (avocado, banana): always 0.5 OK (can physically halve)
-    else if (db.unit === 'each') {
-      const isEgg = (ing.dbKey === 'egg white' || ing.dbKey === 'egg whole');
-      if (isEgg && !isSharedOrLeftover) {
+    // Shared/leftover: snap total cook amount, then divide back
+    else if (isSharedOrLeftover) {
+      // Estimate total servings (same as package nudge)
+      const leftovers = typeof computeLeftovers === 'function' ? computeLeftovers() : {};
+      let totalServings = 2;
+      Object.keys(leftovers).forEach(function(k) {
+        const lo = leftovers[k];
+        if (lo && !lo.isLeftover && lo.totalServings && lo.totalServings > totalServings) {
+          totalServings = lo.totalServings;
+        }
+      });
+      let totalAmt = amt * totalServings;
+      // Snap the TOTAL to practical values
+      const unit = db.unit || '';
+      if (unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving') {
+        totalAmt = Math.round(totalAmt);
+        if (totalAmt < 1) totalAmt = 1;
+      } else if (unit === 'each') {
+        totalAmt = Math.round(totalAmt);
+        if (totalAmt < 1) totalAmt = 1;
+      } else if (unit==='clove'||unit==='cloves') {
+        totalAmt = Math.round(totalAmt);
+        if (totalAmt < 1) totalAmt = 1;
+      } else if (db.halfSnap || unit === 'tbsp') {
+        totalAmt = Math.round(totalAmt * 2) / 2;
+        if (totalAmt < 0.5) totalAmt = 0.5;
+      } else {
+        totalAmt = Math.round(totalAmt * 4) / 4;
+        if (totalAmt < 0.25) totalAmt = 0.25;
+      }
+      // Divide back to per-person (no additional snap — just math)
+      amt = totalAmt / totalServings;
+    }
+    // Solo meal: snap per-person directly
+    else {
+      const unit = db.unit || '';
+      if (unit==='oz'||unit==='each'||unit==='slice'||unit==='scoop'||unit==='serving') {
         amt = Math.round(amt);
         if (amt < 1) amt = 1;
-      } else {
+      } else if (unit==='clove'||unit==='cloves') {
         amt = Math.round(amt * 2) / 2;
         if (amt < 0.5) amt = 0.5;
+      } else if (db.halfSnap || unit === 'tbsp') {
+        amt = Math.round(amt * 2) / 2;
+        if (amt < 0.5) amt = 0.5;
+      } else {
+        amt = Math.round(amt * 4) / 4;
+        if (amt < 0.25) amt = 0.25;
       }
-    }
-    // oz/slice/scoop/serving: whole numbers
-    else if (db.unit==='oz'||db.unit==='slice'||db.unit==='scoop'||db.unit==='serving') {
-      amt = Math.round(amt);
-      if (amt < 1) amt = 1;
-    }
-    // cloves: 0.5 increments (minced garlic divides for shared meals)
-    else if (db.unit==='clove'||db.unit==='cloves') {
-      amt = Math.round(amt * 2) / 2;
-      if (amt < 0.5) amt = 0.5;
-    }
-    // tbsp: 0.5 increments
-    else if (db.halfSnap || db.unit === 'tbsp') {
-      amt = Math.round(amt * 2) / 2;
-      if (amt < 0.5) amt = 0.5;
-    }
-    // cup and others: 0.25 increments
-    else {
-      amt = Math.round(amt * 4) / 4;
-      if (amt < 0.25) amt = 0.25;
     }
 
     if (db.minAmt && amt < db.minAmt) amt = db.minAmt;
