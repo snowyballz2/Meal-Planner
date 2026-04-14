@@ -200,12 +200,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   color:#000;font-size:12px;font-weight:700;cursor:pointer;display:inline-block}
 .rf-cancel{padding:6px 14px;border:1.5px solid var(--border);border-radius:6px;
   background:none;color:var(--gray);font-size:11px;font-weight:600;cursor:pointer}
-.rf-slot-grid{display:flex;flex-wrap:nowrap;gap:4px;margin-bottom:6px}
+.rf-slot-grid{display:flex;flex-wrap:nowrap;gap:4px;margin-bottom:6px;justify-content:center}
 .rf-slot-chip{padding:3px 7px;border-radius:20px;border:1.5px solid var(--border);font-size:10px;
   font-weight:600;cursor:pointer;background:var(--bg-surface);color:var(--gray)}
 .rf-slot-chip.on{background:var(--shop);color:var(--bg);border-color:var(--shop)}
 .rf-section-hdr{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray);margin:10px 0 4px}
-.rf-person-grid{display:flex;gap:4px;margin-bottom:8px}
+.rf-person-grid{display:flex;gap:4px;margin-bottom:8px;justify-content:center}
 .rf-person-chip{padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;background:var(--bg-surface);color:var(--gray);text-align:center;border:1.5px solid var(--border);border-radius:20px;transition:all .15s}
 /* New Ingredient compact form */
 .ni-row{display:flex;gap:6px;margin-bottom:6px;align-items:flex-end}
@@ -299,7 +299,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sched-btn-set{border-color:rgba(167,139,250,.5);color:#A78BFA}
 .sched-day{font-size:11px;font-weight:700;display:flex;align-items:center}
 .sched-day.dim{color:var(--gray);opacity:0.5}
-.sched-slot-hdr{display:flex;align-items:center;justify-content:center;position:relative;font-size:9px;font-weight:700;text-transform:uppercase;padding:2px 0}
+.sched-slot-hdr{display:flex;align-items:center;justify-content:center;position:relative;font-size:11px;font-weight:700;text-transform:uppercase;padding:6px 0}
 .sched-slot-hdr.active{color:var(--shop);cursor:pointer}
 .sched-slot-hdr.inactive{color:var(--gray);opacity:0.3}
 .sched-zone{position:absolute;top:0;bottom:0}
@@ -2321,7 +2321,56 @@ function macroBar(kcal,pro,fat,carb,p){
 }
 
 // ── Nav ──────────────────────────────────────────────────────
+function saveRecipeFormState(){
+  const label=document.getElementById('rf_label');
+  const url=document.getElementById('rf_url');
+  const steps=document.getElementById('rf_steps');
+  if(label)_rfSaved.label=label.value;
+  if(url)_rfSaved.url=url.value;
+  if(steps)_rfSaved.steps=steps.value;
+  // Save ingredient rows
+  const rows=document.querySelectorAll('#rf_ingr_list .rf-ingr-row');
+  _rfSaved.ingrRows=[];
+  rows.forEach(function(row){
+    const selects=row.querySelectorAll('select');
+    if(selects.length>=3){
+      _rfSaved.ingrRows.push({amt:selects[0].value,ingr:selects[1].value,role:selects[2].value});
+    }
+  });
+}
+function restoreRecipeFormState(){
+  setTimeout(function(){
+    const label=document.getElementById('rf_label');
+    const url=document.getElementById('rf_url');
+    const steps=document.getElementById('rf_steps');
+    if(label&&_rfSaved.label)label.value=_rfSaved.label;
+    if(url&&_rfSaved.url)url.value=_rfSaved.url;
+    if(steps&&_rfSaved.steps)steps.value=_rfSaved.steps;
+    // Restore ingredient rows
+    if(_rfSaved.ingrRows.length){
+      const list=document.getElementById('rf_ingr_list');
+      if(list&&!list.children.length){
+        _rfSaved.ingrRows.forEach(function(r){
+          addIngrRow();
+          const rows=list.querySelectorAll('.rf-ingr-row');
+          const last=rows[rows.length-1];
+          if(last){
+            const selects=last.querySelectorAll('select');
+            if(selects[2])selects[2].value=r.role;
+            if(selects[2])selects[2].dispatchEvent(new Event('change'));
+            setTimeout(function(){
+              if(selects[1])selects[1].value=r.ingr;
+              if(selects[0])selects[0].value=r.amt;
+            },50);
+          }
+        });
+      }
+    }
+  },20);
+}
 function setTopTab(t){
+  // Save recipe form before leaving
+  if(topTab==='recipes')saveRecipeFormState();
   topTab=t;
   const mealsTab=document.getElementById('ttMeals');
   mealsTab.className='top-tab'+(t==='meals'?' on-meals':'');
@@ -2339,7 +2388,7 @@ function setTopTab(t){
   document.getElementById('syncView').style.display='none';
   document.getElementById('recipesView').style.display=t==='recipes'?'':'none';
   if(t==='shop')renderShop();
-  if(t==='recipes')renderRecipesView();
+  if(t==='recipes'){renderRecipesView();restoreRecipeFormState();}
 }
 function setPerson(p){
   person=p;
@@ -3023,6 +3072,8 @@ function renderMeals(){
     }
     html+='</div>';
     if(sharedSchedOpen){
+      // Spacer between header buttons and grid
+      html+='<div style="height:8px"></div>';
       // Grid header: Day + Breakfast + Lunch + Dinner
       html+='<div class="sched-grid">';
       html+='<div></div>';
@@ -4476,6 +4527,8 @@ function renderSyncView(){
 
 // ── CUSTOM RECIPE MANAGER ───────────────────────────────────
 var customMeals={};var editingRecipeId=null;var selectedSlots=[];var selectedRecipePersons='both';
+// Persisted form state across tab switches
+var _rfSaved={label:'',url:'',steps:'',ingrRows:[]};
 
 function loadCustomMeals(){customMeals=lsGet('mealPlannerCustom',{});injectCustomMeals();}
 function saveCustomMeals(){lsSet('mealPlannerCustom',customMeals);}
