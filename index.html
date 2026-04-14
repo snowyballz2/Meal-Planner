@@ -831,13 +831,14 @@ function adjustIngredients(ingredients, targetDelta, slot) {
       // Don't let any ingredient go below 25% of original or negative
       const minAmt = item.ing.amt * 0.25;
       if (newAmt < minAmt) newAmt = minAmt;
-      // Cap ingredients to preserve recipe proportions
-      // ±40% ratio shift for protein/carb/fat, ±50% for veg (veg is more flexible)
-      const maxRatio = item.role==='veg' ? 0.50 : 0.40;
-      const upperLimit = item.ing.amt * (1 + maxRatio);
-      const lowerLimit = item.ing.amt * (1 - maxRatio);
-      if (newAmt > upperLimit) newAmt = upperLimit;
-      if (newAmt < lowerLimit) newAmt = lowerLimit;
+      // Preserve recipe proportions via ratio caps
+      // Veg: never reduce, allow up to +50%
+      // Protein/carb/fat: individual amounts can flex but ratio between
+      // total protein kcal and total carb kcal must stay within ±40%
+      if (item.role==='veg') {
+        if (newAmt < item.ing.amt) newAmt = item.ing.amt; // never reduce veg
+        if (newAmt > item.ing.amt * 1.5) newAmt = item.ing.amt * 1.5; // max +50%
+      }
       // Snap based on unit: whole numbers for oz/each/slice/scoop, quarters for cup/tbsp/tsp
       const db = NUTRI_DB[item.ing.dbKey];
       const unit = db ? db.unit : '';
@@ -862,6 +863,42 @@ function adjustIngredients(ingredients, targetDelta, slot) {
       remaining -= actualDelta;
     });
   } while (Math.abs(remaining) > 25 && Math.abs(remaining) < Math.abs(prevRemaining) - 5);
+
+  // Ratio enforcement: ensure protein:carb calorie ratio stays within ±40% of original
+  // Calculate original ratio
+  let origProKcal=0, origCarbKcal=0, adjProKcal=0, adjCarbKcal=0;
+  ingredients.forEach(function(ing, idx){
+    const db=NUTRI_DB[ing.dbKey];if(!db)return;
+    if(ing.role==='protein'){origProKcal+=db.kcal*ing.amt;adjProKcal+=db.kcal*(adjustments[idx]!==undefined?adjustments[idx]:ing.amt);}
+    if(ing.role==='carb'){origCarbKcal+=db.kcal*ing.amt;adjCarbKcal+=db.kcal*(adjustments[idx]!==undefined?adjustments[idx]:ing.amt);}
+  });
+  if(origProKcal>0&&origCarbKcal>0&&adjProKcal>0&&adjCarbKcal>0){
+    const origRatio=origProKcal/origCarbKcal;
+    const adjRatio=adjProKcal/adjCarbKcal;
+    const ratioDrift=adjRatio/origRatio;
+    // If ratio drifted beyond ±40%, scale back the over-represented role
+    if(ratioDrift>1.4){
+      // Protein grew too much relative to carbs — scale protein down toward limit
+      const targetProKcal=origRatio*1.4*adjCarbKcal;
+      ingredients.forEach(function(ing,idx){
+        if(ing.role!=='protein')return;
+        const db=NUTRI_DB[ing.dbKey];if(!db||db.kcal===0)return;
+        const curAmt=adjustments[idx]!==undefined?adjustments[idx]:ing.amt;
+        const scale=targetProKcal/adjProKcal;
+        adjustments[idx]=curAmt*scale;
+      });
+    } else if(ratioDrift<0.6){
+      // Carbs grew too much relative to protein — scale carbs down toward limit
+      const targetCarbKcal=adjProKcal/(origRatio*0.6);
+      ingredients.forEach(function(ing,idx){
+        if(ing.role!=='carb')return;
+        const db=NUTRI_DB[ing.dbKey];if(!db||db.kcal===0)return;
+        const curAmt=adjustments[idx]!==undefined?adjustments[idx]:ing.amt;
+        const scale=targetCarbKcal/adjCarbKcal;
+        adjustments[idx]=curAmt*scale;
+      });
+    }
+  }
 
   // Package-aware nudge: after calorie scaling, nudge packaged ingredients toward
   // clean package boundaries. Uses the same flex ranges as the shopping optimizer.
