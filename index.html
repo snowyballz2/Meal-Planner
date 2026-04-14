@@ -5711,11 +5711,42 @@ function renderRecipesView(){
 }
 
 // ── INIT ────────────────────────────────────────────────────
+// Restore page state from sessionStorage (survives refresh)
+(function(){
+  var saved=sessionStorage.getItem('mealPlannerPageState');
+  if(saved){
+    try{
+      var s=JSON.parse(saved);
+      if(s.topTab)topTab=s.topTab;
+      if(s.person)person=s.person;
+      if(s.day)day=s.day;
+      if(s.activeWeek)activeWeek=s.activeWeek;
+    }catch(e){}
+  }
+})();
+// Save page state on unload
+window.addEventListener('beforeunload',function(){
+  sessionStorage.setItem('mealPlannerPageState',JSON.stringify({
+    topTab:topTab,person:person,day:day,activeWeek:activeWeek,scrollY:window.scrollY
+  }));
+});
+
 loadSyncId();loadCustomIngredients();loadWeeks();renderWeekBar();
 loadCustomMeals();loadEatOutDB();
 MEALS.forEach(function(m){expandMealIngredients(m);});
 MEALS.forEach(function(m){buildColorizedSteps(m);});
-renderDayTabs();renderMeals();
+renderDayTabs();setTopTab(topTab);renderMeals();
+
+// Restore scroll position after render
+(function(){
+  var saved=sessionStorage.getItem('mealPlannerPageState');
+  if(saved){
+    try{
+      var s=JSON.parse(saved);
+      if(s.scrollY)setTimeout(function(){window.scrollTo(0,s.scrollY);},50);
+    }catch(e){}
+  }
+})();
 
 // Register service worker for offline PWA support
 // Unregister any existing service worker — it causes stale code issues
