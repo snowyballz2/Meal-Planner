@@ -4736,9 +4736,32 @@ function addNewDbIngredient(){
   const role=document.getElementById('rf_new_role').value||'protein';
   if(!name){alert('Enter an ingredient name.');return;}
   if(NUTRI_DB[name]){alert(name+' already exists in the database.');return;}
-  NUTRI_DB[name]={kcal:kcal,pro:pro,fat:fat,carb:carb,unit:unit};
-  customIngredients[name]={kcal:kcal,pro:pro,fat:fat,carb:carb,unit:unit};
+
+  // Build entry with required fields
+  const entry={kcal:kcal,pro:pro,fat:fat,carb:carb,unit:unit};
+
+  // Optional behavior fields
+  const minAmt=parseFloat(document.getElementById('rf_new_minAmt').value);
+  if(minAmt>0)entry.minAmt=minAmt;
+  if(document.getElementById('rf_new_halfSnap').value==='yes')entry.halfSnap=true;
+  if(document.getElementById('rf_new_wholeOnly').value==='yes')entry.wholeOnly=true;
+
+  // Optional package fields
+  const pkgSize=parseFloat(document.getElementById('rf_new_pkgSize').value);
+  const pkgUnit=document.getElementById('rf_new_pkgUnit').value;
+  const pkgDrained=parseFloat(document.getElementById('rf_new_pkgDrained').value);
+  const pkgType=document.getElementById('rf_new_pkgType').value;
+  if(pkgSize>0&&pkgUnit){
+    entry.pkg={size:pkgSize,unit:pkgUnit};
+    if(pkgDrained>0)entry.pkg.drained=pkgDrained;
+    if(pkgUnit==='cups'&&pkgDrained>0)entry.pkg.cups=pkgDrained;
+    if(pkgType)entry.pkg.type=pkgType;
+  }
+
+  NUTRI_DB[name]=entry;
+  customIngredients[name]=entry;
   saveCustomIngredients();
+
   // Add to role cache so it appears in filtered dropdowns immediately
   if(ROLE_INGR){
     if(!ROLE_INGR[role])ROLE_INGR[role]=[];
@@ -4747,9 +4770,13 @@ function addNewDbIngredient(){
     ROLE_INGR.all.push(name);ROLE_INGR.all.sort();
   }
   alert('Added "'+name+'" to the database!');
-  ['rf_new_name','rf_new_kcal','rf_new_pro','rf_new_fat','rf_new_carb'].forEach(function(id){document.getElementById(id).value='';});
+  ['rf_new_name','rf_new_kcal','rf_new_pro','rf_new_fat','rf_new_carb','rf_new_minAmt','rf_new_pkgSize','rf_new_pkgDrained'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('rf_new_unit').value='oz';
   document.getElementById('rf_new_role').value='protein';
+  document.getElementById('rf_new_halfSnap').value='no';
+  document.getElementById('rf_new_wholeOnly').value='no';
+  document.getElementById('rf_new_pkgUnit').value='';
+  document.getElementById('rf_new_pkgType').value='';
 }
 function saveRecipe(){const meal=buildCustomMeal();if(!meal)return;customMeals[meal.id]=meal;saveCustomMeals();injectCustomMeals();closeRecipeForm();renderRecipesView();}
 function closeRecipeForm(){editingRecipeId=null;selectedSlots=[];selectedRecipePersons='both';renderRecipesView();}
@@ -4901,7 +4928,19 @@ function renderRecipesView(){
     +'<div class="ni-field" style="flex:1"><label>Fat</label><input id="rf_new_fat" type="number" min="0" placeholder="0"></div>'
     +'<div class="ni-field" style="flex:1"><label>Carb</label><input id="rf_new_carb" type="number" min="0" placeholder="0"></div>'
     +'</div>'
-    +'<button class="rf-save" style="padding:5px 14px;font-size:11px;margin-top:4px" onclick="addNewDbIngredient()">Add to Database</button>'
+    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray);margin:8px 0 4px">Optional — Package &amp; Behavior</div>'
+    +'<div class="ni-row">'
+    +'<div class="ni-field" style="flex:1"><label>Min Amt</label><input id="rf_new_minAmt" type="number" min="0" step="0.25" placeholder="—"></div>'
+    +'<div class="ni-field" style="flex:1"><label>½ Snap</label><select id="rf_new_halfSnap"><option value="no">No</option><option value="yes">Yes</option></select></div>'
+    +'<div class="ni-field" style="flex:1"><label>Whole Only</label><select id="rf_new_wholeOnly"><option value="no">No</option><option value="yes">Yes</option></select></div>'
+    +'</div>'
+    +'<div class="ni-row">'
+    +'<div class="ni-field" style="flex:1"><label>Pkg Size</label><input id="rf_new_pkgSize" type="number" min="0" step="0.5" placeholder="—"></div>'
+    +'<div class="ni-field" style="flex:1"><label>Pkg Unit</label><select id="rf_new_pkgUnit"><option value="">—</option><option value="oz">oz</option><option value="cups">cups</option></select></div>'
+    +'<div class="ni-field" style="flex:1"><label>Drained</label><input id="rf_new_pkgDrained" type="number" min="0" step="0.25" placeholder="—"></div>'
+    +'<div class="ni-field" style="flex:1"><label>Pkg Type</label><select id="rf_new_pkgType"><option value="">—</option><option value="can">can</option><option value="carton">carton</option><option value="jar">jar</option><option value="bulk">bulk</option></select></div>'
+    +'</div>'
+    +'<button class="rf-save" style="padding:5px 14px;font-size:11px;margin-top:8px" onclick="addNewDbIngredient()">Add to Database</button>'
     +'</div>':'')
     +'</div>'
     // Edit Recipes collapsible
