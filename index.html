@@ -2878,13 +2878,14 @@ function buildPrepBanner(day){
         });
       }
 
-      // 2. Bean soak (aggregate per type)
+      // 2. Bean soak (aggregate per type — include leftover servings since all beans cook on day 1)
+      const loServings=(lo&&!lo.isLeftover&&lo.servings>1)?lo.servings:1;
       meal.ingredients.forEach(function(ing){
         if(soakBeans[ing.dbKey]&&ing.amt>0){
           const beanName=soakBeans[ing.dbKey];
           if(!beanTotals[beanName])beanTotals[beanName]={cups:0,meals:[]};
-          beanTotals[beanName].cups+=ing.amt;
-          const mealLabel=SLOT_LABEL[s]+': '+meal.label;
+          beanTotals[beanName].cups+=ing.amt*loServings;
+          const mealLabel=SLOT_LABEL[s]+': '+meal.label+(loServings>1?' (×'+loServings+' servings)':'');
           if(beanTotals[beanName].meals.indexOf(mealLabel)<0)beanTotals[beanName].meals.push(mealLabel);
         }
       });
