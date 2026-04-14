@@ -775,7 +775,8 @@ function getPrimaryProtein(m, titleCase) {
 // intelligently adjusts specific ingredients to hit a target
 // calorie delta. Priority: protein sources first for + calories,
 // carb sources for moderate changes, fat sources last.
-function adjustIngredients(ingredients, targetDelta, slot) {
+// macroHints (optional): {proTarget, slotKcalBudget, maxCarbPct, maxFatPct}
+function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
   if (Math.abs(targetDelta) < 5) return ingredients.map(function(i){return {ing:i,newAmt:i.amt};});
 
   // Classify scalable ingredients by role
@@ -908,6 +909,117 @@ function adjustIngredients(ingredients, targetDelta, slot) {
         const db = NUTRI_DB[ing.dbKey]; if (!db) return;
         if (adjustments[idx] !== undefined) adjustments[idx] = adjustments[idx] * scale;
       });
+    }
+  }
+
+  // Macro-aware adjustment: honor protein target and C/F limits
+  if (macroHints) {
+    // Calculate current adjusted macros
+    let adjPro=0, adjCarb=0, adjFat=0, adjKcal=0;
+    ingredients.forEach(function(ing, idx) {
+      const db = NUTRI_DB[ing.dbKey]; if (!db) return;
+      const amt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
+      adjPro += db.pro * amt;
+      adjCarb += db.carb * amt;
+      adjFat += db.fat * amt;
+      adjKcal += db.kcal * amt;
+    });
+    if (adjKcal > 0) {
+      const carbPct = (adjCarb * 4) / adjKcal;
+      const fatPct = (adjFat * 9) / adjKcal;
+      const proGrams = adjPro;
+      const slotProTarget = macroHints.proTarget || 0;
+      const maxCarbPct = macroHints.maxCarbPct || 1;
+      const maxFatPct = macroHints.maxFatPct || 1;
+
+      // If protein is below target for this slot, boost protein ingredients
+      // and compensate by slightly reducing carbs (within ±40% ratio limit)
+      if (slotProTarget > 0 && proGrams < slotProTarget) {
+        const proDeficit = slotProTarget - proGrams; // grams needed
+        const proItems = scalable.filter(function(item) { return item.role === 'protein'; });
+        if (proItems.length) {
+          const proKcalPerG = 4; // rough: 1g protein ≈ 4 kcal
+          proItems.forEach(function(item) {
+            const db = NUTRI_DB[item.ing.dbKey]; if (!db || db.pro <= 0) return;
+            const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
+            const shareG = proDeficit / proItems.length;
+            const unitsToAdd = shareG / db.pro;
+            let newAmt = curAmt + unitsToAdd;
+            // Don't exceed ±40% ratio drift overall
+            if (newAmt > item.ing.amt * 1.4) newAmt = item.ing.amt * 1.4;
+            if (newAmt > curAmt) {
+              const extraKcal = (newAmt - curAmt) * db.kcal;
+              adjustments[item.idx] = newAmt;
+              // Compensate extra kcal by reducing carbs proportionally
+              const carbItems = scalable.filter(function(ci) { return ci.role === 'carb'; });
+              if (carbItems.length && extraKcal > 5) {
+                carbItems.forEach(function(ci) {
+                  const cdb = NUTRI_DB[ci.ing.dbKey]; if (!cdb) return;
+                  const cAmt = adjustments[ci.idx] !== undefined ? adjustments[ci.idx] : ci.ing.amt;
+                  const reduceKcal = extraKcal / carbItems.length;
+                  let cNew = cAmt - reduceKcal / cdb.kcal;
+                  if (cNew < ci.ing.amt * 0.6) cNew = ci.ing.amt * 0.6;
+                  if (cdb.minAmt && cNew < cdb.minAmt) cNew = cdb.minAmt;
+                  adjustments[ci.idx] = cNew;
+                });
+              }
+            }
+          });
+        }
+      }
+
+      // If carb% exceeds limit, reduce carbs and shift to protein
+      if (carbPct > maxCarbPct) {
+        const excessCarbKcal = (carbPct - maxCarbPct) * adjKcal;
+        const carbItems = scalable.filter(function(item) { return item.role === 'carb'; });
+        const proItems = scalable.filter(function(item) { return item.role === 'protein'; });
+        if (carbItems.length) {
+          carbItems.forEach(function(item) {
+            const db = NUTRI_DB[item.ing.dbKey]; if (!db) return;
+            const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
+            const reduceKcal = excessCarbKcal / carbItems.length;
+            let newAmt = curAmt - reduceKcal / db.kcal;
+            if (newAmt < item.ing.amt * 0.6) newAmt = item.ing.amt * 0.6;
+            if (db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
+            adjustments[item.idx] = newAmt;
+          });
+          // Shift freed kcal to protein
+          if (proItems.length) {
+            proItems.forEach(function(item) {
+              const db = NUTRI_DB[item.ing.dbKey]; if (!db) return;
+              const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
+              const addKcal = excessCarbKcal / proItems.length;
+              adjustments[item.idx] = curAmt + addKcal / db.kcal;
+            });
+          }
+        }
+      }
+
+      // If fat% exceeds limit, reduce fat and shift to protein
+      if (fatPct > maxFatPct) {
+        const excessFatKcal = (fatPct - maxFatPct) * adjKcal;
+        const fatItems = scalable.filter(function(item) { return item.role === 'fat'; });
+        const proItems = scalable.filter(function(item) { return item.role === 'protein'; });
+        if (fatItems.length) {
+          fatItems.forEach(function(item) {
+            const db = NUTRI_DB[item.ing.dbKey]; if (!db) return;
+            const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
+            const reduceKcal = excessFatKcal / fatItems.length;
+            let newAmt = curAmt - reduceKcal / db.kcal;
+            if (newAmt < item.ing.amt * 0.6) newAmt = item.ing.amt * 0.6;
+            if (db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
+            adjustments[item.idx] = newAmt;
+          });
+          if (proItems.length) {
+            proItems.forEach(function(item) {
+              const db = NUTRI_DB[item.ing.dbKey]; if (!db) return;
+              const curAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
+              const addKcal = excessFatKcal / proItems.length;
+              adjustments[item.idx] = curAmt + addKcal / db.kcal;
+            });
+          }
+        }
+      }
     }
   }
 
@@ -2265,7 +2377,8 @@ function buildShoppingList(trip,who){
           const ingr = applyOverrides(port,p,d,s);
           let finalIngr;
           if(slotAdj!==0){
-            const adjResult = adjustIngredients(ingr, slotAdj, s);
+            const hints=buildMacroHints(p,d,s);
+            const adjResult = adjustIngredients(ingr, slotAdj, s, hints);
             finalIngr = adjResult.map(function(a){return {dbKey:a.ing.dbKey,amt:a.newAmt,role:a.ing.role};});
           } else {
             finalIngr = ingr.map(function(i){return {dbKey:i.dbKey,amt:i.amt,role:i.role};});
@@ -2550,8 +2663,24 @@ function renderDayTabs(){
 // ── Calorie Adjustment ──────────────────────────────────────
 var CAL_BASE=lsGet('mealPlannerCalBase',{him:2800,her:1900});
 var PRO_TARGET=lsGet('mealPlannerProTarget',{him:180,her:120});
-// Macro ratio limits: carbs < 50% of kcal, fat < 30% of kcal
+// Macro ratio limits: carbs < 50% of kcal calories, fat < 30% of kcal calories
 var MACRO_LIMITS={maxCarbPct:0.50,maxFatPct:0.30};
+
+// Build macro hints for the calorie adjuster based on person, day, slot
+function buildMacroHints(p,d,s){
+  if(!SLOT_BUDGET[s])return null;
+  const dailyPro=PRO_TARGET[p]||0;
+  if(!dailyPro)return null;
+  // Slot's share of daily protein = proportional to its calorie budget share
+  const slotPct=SLOT_BUDGET[s]||0;
+  const slotProTarget=Math.round(dailyPro*slotPct);
+  return {
+    proTarget:slotProTarget,
+    slotKcalBudget:getSlotBudget(p,d,s),
+    maxCarbPct:MACRO_LIMITS.maxCarbPct,
+    maxFatPct:MACRO_LIMITS.maxFatPct
+  };
+}
 
 function openCalPopup(p){
   const overlay=document.getElementById('calPopupOverlay');
@@ -3204,7 +3333,8 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner){
   } else if(slotAdj!==0){
     const adjIngr = applyOverrides(port,person,day,s);
     if(adjIngr && adjIngr.length && adjIngr[0].dbKey!==undefined){
-      const adjResult = adjustIngredients(adjIngr, slotAdj, s);
+      const hints=buildMacroHints(person,day,s);
+      const adjResult = adjustIngredients(adjIngr, slotAdj, s, hints);
       pm = {kcal:0,pro:0,fat:0,carb:0};
       adjResult.forEach(function(a){
         const db = NUTRI_DB[a.ing.dbKey];
