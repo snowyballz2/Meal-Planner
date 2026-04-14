@@ -4528,11 +4528,11 @@ function renderSyncView(){
       +'</div>'
       +'<div style="margin-top:8px"><button class="sync-btn secondary" style="width:100%" onclick="clearSyncId()">Disconnect</button></div>';
   } else {
-    html+='<form id="syncForm" autocomplete="on" onsubmit="event.preventDefault();connectSync()">'
-      +'<div class="sync-field-label">Gist ID</div>'
-      +'<input class="sync-input" id="syncIdInput" name="username" autocomplete="username" type="text" placeholder="Paste Gist ID" value="'+(syncId||'')+'" style="width:100%;margin-bottom:10px;font-size:16px">'
-      +'<div class="sync-field-label">GitHub Token</div>'
-      +'<input class="sync-input" id="syncTokenInput" name="password" autocomplete="current-password" type="password" placeholder="ghp_xxxx..." value="'+(syncToken||'')+'" style="width:100%;margin-bottom:10px;font-size:16px">'
+    html+='<form id="syncForm" method="post" action="javascript:void(0)" autocomplete="on" onsubmit="event.preventDefault();connectSync()">'
+      +'<label for="syncIdInput" class="sync-field-label">Gist ID</label>'
+      +'<input class="sync-input" id="syncIdInput" name="login" autocomplete="username" type="text" placeholder="Paste Gist ID" value="'+(syncId||'')+'" style="width:100%;margin-bottom:10px;font-size:16px">'
+      +'<label for="syncTokenInput" class="sync-field-label">GitHub Token</label>'
+      +'<input class="sync-input" id="syncTokenInput" name="pass" autocomplete="current-password" type="password" placeholder="ghp_xxxx..." value="'+(syncToken||'')+'" style="width:100%;margin-bottom:10px;font-size:16px">'
       +'<button type="submit" class="sync-btn primary" style="width:100%;margin-bottom:6px">Connect</button>'
       +'<button type="button" class="sync-btn secondary" style="width:100%" onclick="connectSync();createSync()">Create New Sync</button>'
       +'</form>';
