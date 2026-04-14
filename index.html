@@ -916,8 +916,8 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
       adjKcal += db.kcal * amt;
     });
     if (adjKcal > 0) {
-      const carbPct = (adjCarb * 4) / adjKcal;
-      const fatPct = (adjFat * 9) / adjKcal;
+      let carbPct = (adjCarb * 4) / adjKcal;
+      let fatPct = (adjFat * 9) / adjKcal;
       const proGrams = adjPro;
       const slotProTarget = macroHints.proTarget || 0;
       const maxCarbPct = macroHints.maxCarbPct || 1;
@@ -986,7 +986,46 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
         }
       }
 
-      // If fat% exceeds limit, reduce fat-role items and also reduce
+      // First: if fat% exceeds limit and meal has egg wholes, swap to egg whites
+      if (fatPct > maxFatPct) {
+        let eggWholeIdx = -1, eggWhiteIdx = -1;
+        ingredients.forEach(function(ing, idx) {
+          if (ing.dbKey === 'egg whole') eggWholeIdx = idx;
+          if (ing.dbKey === 'egg white') eggWhiteIdx = idx;
+        });
+        if (eggWholeIdx >= 0) {
+          const wholeAmt = adjustments[eggWholeIdx] !== undefined ? adjustments[eggWholeIdx] : ingredients[eggWholeIdx].amt;
+          if (wholeAmt > 0) {
+            // Calculate how many egg wholes to swap to whites to get fat under limit
+            const wholeDb = NUTRI_DB['egg whole'];
+            const whiteDb = NUTRI_DB['egg white'];
+            const fatPerWhole = wholeDb.fat * 9; // fat calories per egg whole
+            const fatPerWhite = whiteDb.fat * 9; // fat calories per egg white
+            const fatSavedPerSwap = fatPerWhole - fatPerWhite; // ~42 fat cal saved per swap
+            const excessFatCal = (fatPct - maxFatPct) * adjKcal;
+            const swapsNeeded = Math.ceil(excessFatCal / fatSavedPerSwap);
+            const swapsToMake = Math.min(swapsNeeded, wholeAmt);
+            if (swapsToMake > 0) {
+              adjustments[eggWholeIdx] = wholeAmt - swapsToMake;
+              if (eggWhiteIdx >= 0) {
+                const whiteAmt = adjustments[eggWhiteIdx] !== undefined ? adjustments[eggWhiteIdx] : ingredients[eggWhiteIdx].amt;
+                adjustments[eggWhiteIdx] = whiteAmt + swapsToMake;
+              }
+              // Recalculate fat% after swap
+              adjFat = 0; adjKcal = 0;
+              ingredients.forEach(function(ing, idx) {
+                const db = NUTRI_DB[ing.dbKey]; if (!db) return;
+                const amt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
+                adjFat += db.fat * amt;
+                adjKcal += db.kcal * amt;
+              });
+              fatPct = adjKcal > 0 ? (adjFat * 9) / adjKcal : 0;
+            }
+          }
+        }
+      }
+
+      // If fat% still exceeds limit, reduce fat-role items and also reduce
       // high-fat protein/condiment items, shift freed kcal to lean protein/carbs
       if (fatPct > maxFatPct) {
         const excessFatKcal = (fatPct - maxFatPct) * adjKcal;
