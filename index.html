@@ -5696,11 +5696,11 @@ MEALS.forEach(function(m){buildColorizedSteps(m);});
 renderDayTabs();renderMeals();
 
 // Register service worker for offline PWA support
+// Unregister any existing service worker — it causes stale code issues
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(reg){
-    // Check for updates on every page load
-    reg.update();
-  }).catch(function(){});
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    regs.forEach(function(r){r.unregister();});
+  });
 }
 
 </script>
