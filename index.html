@@ -830,6 +830,8 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     if (newAmt < item.ing.amt * 0.25) newAmt = item.ing.amt * 0.25;
 
     // No snapping here — the final snap pass handles all snapping in one place
+    // Debug: trace brown rice
+    if(item.ing.dbKey==='brown rice cooked')console.log('[adjuster step2] brown rice: orig='+item.ing.amt+', scale='+uniformScale+', newAmt='+newAmt);
 
     adjustments[item.idx] = newAmt;
   });
@@ -1140,6 +1142,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     }
 
     if (db.minAmt && amt < db.minAmt) amt = db.minAmt;
+    if(item.ing.dbKey==='brown rice cooked')console.log('[adjuster snap] brown rice: pre-snap='+( adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt)+', post-snap='+amt+', shared='+isSharedOrLeftover);
     adjustments[item.idx] = amt;
   });
 
@@ -5721,13 +5724,17 @@ function renderRecipesView(){
       if(s.person)person=s.person;
       if(s.day)day=s.day;
       if(s.activeWeek)activeWeek=s.activeWeek;
+      if(s.openCards)openCards=s.openCards;
+      if(s.sharedSchedOpen!==undefined)sharedSchedOpen=s.sharedSchedOpen;
     }catch(e){}
   }
 })();
 // Save page state on unload
 window.addEventListener('beforeunload',function(){
   sessionStorage.setItem('mealPlannerPageState',JSON.stringify({
-    topTab:topTab,person:person,day:day,activeWeek:activeWeek,scrollY:window.scrollY
+    topTab:topTab,person:person,day:day,activeWeek:activeWeek,scrollY:window.scrollY,
+    openCards:JSON.parse(JSON.stringify(openCards)),
+    sharedSchedOpen:sharedSchedOpen
   }));
 });
 
