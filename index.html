@@ -3422,8 +3422,11 @@ function buildMealCardHtml(s, person, day, other){
   // Ingredient display with per-ingredient nutrition — EDITABLE
   const hasOverrides = !!getOverrides(person,day,s);
   let ingrHtml='';
+  // cookServings = this person's portion count (used for ingredient amounts)
   const cookServings=(loInfo&&!loInfo.isLeftover&&loInfo.servings>1)?loInfo.servings:1;
-  const ingrSectionTitle=cookServings>1?'🥗 Combined ingredients (serves '+cookServings+')':'🥗 Ingredients';
+  // displayServings = total people×days being cooked for (used for title label)
+  const displayServings=(loInfo&&!loInfo.isLeftover)?(loInfo.totalServings||loInfo.servings||1):1;
+  const ingrSectionTitle=displayServings>1?'🥗 Combined ingredients (serves '+displayServings+')':'🥗 Ingredients';
   if (port.ingredients && port.ingredients.length && port.ingredients[0].dbKey !== undefined) {
     // Get ingredients with overrides applied
     const ovrIngr = applyOverrides(port,person,day,s);
