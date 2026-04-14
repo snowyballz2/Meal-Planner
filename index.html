@@ -817,9 +817,15 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
       if (newAmt < item.ing.amt) newAmt = item.ing.amt;
       if (newAmt > item.ing.amt * 1.5) newAmt = item.ing.amt * 1.5;
     }
-    // Fat-role: don't scale up with uniform scaling (oils/butter shouldn't double)
-    if (item.role === 'fat' && uniformScale > 1) {
+    // Fat-heavy items: don't scale up with uniform scaling
+    // Includes fat-role AND any item where >25% of kcal comes from fat
+    const fatFrac = db && db.kcal > 0 ? (db.fat * 9 / db.kcal) : 0;
+    if ((item.role === 'fat' || fatFrac > 0.25) && uniformScale > 1) {
       newAmt = item.ing.amt; // keep original
+    }
+    // When scaling DOWN, don't reduce carbs below a minimum — preserve the base of the meal
+    if (item.role === 'carb' && uniformScale < 1) {
+      if (newAmt < item.ing.amt * 0.5) newAmt = item.ing.amt * 0.5;
     }
 
     // Enforce minAmt
@@ -1033,7 +1039,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
         const fatItems = scalable.filter(function(item) {
           if (item.role === 'fat') return true;
           const db = NUTRI_DB[item.ing.dbKey];
-          return db && db.fat > 0 && (db.fat * 9 / db.kcal) > 0.4;
+          return db && db.fat > 0 && db.kcal > 0 && (db.fat * 9 / db.kcal) > 0.25;
         });
         const proItems = scalable.filter(function(item) { return item.role === 'protein'; });
         if (fatItems.length) {
