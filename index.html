@@ -402,8 +402,8 @@ var NUTRI_DB = {
   'quinoa cooked':                {kcal:222, pro:8,  fat:3.6, carb:39,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:185}},
   'farro cooked':                 {kcal:170, pro:7,  fat:1,   carb:37,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:170}},
   'whole wheat pasta cooked':     {kcal:174, pro:7.5,fat:0.8, carb:37,  unit:'cup', note:'cooked', altUnits:{g:137}},
-  'whole wheat toast':     {kcal:70,  pro:3.6,fat:1,   carb:12,  unit:'slice'},
-  'whole wheat tortilla':  {kcal:130, pro:4,  fat:3,   carb:22,  unit:'each'},
+  'whole wheat toast':     {kcal:70,  pro:3.6,fat:1,   carb:12,  unit:'slice', wholeOnly:true},
+  'whole wheat tortilla':  {kcal:130, pro:4,  fat:3,   carb:22,  unit:'each', wholeOnly:true},
   'rice vermicelli cooked':       {kcal:190, pro:3.2,fat:0.4, carb:44,  unit:'cup', note:'cooked'},
   'udon noodles cooked':   {kcal:210, pro:7,  fat:1,   carb:42,  unit:'cup', note:'cooked'},
   'oat flour':             {kcal:520, pro:20, fat:10,  carb:88,  unit:'cup', brand:'One Degree', altUnits:{g:132}},
@@ -496,9 +496,9 @@ var NUTRI_DB = {
   'red curry paste':{kcal:20,pro:0,fat:0,carb:4,unit:'tbsp',brand:'Maesri'},
   'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup'},
   // Packaged / grab-and-go
-  'rxbar':{kcal:180,pro:12,fat:6,carb:24,unit:'each',brand:'RXBar',altUnits:{g:52}},
-  'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz'}},
-  'triscuit':              {kcal:20,  pro:0.4,fat:0.7, carb:3.3, unit:'each'},
+  'rxbar':{kcal:180,pro:12,fat:6,carb:24,unit:'each',brand:'RXBar',altUnits:{g:52},wholeOnly:true},
+  'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz'},wholeOnly:true},
+  'triscuit':              {kcal:20,  pro:0.4,fat:0.7, carb:3.3, unit:'each', wholeOnly:true},
   // Milks
   'coconut milk':{kcal:420,pro:1,fat:14,carb:2,unit:'cup',brand:'Chaokoh',minAmt:0.25,pkg:{size:13.5,unit:'oz',cups:1.7}},
   'coconut water':         {kcal:50,  pro:0,  fat:0,   carb:12,  unit:'cup', brand:'H2C'},
@@ -1081,8 +1081,13 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints) {
       // Check calorie impact — only nudge if within ±75 kcal
       const kcalImpact = absChange * db.kcal;
       if (kcalImpact <= 75) {
-        // Enforce minAmt
+        // Enforce minAmt and wholeOnly
         let nudged = targetPerServing;
+        // wholeOnly items or unit:each/slice must round to whole numbers
+        if (db.wholeOnly || db.unit === 'each' || db.unit === 'slice') {
+          nudged = Math.round(nudged);
+          if (nudged < 1) nudged = 1;
+        }
         if (db.minAmt && nudged < db.minAmt) nudged = db.minAmt;
         if (nudged > 0) {
           remaining -= (nudged - currentAmt) * db.kcal;
