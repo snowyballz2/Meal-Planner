@@ -442,12 +442,12 @@ var NUTRI_DB = {
   'acai':                  {kcal:70,  pro:1,  fat:1.5, carb:13,  unit:'cup', brand:'Sambazon', altUnits:{g:115}},
   'lime':                  {kcal:20,  pro:0.5,fat:0.1, carb:7,   unit:'each'},
   // Fats & oils
-  'sesame oil':            {kcal:120, pro:0,  fat:13.5,carb:0,   unit:'tbsp', halfSnap:true},
-  'almond butter':         {kcal:95,  pro:3.5,fat:8.5, carb:3.5, unit:'tbsp', brand:'365', altUnits:{g:32}},
-  'peanut butter':         {kcal:90,  pro:4,  fat:7.5, carb:3.5, unit:'tbsp', brand:'Kirkland Organic', altUnits:{g:32}},
-  'avocado':               {kcal:320, pro:4,  fat:30,  carb:16,  unit:'each'},
-  'avocado oil':           {kcal:120, pro:0,  fat:14,  carb:0,   unit:'tbsp', brand:'Chosen', altUnits:{ml:15}, halfSnap:true},
-  'olive oil':             {kcal:119, pro:0,  fat:13.5,carb:0,   unit:'tbsp'},
+  'sesame oil':            {kcal:120, pro:0,  fat:13.5,carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.5},
+  'almond butter':         {kcal:95,  pro:3.5,fat:8.5, carb:3.5, unit:'tbsp', brand:'365', altUnits:{g:32}, minAmt:0.5},
+  'peanut butter':         {kcal:90,  pro:4,  fat:7.5, carb:3.5, unit:'tbsp', brand:'Kirkland Organic', altUnits:{g:32}, minAmt:0.5},
+  'avocado':               {kcal:320, pro:4,  fat:30,  carb:16,  unit:'each', minAmt:0.5},
+  'avocado oil':           {kcal:120, pro:0,  fat:14,  carb:0,   unit:'tbsp', brand:'Chosen', altUnits:{ml:15}, halfSnap:true, minAmt:0.5},
+  'olive oil':             {kcal:119, pro:0,  fat:13.5,carb:0,   unit:'tbsp', minAmt:0.5},
   // Seeds & extras
   'chia seeds':            {kcal:58,  pro:2,  fat:3.7, carb:5,   unit:'tbsp'},
   'sesame seeds':          {kcal:51,  pro:1.5,fat:4.5, carb:2.1, unit:'tbsp', halfSnap:true},
