@@ -860,7 +860,66 @@ function adjustIngredients(ingredients, targetDelta, slot) {
     });
   } while (Math.abs(remaining) > 25 && Math.abs(remaining) < Math.abs(prevRemaining) - 5);
 
-  // Package-aware nudge removed from adjustIngredients — handled at trip level in buildShoppingList
+  // Package-aware nudge: after calorie scaling, nudge packaged ingredients toward
+  // clean package boundaries. Uses the same flex ranges as the shopping optimizer.
+  // This reduces waste at the source instead of relying on trip-level rounding.
+  ingredients.forEach(function(ing, idx) {
+    const db = NUTRI_DB[ing.dbKey];
+    if (!db || !db.pkg || db.pkg.type === 'bulk') return;
+    const currentAmt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
+    if (currentAmt <= 0) return;
+
+    // Get package size in the ingredient's unit
+    const perPkg = (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
+    if (perPkg <= 0) return;
+
+    // Estimate total servings from leftovers (shared cook = both people × leftover days)
+    // Use 4 as common case (2 people × 2 days), fall back to 2 (2 people × 1 day)
+    const leftovers = typeof computeLeftovers === 'function' ? computeLeftovers() : {};
+    let totalServings = 2; // default: assume shared (him + her)
+    // If we can detect leftover pairing, use actual count
+    Object.keys(leftovers).forEach(function(k) {
+      const lo = leftovers[k];
+      if (lo && !lo.isLeftover && lo.totalServings) {
+        // Check if this slot matches
+        if (lo.servings > 1) totalServings = lo.totalServings || lo.servings * 2;
+      }
+    });
+
+    const totalNeeded = currentAmt * totalServings;
+    const pkgsNeeded = Math.ceil(totalNeeded / perPkg);
+    const cleanTotal = pkgsNeeded * perPkg;
+    const targetPerServing = cleanTotal / totalServings;
+
+    // Flex ranges matching shopping optimizer
+    const flexIngr = ['black beans canned', 'cannellini beans canned', 'marinara', 'chickpeas roasted'];
+    let maxUp = 0.25; // default +25%
+    if (flexIngr.indexOf(ing.dbKey) >= 0) maxUp = 1.0; // beans/marinara +100%
+    if (ing.dbKey === 'coconut milk') maxUp = 0.75;
+
+    // Only nudge up (never reduce below what calorie adjuster set)
+    const nudgeChange = targetPerServing - currentAmt;
+    if (nudgeChange > 0.01 && nudgeChange <= currentAmt * maxUp) {
+      // Check calorie impact — only nudge if within ±75 kcal
+      const kcalImpact = Math.abs(nudgeChange * db.kcal);
+      if (kcalImpact <= 75) {
+        // Snap the nudged amount
+        let nudged = targetPerServing;
+        if (db.unit === 'oz' || db.unit === 'each' || db.unit === 'slice' || db.unit === 'scoop') {
+          nudged = Math.round(nudged);
+          if (nudged < 1) nudged = 1;
+        } else if (db.halfSnap) {
+          nudged = Math.round(nudged * 2) / 2;
+        } else {
+          nudged = Math.round(nudged * 4) / 4;
+        }
+        if (nudged > currentAmt) {
+          adjustments[idx] = nudged;
+          remaining -= (nudged - currentAmt) * db.kcal;
+        }
+      }
+    }
+  });
 
   // Second pass: if cutting and gap is still large, remove entire ingredients
   if (targetDelta < 0 && remaining < -25) {
