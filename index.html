@@ -2479,9 +2479,8 @@ function buildShoppingList(trip,who){
         const leftoverMultiplier=(loInfo&&!loInfo.isLeftover&&loInfo.servings>1)?loInfo.servings:1;
 
         // Get calorie adjustment for this slot
-        // Shared meals: use averaged adjustment so both people get same proportions
-        const isShopShared = getMealId('him',d,s) === getMealId('her',d,s) && getMealId('him',d,s);
-        const slotAdj = isShopShared ? getSharedSlotAdjustment(d,s) : getSlotAdjustment(p,d,s);
+        // Each person gets their own calorie adjustment — same ratios, different portion sizes
+        const slotAdj = getSlotAdjustment(p,d,s);
 
         // Use ingredients as source of truth for shopping when available
         if(port.ingredients && port.ingredients.length && port.ingredients[0].dbKey!==undefined){
@@ -3441,9 +3440,8 @@ function buildMealSelectOpts(slotMeals, activeId){
 // Compute adjusted macros and ingredient HTML for a meal card
 function computeCardMacros(port, person, day, s, cookServings, showBanner, isSharedOrLeftover){
   const ovrMacros = getPortMacrosOvr(port,person,day,s);
-  // Shared meals: use averaged adjustment so both people eat same proportions
-  const isSharedMeal = isSharedOrLeftover && getMealId('him',day,s) === getMealId('her',day,s);
-  const slotAdj = isSharedMeal ? getSharedSlotAdjustment(day,s) : getSlotAdjustment(person,day,s);
+  // Each person gets their own calorie adjustment — same recipe ratios, different portion sizes
+  const slotAdj = getSlotAdjustment(person,day,s);
   const isSkipped = !!SKIPPED[sk(person,day,s)];
   const hasOverrides = !!getOverrides(person,day,s);
   let pm, adjBanner='', ingrHtml='';
