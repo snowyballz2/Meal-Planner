@@ -2167,28 +2167,30 @@ function computeLeftovers(){
         const id=getMealId(p,d,s);
         if(!id||noLeftoverIds[id])return;
         const otherP=p==='him'?'her':'him';
-        // Look back 1-2 days for the other person having the same meal
-        // Skip breakfast for cross-person (breakfast is made fresh, not leftover)
-        if(s==='breakfast')continue;
+        // Look back 1-2 days for the other person having the same meal in any slot
+        // Only the COOK slot matters (not breakfast — breakfast is always made fresh)
         for(let back=1;back<=2;back++){
           if(di-back<0)continue;
           const prevDay=DAYS[di-back];
-          // Check same slot only (lunch→lunch, dinner→dinner)
-          const prevSlot=s;
-          const prevId=getMealId(otherP,prevDay,prevSlot);
-          if(prevId!==id)continue;
-          const prevKey=sk(otherP,prevDay,prevSlot);
-          const prevLo=result[prevKey];
-          // The other person's meal must be a cook day (not itself a leftover)
-          if(prevLo&&prevLo.isLeftover)continue;
-          // Mark the later person as cross-person leftover
-          result[key]={isLeftover:true,cookDay:prevDay,crossPerson:true,cookedBy:otherP};
-          // Mark the cook day so it knows it also feeds the other person
-          if(!result[prevKey])result[prevKey]={isLeftover:false,cookDay:prevDay,servings:1};
-          result[prevKey].crossPersonCook=true;
-          result[prevKey].feedsAlso=p;
-          result[prevKey].feedsDay=d;
-          return;
+          for(let si=0;si<leftoverSlots.length;si++){
+            const prevSlot=leftoverSlots[si];
+            // Skip if the cook slot is breakfast — breakfast doesn't produce leftovers
+            if(prevSlot==='breakfast')continue;
+            const prevId=getMealId(otherP,prevDay,prevSlot);
+            if(prevId!==id)continue;
+            const prevKey=sk(otherP,prevDay,prevSlot);
+            const prevLo=result[prevKey];
+            // The other person's meal must be a cook day (not itself a leftover)
+            if(prevLo&&prevLo.isLeftover)continue;
+            // Mark the later person as cross-person leftover
+            result[key]={isLeftover:true,cookDay:prevDay,crossPerson:true,cookedBy:otherP};
+            // Mark the cook day so it knows it also feeds the other person
+            if(!result[prevKey])result[prevKey]={isLeftover:false,cookDay:prevDay,servings:1};
+            result[prevKey].crossPersonCook=true;
+            result[prevKey].feedsAlso=p;
+            result[prevKey].feedsDay=d;
+            return;
+          }
         }
       });
     });
