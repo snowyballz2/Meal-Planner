@@ -793,54 +793,38 @@ function adjustIngredients(ingredients, targetDelta, slot) {
 
   if (!scalable.length) return ingredients.map(function(i){return {ing:i,newAmt:i.amt};});
 
-  // Strategy: Distribute calories based on role priority
-  // For gaining: prioritize protein, then carbs
-  // For cutting: reduce carbs first, then fat, protect protein
-  let remaining = targetDelta;
+  // Step 1: Calculate uniform scale factor to hit calorie target
+  // All scalable ingredients scale by the same multiplier (0% ratio drift)
   const adjustments = {};
+  let totalScalableKcal = 0;
+  scalable.forEach(function(item) {
+    totalScalableKcal += item.calPerUnit * item.ing.amt;
+  });
 
-  // Sort by priority
-  let sorted;
-  if (targetDelta > 0) {
-    // Adding calories: protein and carbs primarily, veg gets minor bump only
-    sorted = scalable.filter(function(item){return item.role==='protein'||item.role==='carb';});
-    if(!sorted.length) sorted = scalable; // fallback if no protein/carb available
-    sorted.sort(function(a, b) {
-      const order = { protein:0, carb:1 };
-      return (order[a.role]||2) - (order[b.role]||2);
-    });
-  } else {
-    // Cutting calories: reduce carbs first, then fat, protect protein
-    sorted = scalable.sort(function(a, b) {
-      const order = { carb:0, fat:1, condiment:2, veg:3, protein:4 };
-      return (order[a.role]||3) - (order[b.role]||3);
-    });
-  }
+  const targetKcal = totalScalableKcal + targetDelta;
+  let uniformScale = totalScalableKcal > 0 ? targetKcal / totalScalableKcal : 1;
+  if (uniformScale < 0.1) uniformScale = 0.1; // safety floor
 
-  // Distribute calories across ingredients, retry until remaining stabilizes
-  const numToAdjust = sorted.length;
-  let prevRemaining;
-  do {
-    prevRemaining = remaining;
-    sorted.forEach(function(item, i) {
-      if (i >= numToAdjust || Math.abs(remaining) < 5) return;
-      const currentAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
-      const share = (i < numToAdjust - 1) ? remaining / (numToAdjust - i) : remaining;
-      const unitsToAdd = share / item.calPerUnit;
-      let newAmt = currentAmt + unitsToAdd;
-      // Don't let any ingredient go below 25% of original or negative
-      const minAmt = item.ing.amt * 0.25;
-      if (newAmt < minAmt) newAmt = minAmt;
-      // Preserve recipe proportions via ratio caps
-      // Veg: never reduce, allow up to +50%
-      // Protein/carb/fat: individual amounts can flex but ratio between
-      // total protein kcal and total carb kcal must stay within ±40%
-      if (item.role==='veg') {
-        if (newAmt < item.ing.amt) newAmt = item.ing.amt; // never reduce veg
-        if (newAmt > item.ing.amt * 1.5) newAmt = item.ing.amt * 1.5; // max +50%
-      }
-      // Snap based on unit: whole numbers for oz/each/slice/scoop, quarters for cup/tbsp/tsp
-      const db = NUTRI_DB[item.ing.dbKey];
+  // Step 2: Apply uniform scale with constraints
+  scalable.forEach(function(item) {
+    let newAmt = item.ing.amt * uniformScale;
+    const db = NUTRI_DB[item.ing.dbKey];
+
+    // Veg: never reduce, max +50%
+    if (item.role === 'veg') {
+      if (newAmt < item.ing.amt) newAmt = item.ing.amt;
+      if (newAmt > item.ing.amt * 1.5) newAmt = item.ing.amt * 1.5;
+    }
+
+    // Enforce minAmt
+    if (db && db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
+
+    // Don't go below 25% of original
+    if (newAmt < item.ing.amt * 0.25) newAmt = item.ing.amt * 0.25;
+
+    // Snap based on unit (for non-package ingredients — package nudge handles pkgs later)
+    const isPkg = db && db.pkg && db.pkg.type !== 'bulk';
+    if (!isPkg) {
       const unit = db ? db.unit : '';
       if (unit==='oz'||unit==='each'||unit==='slice'||unit==='scoop'||unit==='clove'||unit==='cloves') {
         newAmt = Math.round(newAmt);
@@ -852,50 +836,77 @@ function adjustIngredients(ingredients, targetDelta, slot) {
         newAmt = Math.round(newAmt * 4) / 4;
         if (newAmt < 0.25) newAmt = 0.25;
       }
-      // When cutting, snapping must never increase beyond current amount
-      // When adding, snapping must never decrease below current amount
-      if (targetDelta < 0 && newAmt > currentAmt) newAmt = currentAmt;
-      if (targetDelta > 0 && newAmt < currentAmt) newAmt = currentAmt;
-      // Enforce per-ingredient minimum (e.g. yogurt min 0.5 cup)
-      if (db && db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
-      const actualDelta = (newAmt - currentAmt) * item.calPerUnit;
-      adjustments[item.idx] = newAmt;
-      remaining -= actualDelta;
-    });
-  } while (Math.abs(remaining) > 25 && Math.abs(remaining) < Math.abs(prevRemaining) - 5);
+    }
 
-  // Ratio enforcement: ensure protein:carb calorie ratio stays within ±40% of original
-  // Calculate original ratio
-  let origProKcal=0, origCarbKcal=0, adjProKcal=0, adjCarbKcal=0;
-  ingredients.forEach(function(ing, idx){
-    const db=NUTRI_DB[ing.dbKey];if(!db)return;
-    if(ing.role==='protein'){origProKcal+=db.kcal*ing.amt;adjProKcal+=db.kcal*(adjustments[idx]!==undefined?adjustments[idx]:ing.amt);}
-    if(ing.role==='carb'){origCarbKcal+=db.kcal*ing.amt;adjCarbKcal+=db.kcal*(adjustments[idx]!==undefined?adjustments[idx]:ing.amt);}
+    adjustments[item.idx] = newAmt;
   });
-  if(origProKcal>0&&origCarbKcal>0&&adjProKcal>0&&adjCarbKcal>0){
-    const origRatio=origProKcal/origCarbKcal;
-    const adjRatio=adjProKcal/adjCarbKcal;
-    const ratioDrift=adjRatio/origRatio;
-    // If ratio drifted beyond ±40%, scale back the over-represented role
-    if(ratioDrift>1.4){
-      // Protein grew too much relative to carbs — scale protein down toward limit
-      const targetProKcal=origRatio*1.4*adjCarbKcal;
-      ingredients.forEach(function(ing,idx){
-        if(ing.role!=='protein')return;
-        const db=NUTRI_DB[ing.dbKey];if(!db||db.kcal===0)return;
-        const curAmt=adjustments[idx]!==undefined?adjustments[idx]:ing.amt;
-        const scale=targetProKcal/adjProKcal;
-        adjustments[idx]=curAmt*scale;
+
+  // Step 3: Calculate remaining gap after uniform scale + constraints
+  let remaining = targetDelta;
+  scalable.forEach(function(item) {
+    const newAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
+    remaining -= (newAmt - item.ing.amt) * item.calPerUnit;
+  });
+
+  // Step 4: If remaining gap is large, distribute residual to protein/carb
+  // while keeping ratio drift minimal (iterate small adjustments)
+  if (Math.abs(remaining) > 25) {
+    const mainItems = scalable.filter(function(item) {
+      return item.role === 'protein' || item.role === 'carb';
+    });
+    if (mainItems.length) {
+      let prevRem;
+      let iterations = 0;
+      do {
+        prevRem = remaining;
+        mainItems.forEach(function(item) {
+          if (Math.abs(remaining) < 10) return;
+          const db = NUTRI_DB[item.ing.dbKey];
+          const currentAmt = adjustments[item.idx];
+          // Give each item an equal share of the residual
+          const share = remaining / mainItems.length;
+          const unitsToAdd = share / item.calPerUnit;
+          let newAmt = currentAmt + unitsToAdd;
+          // Veg guard
+          if (item.role === 'veg') {
+            if (newAmt < item.ing.amt) newAmt = item.ing.amt;
+            if (newAmt > item.ing.amt * 1.5) newAmt = item.ing.amt * 1.5;
+          }
+          if (db && db.minAmt && newAmt < db.minAmt) newAmt = db.minAmt;
+          if (newAmt < item.ing.amt * 0.25) newAmt = item.ing.amt * 0.25;
+          const actualDelta = (newAmt - currentAmt) * item.calPerUnit;
+          adjustments[item.idx] = newAmt;
+          remaining -= actualDelta;
+        });
+        iterations++;
+      } while (Math.abs(remaining) > 25 && Math.abs(remaining) < Math.abs(prevRem) - 5 && iterations < 10);
+    }
+  }
+
+  // Step 5: Ratio enforcement — if drift exceeded ±40%, pull back
+  let origProKcal=0, origCarbKcal=0, adjProKcal=0, adjCarbKcal=0;
+  ingredients.forEach(function(ing, idx) {
+    const db = NUTRI_DB[ing.dbKey]; if (!db) return;
+    if (ing.role === 'protein') { origProKcal += db.kcal * ing.amt; adjProKcal += db.kcal * (adjustments[idx] !== undefined ? adjustments[idx] : ing.amt); }
+    if (ing.role === 'carb') { origCarbKcal += db.kcal * ing.amt; adjCarbKcal += db.kcal * (adjustments[idx] !== undefined ? adjustments[idx] : ing.amt); }
+  });
+  if (origProKcal > 0 && origCarbKcal > 0 && adjProKcal > 0 && adjCarbKcal > 0) {
+    const origRatio = origProKcal / origCarbKcal;
+    const adjRatio = adjProKcal / adjCarbKcal;
+    const drift = adjRatio / origRatio;
+    if (drift > 1.4) {
+      const scale = (origRatio * 1.4 * adjCarbKcal) / adjProKcal;
+      ingredients.forEach(function(ing, idx) {
+        if (ing.role !== 'protein') return;
+        const db = NUTRI_DB[ing.dbKey]; if (!db) return;
+        if (adjustments[idx] !== undefined) adjustments[idx] = adjustments[idx] * scale;
       });
-    } else if(ratioDrift<0.6){
-      // Carbs grew too much relative to protein — scale carbs down toward limit
-      const targetCarbKcal=adjProKcal/(origRatio*0.6);
-      ingredients.forEach(function(ing,idx){
-        if(ing.role!=='carb')return;
-        const db=NUTRI_DB[ing.dbKey];if(!db||db.kcal===0)return;
-        const curAmt=adjustments[idx]!==undefined?adjustments[idx]:ing.amt;
-        const scale=targetCarbKcal/adjCarbKcal;
-        adjustments[idx]=curAmt*scale;
+    } else if (drift < 0.6) {
+      const scale = (adjProKcal / (origRatio * 0.6)) / adjCarbKcal;
+      ingredients.forEach(function(ing, idx) {
+        if (ing.role !== 'carb') return;
+        const db = NUTRI_DB[ing.dbKey]; if (!db) return;
+        if (adjustments[idx] !== undefined) adjustments[idx] = adjustments[idx] * scale;
       });
     }
   }
