@@ -1593,6 +1593,7 @@ const MEALS=[
   him:{fv:'2c veg'},her:{fv:'1.5c veg'},
   ingredients:[
     I('tofu firm',7,'protein'),
+    I('edamame',0.5,'protein'),
     I('brown rice cooked',1,'carb'),
     I('broccoli',0.75,'veg'),
     I('bell pepper',0.75,'veg'),
@@ -1607,6 +1608,7 @@ const MEALS=[
   him:{fv:'2c veg'},her:{fv:'1c veg'},
   ingredients:[
     I('tofu firm',7,'protein'),
+    I('egg white',0.25,'protein'),
     I('rice vermicelli cooked',1.25,'carb'),
     I('baby spinach',1.5,'veg'),
     I('carrots',0.5,'veg'),
@@ -2040,11 +2042,12 @@ const MEALS=[
     I('salt',0.5,'fixed',false)
   ]},
 
- {id:'black_bean_rice_bowl',label:'Black bean & rice bowl',slots:['lunch','dinner'],
-  steps:['Warm black beans with cumin and garlic powder.','Heat brown rice. Sauté bell pepper and kale 3 min.','Assemble: rice, beans, veg. Top with salsa and lime.'],
+ {id:'black_bean_rice_bowl',label:'Black bean & rice bowl with yogurt',slots:['lunch','dinner'],
+  steps:['Warm black beans with cumin and garlic powder.','Heat brown rice. Sauté bell pepper and kale 3 min.','Assemble: rice, beans, veg. Top with salsa, yogurt, and lime.'],
   him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
   ingredients:[
-    I('black beans canned',0.75,'protein'),
+    I('black beans canned',1,'protein'),
+    I('greek yogurt 0%',0.5,'protein'),
     I('brown rice cooked',1,'carb'),
     I('bell pepper',0.75,'veg'),
     I('kale',1,'veg'),
@@ -2055,10 +2058,11 @@ const MEALS=[
   ]},
 
  {id:'chickpea_curry_bowl',label:'Chickpea & spinach curry',slots:['lunch','dinner'],
-  steps:['Heat a pan over medium. Add red curry paste, stir 30 sec.','Add coconut milk, chickpeas, and spinach. Simmer 6–8 min.','Serve over brown rice.'],
+  steps:['Heat a pan over medium. Add red curry paste, stir 30 sec.','Add coconut milk, chickpeas, edamame, and spinach. Simmer 6–8 min.','Serve over brown rice.'],
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
     I('chickpeas roasted',0.75,'protein'),
+    I('edamame',0.5,'protein'),
     I('brown rice cooked',1,'carb'),
     I('baby spinach',1.5,'veg'),
     I('coconut milk',0.25,'liquid'),
@@ -2093,10 +2097,11 @@ const MEALS=[
   ]},
 
  {id:'lentil_soup_lean',label:'Lentil & vegetable soup',slots:['lunch','dinner'],
-  steps:['Sauté carrots, celery, garlic in broth 3–4 min.','Add lentils, remaining broth, Italian seasoning. Simmer 20 min.','Add kale. Cook 3 min until wilted. Season with salt and pepper.'],
+  steps:['Sauté carrots, celery, garlic in broth 3–4 min.','Add lentils, remaining broth, Italian seasoning. Simmer 20 min.','Add kale. Cook 3 min until wilted.','Stir in egg whites for extra protein — they cook in ribbons in the hot soup. Season with salt and pepper.'],
   him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
   ingredients:[
-    I('lentils cooked',0.75,'protein'),
+    I('lentils cooked',1,'protein'),
+    I('egg white',0.25,'protein'),
     I('kale',1,'veg'),
     I('carrots',0.5,'veg'),
     I('celery',1,'veg'),
@@ -2119,11 +2124,12 @@ const MEALS=[
     I('salt',0.5,'fixed',false)
   ]},
 
- {id:'cannellini_kale_soup',label:'White bean & kale soup',slots:['lunch','dinner'],
-  steps:['Sauté garlic and carrots in broth 3 min.','Add beans, broth, Italian seasoning. Simmer 10 min.','Add kale. Cook 3 min. Season with salt, pepper, lemon juice.'],
+ {id:'cannellini_kale_soup',label:'White bean & kale protein soup',slots:['lunch','dinner'],
+  steps:['Sauté garlic and carrots in broth 3 min.','Add beans, broth, Italian seasoning. Simmer 10 min.','Add kale. Cook 3 min.','Stir in egg whites — they form ribbons in the hot soup. Season with salt, pepper, lemon juice.'],
   him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
   ingredients:[
-    I('cannellini beans canned',0.75,'protein'),
+    I('cannellini beans canned',1,'protein'),
+    I('egg white',0.25,'protein'),
     I('kale',1.5,'veg'),
     I('carrots',0.5,'veg'),
     I('chicken broth',2,'liquid'),
@@ -4581,7 +4587,7 @@ function _randomizeWeekCore(randTarget){
         var fatPct = totalKcal > 0 ? totalFatCal / totalKcal : 0;
         var fatPenalty = fatPct > 0.30 ? (fatPct - 0.30) * 1000 : 0;
         var proTarget = PRO_TARGET[p] || 0;
-        var proPenalty = totalPro < proTarget ? (proTarget - totalPro) * 15 : 0; // 15 points per gram short
+        var proPenalty = totalPro < proTarget ? (proTarget - totalPro) * 5 : 0; // 5 points per gram short
         var score = calDiff + fatPenalty + proPenalty;
 
         if (score < bestScore) {
