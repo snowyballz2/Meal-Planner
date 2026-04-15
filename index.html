@@ -4733,6 +4733,11 @@ function _randomizeWeekCore(randTarget){
       var bestScore = Infinity;
       var attempts = 60;
       var recentIds = getRecentMealIds(di, days, p, 2);
+      // Pre-compute per-slot kcal budgets so Phase 1 scoring matches reality:
+      // the adjuster scales each slot to its budget, so a low-base meal is
+      // NOT actually worse than a high-base one — it just gets scaled up.
+      var slotBudgets = computeSlotBudgets(p, d);
+      var MAX_UP_SCALE = 1.75; // matches the adjuster's per-slot scale cap
 
       for (var a = 0; a < attempts; a++) {
         var used = [];
@@ -4751,9 +4756,14 @@ function _randomizeWeekCore(randTarget){
               var lm = getMeal(lockedId);
               if (lm && lm[p]) {
                 var lmm = getPortMacros(lm[p]);
-                totalKcal += lmm.kcal;
-                totalFatCal += lmm.fat * 9;
-                totalPro += lmm.pro;
+                // Locked slots: approximate adjusted kcal same as unlocked below.
+                var lBudget = slotBudgets[s] || 0;
+                var lEff = (s==='shake' || !lBudget) ? lmm.kcal
+                          : Math.min(lmm.kcal * MAX_UP_SCALE, lBudget);
+                var lScale = lmm.kcal > 0 ? lEff / lmm.kcal : 1;
+                totalKcal += lEff;
+                totalFatCal += lmm.fat * 9 * lScale;
+                totalPro += lmm.pro * lScale;
               }
             }
             return;
@@ -4780,9 +4790,15 @@ function _randomizeWeekCore(randTarget){
           var port = pick[p];
           if (port) {
             var pm = getPortMacros(port);
-            totalKcal += pm.kcal;
-            totalFatCal += pm.fat * 9;
-            totalPro += pm.pro;
+            // Simulate what the adjuster will do: scale this slot to its budget
+            // (capped at 1.75x so meals too small to scale up still get penalized).
+            var budget = slotBudgets[s] || 0;
+            var effKcal = (s==='shake' || !budget) ? pm.kcal
+                        : Math.min(pm.kcal * MAX_UP_SCALE, budget);
+            var macroScale = pm.kcal > 0 ? effKcal / pm.kcal : 1;
+            totalKcal += effKcal;
+            totalFatCal += pm.fat * 9 * macroScale;
+            totalPro += pm.pro * macroScale;
           }
         });
 
@@ -5056,9 +5072,15 @@ function _randomizeWeekCore(randTarget){
         }
       }
 
-      // ── Strategy C: Remove package meals if waste can't be resolved ──
-      if (!resolved && pkg.mealsUsing.length > 0) {
-        // Find package meals that appear only once (no leftover pairing) — replace with non-pkg
+      // ── Strategy C: Remove package meals if waste is severe AND can't be resolved ──
+      // Only triggers when:
+      //  1. The package waste is severe (> 50% of package wasted), AND
+      //  2. Removing the meal actually reduces TOTAL trip waste (not just this package's).
+      // This preserves meal variety for meals like silken_tofu_smoothie that create
+      // modest waste when unpaired — the user would rather eat the meal with 2 oz
+      // waste than lose variety entirely.
+      if (!resolved && pkg.mealsUsing.length > 0 && pkg.waste > pkg.perPkg * 0.5) {
+        // Find package meals that appear only once (no leftover pairing)
         var singleUse = [];
         pkg.mealsUsing.forEach(function(mu) {
           var loInfo = leftovers[sk(mu.p, mu.d, mu.s)];
@@ -5079,19 +5101,40 @@ function _randomizeWeekCore(randTarget){
           });
           if (!candidates.length) return;
 
-          // Pick a replacement that stays close to calorie target
+          // Current trip waste (across ALL packages) as baseline
+          var baselineTripWaste = 0;
+          _analyzeTripPackages(trip.days).forEach(function(px){ baselineTripWaste += (px.waste || 0); });
+
+          // Pick the candidate that minimizes TOTAL trip waste (not just kcal)
           var bestRep = null;
+          var bestTripWaste = baselineTripWaste;
           var bestCalDiff = Infinity;
           candidates.forEach(function(c) {
             var origSel = SEL[selKey];
+            var otherKey = null, otherOrig = null;
             SEL[selKey] = c.id;
+            if (isSharedSlot) {
+              var otherP = mu.p === 'him' ? 'her' : 'him';
+              otherKey = sk(otherP, mu.d, mu.s); otherOrig = SEL[otherKey]; SEL[otherKey] = c.id;
+            }
+            invalidateLeftoverCache();
+            var newTripWaste = 0;
+            _analyzeTripPackages(trip.days).forEach(function(px){ newTripWaste += (px.waste || 0); });
             var totals = calcTotals(mu.p, mu.d);
             var calDiff = Math.abs(totals.kcal - CAL_BASE[mu.p]);
             SEL[selKey] = origSel;
-            if (calDiff < bestCalDiff) { bestCalDiff = calDiff; bestRep = c; }
+            if (otherKey) SEL[otherKey] = otherOrig;
+            invalidateLeftoverCache();
+            if (calDiff > 200) return;
+            // Only accept removal if it actually reduces total trip waste
+            if (newTripWaste < bestTripWaste - 0.01) {
+              bestTripWaste = newTripWaste;
+              bestRep = c;
+              bestCalDiff = calDiff;
+            }
           });
 
-          if (bestRep && bestCalDiff <= 200) {
+          if (bestRep) {
             SEL[selKey] = bestRep.id;
             weekData[activeWeek].ts[selKey] = now;
             if (isSharedSlot) {
@@ -5099,6 +5142,7 @@ function _randomizeWeekCore(randTarget){
               SEL[sk(otherP4, mu.d, mu.s)] = bestRep.id;
               weekData[activeWeek].ts[sk(otherP4, mu.d, mu.s)] = now;
             }
+            invalidateLeftoverCache();
           }
         });
       }
