@@ -1120,16 +1120,32 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     const cleanTotal = pkgsNeeded * perPkg;
     const targetPerServing = cleanTotal / totalServings;
 
-    // Per-meal nudge: small adjustments only (±0.25 cup / ±1 oz)
-    // Big waste problems are solved by the randomizer's Phase 3 (meal pairing), not per-meal nudging
-    const maxNudge = (db.unit === 'cup') ? 0.25 : (db.unit === 'oz') ? 2 : 0.25;
+    // Per-ingredient nudge flex ranges. Default is tight (±0.25 cup / ±2 oz
+    // so per-meal calories don't drift). Beans/marinara/chickpeas tolerate
+    // wider upward scaling — extra serving of those doesn't hurt. Coconut
+    // milk similarly flexes up to fill its 1.7c can.
+    let maxNudgeUp = (db.unit === 'cup') ? 0.25 : (db.unit === 'oz') ? 2 : 0.25;
+    let maxNudgeDown = maxNudgeUp;
+    let kcalCap = 50;
+    const flexIngr = ['black beans canned','cannellini beans canned','marinara','chickpeas roasted'];
+    if (flexIngr.indexOf(ing.dbKey) >= 0) {
+      // Up to double the current amount; never reduce (beans/marinara are always welcome to add more)
+      maxNudgeUp = currentAmt;
+      maxNudgeDown = 0;
+      kcalCap = 200; // cal impact can be bigger for flex items
+    } else if (ing.dbKey === 'coconut milk') {
+      maxNudgeUp = currentAmt * 0.75;
+      maxNudgeDown = currentAmt * 0.5;
+      kcalCap = 200;
+    }
 
     const nudgeChange = targetPerServing - currentAmt;
     const absChange = Math.abs(nudgeChange);
-    if (absChange > 0.01 && absChange <= maxNudge) {
-      // Check calorie impact — only nudge if within ±50 kcal
+    const limit = nudgeChange > 0 ? maxNudgeUp : maxNudgeDown;
+    if (absChange > 0.01 && absChange <= limit) {
+      // Check calorie impact
       const kcalImpact = absChange * db.kcal;
-      if (kcalImpact <= 50) {
+      if (kcalImpact <= kcalCap) {
         // Enforce minAmt and wholeOnly
         let nudged = targetPerServing;
         // wholeOnly items or unit:each/slice must round to whole numbers
