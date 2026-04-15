@@ -3307,7 +3307,7 @@ function buildIngrEditRow(ing, amt, person, day, s, idx){
     +'<select class="ingr-amt-select" id="'+amtId+'"'
     +' onchange="onIngrAmt(\''+person+'\',\''+day+'\',\''+slotEsc+'\','+idx+',this.value)">'
     +qtyHtml+'</select>'
-    +'<span class="ingr-unit-label">'+unitLabel+'</span>'
+    +'<span class="ingr-unit-label">'+unitLabel+(ing.dbKey==='egg white'&&unitLabel==='cup'?' ('+Math.round(amt*8)+')':'')+'</span>'
     +'<select class="ingr-swap-select role-'+ing.role+'" onchange="onIngrSwap(\''+person+'\',\''+day+'\',\''+slotEsc+'\','+idx+',this.value)">'
     +optHtml+'</select>'
     +'<span class="ingr-cal">'+displayCal+'cal</span>'
