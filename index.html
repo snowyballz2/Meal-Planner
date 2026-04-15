@@ -1201,15 +1201,15 @@ const MEALS=[
     I('cinnamon',0.5,'fixed',false)
   ]},
 
- {id:'her_shake',label:'Protein, creatine & acai peanut butter shake',slots:['shake'],
-  steps:['Add cashew milk to blender first.','Add banana, acai, peanut butter, oats, protein, creatine.','Blend 30–45 sec.'],
+ {id:'her_shake',label:'Protein, creatine & acai oat shake',slots:['shake'],
+  steps:['Add cashew milk to blender first.','Add banana, acai, oats, protein, creatine.','Blend 30–45 sec. Optional: add 1 tbsp peanut butter.'],
   him:null,her:{fv:'0.5c fruit'},
   ingredients:[
     I('protein powder',1,'protein',false),
     I('creatine',1,'fixed',false),
     I('acai',0.33,'fruit',false),
     I('banana',0.5,'fruit',false),
-    I('peanut butter',1,'fat'),
+    I('peanut butter',0,'fat'),
     I('oats tbsp',1,'carb'),
     I('cashew milk (sweetened)',0.5,'liquid')
   ]},
@@ -3758,7 +3758,7 @@ function buildMealCardHtml(s, person, day, other){
     +notePill
     +'<div class="mc-body">'
     +adjBanner
-    +'<div class="bsec"><div class="bsec-title ingr">'+ingrSectionTitle+'</div>'+ingrHtml+'</div>'
+    +'<div class="bsec"><div class="bsec-title ingr" style="display:flex;align-items:center;justify-content:space-between">'+ingrSectionTitle+'<button style="border:none;background:var(--shop);color:#000;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button></div>'+ingrHtml+'</div>'
     +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'
     +'</div></div>';
 }
@@ -4070,6 +4070,44 @@ function toggleShared(slot,checked){
 }
 
 // ── Ingredient edit handlers ────────────────────────────────
+function addTempIngredient(p,d,s){
+  // Show a select popup with all ingredients
+  const overlay=document.getElementById('calPopupOverlay');
+  if(!overlay)return;
+  const keys=Object.keys(NUTRI_DB).sort();
+  let optsHtml='<option value="">— Select ingredient —</option>';
+  keys.forEach(function(k){
+    const db=NUTRI_DB[k];
+    optsHtml+='<option value="'+k+'">'+k+' ('+db.kcal+' kcal/'+db.unit+')</option>';
+  });
+  overlay.innerHTML='<div class="cal-popup-overlay" onclick="if(event.target===this){document.getElementById(\'calPopupOverlay\').style.display=\'none\';}">'
+    +'<div style="background:var(--bg-card);border-radius:14px;padding:20px;width:85%;max-width:340px;box-shadow:0 10px 40px rgba(0,0,0,.5)">'
+    +'<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:10px">Add Ingredient</div>'
+    +'<select id="tempIngrSelect" style="width:100%;padding:8px;font-size:16px;background:var(--bg);color:var(--text);border:1.5px solid var(--border);border-radius:8px;margin-bottom:10px">'+optsHtml+'</select>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button style="flex:1;padding:10px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--gray);font-size:13px;font-weight:600;cursor:pointer" onclick="document.getElementById(\'calPopupOverlay\').style.display=\'none\'">Cancel</button>'
+    +'<button style="flex:1;padding:10px;border:none;border-radius:8px;background:var(--shop);color:#000;font-size:13px;font-weight:700;cursor:pointer" onclick="confirmTempIngredient(\''+p+'\',\''+d+'\',\''+s+'\')">Add</button>'
+    +'</div></div></div>';
+  overlay.style.display='';
+}
+function confirmTempIngredient(p,d,s){
+  const sel=document.getElementById('tempIngrSelect');
+  if(!sel||!sel.value)return;
+  const dbKey=sel.value;
+  const db=NUTRI_DB[dbKey];
+  if(!db)return;
+  // Add as an override at the next index
+  const meal=getActiveMeal(p,d,s);
+  if(!meal||!meal[p])return;
+  const ingrCount=meal[p].ingredients?meal[p].ingredients.length:0;
+  // Default amount: 1 unit
+  const defaultAmt=db.unit==='cup'?0.5:db.unit==='tbsp'?1:db.unit==='oz'?4:1;
+  setOverride(p,d,s,ingrCount,'dbKey',dbKey);
+  setOverride(p,d,s,ingrCount,'amt',defaultAmt);
+  document.getElementById('calPopupOverlay').style.display='none';
+  invalidateLeftoverCache();
+  renderMeals();
+}
 function onIngrAmt(p,d,s,idx,val){
   const amt=parseFloat(val);
   if(isNaN(amt)||amt<0)return;
