@@ -763,6 +763,19 @@ function getPrimaryProtein(m, titleCase) {
   if (!port || !port.ingredients) return titleCase ? 'Other' : 'other';
   const proIngr = port.ingredients.filter(function(i) { return i.role === 'protein'; });
   if (!proIngr.length) return titleCase ? 'Other' : 'other';
+
+  // Check if lunch/dinner meal has any meat/seafood — if not, it's vegetarian
+  // Don't apply to breakfast/snack (egg/yogurt meals aren't "vegetarian" category)
+  const isLunchDinner = m.slots && (m.slots.indexOf('lunch')>=0 || m.slots.indexOf('dinner')>=0);
+  if (isLunchDinner) {
+    const meatKeys = {'chicken breast':1,'chicken thigh':1,'ground turkey 93':1,'ground chicken':1,
+      'salmon':1,'halibut':1,'filet mignon':1,'shrimp':1,'canned tuna':1,'tuna pouch':1};
+    const hasMeat = port.ingredients.some(function(i){return meatKeys[i.dbKey];});
+    if (!hasMeat) {
+      return titleCase ? 'Vegetarian' : 'vegetarian';
+    }
+  }
+
   const key = proIngr[0].dbKey;
   const map = {
     'egg white':'egg','egg whole':'egg','hard boiled egg':'egg',
