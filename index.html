@@ -841,6 +841,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
   const targetKcal = totalScalableKcal + targetDelta;
   let uniformScale = totalScalableKcal > 0 ? targetKcal / totalScalableKcal : 1;
   if (uniformScale < 0.1) uniformScale = 0.1; // safety floor
+  if (uniformScale > 1.75) uniformScale = 1.75; // cap at 75% scale-up — beyond this the recipe is wrong for the slot
 
   // Apply uniform scale with per-role constraints
   scalable.forEach(function(item) {
@@ -2055,12 +2056,11 @@ const MEALS=[
     I('salt',0.5,'fixed',false)
   ]},
 
- {id:'black_bean_rice_bowl',label:'Black bean & rice bowl with yogurt',slots:['lunch','dinner'],
-  steps:['Warm black beans with cumin and garlic powder.','Heat brown rice. Sauté bell pepper and kale 3 min.','Assemble: rice, beans, veg. Top with salsa, yogurt, and lime.'],
+ {id:'black_bean_rice_bowl',label:'Black bean & rice bowl',slots:['lunch','dinner'],
+  steps:['Warm black beans with cumin and garlic powder.','Heat brown rice. Sauté bell pepper and kale 3 min.','Assemble: rice, beans, veg. Top with salsa and lime.'],
   him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
   ingredients:[
     I('black beans canned',1,'protein'),
-    I('greek yogurt 0%',0.5,'protein'),
     I('brown rice cooked',1,'carb'),
     I('bell pepper',0.75,'veg'),
     I('kale',1,'veg'),
