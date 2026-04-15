@@ -3291,8 +3291,10 @@ function buildIngrEditRow(ing, amt, person, day, s, idx){
   const db = NUTRI_DB[ing.dbKey];
   const unitLabel = db ? db.unit : '';
   const allKeys = Object.keys(NUTRI_DB).sort();
+  const eggCount = (ing.dbKey==='egg white') ? ' ('+Math.round(amt*8)+')' : '';
   const optHtml = allKeys.map(function(k){
-    return '<option value="'+k+'"'+(k===ing.dbKey?' selected':'')+'>'+k+'</option>';
+    const label = (k==='egg white' && k===ing.dbKey) ? k+eggCount : k;
+    return '<option value="'+k+'"'+(k===ing.dbKey?' selected':'')+'>'+label+'</option>';
   }).join('');
   const slotEsc = s.replace(/'/g,"\\'");
   const amtId = 'amt_'+person+'_'+day+'_'+s+'_'+idx;
@@ -3307,7 +3309,7 @@ function buildIngrEditRow(ing, amt, person, day, s, idx){
     +'<select class="ingr-amt-select" id="'+amtId+'"'
     +' onchange="onIngrAmt(\''+person+'\',\''+day+'\',\''+slotEsc+'\','+idx+',this.value)">'
     +qtyHtml+'</select>'
-    +'<span class="ingr-unit-label">'+unitLabel+(ing.dbKey==='egg white'&&unitLabel==='cup'?' ('+Math.round(amt*8)+')':'')+'</span>'
+    +'<span class="ingr-unit-label">'+unitLabel+'</span>'
     +'<select class="ingr-swap-select role-'+ing.role+'" onchange="onIngrSwap(\''+person+'\',\''+day+'\',\''+slotEsc+'\','+idx+',this.value)">'
     +optHtml+'</select>'
     +'<span class="ingr-cal">'+displayCal+'cal</span>'
