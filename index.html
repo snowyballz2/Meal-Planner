@@ -497,7 +497,7 @@ var NUTRI_DB = {
   'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup'},
   // Packaged / grab-and-go
   'rxbar':{kcal:180,pro:12,fat:6,carb:24,unit:'each',brand:'RXBar',altUnits:{g:52},wholeOnly:true},
-  'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz'},wholeOnly:true},
+  'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz',type:'pouch'},wholeOnly:true},
   'triscuit':              {kcal:20,  pro:0.4,fat:0.7, carb:3.3, unit:'each', wholeOnly:true},
   // Milks
   'coconut milk':{kcal:420,pro:1,fat:14,carb:2,unit:'cup',brand:'Chaokoh',minAmt:0.25,pkg:{size:13.5,unit:'oz',cups:1.7}},
@@ -1450,6 +1450,85 @@ const MEALS=[
     I('oats',0.25,'carb'),
     I('mixed berries',0.5,'fruit',false),
     I('cinnamon',0.5,'fixed',false)
+  ]},
+
+ {id:'coconut_chia_pudding',label:'Coconut berry chia pudding',slots:['breakfast'],
+  steps:['Whisk chia, coconut milk, regular milk, protein powder, cinnamon in a jar until combined.','Stir in oats.','Refrigerate overnight (at least 4 hours) to thicken.','Top with mixed berries before serving.'],
+  him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
+  ingredients:[
+    I('chia seeds',1,'fat'),
+    I('coconut milk',0.33,'liquid'),
+    I('1% milk',0.67,'liquid'),
+    I('protein powder',1,'protein'),
+    I('oats',0.5,'carb'),
+    I('mixed berries',0.5,'fruit',false),
+    I('cinnamon',0.5,'fixed',false)
+  ]},
+
+ {id:'coconut_oatmeal',label:'Coconut banana protein oats',slots:['breakfast'],
+  steps:['Combine oats, coconut milk, regular milk, protein powder, cinnamon in a jar or pot.','Microwave 90s (or refrigerate overnight).','Top with sliced banana and berries.'],
+  him:{fv:'1c fruit'},her:{fv:'1c fruit'},
+  ingredients:[
+    I('oats',0.5,'carb'),
+    I('coconut milk',0.33,'liquid'),
+    I('1% milk',0.5,'liquid'),
+    I('protein powder',1,'protein'),
+    I('banana',0.5,'fruit',false),
+    I('mixed berries',0.25,'fruit',false),
+    I('cinnamon',0.5,'fixed',false)
+  ]},
+
+ {id:'white_bean_scramble',label:'White bean & spinach scramble',slots:['breakfast'],
+  steps:['Warm cannellini beans in a non-stick pan 1 min, mashing lightly.','Add spinach, cook 1 min until wilted.','Pour in egg whites + whole egg, scramble 2–3 min.','Crush garlic and stir in at the end. Season with black pepper. Serve with toast.'],
+  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  ingredients:[
+    I('cannellini beans canned',0.5,'protein'),
+    I('egg whole',1,'protein'),
+    I('egg white',0.5,'protein'),
+    I('baby spinach',1,'veg'),
+    I('whole wheat toast',1,'carb'),
+    I('garlic',1,'condiment',false),
+    I('black pepper',0.5,'fixed',false)
+  ]},
+
+ {id:'silken_tofu_smoothie',label:'Silken tofu berry smoothie',slots:['breakfast'],
+  steps:['Add silken tofu, mixed berries, banana, protein powder, and milk to a blender.','Blend until smooth. Pour and drink.'],
+  him:{fv:'1.25c fruit'},her:{fv:'1.25c fruit'},
+  ingredients:[
+    I('silken tofu',5,'protein'),
+    I('mixed berries',0.75,'fruit',false),
+    I('banana',0.5,'fruit',false),
+    I('protein powder',1,'protein'),
+    I('1% milk',0.5,'liquid')
+  ]},
+
+ {id:'savory_congee',label:'Chicken congee',slots:['breakfast'],
+  steps:['Combine rice + chicken broth in a pot, simmer 10 min until thick.','Shred chicken breast and stir in (or cook raw chicken directly in the broth first).','Add ginger and spinach, simmer 2 min.','Stir in egg whites until set.','Top with scallions and black pepper.'],
+  him:{fv:'0.5c veg'},her:{fv:'0.5c veg'},
+  ingredients:[
+    I('brown rice cooked',0.75,'carb'),
+    I('chicken broth',1,'liquid'),
+    I('chicken breast',3,'protein'),
+    I('egg white',0.25,'protein'),
+    I('scallion',2,'veg'),
+    I('ginger',1,'condiment',false),
+    I('baby spinach',0.5,'veg'),
+    I('black pepper',0.5,'fixed',false)
+  ]},
+
+ {id:'shrimp_coconut_curry',label:'Shrimp coconut curry with jasmine rice',slots:['lunch','dinner'],
+  steps:['Sauté bell pepper in non-stick skillet 2 min.','Add ginger and garlic, cook 30s.','Stir in red curry paste, then coconut milk. Simmer 3 min.','Add shrimp, cook 3 min until pink.','Stir in spinach until wilted. Squeeze lime.','Serve over jasmine rice.'],
+  him:{fv:'1.5c veg'},her:{fv:'1c veg'},
+  ingredients:[
+    I('shrimp',5,'protein'),
+    I('coconut milk',0.5,'liquid'),
+    I('jasmine rice cooked',1,'carb'),
+    I('red curry paste',1,'condiment'),
+    I('bell pepper',0.5,'veg'),
+    I('baby spinach',1,'veg'),
+    I('ginger',1,'condiment',false),
+    I('lime',0.5,'condiment',false),
+    I('garlic',2,'condiment',false)
   ]},
 
  {id:'smoothie_bowl',label:'Berry smoothie bowl',slots:['breakfast'],
@@ -3059,6 +3138,9 @@ var CAL_BASE=lsGet('mealPlannerCalBase',{him:2800,her:1900});
 var PRO_TARGET=lsGet('mealPlannerProTarget',{him:180,her:120});
 // Macro ratio limits: carbs < 50% of kcal calories, fat < 30% of kcal calories
 var MACRO_LIMITS={maxCarbPct:0.55,maxFatPct:0.30};
+// Ingredients the randomizer should avoid unless needed for macros/waste.
+// Meals containing any of these get a mild score penalty in Phase 1.
+var DISCOURAGED_INGREDIENTS=['coconut milk'];
 
 // Build macro hints for the calorie adjuster based on person, day, slot
 function buildMacroHints(p,d,s){
@@ -4704,11 +4786,20 @@ function _randomizeWeekCore(randTarget){
           }
         });
 
-        // Score: calorie fit + fat penalty + protein penalty
+        // Score: calorie fit + fat penalty + discouraged-ingredient penalty
         var calDiff = Math.abs(totalKcal - target);
         var fatPct = totalKcal > 0 ? totalFatCal / totalKcal : 0;
         var fatPenalty = fatPct > 0.30 ? (fatPct - 0.30) * 1000 : 0;
-        var score = calDiff + fatPenalty;
+        // Mild penalty per meal containing a discouraged ingredient (coconut milk etc.).
+        // Still allows picks when cal/macro fit requires it; just biases away by default.
+        var discouragedCount = 0;
+        SLOTS.forEach(function(s2){
+          var mid = trySel[s2]; if (!mid) return;
+          var mm = getMeal(mid); if (!mm || !mm.ingredients) return;
+          if (mm.ingredients.some(function(i){ return DISCOURAGED_INGREDIENTS.indexOf(i.dbKey) >= 0; })) discouragedCount++;
+        });
+        var discouragedPenalty = discouragedCount * 150;
+        var score = calDiff + fatPenalty + discouragedPenalty;
 
         if (score < bestScore) {
           bestScore = score;
