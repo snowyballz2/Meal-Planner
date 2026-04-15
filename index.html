@@ -4752,8 +4752,19 @@ function _randomizeWeekCore(randTarget){
   }
 
   // ── PHASE 3: Package resolution — SMART ──────────────────────
+  // Iterate until waste stops decreasing (convergence). Each outer pass
+  // re-analyzes the trip so swaps applied for one package are reflected
+  // when scoring swaps for the next package.
   trips.forEach(function(trip) {
+    var maxPhase3Iters = 6;
+    var prevTripWaste = Infinity;
+    for (var ph3iter = 0; ph3iter < maxPhase3Iters; ph3iter++) {
     var analysis = _analyzeTripPackages(trip.days);
+    var currentTripWaste = 0;
+    analysis.forEach(function(p){ currentTripWaste += (p.waste || 0); });
+    if (currentTripWaste < 0.01) break;       // nothing left to fix
+    if (currentTripWaste >= prevTripWaste) break; // no progress → stop
+    prevTripWaste = currentTripWaste;
 
     analysis.forEach(function(pkg) {
       if (pkg.waste < 0.01) return; // no waste to resolve
@@ -4938,6 +4949,7 @@ function _randomizeWeekCore(randTarget){
         });
       }
     });
+    } // end Phase 3 convergence loop
   });
 
   // ── PHASE 4: Enforce shared schedule (runs absolutely last) ──
