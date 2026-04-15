@@ -4504,7 +4504,7 @@ function randomizeWeek(target){
   sharedSchedOpen=false;
   const randTarget=target||person; // use passed target or current person tab
   const savedSel = JSON.parse(JSON.stringify(SEL));
-  const maxRetries = 10;
+  const maxRetries = 30;
   // Track the best retry so we don't end up using a random late-retry state
   // that happens to be worse than an earlier one.
   let bestWaste = Infinity;
