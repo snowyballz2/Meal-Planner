@@ -3229,11 +3229,11 @@ function balanceDayMacros(p,d,slots){
     return 1;
   }
 
-  function itemsByRole(role){
+  function itemsByRole(role, ignoreScalableFalse){
     const out=[];
     Object.keys(slots).forEach(function(s){
       slots[s].forEach(function(i,idx){
-        if(i.scalable===false)return;
+        if(!ignoreScalableFalse && i.scalable===false)return;
         if(role&&i.role!==role)return;
         const db=NUTRI_DB[i.dbKey]; if(!db)return;
         const isPkg=!!(db.pkg&&db.pkg.type!=='bulk'&&!db.pkg.longShelfLife);
@@ -3241,6 +3241,22 @@ function balanceDayMacros(p,d,slots){
       });
     });
     return out;
+  }
+
+  // Compute daily veg/fruit in cup-equivalents (same conversion as computeDailyFV)
+  function dailyFV(){
+    let veg=0, fruit=0;
+    Object.keys(slots).forEach(function(s){
+      slots[s].forEach(function(i){
+        const db=NUTRI_DB[i.dbKey]; if(!db)return;
+        let cups=0;
+        if(db.unit==='cup')cups=i.amt;
+        else if(db.unit==='each'&&typeof db.cupsEach==='number')cups=i.amt*db.cupsEach;
+        if(i.role==='veg')veg+=cups;
+        else if(i.role==='fruit')fruit+=cups;
+      });
+    });
+    return {veg:veg,fruit:fruit};
   }
 
   function bestAdd(role){
@@ -3279,6 +3295,27 @@ function balanceDayMacros(p,d,slots){
     return null;
   }
 
+  // Helper: scale up an existing veg/fruit ingredient by one increment
+  // (bypassing scalable:false — veg/fruit ingredients in recipes are flagged
+  // not-scalable so the calorie adjuster doesn't scale them, but the
+  // day-level balancer CAN scale them UP to meet the daily fv floor).
+  function boostFV(role){
+    // Prefer scaling an item already in the recipe with unit=cup so 0.25 step is meaningful
+    const items=itemsByRole(role, true).filter(function(x){
+      return x.db.unit==='cup' || (x.db.unit==='each' && x.db.cupsEach);
+    });
+    if(!items.length)return null;
+    // Pick cheapest-kcal-per-cup (so adding veg/fruit minimizes calorie cost)
+    items.sort(function(a,b){
+      const cupKcalA=a.db.unit==='cup'?a.db.kcal:(a.db.kcal/(a.db.cupsEach||1));
+      const cupKcalB=b.db.unit==='cup'?b.db.kcal:(b.db.kcal/(b.db.cupsEach||1));
+      return cupKcalA-cupKcalB;
+    });
+    const item=items[0];
+    const inc=incrementFor(item.db);
+    return {item:item, inc:inc};
+  }
+
   let safety=40;
   while(safety-->0){
     const t=dailyMacros();
@@ -3289,6 +3326,9 @@ function balanceDayMacros(p,d,slots){
     const proGap=proTarget-t.pro;
     const carbOver=carbPct-0.55;
     const fatOver=fatPct-0.30;
+    const fv=dailyFV();
+    const vegGap=3-fv.veg;    // target ≥ 3c veg
+    const fruitGap=1-fv.fruit; // target ≥ 1c fruit
 
     let changed=false;
 
@@ -3299,7 +3339,6 @@ function balanceDayMacros(p,d,slots){
       const pInc=incrementFor(pItem.db);
       const trim=bestTrim(['carb','fat']);
       if(!trim)break;
-      // Apply
       slots[pItem.slot][pItem.idx].amt=pItem.cur+pInc;
       slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
       changed=true;
@@ -3325,6 +3364,32 @@ function balanceDayMacros(p,d,slots){
       if(pItem){
         const pInc=incrementFor(pItem.db);
         slots[pItem.slot][pItem.idx].amt=pItem.cur+pInc;
+      }
+      changed=true;
+    }
+    // Priority 4: veg shortfall (add veg cup, trim carb/fat equivalent kcal)
+    else if(vegGap>0.1){
+      const boost=boostFV('veg');
+      if(!boost)break;
+      const addKcal=boost.item.db.kcal*boost.inc;
+      const trim=bestTrim(['carb','fat']);
+      // Allow adding veg even without a trim slot (veg kcal is low;
+      // dinner cal corrector will rebalance next render)
+      slots[boost.item.slot][boost.item.idx].amt=boost.item.cur+boost.inc;
+      if(trim && addKcal>5){
+        slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
+      }
+      changed=true;
+    }
+    // Priority 5: fruit shortfall (add fruit cup, trim carb/fat equivalent)
+    else if(fruitGap>0.1){
+      const boost=boostFV('fruit');
+      if(!boost)break;
+      const addKcal=boost.item.db.kcal*boost.inc;
+      const trim=bestTrim(['carb','fat']);
+      slots[boost.item.slot][boost.item.idx].amt=boost.item.cur+boost.inc;
+      if(trim && addKcal>30){
+        slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
       }
       changed=true;
     }
