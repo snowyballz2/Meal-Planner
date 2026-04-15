@@ -4237,7 +4237,21 @@ function renderMeals(){
   requestAnimationFrame(function(){window.scrollTo(0,scrollY);mealEl.style.minHeight='';});
 }
 
-function toggleCard(k){openCards[k]=!openCards[k];const card=document.getElementById('mc_'+k);if(card)card.classList.toggle('open',openCards[k]);}
+function toggleCard(k){
+  openCards[k]=!openCards[k];
+  const card=document.getElementById('mc_'+k);
+  if(card)card.classList.toggle('open',openCards[k]);
+  // Mirror open state between him and her for the same day/slot so switching
+  // person tabs keeps the same cards expanded (layout + scroll stays consistent).
+  const parts=k.split('_');
+  if(parts.length>=3&&(parts[0]==='him'||parts[0]==='her')){
+    const other=parts[0]==='him'?'her':'him';
+    const otherKey=other+'_'+parts.slice(1).join('_');
+    openCards[otherKey]=openCards[k];
+    const otherCard=document.getElementById('mc_'+otherKey);
+    if(otherCard)otherCard.classList.toggle('open',openCards[k]);
+  }
+}
 function toggleSkip(p,d,s){const k=sk(p,d,s);SKIPPED[k]=!SKIPPED[k];if(!SKIPPED[k]){delete SKIPPED[k];delete MANUAL_SET[k];}else{delete EAT_OUT[k];MANUAL_SET[k]=true;}invalidateLeftoverCache();renderMeals();}
 function addLateSnack(p,d){LATE_SNACK[pk(p,d)]={name:'',kcal:null,pro:null,fat:null,carb:null};renderMeals();}
 function removeLateSnack(p,d){delete LATE_SNACK[pk(p,d)];renderMeals();}
