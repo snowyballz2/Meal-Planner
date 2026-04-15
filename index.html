@@ -2646,6 +2646,8 @@ function computeLeftovers(){
             result[prevKey].crossPersonCook=true;
             result[prevKey].feedsAlso=p;
             result[prevKey].feedsDay=d;
+            // Total batch = this person's portions + the other person's leftover serving
+            result[prevKey].totalServings=(result[prevKey].servings||1)+1;
             return;
           }
         }
@@ -3519,24 +3521,54 @@ function renderStatsBar(person, day){
 
 // 2a. Shared card renderer (used inside renderSharedView)
 function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day){
-  let combinedIngr=[];
-  if(meal.ingredients){
-    combinedIngr=meal.ingredients.filter(function(ing){return(ing.amt||0)>0;}).map(function(ing){
-      const db=NUTRI_DB[ing.dbKey],unit=db?db.unit:'';
-      const hAmt=(ing.amt||0)*himMult;
-      const rAmt=(ing.amt||0)*herMult;
-      const amt=Math.round((hAmt+rAmt)*4)/4;
-      return{dbKey:ing.dbKey,amt:amt,hAmt:hAmt,rAmt:rAmt,role:ing.role,displayText:amt+(unit?' '+unit:'')+' '+ing.dbKey};
-    });
+  // Build each person's adjusted ingredient list (respects slot calorie budget).
+  // The combined shared total = him's adjusted × himMult + her's adjusted × herMult,
+  // so the Shared tab matches what Him and Her tabs show per-portion.
+  function adjustedForPerson(p, mult){
+    const port = meal[p];
+    if(!port || !port.ingredients) return [];
+    const ingr = applyOverrides(port, p, day, s);
+    if(!ingr || !ingr.length || ingr[0].dbKey === undefined) return [];
+    const slotAdj = getSlotAdjustment(p, day, s);
+    const leftovers = computeLeftovers();
+    const loInfo = leftovers[sk(p, day, s)];
+    const mts = (loInfo && !loInfo.isLeftover) ? (loInfo.totalServings||loInfo.servings||1) : 1;
+    let adjusted;
+    if(slotAdj !== 0){
+      const hints = buildMacroHints(p, day, s);
+      const r = adjustIngredients(ingr, slotAdj, s, hints, mts);
+      adjusted = r.map(a => ({dbKey:a.ing.dbKey, amt:a.newAmt, role:a.ing.role}));
+    } else {
+      adjusted = ingr.map(i => ({dbKey:i.dbKey, amt:i.amt, role:i.role}));
+    }
+    return adjusted.map(i => ({dbKey:i.dbKey, amt:i.amt*mult, role:i.role}));
   }
+  const himAdj = adjustedForPerson('him', himMult);
+  const herAdj = adjustedForPerson('her', herMult);
+  // Merge by dbKey preserving original order
+  const orderedKeys = [];
+  const bucket = {};
+  (meal.ingredients||[]).forEach(function(ing){
+    if(!ing || !ing.dbKey || !((ing.amt||0) > 0)) return;
+    orderedKeys.push(ing.dbKey);
+    bucket[ing.dbKey] = {dbKey:ing.dbKey, role:ing.role, hAmt:0, rAmt:0};
+  });
+  himAdj.forEach(function(i){ if(bucket[i.dbKey]) bucket[i.dbKey].hAmt += i.amt; else { orderedKeys.push(i.dbKey); bucket[i.dbKey] = {dbKey:i.dbKey, role:i.role, hAmt:i.amt, rAmt:0}; } });
+  herAdj.forEach(function(i){ if(bucket[i.dbKey]) bucket[i.dbKey].rAmt += i.amt; else { orderedKeys.push(i.dbKey); bucket[i.dbKey] = {dbKey:i.dbKey, role:i.role, hAmt:0, rAmt:i.amt}; } });
+  const combinedIngr = orderedKeys.filter(function(k,idx){return orderedKeys.indexOf(k)===idx;}).map(function(k){
+    const c = bucket[k];
+    const db = NUTRI_DB[c.dbKey], unit = db ? db.unit : '';
+    const amt = Math.round((c.hAmt + c.rAmt) * 1000) / 1000;
+    return {dbKey:c.dbKey, amt:amt, hAmt:c.hAmt, rAmt:c.rAmt, role:c.role, displayText: amt + (unit?' '+unit:'') + ' ' + c.dbKey};
+  }).filter(function(x){return x.amt > 0;});
   const pm={kcal:0,pro:0,fat:0,carb:0};
   combinedIngr.forEach(function(i){const db=NUTRI_DB[i.dbKey];if(db){pm.kcal+=Math.round(db.kcal*i.amt);pm.pro+=Math.round(db.pro*i.amt);pm.fat+=Math.round(db.fat*i.amt);pm.carb+=Math.round(db.carb*i.amt);}});
   const macroLine=pm.kcal+' kcal · P '+pm.pro+'g · C '+pm.carb+'g · F '+pm.fat+'g';
   let ingrHtml='<div class="shared-ingr-grid">';
   ingrHtml+=combinedIngr.map(function(i){
     const db=NUTRI_DB[i.dbKey];const kcal=db?Math.round(db.kcal*i.amt):0;
-    const hFmt=i.hAmt?(Math.round(i.hAmt*4)/4):'—';
-    const rFmt=i.rAmt?(Math.round(i.rAmt*4)/4):'—';
+    const hFmt=i.hAmt?(Math.round(i.hAmt*1000)/1000):'—';
+    const rFmt=i.rAmt?(Math.round(i.rAmt*1000)/1000):'—';
     const rc=ROLE_COLORS[i.role]||'var(--border)';
     return '<div class="sig-row">'
       +'<span class="sig-name" style="border-left:3px solid '+rc+';padding-left:6px">'+i.displayText+'</span>'
@@ -3935,10 +3967,17 @@ function buildMealCardHtml(s, person, day, other){
   // Ingredient display with per-ingredient nutrition — EDITABLE
   const hasOverrides = !!getOverrides(person,day,s);
   let ingrHtml='';
-  // cookServings = this person's portion count (used for ingredient amounts)
-  const cookServings=(loInfo&&!loInfo.isLeftover&&loInfo.servings>1)?loInfo.servings:1;
-  // displayServings = total people×days being cooked for (used for title label)
-  const displayServings=(loInfo&&!loInfo.isLeftover)?(loInfo.totalServings||loInfo.servings||1):1;
+  // On same-day shared slots, the Shared tab owns the combined view.
+  // Individual Him/Her tabs should just show per-portion amounts.
+  const isSameDayShared = SHARED_SCHEDULE[dk(day,s)] === 'shared';
+  const isBigCookHere = !!(loInfo && !loInfo.isLeftover && (loInfo.servings > 1 || loInfo.crossPersonCook));
+  const showCombinedOnThisTab = isBigCookHere && !isSameDayShared;
+  // cookServings = portion multiplier applied to ingredient amounts.
+  //   - Shared slot: 1 (show per-portion; Shared tab combines)
+  //   - Non-shared Big Cook (solo leftovers or cross-person cook): total batch size
+  //   - Otherwise: 1
+  const cookServings = showCombinedOnThisTab ? (loInfo.totalServings||loInfo.servings||1) : 1;
+  const displayServings = cookServings;
   const ingrSectionTitle=displayServings>1?'🥗 Combined ingredients (serves '+displayServings+')':'🥗 Ingredients';
   if (port.ingredients && port.ingredients.length && port.ingredients[0].dbKey !== undefined) {
     // Get ingredients with overrides applied
