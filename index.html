@@ -4953,9 +4953,10 @@ function randomizeWeek(target){
   const randTarget=target||person; // use passed target or current person tab
   const savedSel = JSON.parse(JSON.stringify(SEL));
   const maxRetries = 30;
-  // Track the best retry so we don't end up using a random late-retry state
-  // that happens to be worse than an earlier one.
+  // Track the best retry — prefer (zero waste, then zero goal-misses).
+  // Score lexicographic: (totalWaste, goalMisses). Lower is better.
   let bestWaste = Infinity;
+  let bestMisses = Infinity;
   let bestSEL = null;
   for (let retry = 0; retry < maxRetries; retry++) {
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
@@ -4971,18 +4972,151 @@ function randomizeWeek(target){
         grouped[cat].forEach(function(item){ if(item.wasteLabel) totalWaste++; });
       });
     });
-    if (totalWaste < bestWaste) {
+    // Lexicographic preference: (waste, goal-misses). Only compute goal misses
+    // when this retry matches or beats current best waste (day-balancer is expensive).
+    let goalMisses = Infinity;
+    if (totalWaste <= bestWaste) {
+      goalMisses = 0;
+      const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+      persons.forEach(function(p){
+        if(p!=='him'&&p!=='her')return;
+        const calT=CAL_BASE[p], proT=PRO_TARGET[p];
+        DAYS.forEach(function(d){
+          const t=calcTotals(p,d);
+          const fv=computeDailyFV(p,d);
+          const mk=t.pro*4+t.fat*9+t.carb*4;
+          const carbPct=mk>0?(t.carb*4)/mk:0;
+          const fatPct=mk>0?(t.fat*9)/mk:0;
+          const ok=(Math.abs(t.kcal-calT)<=100)&&(t.pro>=proT)&&(carbPct<=0.55)&&(fatPct<=0.30)&&(fv.veg>=3)&&(fv.fruit>=1);
+          if(!ok)goalMisses++;
+        });
+      });
+    }
+    const better = (totalWaste < bestWaste) || (totalWaste === bestWaste && goalMisses < bestMisses);
+    if (better) {
       bestWaste = totalWaste;
+      bestMisses = goalMisses;
       bestSEL = JSON.parse(JSON.stringify(SEL));
     }
-    if (totalWaste === 0) break;
+    if (totalWaste === 0 && goalMisses === 0) break;
   }
-  // Restore best retry's selections (last retry's state may be worse)
-  if (bestSEL && bestWaste > 0) {
+  // Restore best state (if we exited with improvement room remaining)
+  if (bestSEL && (bestWaste > 0 || bestMisses > 0)) {
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
     Object.keys(bestSEL).forEach(function(k){SEL[k]=bestSEL[k];});
   }
+  // Targeted day re-rolls: fix any remaining miss-days without breaking waste.
+  if (bestMisses > 0) {
+    rerollMissDays(randTarget);
+  }
   invalidateLeftoverCache();renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
+}
+
+// For each day whose per-person goals aren't all met, try random meal swaps
+// for that day only. Revert if waste worsens or the day still fails.
+function rerollMissDays(randTarget){
+  const now = Date.now();
+  function dayWaste(d){
+    const trip = ['Monday','Tuesday','Wednesday'].indexOf(d)>=0 ? 'sun' : 'wed';
+    let w = 0;
+    const g = buildShoppingList(trip, 'both');
+    Object.keys(g).forEach(function(cat){g[cat].forEach(function(it){if(it.wasteLabel)w++;});});
+    return w;
+  }
+  function totalWaste(){
+    let w=0;
+    ['sun','wed'].forEach(function(trip){
+      const g=buildShoppingList(trip,'both');
+      Object.keys(g).forEach(function(cat){g[cat].forEach(function(it){if(it.wasteLabel)w++;});});
+    });
+    return w;
+  }
+  function dayAllOk(d, persons){
+    let ok = true;
+    persons.forEach(function(p){
+      if(!ok)return;
+      if(p!=='him'&&p!=='her')return;
+      const calT=CAL_BASE[p], proT=PRO_TARGET[p];
+      const t=calcTotals(p,d);
+      const fv=computeDailyFV(p,d);
+      const mk=t.pro*4+t.fat*9+t.carb*4;
+      const carbPct=mk>0?(t.carb*4)/mk:0;
+      const fatPct=mk>0?(t.fat*9)/mk:0;
+      if(!(Math.abs(t.kcal-calT)<=100)||!(t.pro>=proT)||!(carbPct<=0.55)||!(fatPct<=0.30)||!(fv.veg>=3)||!(fv.fruit>=1))ok=false;
+    });
+    return ok;
+  }
+  const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  const maxRerolls = 25;
+  DAYS.forEach(function(d){
+    if (dayAllOk(d, persons)) return;
+    const baseWaste = totalWaste();
+    // Snapshot this day's selections for both persons
+    const snap = {};
+    persons.forEach(function(p){
+      SLOTS.forEach(function(s){ snap[sk(p,d,s)] = SEL[sk(p,d,s)]; });
+    });
+    let bestDaySel = Object.assign({}, snap);
+    let bestDayOk = false;
+    for (let attempt = 0; attempt < maxRerolls; attempt++) {
+      // Random pick new meals for this day (respect locks + shared schedule).
+      // Only re-roll slots whose current meal is NON-package — package meals
+      // are locked in by the waste optimizer and shouldn't be swapped out.
+      // Also don't pick a package meal as replacement.
+      persons.forEach(function(p){
+        SLOTS.forEach(function(s){
+          const key = sk(p,d,s);
+          if (EAT_OUT[key] || SKIPPED[key]) return;
+          if (s === 'shake' || s === 'late_snack') return;
+          const currentId = SEL[key];
+          if (currentId && mealUsesPkg(currentId)) return; // protect pkg meals
+          const isShared = SHARED_SCHEDULE[dk(d,s)] === 'shared';
+          const candidates = getMealsForSlot(s).filter(function(m){
+            if (!m[p]) return false;
+            if (isShared && (!m.him || !m.her)) return false;
+            if (mealUsesPkg(m.id)) return false; // never swap IN a pkg meal
+            return true;
+          });
+          if (!candidates.length) return;
+          const pick = randomPick(candidates);
+          SEL[key] = pick.id;
+          weekData[activeWeek].ts[key] = now;
+        });
+      });
+      // Enforce shared schedule for this day
+      ['breakfast','lunch','dinner'].forEach(function(s){
+        if (SHARED_SCHEDULE[dk(d,s)] === 'shared'){
+          const himId = getMealId('him', d, s);
+          if (himId) { SEL[sk('her',d,s)] = himId; weekData[activeWeek].ts[sk('her',d,s)] = now; }
+        }
+      });
+      invalidateLeftoverCache();
+      // Check waste (must not worsen)
+      if (totalWaste() > baseWaste) continue;
+      // Check goals
+      if (dayAllOk(d, persons)) {
+        // Capture this best
+        bestDaySel = {};
+        persons.forEach(function(p){
+          SLOTS.forEach(function(s){ bestDaySel[sk(p,d,s)] = SEL[sk(p,d,s)]; });
+        });
+        bestDayOk = true;
+        break;
+      }
+    }
+    if (!bestDayOk) {
+      // Revert to original snapshot (no improvement found)
+      Object.keys(snap).forEach(function(k){ SEL[k] = snap[k]; });
+      invalidateLeftoverCache();
+    } else {
+      // Even the "best" found might have tipped waste in another trip;
+      // verify and revert if so.
+      if (totalWaste() > baseWaste) {
+        Object.keys(snap).forEach(function(k){ SEL[k] = snap[k]; });
+        invalidateLeftoverCache();
+      }
+    }
+  });
 }
 
 function _randomizeWeekCore(randTarget){
