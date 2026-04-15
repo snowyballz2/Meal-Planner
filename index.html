@@ -2904,67 +2904,17 @@ function buildShoppingList(trip,who){
       } else {
         item.bothQty='';
       }
-      // Package optimization: snap totals to clean package boundaries
-      // For packaged ingredients, find the nearest package multiple and adjust
-      // the total to hit it exactly — don't let per-serving snaps create waste
+      // Package-level waste check. hisSum/herSum reflect ACTUAL recipe usage —
+      // we never modify them. The shopping display rounds UP to whole packages
+      // (you can't buy a partial can); the gap between packages-needed and
+      // usage is the real waste, flagged with a warning.
       const db=NUTRI_DB[item.dbKey];
       if(db&&db.pkg){
-        let totalNum=(item.hisSum?item.hisSum.num:0)+(item.herSum?item.herSum.num:0);
+        const totalNum=(item.hisSum?item.hisSum.num:0)+(item.herSum?item.herSum.num:0);
         const unit=(item.hisSum||item.herSum||{}).unit;
         const perPkg=(db.pkg.drained&&(unit==='cup'||unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
         if(perPkg>0&&totalNum>0){
-          // Find the nearest clean package total (round down or up)
-          const roundDown=Math.floor(totalNum/perPkg)*perPkg;
-          const roundUp=Math.ceil(totalNum/perPkg)*perPkg;
-          // Per-ingredient scaling limits: some ingredients tolerate wider ranges
-          let maxDown=0.25, maxUp=0.25; // default ±25%
-          const flexIngr=['black beans canned','cannellini beans canned','marinara','chickpeas roasted'];
-          if(flexIngr.indexOf(item.dbKey)>=0){maxDown=0;maxUp=1.0;} // beans/marinara: no reduce, +100% up
-          if(item.dbKey==='coconut milk'){maxDown=0.50;maxUp=0.75;} // coconut: -50% down, +75% up (1.0 → 1.7 is +70%)
-          let bestTotal=totalNum;
-          let bestWaste=(Math.ceil(totalNum/perPkg)*perPkg)-totalNum;
-          // Try rounding down (buy fewer packages, use a bit less)
-          if(roundDown>0&&maxDown>0){
-            const downChange=Math.abs(totalNum-roundDown);
-            if(downChange>0.01&&downChange<=totalNum*maxDown){
-              const downWaste=0;
-              if(downWaste<bestWaste){bestTotal=roundDown;bestWaste=downWaste;}
-            }
-          }
-          // Try rounding up (buy same packages, use a bit more to fill them)
-          if(roundUp>totalNum){
-            const upChange=roundUp-totalNum;
-            if(upChange>0.01&&upChange<=totalNum*maxUp){
-              const upWaste=0;
-              if(upWaste<bestWaste){bestTotal=roundUp;bestWaste=upWaste;}
-            }
-          }
-
-          if(Math.abs(bestTotal-totalNum)>0.01){
-            // For packaged ingredients in shared meals, split evenly (same pot = same portions)
-            // Otherwise scale proportionally
-            const hasBoth=item.hisSum&&item.herSum;
-            if(hasBoth){
-              // Equal split — both people get the same amount from the shared cook
-              const half=bestTotal/2;
-              item.hisSum.num=half;
-              item.herSum.num=half;
-            } else {
-              const scale=bestTotal/totalNum;
-              if(item.hisSum)item.hisSum.num=item.hisSum.num*scale;
-              if(item.herSum)item.herSum.num=item.herSum.num*scale;
-            }
-            totalNum=bestTotal;
-            // Recompute display quantities — no per-serving snapping here,
-            // the total is what matters for shopping
-            item.hisQty=item.hisSum?fmtQty(item.hisSum):item.hisRaw;
-            item.herQty=item.herSum?fmtQty(item.herSum):item.herRaw;
-            if(item.hisSum&&item.herSum&&item.hisSum.unit===item.herSum.unit){
-              item.bothQty=shopQtyWithCount(item.dbKey,{num:item.hisSum.num+item.herSum.num,unit:item.hisSum.unit});
-            } else if(item.hisSum){item.bothQty=shopQtyWithCount(item.dbKey,item.hisSum);}
-            else if(item.herSum){item.bothQty=shopQtyWithCount(item.dbKey,item.herSum);}
-          }
-          // Calculate waste after optimization.
+          // Calculate waste: how much of the last package isn't used.
           // Long-shelf-life items (egg white carton, etc.) carry over between
           // shopping trips, so partial-pkg usage isn't waste.
           if(!db.pkg.longShelfLife){
