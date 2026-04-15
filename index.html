@@ -1127,13 +1127,19 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     let maxNudgeUp = (db.unit === 'cup') ? 0.25 : (db.unit === 'oz') ? 2 : 0.25;
     let maxNudgeDown = maxNudgeUp;
     let kcalCap = 50;
-    const flexIngr = ['black beans canned','cannellini beans canned','marinara','chickpeas roasted'];
-    if (flexIngr.indexOf(ing.dbKey) >= 0) {
-      // Up to double the current amount; never reduce (beans/marinara are always welcome to add more)
-      maxNudgeUp = currentAmt;
+    // Marinara is low-cal (~66 kcal/cup) — can double usage to fit a jar without much cal impact.
+    if (ing.dbKey === 'marinara') {
+      maxNudgeUp = currentAmt;   // +100%
       maxNudgeDown = 0;
-      kcalCap = 200; // cal impact can be bigger for flex items
-    } else if (ing.dbKey === 'coconut milk') {
+      kcalCap = 200;
+    }
+    // Beans/chickpeas are calorie-dense (~200-230 kcal/cup) — allow only +50%.
+    else if (['black beans canned','cannellini beans canned','chickpeas roasted'].indexOf(ing.dbKey) >= 0) {
+      maxNudgeUp = currentAmt * 0.5;
+      maxNudgeDown = 0;
+      kcalCap = 120;
+    }
+    else if (ing.dbKey === 'coconut milk') {
       maxNudgeUp = currentAmt * 0.75;
       maxNudgeDown = currentAmt * 0.5;
       kcalCap = 200;
