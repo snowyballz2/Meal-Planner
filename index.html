@@ -377,7 +377,7 @@ var NUTRI_DB = {
   // Proteins
   'protein powder':        {kcal:97.5,pro:21, fat:1,   carb:2,   unit:'scoop', brand:'Raw Grass Fed Whey', altUnits:{tbsp:5}},
   'creatine':              {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'scoop', brand:'Promix'},
-  'egg white':             {kcal:133, pro:26.7,fat:0,  carb:0,   unit:'cup', note:'liquid carton; ¼ cup = 2 egg whites; 32oz carton = 4 cups'},
+  'egg white':             {kcal:133, pro:26.7,fat:0,  carb:0,   unit:'cup', note:'liquid carton; ¼ cup = 2 egg whites; 32oz carton = 4 cups', pkg:{size:32,unit:'oz',cups:4,type:'carton',longShelfLife:true}},
   'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each'},
   'chicken breast':        {kcal:31,  pro:5.8,fat:0.7, carb:0,   unit:'oz'},
   'chicken thigh':         {kcal:36,  pro:4.8,fat:1.8, carb:0,   unit:'oz'},
@@ -959,8 +959,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
       amt = Math.round(amt);
       if (amt < 1) amt = 1;
     }
-    // Package items: skip — package nudge handles these
-    else if (db.pkg && db.pkg.type !== 'bulk') {
+    // Package items: skip — package nudge handles these (but not long-shelf-life
+    // items like egg white cartons — they get the normal per-portion snap)
+    else if (db.pkg && db.pkg.type !== 'bulk' && !db.pkg.longShelfLife) {
       // no snap
     }
     // Per-portion snap to unit-appropriate grid
@@ -1091,8 +1092,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     const currentAmt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
     if (currentAmt <= 0) return;
 
-    // Package nudge only — eggs handled by the final snap pass
-    if (!db.pkg || db.pkg.type === 'bulk') return;
+    // Package nudge only — eggs handled by the final snap pass.
+    // Skip long-shelf-life items (egg white) — they don't need per-trip pkg alignment.
+    if (!db.pkg || db.pkg.type === 'bulk' || db.pkg.longShelfLife) return;
 
     // Get package size in the ingredient's unit
     const perPkg = (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
@@ -2774,7 +2776,8 @@ function shopDisplayName(dbKey){return SHOP_DISPLAY_NAMES[dbKey]||(dbKey.charAt(
 function addShopIngredient(items,dbKey,amt,p){
   const db=NUTRI_DB[dbKey];if(!db)return;
   if(dbKey==='water'||amt<=0)return;
-  const shopKey=dbKey==='egg white'?'egg whole':dbKey;
+  // Egg whites are tracked as their own shopping line (liquid cartons), not folded into whole eggs
+  const shopKey=dbKey;
   const shopDb=NUTRI_DB[shopKey]||db;
   const unit=shopDb.unit;
   const isLow=isIfLow(shopKey);
@@ -2950,15 +2953,18 @@ function buildShoppingList(trip,who){
             } else if(item.hisSum){item.bothQty=shopQtyWithCount(item.dbKey,item.hisSum);}
             else if(item.herSum){item.bothQty=shopQtyWithCount(item.dbKey,item.herSum);}
           }
-          // Calculate waste after optimization
-          const pkgsNeeded=Math.ceil(totalNum/perPkg);
-          const totalFromPkgs=pkgsNeeded*perPkg;
-          const wasteAmt=totalFromPkgs-totalNum;
-          const wastePct=(wasteAmt/totalFromPkgs)*100;
-          if(wasteAmt>0.01){
-            const wasteInPkgs=wasteAmt/perPkg;
-            const pkgType=db.pkg.type||'can';
-            item.wasteLabel=fmtFrac(wasteInPkgs)+' '+pkgType+' unused';
+          // Calculate waste after optimization.
+          // Long-shelf-life items (egg white carton, etc.) carry over between
+          // shopping trips, so partial-pkg usage isn't waste.
+          if(!db.pkg.longShelfLife){
+            const pkgsNeeded=Math.ceil(totalNum/perPkg);
+            const totalFromPkgs=pkgsNeeded*perPkg;
+            const wasteAmt=totalFromPkgs-totalNum;
+            if(wasteAmt>0.01){
+              const wasteInPkgs=wasteAmt/perPkg;
+              const pkgType=db.pkg.type||'can';
+              item.wasteLabel=fmtFrac(wasteInPkgs)+' '+pkgType+' unused';
+            }
           }
         }
       }
@@ -4921,6 +4927,8 @@ function _randomizeWeekCore(randTarget){
           m.ingredients.forEach(function(ing) {
             var db = NUTRI_DB[ing.dbKey];
             if (!db || !db.pkg || db.pkg.type === 'bulk') return;
+            // Long-shelf-life items (e.g. egg white cartons) carry between trips — skip waste analysis
+            if (db.pkg.longShelfLife) return;
             if (!totals[ing.dbKey]) totals[ing.dbKey] = {total:0, mealsUsing:[]};
             var amt = (ing.amt || 0) * servings;
             totals[ing.dbKey].total += amt;
