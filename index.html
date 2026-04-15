@@ -1068,8 +1068,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
           const db=NUTRI_DB[item.ing.dbKey];
           const curAmt=adjustments[item.idx];
           if(curAmt<=0)continue;
-          // Don't reduce below original amount (only trim the scaling overshoot)
-          if(curAmt<=item.ing.amt)continue;
+          // Allow reducing below original for fat-role items (avocado 0.5→0.25)
+          // Other roles: don't reduce below original
+          if(item.ing.role!=='fat'&&curAmt<=item.ing.amt)continue;
           // Determine one snap decrement
           let decrement=1;
           if(db.unit==='cup')decrement=0.25;
@@ -1077,7 +1078,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
           else if(db.unit==='each')decrement=0.25;
           if(db.wholeOnly)decrement=1;
           const newAmt=curAmt-decrement;
-          if(newAmt<item.ing.amt*0.5)continue; // don't trim too aggressively
+          // Fat items can go to 0.25 min, others to 50% of original
+          if(item.ing.role==='fat'&&newAmt<0.25)continue;
+          else if(item.ing.role!=='fat'&&newAmt<item.ing.amt*0.5)continue;
           const savedKcal=db.kcal*decrement;
           adjustments[item.idx]=newAmt;
           item.amt=newAmt;
@@ -1772,6 +1775,56 @@ const MEALS=[
     I('granola strawberry',0.25,'carb'),
     I('mixed berries',0.5,'fruit',false),
     I('honey tbsp',1,'condiment')
+  ]},
+
+ // ── Lighter snacks (130-170 kcal range, designed for her budget) ──
+
+ {id:'yogurt_berries_light',label:'Greek yogurt & berries',slots:['snack'],
+  steps:['Scoop yogurt into a bowl. Top with berries.'],
+  him:{fv:'0.25c fruit'},her:{fv:'0.25c fruit'},
+  ingredients:[
+    I('greek yogurt 0%',0.5,'protein'),
+    I('mixed berries',0.25,'fruit',false)
+  ]},
+
+ {id:'egg_orange_light',label:'Hard-boiled egg + orange',slots:['snack'],
+  steps:['Grab 1 pre-boiled egg and an orange.'],
+  him:{fv:'0.75c fruit'},her:{fv:'0.75c fruit'},
+  ingredients:[
+    I('egg whole',1,'protein',false),
+    I('orange',1,'fruit',false)
+  ]},
+
+ {id:'tuna_crackers_light',label:'Tuna pouch + crackers',slots:['snack'],
+  steps:['Open tuna pouch. Eat with crackers.'],
+  him:{},her:{},
+  ingredients:[
+    I('tuna pouch',1,'protein',false),
+    I('triscuit',4,'carb',false)
+  ]},
+
+ {id:'edamame_berries_light',label:'Edamame & mixed berries',slots:['snack'],
+  steps:['Steam or microwave edamame. Serve with berries on the side.'],
+  him:{fv:'0.25c fruit'},her:{fv:'0.25c fruit'},
+  ingredients:[
+    I('edamame',0.5,'protein'),
+    I('mixed berries',0.25,'fruit',false)
+  ]},
+
+ {id:'celery_pb_light',label:'Celery & peanut butter',slots:['snack'],
+  steps:['Cut celery into sticks. Spread peanut butter.'],
+  him:{fv:'0.5c veg'},her:{fv:'0.5c veg'},
+  ingredients:[
+    I('celery',2,'veg',false),
+    I('peanut butter',1,'fat')
+  ]},
+
+ {id:'cucumber_hummus_light',label:'Cucumber & hummus',slots:['snack'],
+  steps:['Slice cucumber. Dip in hummus.'],
+  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  ingredients:[
+    I('cucumber',1,'veg',false),
+    I('hummus',3,'fat')
   ]},
 
  {id:'white_bean_chicken_chili',label:'White Bean Chicken Chili with Poblano & Cheddar',slots:['lunch','dinner'],
