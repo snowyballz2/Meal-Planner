@@ -4586,14 +4586,12 @@ function _randomizeWeekCore(randTarget){
         var calDiff = Math.abs(totalKcal - target);
         var fatPct = totalKcal > 0 ? totalFatCal / totalKcal : 0;
         var fatPenalty = fatPct > 0.30 ? (fatPct - 0.30) * 1000 : 0;
-        var proTarget = PRO_TARGET[p] || 0;
-        var proPenalty = totalPro < proTarget ? (proTarget - totalPro) * 5 : 0; // 5 points per gram short
-        var score = calDiff + fatPenalty + proPenalty;
+        var score = calDiff + fatPenalty;
 
         if (score < bestScore) {
           bestScore = score;
           bestSel = trySel;
-          if (calDiff <= 100 && fatPct <= 0.30 && totalPro >= proTarget) break;
+          if (calDiff <= 100 && fatPct <= 0.30) break;
         }
       }
 
