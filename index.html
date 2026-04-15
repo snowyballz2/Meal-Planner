@@ -3367,32 +3367,18 @@ function balanceDayMacros(p,d,slots){
       }
       changed=true;
     }
-    // Priority 4: veg shortfall (add veg cup, trim carb/fat equivalent kcal)
+    // Priority 4: veg shortfall — just add a veg. No trim: veg is so low-cal
+    // (spinach 7/cup, broccoli 31/cup) that the min 0.25-cup trim of
+    // carb/fat would remove WAY more calories than the veg adds. Accept the
+    // small cal bump (usually 2-30 kcal per day).
     else if(vegGap>0.1){
       const boost=boostFV('veg');
       if(!boost)break;
-      const addKcal=boost.item.db.kcal*boost.inc;
-      const trim=bestTrim(['carb','fat']);
-      // Allow adding veg even without a trim slot (veg kcal is low;
-      // dinner cal corrector will rebalance next render)
       slots[boost.item.slot][boost.item.idx].amt=boost.item.cur+boost.inc;
-      if(trim && addKcal>5){
-        slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
-      }
       changed=true;
     }
-    // Priority 5: fruit shortfall (add fruit cup, trim carb/fat equivalent)
-    else if(fruitGap>0.1){
-      const boost=boostFV('fruit');
-      if(!boost)break;
-      const addKcal=boost.item.db.kcal*boost.inc;
-      const trim=bestTrim(['carb','fat']);
-      slots[boost.item.slot][boost.item.idx].amt=boost.item.cur+boost.inc;
-      if(trim && addKcal>30){
-        slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
-      }
-      changed=true;
-    }
+    // (No fruit boost — can't meaningfully adjust fruit without affecting
+    // macros, and most days hit fruit target naturally.)
 
     if(!changed)break;
   }
