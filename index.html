@@ -964,28 +964,30 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
       amt = totalAmt / totalServings;
     }
     // Solo meal: snap per-person directly
+    // When scaling down, floor (don't round up past original)
+    // When scaling up, ceil (don't round down past original)
     else {
       const unit = db.unit || '';
+      const origAmt = item.ing.amt;
+      const snapFn = amt < origAmt ? Math.floor : amt > origAmt ? Math.ceil : Math.round;
       const isEggWhole = (item.ing.dbKey === 'egg whole');
       if (unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving') {
-        amt = Math.round(amt);
+        amt = snapFn(amt);
         if (amt < 1) amt = 1;
       } else if (unit === 'each' && isEggWhole) {
-        // Egg whole: must be whole number for solo (can't crack half)
-        amt = Math.round(amt);
+        amt = snapFn(amt);
         if (amt < 1) amt = 1;
       } else if (unit === 'each') {
-        // 0.25 increments (quarter avocado, half banana, etc.)
-        amt = Math.round(amt * 4) / 4;
+        amt = snapFn(amt * 4) / 4;
         if (amt < 0.25) amt = 0.25;
       } else if (unit==='clove'||unit==='cloves') {
-        amt = Math.round(amt * 2) / 2;
+        amt = snapFn(amt * 2) / 2;
         if (amt < 0.5) amt = 0.5;
       } else if (db.halfSnap || unit === 'tbsp') {
-        amt = Math.round(amt * 2) / 2;
+        amt = snapFn(amt * 2) / 2;
         if (amt < 0.5) amt = 0.5;
       } else {
-        amt = Math.round(amt * 4) / 4;
+        amt = snapFn(amt * 4) / 4;
         if (amt < 0.25) amt = 0.25;
       }
     }
