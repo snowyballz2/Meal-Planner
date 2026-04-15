@@ -442,12 +442,12 @@ var NUTRI_DB = {
   'acai':                  {kcal:70,  pro:1,  fat:1.5, carb:13,  unit:'cup', brand:'Sambazon', altUnits:{g:115}},
   'lime':                  {kcal:20,  pro:0.5,fat:0.1, carb:7,   unit:'each'},
   // Fats & oils
-  'sesame oil':            {kcal:120, pro:0,  fat:13.5,carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.5},
+  'sesame oil':            {kcal:120, pro:0,  fat:13.5,carb:0,   unit:'tbsp', halfSnap:true},
   'almond butter':         {kcal:95,  pro:3.5,fat:8.5, carb:3.5, unit:'tbsp', brand:'365', altUnits:{g:32}, minAmt:0.5},
   'peanut butter':         {kcal:90,  pro:4,  fat:7.5, carb:3.5, unit:'tbsp', brand:'Kirkland Organic', altUnits:{g:32}, minAmt:0.5},
   'avocado':               {kcal:320, pro:4,  fat:30,  carb:16,  unit:'each', minAmt:0.5},
-  'avocado oil':           {kcal:120, pro:0,  fat:14,  carb:0,   unit:'tbsp', brand:'Chosen', altUnits:{ml:15}, halfSnap:true, minAmt:0.5},
-  'olive oil':             {kcal:119, pro:0,  fat:13.5,carb:0,   unit:'tbsp', minAmt:0.5},
+  'avocado oil':           {kcal:120, pro:0,  fat:14,  carb:0,   unit:'tbsp', brand:'Chosen', altUnits:{ml:15}, halfSnap:true},
+  'olive oil':             {kcal:119, pro:0,  fat:13.5,carb:0,   unit:'tbsp'},
   // Seeds & extras
   'chia seeds':            {kcal:58,  pro:2,  fat:3.7, carb:5,   unit:'tbsp'},
   'sesame seeds':          {kcal:51,  pro:1.5,fat:4.5, carb:2.1, unit:'tbsp', halfSnap:true},
@@ -801,6 +801,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
   // ── STEP 1: Uniform scale ──
   // Single multiplier for ALL scalable ingredients — preserves ratios perfectly.
   const adjustments = {};
+  const fatDropped = {}; // items intentionally zeroed by fat reduction — snap pass won't restore
   let totalScalableKcal = 0;
   scalable.forEach(function(item) {
     totalScalableKcal += item.calPerUnit * item.ing.amt;
@@ -837,45 +838,67 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     adjustments[item.idx] = newAmt;
   });
 
-  // ── STEP 2: Egg whole → egg white swap (fat reduction) ──
-  // Only if macroHints.maxFatPct is set and current fat% exceeds it.
-  // This is the ONLY post-scale modification.
-  if (macroHints && macroHints.maxFatPct) {
-    // Calculate current adjusted macros
-    let adjFat = 0, adjKcal = 0;
-    ingredients.forEach(function(ing, idx) {
-      const db = NUTRI_DB[ing.dbKey]; if (!db) return;
-      const amt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
-      adjFat += db.fat * amt;
-      adjKcal += db.kcal * amt;
-    });
-    const fatPct = adjKcal > 0 ? (adjFat * 9) / adjKcal : 0;
-
-    if (fatPct > macroHints.maxFatPct) {
-      let eggWholeIdx = -1, eggWhiteIdx = -1;
-      ingredients.forEach(function(ing, idx) {
-        if (ing.dbKey === 'egg whole') eggWholeIdx = idx;
-        if (ing.dbKey === 'egg white') eggWhiteIdx = idx;
+  // ── STEP 2: Fat reduction — drop highest fat contributors if fat% over limit ──
+  // Only when scaling DOWN significantly — small adjustments shouldn't trigger fat drops
+  // uniformScale < 0.85 means reducing by 15%+ (e.g. 700cal recipe for 580cal budget)
+  if (macroHints && macroHints.maxFatPct && uniformScale < 0.85) {
+    // Recalculate fat% after step 1
+    function calcFatPct() {
+      let f=0,k=0;
+      ingredients.forEach(function(ing,idx){
+        const db=NUTRI_DB[ing.dbKey];if(!db)return;
+        const amt=adjustments[idx]!==undefined?adjustments[idx]:ing.amt;
+        f+=db.fat*amt;k+=db.kcal*amt;
       });
-      if (eggWholeIdx >= 0) {
-        const wholeAmt = adjustments[eggWholeIdx] !== undefined ? adjustments[eggWholeIdx] : ingredients[eggWholeIdx].amt;
-        if (wholeAmt > 0) {
-          const wholeDb = NUTRI_DB['egg whole'];
-          const whiteDb = NUTRI_DB['egg white'];
-          const fatSavedPerSwap = (wholeDb.fat * 9) - (whiteDb.fat * 9);
-          const excessFatCal = (fatPct - macroHints.maxFatPct) * adjKcal;
-          const swapsNeeded = Math.ceil(excessFatCal / fatSavedPerSwap);
-          const swapsToMake = Math.min(swapsNeeded, wholeAmt);
-          if (swapsToMake > 0) {
-            adjustments[eggWholeIdx] = wholeAmt - swapsToMake;
-            if (eggWhiteIdx >= 0) {
-              const whiteAmt = adjustments[eggWhiteIdx] !== undefined ? adjustments[eggWhiteIdx] : ingredients[eggWhiteIdx].amt;
-              adjustments[eggWhiteIdx] = whiteAmt + swapsToMake;
+      return k>0?(f*9)/k:0;
+    }
+
+    // Drop highest fat-calorie scalable ingredients one at a time until fat% is under limit
+    // fatDropped declared at function scope — tracks items snap pass should not restore
+    while (calcFatPct() > macroHints.maxFatPct + 0.03) { // 3% tolerance
+      let worstIdx=-1, worstFatCal=0;
+      scalable.forEach(function(item) {
+        const db=NUTRI_DB[item.ing.dbKey];if(!db||db.fat<=0)return;
+        const amt=adjustments[item.idx]!==undefined?adjustments[item.idx]:item.ing.amt;
+        if(amt<=0)return;
+        if(item.role==='veg')return;
+        if(item.role==='protein')return;
+        if(item.role==='carb')return;
+        const fatCal=db.fat*amt*9;
+        if(fatCal>worstFatCal){worstFatCal=fatCal;worstIdx=item.idx;}
+      });
+      if(worstIdx<0)break;
+      adjustments[worstIdx]=0;
+      fatDropped[worstIdx]=true;
+    }
+
+    // For breakfast meals with eggs: if still over, swap egg whole → egg white
+    if (calcFatPct() > macroHints.maxFatPct && (slot==='breakfast'||slot==='snack')) {
+      let eggWholeIdx=-1, eggWhiteIdx=-1;
+      ingredients.forEach(function(ing,idx){
+        if(ing.dbKey==='egg whole')eggWholeIdx=idx;
+        if(ing.dbKey==='egg white')eggWhiteIdx=idx;
+      });
+      if(eggWholeIdx>=0){
+        const wholeAmt=adjustments[eggWholeIdx]!==undefined?adjustments[eggWholeIdx]:ingredients[eggWholeIdx].amt;
+        if(wholeAmt>0){
+          const fatSaved=(NUTRI_DB['egg whole'].fat*9)-(NUTRI_DB['egg white'].fat*9);
+          let fatPctNow=calcFatPct();
+          let adjKcalNow=0;
+          ingredients.forEach(function(ing,idx){const db=NUTRI_DB[ing.dbKey];if(!db)return;adjKcalNow+=db.kcal*(adjustments[idx]!==undefined?adjustments[idx]:ing.amt);});
+          const excessFatCal=(fatPctNow-macroHints.maxFatPct)*adjKcalNow;
+          const swaps=Math.min(Math.ceil(excessFatCal/fatSaved),wholeAmt);
+          if(swaps>0){
+            adjustments[eggWholeIdx]=wholeAmt-swaps;
+            if(eggWhiteIdx>=0){
+              adjustments[eggWhiteIdx]=(adjustments[eggWhiteIdx]!==undefined?adjustments[eggWhiteIdx]:ingredients[eggWhiteIdx].amt)+swaps;
             }
           }
         }
       }
     }
+
+    // Backfill moved to after snap pass (below)
   }
 
   // Calculate remaining calorie gap (needed by second-pass removal and package nudge)
@@ -893,6 +916,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     const db = NUTRI_DB[item.ing.dbKey];
     if (!db) return;
     let amt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
+
+    // Skip items intentionally dropped by fat reduction
+    if (fatDropped[item.idx]) { adjustments[item.idx] = 0; return; }
 
     // wholeOnly: always whole per-person (toast, tortilla, rxbar, tuna pouch, fish oil)
     if (db.wholeOnly) {
@@ -958,9 +984,46 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
       }
     }
 
-    if (db.minAmt && amt < db.minAmt) amt = db.minAmt;
+    // Enforce minAmt — but not for items intentionally dropped by fat reduction
+    if (db.minAmt && amt < db.minAmt && !fatDropped[item.idx]) amt = db.minAmt;
     adjustments[item.idx] = amt;
   });
+
+  // ── BACKFILL: after fat drops + snap, add protein/carbs to fill calorie gap ──
+  if (macroHints && macroHints.slotKcalBudget && uniformScale < 0.85) {
+    let postSnapKcal=0;
+    ingredients.forEach(function(ing,idx){
+      const db=NUTRI_DB[ing.dbKey];if(!db)return;
+      postSnapKcal+=db.kcal*(adjustments[idx]!==undefined?adjustments[idx]:ing.amt);
+    });
+    let kcalGap=macroHints.slotKcalBudget-postSnapKcal;
+    if(kcalGap>25){
+      const fillItems=scalable.filter(function(item){
+        return (item.role==='protein'||item.role==='carb')&&!fatDropped[item.idx];
+      }).sort(function(a,b){return a.calPerUnit-b.calPerUnit;});
+      let safety=20;
+      while(kcalGap>25&&fillItems.length&&safety-->0){
+        let added=false;
+        for(let fi=0;fi<fillItems.length;fi++){
+          const item=fillItems[fi];
+          const db=NUTRI_DB[item.ing.dbKey];
+          const curAmt=adjustments[item.idx]!==undefined?adjustments[item.idx]:item.ing.amt;
+          let increment=1;
+          if(db.unit==='cup')increment=0.25;
+          else if(db.unit==='tbsp')increment=0.5;
+          if(db.wholeOnly)increment=1;
+          const addKcal=db.kcal*increment;
+          if(addKcal>0&&addKcal<=kcalGap+30){
+            adjustments[item.idx]=curAmt+increment;
+            kcalGap-=addKcal;
+            added=true;
+            break;
+          }
+        }
+        if(!added)break;
+      }
+    }
+  }
 
   // Package-aware nudge: after calorie scaling, nudge packaged ingredients toward
   // clean package boundaries. Uses the same flex ranges as the shopping optimizer.
