@@ -963,13 +963,11 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
       }
       amt = totalAmt / totalServings;
     }
-    // Solo meal: snap per-person directly
-    // When scaling down, floor (don't round up past original)
-    // When scaling up, ceil (don't round down past original)
+    // Solo meal: snap per-person to nearest increment
+    // Trim pass corrects overshoot, backfill corrects undershoot
     else {
       const unit = db.unit || '';
-      const origAmt = item.ing.amt;
-      const snapFn = amt < origAmt ? Math.floor : amt > origAmt ? Math.ceil : Math.round;
+      const snapFn = Math.round;
       const isEggWhole = (item.ing.dbKey === 'egg whole');
       if (unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving') {
         amt = snapFn(amt);
@@ -998,7 +996,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
   });
 
   // ── BACKFILL: after fat drops + snap, add protein/carbs to fill calorie gap ──
-  if (macroHints && macroHints.slotKcalBudget && uniformScale < 0.85) {
+  if (macroHints && macroHints.slotKcalBudget) {
     let postSnapKcal=0;
     ingredients.forEach(function(ing,idx){
       const db=NUTRI_DB[ing.dbKey];if(!db)return;
