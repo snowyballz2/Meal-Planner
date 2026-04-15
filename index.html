@@ -3614,7 +3614,7 @@ function calcTotals(p,d){
     }
   });
 
-  return{kcal:kcal,pro:pro,fat:fat,carb:carb};
+  return{kcal:Math.round(kcal),pro:Math.round(pro),fat:Math.round(fat),carb:Math.round(carb)};
 }
 
 // Total cups of vegetables and fruit for a person on a given day,
