@@ -1215,7 +1215,7 @@ const MEALS=[
   ]},
 
  {id:'egg_scramble',label:'Egg white scramble & toast',slots:['breakfast'],
-  steps:['Heat avocado oil in a non-stick pan over medium heat.','Add diced bell pepper and cook 2 min, stirring occasionally.','Add spinach and stir until just wilted, about 1 min.','Whisk egg whites and whole egg together with a pinch of garlic powder and black pepper.','Pour eggs over the veg. Let set 10 sec, then gently fold and scramble until just cooked, 3–4 min. Remove from heat while still slightly glossy — they carry-over cook.','Toast bread. Slice avocado. Plate everything together.'],
+  steps:['Heat non-stick pan over medium heat with light oil spray.','Add diced bell pepper and cook 2 min, stirring occasionally.','Add spinach and stir until just wilted, about 1 min.','Whisk egg whites and whole egg together with a pinch of garlic powder and black pepper.','Pour eggs over the veg. Let set 10 sec, then gently fold and scramble until just cooked, 3–4 min. Remove from heat while still slightly glossy — they carry-over cook.','Toast bread. Plate everything together.'],
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
     I('egg white',0.75,'protein'),
@@ -1223,8 +1223,6 @@ const MEALS=[
     I('baby spinach',1,'veg'),
     I('bell pepper',0.25,'veg'),
     I('whole wheat toast',2,'carb'),
-    I('avocado',0.5,'fat'),
-    I('avocado oil',0.5,'fat'),
     I('garlic powder',0.5,'fixed',false),
     I('black pepper',0.5,'fixed',false)
   ]},
@@ -1249,7 +1247,7 @@ const MEALS=[
     I('water',0.75,'liquid'),
     I('chia seeds',1,'fat'),
     I('mixed berries',0.5,'fruit',false),
-    I('almond butter',1,'fat')
+    I('almond butter',0.5,'fat')
   ]},
 
  {id:'protein_pancakes',label:'Protein pancakes',slots:['breakfast'],
@@ -1282,7 +1280,7 @@ const MEALS=[
   ]},
 
  {id:'egg_omelet',label:'Egg & kale omelet with toast',slots:['breakfast'],
-  steps:['Whisk eggs together with garlic powder, black pepper.','Heat avocado oil in a non-stick pan over medium heat. Add bell pepper 2 min.','Add kale, stir until wilted.','Pour egg mixture over veg. Let cook undisturbed 1–2 min.','When center is almost set, fold omelet in half.','Serve immediately with toast.'],
+  steps:['Whisk eggs together with garlic powder, black pepper.','Heat non-stick pan over medium heat with light oil spray. Add bell pepper 2 min.','Add kale, stir until wilted.','Pour egg mixture over veg. Let cook undisturbed 1–2 min.','When center is almost set, fold omelet in half.','Serve immediately with toast.'],
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
     I('egg whole',2,'protein'),
@@ -1290,7 +1288,6 @@ const MEALS=[
     I('kale',1,'veg'),
     I('bell pepper',0.25,'veg'),
     I('whole wheat toast',2,'carb'),
-    I('avocado oil',0.5,'fat'),
     I('garlic powder',0.5,'fixed',false),
     I('black pepper',0.5,'fixed',false)
   ]},
@@ -1305,33 +1302,30 @@ const MEALS=[
     I('carrots',0.25,'veg'),
     I('brown rice cooked',0.5,'carb'),
     I('soy sauce',0.33,'condiment',false),
-    I('sesame oil',0.5,'fat'),
     I('gochujang',1,'condiment',false),
     I('rice vinegar',1,'condiment',false)
   ]},
 
  {id:'thai_tofu_scramble',label:'Thai-spiced tofu scramble & toast',slots:['breakfast'],
-  steps:['Press tofu and crumble. Heat avocado oil. Sauté carrots 2 min.','Add crumbled tofu. Cook 4–5 min until golden.','Add spinach, soy sauce. Stir until wilted. Serve with toast.'],
+  steps:['Press tofu and crumble. Heat non-stick pan with light oil spray. Sauté carrots 2 min.','Add crumbled tofu. Cook 4–5 min until golden.','Add spinach, soy sauce. Stir until wilted. Serve with toast.'],
   him:{fv:'1.5c veg'},her:{fv:'1c veg'},
   ingredients:[
     I('tofu firm',7,'protein'),
     I('baby spinach',1.5,'veg'),
     I('carrots',0.5,'veg'),
     I('whole wheat toast',2,'carb'),
-    I('avocado oil',0.5,'fat'),
     I('soy sauce',0.5,'condiment',false)
   ]},
 
  {id:'viet_noodle_bowl',label:'Vietnamese egg & noodle bowl',slots:['breakfast'],
-  steps:['Soft-boil eggs: simmer 6–7 min, ice bath, peel.','Soak vermicelli in hot water 5 min. Drain.','Wilt spinach + carrots in sesame oil 1–2 min.','Assemble: noodles, veg, halved eggs. Drizzle soy, vinegar.'],
+  steps:['Soft-boil eggs: simmer 6–7 min, ice bath, peel.','Soak vermicelli in hot water 5 min. Drain.','Wilt spinach + carrots in a non-stick pan 1–2 min.','Assemble: noodles, veg, halved eggs. Drizzle soy, vinegar.'],
   him:{fv:'1.5c veg'},her:{fv:'1c veg'},
   ingredients:[
-    I('egg whole',3,'protein',false),
+    I('egg whole',2,'protein',false),
     I('rice vermicelli cooked',1.25,'carb'),
     I('baby spinach',1,'veg'),
     I('carrots',0.5,'veg'),
     I('soy sauce',1,'condiment',false),
-    I('sesame oil',0.5,'fat'),
     I('rice vinegar',1,'condiment',false)
   ]},
 
@@ -1344,8 +1338,7 @@ const MEALS=[
     I('egg whole',1,'protein'),
     I('egg white',0.25,'protein'),
     I('kale',1,'veg'),
-    I('soy sauce',0.33,'condiment',false),
-    I('sesame oil',0.5,'fat')
+    I('soy sauce',0.33,'condiment',false)
   ]},
 
  {id:'quinoa_bowl',label:'Grilled chicken & quinoa bowl',slots:['lunch','dinner'],
