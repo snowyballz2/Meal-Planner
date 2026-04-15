@@ -808,8 +808,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
   var isSharedOrLeftover = totalServingsForSnap > 1;
   if (Math.abs(targetDelta) < 5) return ingredients.map(function(i){return {ing:i,newAmt:i.amt};});
 
-  // If the recipe is close to budget, leave it unchanged
-  // Threshold: 15% of base kcal OR 80 kcal, whichever is smaller
+  // If the recipe is close to budget, leave it unchanged.
+  // Per-slot threshold (15% of base kcal OR 80 kcal). Day-level correction below
+  // handles any residual mismatch.
   var baseKcal = 0;
   ingredients.forEach(function(ing) {
     var db = NUTRI_DB[ing.dbKey]; if (!db) return;
@@ -998,6 +999,10 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     adjustments[item.idx] = amt;
   });
 
+  // Effective target: baseKcal + targetDelta (respects day-level correction
+  // when caller has adjusted the delta away from the raw slot budget).
+  const effectiveBudget = baseKcal + targetDelta;
+
   // ── BACKFILL: after fat drops + snap, add protein/carbs to fill calorie gap ──
   if (macroHints && macroHints.slotKcalBudget) {
     let postSnapKcal=0;
@@ -1005,7 +1010,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
       const db=NUTRI_DB[ing.dbKey];if(!db)return;
       postSnapKcal+=db.kcal*(adjustments[idx]!==undefined?adjustments[idx]:ing.amt);
     });
-    let kcalGap=macroHints.slotKcalBudget-postSnapKcal;
+    let kcalGap=effectiveBudget-postSnapKcal;
     if(kcalGap>25){
       const fillItems=scalable.filter(function(item){
         return (item.role==='protein'||item.role==='carb')&&!fatDropped[item.idx];
@@ -1041,7 +1046,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
       const db=NUTRI_DB[ing.dbKey];if(!db)return;
       postKcal+=db.kcal*(adjustments[idx]!==undefined?adjustments[idx]:ing.amt);
     });
-    let overBy=postKcal-macroHints.slotKcalBudget;
+    let overBy=postKcal-effectiveBudget;
     if(overBy>50){
       // Sort scalable items by calorie contribution (highest first)
       const trimItems=scalable.filter(function(item){
@@ -1146,8 +1151,8 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
   });
 }
 
-function computeAdjustedMacros(ingredients, targetDelta, slot) {
-  const adjusted = adjustIngredients(ingredients, targetDelta, slot);
+function computeAdjustedMacros(ingredients, targetDelta, slot, macroHints, mealTotalServings) {
+  const adjusted = adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotalServings);
   let kcal=0, pro=0, fat=0, carb=0;
   adjusted.forEach(function(a) {
     const db = NUTRI_DB[a.ing.dbKey];
@@ -3357,11 +3362,13 @@ function calcTotals(p,d){
     // Adjustable slots: target their budget
     const ingr=applyOverrides(port,p,d,s);
     if(ingr && ingr.length && ingr[0].dbKey!==undefined){
-      const baseKcal=computeMacros(ingr).kcal;
-      const budget=getSlotBudget(p,d,s);
-      const delta=budget-baseKcal;
+      // Use getSlotAdjustment so day-level correction (dinner absorbs residual) applies
+      const delta=getSlotAdjustment(p,d,s);
       if(Math.abs(delta)>10){
-        const m=computeAdjustedMacros(ingr,delta,s);
+        const hints=buildMacroHints(p,d,s);
+        const lo=(typeof computeLeftovers==='function')?computeLeftovers()[sk(p,d,s)]:null;
+        const mts=(lo&&!lo.isLeftover)?(lo.totalServings||lo.servings||1):1;
+        const m=computeAdjustedMacros(ingr,delta,s,hints,mts);
         kcal+=m.kcal;pro+=m.pro;fat+=m.fat;carb+=m.carb;
       } else {
         const m=computeMacros(ingr);
@@ -3429,6 +3436,45 @@ function getSlotAdjustment(p,d,s){
 
   const baseKcal=computeMacros(ingr).kcal;
   const budget=getSlotBudget(p,d,s);
+
+  // DAY-LEVEL CORRECTION: dinner absorbs the day's residual so the daily
+  // total hits CAL_BASE exactly (modulo dinner's own snap error). Other
+  // slots can miss their individual budget (from skip-if-close, snap,
+  // package nudge, etc.) but dinner compensates.
+  if(s==='dinner'&&getAdjTargets(p,d).dinner){
+    let othersKcal=getShakeKcal(p,d);
+    const leftovers=(typeof computeLeftovers==='function')?computeLeftovers():{};
+    ['breakfast','lunch','snack'].forEach(function(other){
+      const okey=sk(p,d,other);
+      if(SKIPPED[okey])return;
+      if(EAT_OUT[okey]){othersKcal+=(EAT_OUT[okey].kcal||0);return;}
+      const oPort=getPort(p,d,other); if(!oPort)return;
+      const oIngr=applyOverrides(oPort,p,d,other);
+      if(!oIngr||!oIngr.length||oIngr[0].dbKey===undefined)return;
+      const oBase=computeMacros(oIngr).kcal;
+      const oBudget=getSlotBudget(p,d,other);
+      let oDelta=oBudget-oBase;
+      if(Math.abs(oDelta)<=10)oDelta=0;
+      const oHints=buildMacroHints(p,d,other);
+      const oLo=leftovers[okey];
+      const oMts=(oLo&&!oLo.isLeftover)?(oLo.totalServings||oLo.servings||1):1;
+      const oResult=(oDelta!==0)?adjustIngredients(oIngr,oDelta,other,oHints,oMts)
+                                :oIngr.map(function(i){return {ing:i,newAmt:i.amt};});
+      oResult.forEach(function(a){
+        const oDb=NUTRI_DB[a.ing.dbKey];
+        if(oDb)othersKcal+=oDb.kcal*a.newAmt;
+      });
+    });
+    // Late snack is user-entered macros, include if present
+    const lateSnack=LATE_SNACK[pk(p,d)];
+    if(lateSnack&&lateSnack.kcal)othersKcal+=lateSnack.kcal;
+
+    const dinnerTarget=CAL_BASE[p]-othersKcal;
+    const corrDelta=dinnerTarget-baseKcal;
+    if(Math.abs(corrDelta)<=10)return 0;
+    return corrDelta;
+  }
+
   const delta=budget-baseKcal;
   if(Math.abs(delta)<=10)return 0;
   return delta;
