@@ -1495,7 +1495,7 @@ const MEALS=[
   steps:['Add silken tofu, mixed berries, banana, protein powder, and milk to a blender.','Blend until smooth. Pour and drink.'],
   him:{fv:'1.25c fruit'},her:{fv:'1.25c fruit'},
   ingredients:[
-    I('silken tofu',5,'protein'),
+    I('silken tofu',7,'protein'),
     I('mixed berries',0.75,'fruit',false),
     I('banana',0.5,'fruit',false),
     I('protein powder',1,'protein'),
@@ -5072,14 +5072,13 @@ function _randomizeWeekCore(randTarget){
         }
       }
 
-      // ── Strategy C: Remove package meals if waste is severe AND can't be resolved ──
-      // Only triggers when:
-      //  1. The package waste is severe (> 50% of package wasted), AND
-      //  2. Removing the meal actually reduces TOTAL trip waste (not just this package's).
-      // This preserves meal variety for meals like silken_tofu_smoothie that create
-      // modest waste when unpaired — the user would rather eat the meal with 2 oz
-      // waste than lose variety entirely.
-      if (!resolved && pkg.mealsUsing.length > 0 && pkg.waste > pkg.perPkg * 0.5) {
+      // ── Strategy C: Remove package meals if waste can't be resolved ──
+      // Fires on ANY residual waste, but only removes a meal if the removal
+      // STRICTLY reduces total trip waste. This means:
+      //  - Unpairable singles get removed (removal reduces waste → zero).
+      //  - Pairable meals with acceptable combined waste are preserved
+      //    (removal would INCREASE waste → no action).
+      if (!resolved && pkg.mealsUsing.length > 0) {
         // Find package meals that appear only once (no leftover pairing)
         var singleUse = [];
         pkg.mealsUsing.forEach(function(mu) {
