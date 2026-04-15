@@ -381,14 +381,14 @@ var NUTRI_DB = {
   'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each'},
   'chicken breast':        {kcal:31,  pro:5.8,fat:0.7, carb:0,   unit:'oz'},
   'chicken thigh':         {kcal:36,  pro:4.8,fat:1.8, carb:0,   unit:'oz'},
-  'ground turkey 93':      {kcal:38,  pro:5.3,fat:1.8, carb:0,   unit:'oz',minAmt:8,pkg:{size:16,unit:'oz',drained:16,type:'bulk'}},
+  'ground turkey 93':      {kcal:38,  pro:5.3,fat:1.8, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'bulk'}},
   'salmon':                {kcal:52,  pro:5.7,fat:3.1, carb:0,   unit:'oz'},
   'halibut':               {kcal:26,  pro:5.3,fat:0.4, carb:0,   unit:'oz'},
   'filet mignon':          {kcal:57,  pro:6.6,fat:3.2, carb:0,   unit:'oz'},
   'shrimp':                {kcal:24,  pro:5.7,fat:0.3, carb:0,   unit:'oz'},
   'canned tuna':{kcal:27.5,pro:6.5,fat:0.25,carb:0,unit:'oz',brand:'Starkist',altUnits:{can:4,g:113},pkg:{size:5,unit:'oz',drained:4}},
-  'tofu firm':             {kcal:20,  pro:2.2,fat:1.1, carb:0.5, unit:'oz',minAmt:7,pkg:{size:14,unit:'oz',drained:14}},
-  'silken tofu':           {kcal:15,  pro:1.7,fat:0.7, carb:0.3, unit:'oz', brand:'Nature\'s Tofu', altUnits:{g:85},minAmt:3.5,pkg:{size:14,unit:'oz',drained:14}},
+  'tofu firm':             {kcal:20,  pro:2.2,fat:1.1, carb:0.5, unit:'oz',pkg:{size:14,unit:'oz',drained:14}},
+  'silken tofu':           {kcal:15,  pro:1.7,fat:0.7, carb:0.3, unit:'oz', brand:'Nature\'s Tofu', altUnits:{g:85},pkg:{size:14,unit:'oz',drained:14}},
   // Dairy & alt
   'greek yogurt 0%':       {kcal:120, pro:24, fat:0,   carb:7,   unit:'cup', brand:'Fage', altUnits:{g:227}, minAmt:0.5},
   'cashew milk (sweetened)':{kcal:130, pro:4,  fat:10,  carb:8,   unit:'cup', brand:'Elmhurst', altUnits:{floz:8,ml:240}},
@@ -484,7 +484,7 @@ var NUTRI_DB = {
   'lemon':                 {kcal:12,  pro:0.5,fat:0.1, carb:4,   unit:'each'},
   'ginger':                {kcal:6,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', halfSnap:true},
   'lemongrass':            {kcal:5,   pro:0,  fat:0,   carb:1.2, unit:'tbsp'},
-  'ground chicken':        {kcal:35,  pro:5.8,fat:1.3, carb:0,   unit:'oz',minAmt:8,pkg:{size:16,unit:'oz',drained:16,type:'bulk'}},
+  'ground chicken':        {kcal:35,  pro:5.8,fat:1.3, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'bulk'}},
   'oyster sauce':          {kcal:9,   pro:0.3,fat:0,   carb:2,   unit:'tbsp'},
   'dark soy sauce':        {kcal:10,  pro:0.9,fat:0,   carb:1.5, unit:'tbsp'},
   'tahini':                {kcal:89,  pro:2.6,fat:8,   carb:3,   unit:'tbsp'},
@@ -822,11 +822,8 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     let newAmt = item.ing.amt * uniformScale;
     const db = NUTRI_DB[item.ing.dbKey];
 
-    // Fat-heavy items (role:fat OR >25% fat calories): freeze when scaling UP
-    const fatFrac = db && db.kcal > 0 ? (db.fat * 9 / db.kcal) : 0;
-    if ((item.role === 'fat' || fatFrac > 0.25) && uniformScale > 1) {
-      newAmt = item.ing.amt;
-    }
+    // No fat freeze — uniform scaling preserves ratios (fat% stays same)
+    // The fat drop in step 2 handles cases where fat% is too high after scaling down
 
     // Veg: never reduce below original
     if (item.role === 'veg' && newAmt < item.ing.amt) {
