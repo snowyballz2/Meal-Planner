@@ -5034,9 +5034,9 @@ function randomizeWeek(target){
 function applyTripFlexScaling(randTarget){
   const FLEX = {
     'marinara':                 {maxUp:1.0,  maxDown:0,    kcalCap:200},
-    'black beans canned':       {maxUp:0.5,  maxDown:0,    kcalCap:120},
-    'cannellini beans canned':  {maxUp:0.5,  maxDown:0,    kcalCap:120},
-    'chickpeas roasted':        {maxUp:0.5,  maxDown:0,    kcalCap:120},
+    'black beans canned':       {maxUp:0.75, maxDown:0,    kcalCap:180},
+    'cannellini beans canned':  {maxUp:0.75, maxDown:0,    kcalCap:180},
+    'chickpeas roasted':        {maxUp:0.75, maxDown:0,    kcalCap:180},
     'coconut milk':             {maxUp:0.75, maxDown:0.5,  kcalCap:200}
   };
   const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
@@ -5100,28 +5100,96 @@ function applyTripFlexScaling(randTarget){
       }
       if (chosenScale === null || Math.abs(chosenScale - 1) < 0.001) return;
 
-      // Calorie safety check: scaling must not push any day's total kcal past ±100
+      // Sanity check: ensure each affected meal has enough scalable carb/fat
+      // capacity for the day-balancer to trim the added calories back. If a
+      // meal is already rock-bottom on carb/fat, skip.
       const dayDeltaKcal = {};
       usages.forEach(function(u){
         const perServAddKcal = (chosenScale - 1) * u.curAmt * db.kcal;
         const dayKey = u.p + '_' + u.d;
         dayDeltaKcal[dayKey] = (dayDeltaKcal[dayKey] || 0) + perServAddKcal;
       });
-      let safe = true;
+      let hasTrimCapacity = true;
       Object.keys(dayDeltaKcal).forEach(function(k){
         const p = k.split('_')[0], d = k.split('_')[1];
-        const current = calcTotals(p, d).kcal;
-        const target = CAL_BASE[p];
-        const after = current + dayDeltaKcal[k];
-        if (after > target + 100 || after < target - 100) safe = false;
+        const addKcal = dayDeltaKcal[k];
+        if (addKcal <= 0) return;
+        // Count trimable scalable carb/fat kcal across the day's slots
+        let trimable = 0;
+        SLOTS.forEach(function(s){
+          if (s === 'late_snack' || s === 'shake') return;
+          if (SKIPPED[sk(p,d,s)] || EAT_OUT[sk(p,d,s)]) return;
+          const bal = getBalancedSlotIngredients(p,d,s);
+          if (!bal) return;
+          bal.forEach(function(i){
+            if (i.scalable === false) return;
+            if (i.role !== 'carb' && i.role !== 'fat') return;
+            const idb = NUTRI_DB[i.dbKey];
+            if (!idb) return;
+            // Allowable trim: down to 50% of original amt for carb, to 0.25 for fat
+            const minAmt = (i.role === 'fat') ? 0.25 : (i.origAmt || i.amt) * 0.5;
+            const trimAmt = Math.max(0, i.amt - minAmt);
+            trimable += trimAmt * idb.kcal;
+          });
+        });
+        // Need trim capacity to absorb at least the added kcal (with some slack)
+        if (trimable < addKcal * 0.75) hasTrimCapacity = false;
       });
-      if (!safe) return;
+      if (!hasTrimCapacity) return;
 
-      // Apply overrides
+      // Snapshot each affected slot's current override for this ingredient
+      // so we can revert if the scale breaks any primary daily goal.
+      const snapshot = usages.map(function(u){
+        const ovs = getOverrides(u.p, u.d, u.s);
+        const existing = ovs ? ovs.find(function(o){return o.idx === u.idx;}) : null;
+        return {u:u, prevAmt: existing && existing.amt !== undefined ? existing.amt : null};
+      });
+
+      // Apply overrides. The day-balancer re-runs (cache invalidated) and will
+      // trim carb/fat to absorb the added kcal.
       usages.forEach(function(u){
         setOverride(u.p, u.d, u.s, u.idx, 'amt', u.curAmt * chosenScale);
       });
       invalidateLeftoverCache();
+
+      // Verify every primary goal on every affected day still holds post-scale.
+      let goalsOk = true;
+      const affectedDays = {};
+      usages.forEach(function(u){ affectedDays[u.p + '|' + u.d] = true; });
+      Object.keys(affectedDays).forEach(function(key){
+        if (!goalsOk) return;
+        const parts = key.split('|');
+        const p = parts[0], d = parts[1];
+        const t = calcTotals(p, d);
+        const fv = computeDailyFV(p, d);
+        const mk = t.pro*4 + t.fat*9 + t.carb*4;
+        const calOk = Math.abs(t.kcal - CAL_BASE[p]) <= 100;
+        const proOk = t.pro >= (PRO_TARGET[p]||0);
+        const carbOk = mk === 0 || (t.carb*4)/mk <= 0.55;
+        const fatOk = mk === 0 || (t.fat*9)/mk <= 0.30;
+        const vegOk = fv.veg >= 3;
+        const fruitOk = fv.fruit >= 1;
+        if (!(calOk && proOk && carbOk && fatOk && vegOk && fruitOk)) goalsOk = false;
+      });
+
+      if (!goalsOk) {
+        // Revert: restore prior per-ingredient override amount or remove it entirely
+        snapshot.forEach(function(s){
+          const u = s.u;
+          if (s.prevAmt !== null) {
+            setOverride(u.p, u.d, u.s, u.idx, 'amt', s.prevAmt);
+          } else {
+            // Remove just this idx from the slot's override list
+            const ovs = getOverrides(u.p, u.d, u.s);
+            if (ovs) {
+              const filtered = ovs.filter(function(o){return o.idx !== u.idx;});
+              if (filtered.length) OVERRIDES[sk(u.p,u.d,u.s)] = filtered;
+              else delete OVERRIDES[sk(u.p,u.d,u.s)];
+            }
+          }
+        });
+        invalidateLeftoverCache();
+      }
     });
   });
 }
