@@ -799,7 +799,13 @@ function getPrimaryProtein(m, titleCase) {
 // Fat-heavy items freeze when scaling UP. Veg never reduced below original.
 // Egg whole→white swap is the only post-scale macro correction.
 // Final snap, package nudge, and second-pass removal run after this.
-function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedOrLeftover) {
+function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotalServings) {
+  // mealTotalServings: total portions cooked in one batch for this meal (shared + leftover days).
+  // When > 1, ingredient snapping targets the TOTAL cook amount so leftover fractions
+  // (e.g. 7.755 oz per portion) collapse to clean totals (e.g. 16 oz total = 8 per portion).
+  // Per-portion amounts may be fractional; only the total needs to be clean.
+  var totalServingsForSnap = (typeof mealTotalServings === 'number' && mealTotalServings > 1) ? mealTotalServings : 1;
+  var isSharedOrLeftover = totalServingsForSnap > 1;
   if (Math.abs(targetDelta) < 5) return ingredients.map(function(i){return {ing:i,newAmt:i.amt};});
 
   // If the recipe is close to budget, leave it unchanged
@@ -960,14 +966,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     }
     // Shared/leftover: snap total cook amount, then divide back
     else if (isSharedOrLeftover) {
-      const leftovers = typeof computeLeftovers === 'function' ? computeLeftovers() : {};
-      let totalServings = 2;
-      Object.keys(leftovers).forEach(function(k) {
-        const lo = leftovers[k];
-        if (lo && !lo.isLeftover && lo.totalServings && lo.totalServings > totalServings) {
-          totalServings = lo.totalServings;
-        }
-      });
+      const totalServings = totalServingsForSnap;
       let totalAmt = amt * totalServings;
       const unit = db.unit || '';
       if (unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving') {
@@ -1124,18 +1123,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     const perPkg = (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
     if (perPkg <= 0) return;
 
-    // Estimate total servings from leftovers (shared cook = both people × leftover days)
-    // Use 4 as common case (2 people × 2 days), fall back to 2 (2 people × 1 day)
-    const leftovers = typeof computeLeftovers === 'function' ? computeLeftovers() : {};
-    let totalServings = 2; // default: assume shared (him + her)
-    // If we can detect leftover pairing, use actual count
-    Object.keys(leftovers).forEach(function(k) {
-      const lo = leftovers[k];
-      if (lo && !lo.isLeftover && lo.totalServings) {
-        // Check if this slot matches
-        if (lo.servings > 1) totalServings = lo.totalServings || lo.servings * 2;
-      }
-    });
+    // Total servings for this specific meal (shared + leftover days in one batch).
+    // Falls back to 1 for solo single-meal cooks.
+    const totalServings = totalServingsForSnap;
 
     const totalNeeded = currentAmt * totalServings;
     const pkgsNeeded = Math.ceil(totalNeeded / perPkg);
@@ -2718,8 +2708,8 @@ function buildShoppingList(trip,who){
           let finalIngr;
           if(slotAdj!==0){
             const hints=buildMacroHints(p,d,s);
-            const shopShared=!!(loInfo&&(loInfo.shared||loInfo.servings>1||loInfo.crossPersonCook));
-            const adjResult = adjustIngredients(ingr, slotAdj, s, hints, shopShared);
+            const shopTotal=(loInfo && !loInfo.isLeftover)?(loInfo.totalServings||loInfo.servings||1):1;
+            const adjResult = adjustIngredients(ingr, slotAdj, s, hints, shopTotal);
             finalIngr = adjResult.map(function(a){return {dbKey:a.ing.dbKey,amt:a.newAmt,role:a.ing.role};});
           } else {
             finalIngr = ingr.map(function(i){return {dbKey:i.dbKey,amt:i.amt,role:i.role};});
@@ -3670,7 +3660,7 @@ function buildMealSelectOpts(slotMeals, activeId){
 }
 
 // Compute adjusted macros and ingredient HTML for a meal card
-function computeCardMacros(port, person, day, s, cookServings, showBanner, isSharedOrLeftover){
+function computeCardMacros(port, person, day, s, cookServings, showBanner, mealTotalServings){
   const ovrMacros = getPortMacrosOvr(port,person,day,s);
   // Each person gets their own calorie adjustment — same recipe ratios, different portion sizes
   const slotAdj = getSlotAdjustment(person,day,s);
@@ -3684,7 +3674,7 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, isSha
     const adjIngr = applyOverrides(port,person,day,s);
     if(adjIngr && adjIngr.length && adjIngr[0].dbKey!==undefined){
       const hints=buildMacroHints(person,day,s);
-      const adjResult = adjustIngredients(adjIngr, slotAdj, s, hints, isSharedOrLeftover);
+      const adjResult = adjustIngredients(adjIngr, slotAdj, s, hints, mealTotalServings);
       pm = {kcal:0,pro:0,fat:0,carb:0};
       adjResult.forEach(function(a){
         const db = NUTRI_DB[a.ing.dbKey];
@@ -3795,8 +3785,17 @@ function buildMealCardHtml(s, person, day, other){
   const showBanner = !isLeftoverDay && (hasSkips || hasAnyEatOut || hasOverrides);
   // For leftovers, compute macros using the cook day's adjustment instead of this day's
   const cookDay=isLeftoverDay?loInfo.cookDay:day;
-  const isSharedOrLo = !!(loInfo && (loInfo.shared || loInfo.isLeftover || loInfo.servings > 1 || loInfo.crossPersonCook));
-  const macroResult = computeCardMacros(port, person, cookDay, s, cookServings, showBanner, isSharedOrLo);
+  // Compute the total cook batch size for snapping purposes.
+  // On a leftover day, look up the cook day's entry (which carries totalServings).
+  let cookLoInfo = loInfo;
+  if (isLeftoverDay && loInfo) {
+    const cookKey = sk(person, loInfo.cookDay, s);
+    cookLoInfo = leftovers[cookKey] || loInfo;
+  }
+  const mealTotalServings = (cookLoInfo && !cookLoInfo.isLeftover)
+    ? (cookLoInfo.totalServings || cookLoInfo.servings || 1)
+    : 1;
+  const macroResult = computeCardMacros(port, person, cookDay, s, cookServings, showBanner, mealTotalServings);
   const pm = macroResult.pm;
   const adjBanner = macroResult.adjBanner;
   if(macroResult.ingrHtml) ingrHtml = macroResult.ingrHtml;
