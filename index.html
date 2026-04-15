@@ -2915,9 +2915,10 @@ function buildShoppingList(trip,who){
         const perPkg=(db.pkg.drained&&(unit==='cup'||unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
         if(perPkg>0&&totalNum>0){
           // Calculate waste: how much of the last package isn't used.
-          // Long-shelf-life items (egg white carton, etc.) carry over between
-          // shopping trips, so partial-pkg usage isn't waste.
-          if(!db.pkg.longShelfLife){
+          // Skip for:
+          //  - longShelfLife items (egg white carton) — carry between trips
+          //  - bulk items (ground meats) — leftover freezes, not real waste
+          if(!db.pkg.longShelfLife && db.pkg.type !== 'bulk'){
             const pkgsNeeded=Math.ceil(totalNum/perPkg);
             const totalFromPkgs=pkgsNeeded*perPkg;
             const wasteAmt=totalFromPkgs-totalNum;
