@@ -1033,6 +1033,54 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     }
   }
 
+  // ── TRIM: if over budget after snap, reduce highest-calorie items one increment at a time ──
+  if (macroHints && macroHints.slotKcalBudget) {
+    let postKcal=0;
+    ingredients.forEach(function(ing,idx){
+      const db=NUTRI_DB[ing.dbKey];if(!db)return;
+      postKcal+=db.kcal*(adjustments[idx]!==undefined?adjustments[idx]:ing.amt);
+    });
+    let overBy=postKcal-macroHints.slotKcalBudget;
+    if(overBy>50){
+      // Sort scalable items by calorie contribution (highest first)
+      const trimItems=scalable.filter(function(item){
+        return !fatDropped[item.idx] && item.role!=='veg';
+      }).map(function(item){
+        const amt=adjustments[item.idx]!==undefined?adjustments[item.idx]:item.ing.amt;
+        return {idx:item.idx,ing:item.ing,kcal:item.calPerUnit*amt,calPerUnit:item.calPerUnit,amt:amt};
+      }).sort(function(a,b){return b.kcal-a.kcal;});
+
+      let safety=20;
+      while(overBy>50&&trimItems.length&&safety-->0){
+        let trimmed=false;
+        for(let ti=0;ti<trimItems.length;ti++){
+          const item=trimItems[ti];
+          const db=NUTRI_DB[item.ing.dbKey];
+          const curAmt=adjustments[item.idx];
+          if(curAmt<=0)continue;
+          // Don't reduce below original amount (only trim the scaling overshoot)
+          if(curAmt<=item.ing.amt)continue;
+          // Determine one snap decrement
+          let decrement=1;
+          if(db.unit==='cup')decrement=0.25;
+          else if(db.unit==='tbsp')decrement=0.5;
+          else if(db.unit==='each')decrement=0.25;
+          if(db.wholeOnly)decrement=1;
+          const newAmt=curAmt-decrement;
+          if(newAmt<item.ing.amt*0.5)continue; // don't trim too aggressively
+          const savedKcal=db.kcal*decrement;
+          adjustments[item.idx]=newAmt;
+          item.amt=newAmt;
+          item.kcal=db.kcal*newAmt;
+          overBy-=savedKcal;
+          trimmed=true;
+          break;
+        }
+        if(!trimmed)break;
+      }
+    }
+  }
+
   // Package-aware nudge: after calorie scaling, nudge packaged ingredients toward
   // clean package boundaries. Uses the same flex ranges as the shopping optimizer.
   // This reduces waste at the source instead of relying on trip-level rounding.
