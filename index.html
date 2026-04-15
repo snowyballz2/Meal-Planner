@@ -1039,6 +1039,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     }
   }
 
+  // Day-level macro balancing happens in balanceDayMacros() OUTSIDE this function
+  // (see getDayBalancedAdjustments). Per-slot adjuster just gets you to slot budget.
+
   // ── TRIM: if over budget after snap, reduce highest-calorie items one increment at a time ──
   if (macroHints && macroHints.slotKcalBudget) {
     let postKcal=0;
@@ -2643,7 +2646,7 @@ function computeLeftovers(){
   _leftoverCache=result;
   return result;
 }
-function invalidateLeftoverCache(){_leftoverCache=null;}
+function invalidateLeftoverCache(){_leftoverCache=null;if(typeof invalidateDayBalancedCache==='function')invalidateDayBalancedCache();}
 
 // Get macros for a port, computing from ingredients
 function getPortMacros(port) {
@@ -2835,12 +2838,12 @@ function buildShoppingList(trip,who){
         // Use ingredients as source of truth for shopping when available
         if(port.ingredients && port.ingredients.length && port.ingredients[0].dbKey!==undefined){
           const ingr = applyOverrides(port,p,d,s);
+          // Use day-balanced ingredients so shopping qty matches what the
+          // meal cards and daily totals display.
+          const balanced = getBalancedSlotIngredients(p,d,s);
           let finalIngr;
-          if(slotAdj!==0){
-            const hints=buildMacroHints(p,d,s);
-            const shopTotal=(loInfo && !loInfo.isLeftover)?(loInfo.totalServings||loInfo.servings||1):1;
-            const adjResult = adjustIngredients(ingr, slotAdj, s, hints, shopTotal);
-            finalIngr = adjResult.map(function(a){return {dbKey:a.ing.dbKey,amt:a.newAmt,role:a.ing.role};});
+          if(balanced){
+            finalIngr = balanced.map(function(i){return {dbKey:i.dbKey, amt:i.amt, role:i.role};});
           } else {
             finalIngr = ingr.map(function(i){return {dbKey:i.dbKey,amt:i.amt,role:i.role};});
           }
@@ -3138,7 +3141,6 @@ function buildMacroHints(p,d,s){
   if(!SLOT_BUDGET[s])return null;
   const dailyPro=PRO_TARGET[p]||0;
   if(!dailyPro)return null;
-  // Slot's share of daily protein = proportional to its calorie budget share
   const slotPct=SLOT_BUDGET[s]||0;
   const slotProTarget=Math.round(dailyPro*slotPct);
   return {
@@ -3147,6 +3149,188 @@ function buildMacroHints(p,d,s){
     maxCarbPct:MACRO_LIMITS.maxCarbPct,
     maxFatPct:MACRO_LIMITS.maxFatPct
   };
+}
+
+// ─── DAY-LEVEL MACRO BALANCER ───────────────────────────────
+// After per-slot adjustments, swap ingredients across slots to hit daily
+// protein/carb/fat targets. Each swap is calorie-neutral (+X of macro A,
+// -X kcal of macro B). Prefers non-package items so the waste optimizer
+// stays intact.
+var _dayBalancedCache={};
+function invalidateDayBalancedCache(){for(const k in _dayBalancedCache)delete _dayBalancedCache[k];}
+
+function getDayBalancedIngredients(p,d){
+  const key=pk(p,d);
+  if(_dayBalancedCache[key])return _dayBalancedCache[key];
+  const slots={};
+  const leftovers=(typeof computeLeftovers==='function')?computeLeftovers():{};
+  // Step 1: per-slot adjust as baseline
+  SLOTS.forEach(function(s){
+    if(s==='shake'||s==='late_snack')return;
+    const selKey=sk(p,d,s);
+    if(SKIPPED[selKey]||EAT_OUT[selKey])return;
+    const port=getPort(p,d,s); if(!port)return;
+    const ingr=applyOverrides(port,p,d,s);
+    if(!ingr||!ingr.length||ingr[0].dbKey===undefined)return;
+    const slotAdj=getSlotAdjustment(p,d,s);
+    const hints=buildMacroHints(p,d,s);
+    const lo=leftovers[selKey];
+    const mts=(lo&&!lo.isLeftover)?(lo.totalServings||lo.servings||1):1;
+    const adj=slotAdj!==0?adjustIngredients(ingr,slotAdj,s,hints,mts)
+                         :ingr.map(function(i){return {ing:i,newAmt:i.amt};});
+    slots[s]=adj.map(function(a){
+      return {dbKey:a.ing.dbKey, amt:a.newAmt, role:a.ing.role,
+              scalable:a.ing.scalable, origAmt:a.ing.amt};
+    });
+  });
+  // Step 2: iterative macro balancing across slots
+  balanceDayMacros(p,d,slots);
+  _dayBalancedCache[key]=slots;
+  return slots;
+}
+
+function getBalancedSlotIngredients(p,d,s){
+  const all=getDayBalancedIngredients(p,d);
+  return all[s]||null;
+}
+
+function balanceDayMacros(p,d,slots){
+  const proTarget=PRO_TARGET[p]||0;
+  if(!proTarget)return;
+
+  function dailyMacros(){
+    let kcal=0,pro=0,fat=0,carb=0;
+    const shakeMeal=getMeal(getMealId(p,d,'shake'));
+    if(shakeMeal&&shakeMeal[p]){
+      const sm=getPortMacrosOvr(shakeMeal[p],p,d,'shake');
+      kcal+=sm.kcal||0;pro+=sm.pro||0;fat+=sm.fat||0;carb+=sm.carb||0;
+    }
+    Object.keys(slots).forEach(function(s){
+      slots[s].forEach(function(i){
+        const db=NUTRI_DB[i.dbKey]; if(!db)return;
+        kcal+=db.kcal*i.amt;pro+=db.pro*i.amt;fat+=db.fat*i.amt;carb+=db.carb*i.amt;
+      });
+    });
+    SLOTS.forEach(function(s){
+      const eo=EAT_OUT[sk(p,d,s)];
+      if(eo){kcal+=eo.kcal||0;pro+=eo.pro||0;fat+=eo.fat||0;carb+=eo.carb||0;}
+    });
+    const ls=LATE_SNACK[pk(p,d)];
+    if(ls){kcal+=ls.kcal||0;pro+=ls.pro||0;fat+=ls.fat||0;carb+=ls.carb||0;}
+    return {kcal:kcal,pro:pro,fat:fat,carb:carb};
+  }
+
+  function incrementFor(db){
+    if(db.wholeOnly)return 1;
+    if(db.unit==='cup')return 0.25;
+    if(db.unit==='tbsp')return 0.5;
+    if(db.unit==='each')return 0.25;
+    if(db.unit==='oz')return 1;
+    return 1;
+  }
+
+  function itemsByRole(role){
+    const out=[];
+    Object.keys(slots).forEach(function(s){
+      slots[s].forEach(function(i,idx){
+        if(i.scalable===false)return;
+        if(role&&i.role!==role)return;
+        const db=NUTRI_DB[i.dbKey]; if(!db)return;
+        const isPkg=!!(db.pkg&&db.pkg.type!=='bulk'&&!db.pkg.longShelfLife);
+        out.push({slot:s,idx:idx,db:db,cur:i.amt,isPkg:isPkg,role:i.role,origAmt:i.origAmt,dbKey:i.dbKey});
+      });
+    });
+    return out;
+  }
+
+  function bestAdd(role){
+    // Highest pro/kcal (for protein) or lowest kcal/g of macro (for other roles).
+    // Non-pkg first.
+    const all=itemsByRole(role);
+    const nonPkg=all.filter(function(x){return !x.isPkg;});
+    const pool=nonPkg.length?nonPkg:all;
+    if(role==='protein'){
+      pool.sort(function(a,b){
+        const ra=a.db.kcal>0?a.db.pro/a.db.kcal:0;
+        const rb=b.db.kcal>0?b.db.pro/b.db.kcal:0;
+        return rb-ra;
+      });
+    }
+    return pool[0]||null;
+  }
+
+  function bestTrim(roles){
+    // Highest-kcal-contribution to trim, non-pkg first.
+    const all=[];
+    roles.forEach(function(r){itemsByRole(r).forEach(function(x){all.push(x);});});
+    const nonPkg=all.filter(function(x){return !x.isPkg;});
+    const pool=nonPkg.length?nonPkg:all;
+    pool.sort(function(a,b){return (b.db.kcal*b.cur)-(a.db.kcal*a.cur);});
+    for(let i=0;i<pool.length;i++){
+      const t=pool[i];
+      const dec=incrementFor(t.db);
+      const newAmt=t.cur-dec;
+      if(newAmt<0)continue;
+      if(t.role==='fat'&&newAmt<0.25)continue;
+      if(t.role!=='fat'&&newAmt<(t.origAmt||0)*0.3)continue;
+      if(t.db.minAmt&&newAmt<t.db.minAmt)continue;
+      return {item:t,dec:dec};
+    }
+    return null;
+  }
+
+  let safety=40;
+  while(safety-->0){
+    const t=dailyMacros();
+    const mk=t.pro*4+t.fat*9+t.carb*4;
+    if(mk<1)break;
+    const carbPct=(t.carb*4)/mk;
+    const fatPct=(t.fat*9)/mk;
+    const proGap=proTarget-t.pro;
+    const carbOver=carbPct-0.55;
+    const fatOver=fatPct-0.30;
+
+    let changed=false;
+
+    // Priority 1: protein shortfall (swap +pro, -carb/fat)
+    if(proGap>3){
+      const pItem=bestAdd('protein');
+      if(!pItem){break;}
+      const pInc=incrementFor(pItem.db);
+      const trim=bestTrim(['carb','fat']);
+      if(!trim)break;
+      // Apply
+      slots[pItem.slot][pItem.idx].amt=pItem.cur+pInc;
+      slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
+      changed=true;
+    }
+    // Priority 2: carb% over 55 (trim carb, add protein)
+    else if(carbOver>0.005){
+      const trim=bestTrim(['carb']);
+      if(!trim)break;
+      slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
+      const pItem=bestAdd('protein');
+      if(pItem){
+        const pInc=incrementFor(pItem.db);
+        slots[pItem.slot][pItem.idx].amt=pItem.cur+pInc;
+      }
+      changed=true;
+    }
+    // Priority 3: fat% over 30 (trim fat, add protein)
+    else if(fatOver>0.005){
+      const trim=bestTrim(['fat']);
+      if(!trim)break;
+      slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
+      const pItem=bestAdd('protein');
+      if(pItem){
+        const pInc=incrementFor(pItem.db);
+        slots[pItem.slot][pItem.idx].amt=pItem.cur+pInc;
+      }
+      changed=true;
+    }
+
+    if(!changed)break;
+  }
 }
 
 function openCalPopup(p){
@@ -3362,14 +3546,13 @@ function calcTotals(p,d){
     // Adjustable slots: target their budget
     const ingr=applyOverrides(port,p,d,s);
     if(ingr && ingr.length && ingr[0].dbKey!==undefined){
-      // Use getSlotAdjustment so day-level correction (dinner absorbs residual) applies
-      const delta=getSlotAdjustment(p,d,s);
-      if(Math.abs(delta)>10){
-        const hints=buildMacroHints(p,d,s);
-        const lo=(typeof computeLeftovers==='function')?computeLeftovers()[sk(p,d,s)]:null;
-        const mts=(lo&&!lo.isLeftover)?(lo.totalServings||lo.servings||1):1;
-        const m=computeAdjustedMacros(ingr,delta,s,hints,mts);
-        kcal+=m.kcal;pro+=m.pro;fat+=m.fat;carb+=m.carb;
+      // Use day-balanced ingredients (per-slot adjust + whole-day macro balance)
+      const balanced=getBalancedSlotIngredients(p,d,s);
+      if(balanced){
+        balanced.forEach(function(i){
+          const db=NUTRI_DB[i.dbKey]; if(!db)return;
+          kcal+=db.kcal*i.amt;pro+=db.pro*i.amt;fat+=db.fat*i.amt;carb+=db.carb*i.amt;
+        });
       } else {
         const m=computeMacros(ingr);
         kcal+=m.kcal;pro+=m.pro;fat+=m.fat;carb+=m.carb;
@@ -3390,7 +3573,6 @@ function calcTotals(p,d){
 // Returns {veg, fruit} in cups. Intended for test/diagnostic use.
 function computeDailyFV(p,d){
   let veg=0, fruit=0;
-  const leftovers = (typeof computeLeftovers === 'function') ? computeLeftovers() : {};
   SLOTS.forEach(function(s){
     if(s==='late_snack')return;
     const key=sk(p,d,s);
@@ -3399,17 +3581,8 @@ function computeDailyFV(p,d){
     const port=getPort(p,d,s); if(!port)return;
     const ingr0=applyOverrides(port,p,d,s);
     if(!ingr0||!ingr0.length||ingr0[0].dbKey===undefined)return;
-    const slotAdj=getSlotAdjustment(p,d,s);
-    let finalIngr;
-    if(slotAdj!==0 && s!=='shake'){
-      const hints=buildMacroHints(p,d,s);
-      const loInfo=leftovers[key];
-      const mts=(loInfo && !loInfo.isLeftover) ? (loInfo.totalServings||loInfo.servings||1) : 1;
-      const r=adjustIngredients(ingr0, slotAdj, s, hints, mts);
-      finalIngr=r.map(function(a){return {dbKey:a.ing.dbKey, amt:a.newAmt, role:a.ing.role};});
-    } else {
-      finalIngr=ingr0;
-    }
+    let finalIngr=getBalancedSlotIngredients(p,d,s);
+    if(!finalIngr) finalIngr=ingr0;
     finalIngr.forEach(function(ing){
       const db=NUTRI_DB[ing.dbKey]; if(!db)return;
       let cups=0;
@@ -3559,18 +3732,11 @@ function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day){
     if(!port || !port.ingredients) return [];
     const ingr = applyOverrides(port, p, day, s);
     if(!ingr || !ingr.length || ingr[0].dbKey === undefined) return [];
-    const slotAdj = getSlotAdjustment(p, day, s);
-    const leftovers = computeLeftovers();
-    const loInfo = leftovers[sk(p, day, s)];
-    const mts = (loInfo && !loInfo.isLeftover) ? (loInfo.totalServings||loInfo.servings||1) : 1;
-    let adjusted;
-    if(slotAdj !== 0){
-      const hints = buildMacroHints(p, day, s);
-      const r = adjustIngredients(ingr, slotAdj, s, hints, mts);
-      adjusted = r.map(a => ({dbKey:a.ing.dbKey, amt:a.newAmt, role:a.ing.role}));
-    } else {
-      adjusted = ingr.map(i => ({dbKey:i.dbKey, amt:i.amt, role:i.role}));
-    }
+    // Use day-balanced ingredients so shared tab shows same numbers as individual tabs
+    const balanced = getBalancedSlotIngredients(p, day, s);
+    const adjusted = balanced
+      ? balanced.map(i => ({dbKey:i.dbKey, amt:i.amt, role:i.role}))
+      : ingr.map(i => ({dbKey:i.dbKey, amt:i.amt, role:i.role}));
     return adjusted.map(i => ({dbKey:i.dbKey, amt:i.amt*mult, role:i.role}));
   }
   const himAdj = adjustedForPerson('him', himMult);
@@ -3919,8 +4085,11 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
   } else if(slotAdj!==0){
     const adjIngr = applyOverrides(port,person,day,s);
     if(adjIngr && adjIngr.length && adjIngr[0].dbKey!==undefined){
-      const hints=buildMacroHints(person,day,s);
-      const adjResult = adjustIngredients(adjIngr, slotAdj, s, hints, mealTotalServings);
+      // Use day-balanced ingredients (per-slot adjust + whole-day macro balance)
+      const balanced = getBalancedSlotIngredients(person,day,s);
+      const adjResult = balanced
+        ? balanced.map(function(i,ix){return {ing:adjIngr[ix]||{dbKey:i.dbKey,amt:i.origAmt||i.amt,role:i.role,scalable:i.scalable}, newAmt:i.amt};})
+        : adjustIngredients(adjIngr, slotAdj, s, buildMacroHints(person,day,s), mealTotalServings);
       pm = {kcal:0,pro:0,fat:0,carb:0};
       adjResult.forEach(function(a){
         const db = NUTRI_DB[a.ing.dbKey];
