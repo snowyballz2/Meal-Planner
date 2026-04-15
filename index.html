@@ -643,7 +643,7 @@ function buildQtyOptions(unit, currentAmt, wholeOnly) {
   const found = opts.some(function(o){return Math.abs(o.val - currentAmt) < 0.02;});
   if (!found && currentAmt > 0) {
     // Format the current amount nicely
-    const label = String(Math.round(currentAmt * 100) / 100);
+    const label = String(Math.round(currentAmt * 1000) / 1000);
     opts.push({val:currentAmt, label:label});
     opts.sort(function(a,b){return a.val - b.val;});
   }
@@ -3761,7 +3761,7 @@ function buildMealCardHtml(s, person, day, other){
     const ovrIngr = applyOverrides(port,person,day,s);
 
     ingrHtml = ovrIngr.map(function(ing, idx) {
-      const displayAmt=Math.round(ing.amt*cookServings*100)/100;
+      const displayAmt=Math.round(ing.amt*cookServings*1000)/1000;
       return buildIngrEditRow(ing, displayAmt, person, day, s, idx);
     }).join('');
     ingrHtml='<div class="ingr-edit-grid">'+ingrHtml+'</div>';
