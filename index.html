@@ -4530,6 +4530,7 @@ function _randomizeWeekCore(randTarget){
         var totalKcal = 0;
 
         var totalFatCal = 0;
+        var totalPro = 0;
 
         SLOTS.forEach(function(s) {
           if (locked[sk(p,d,s)]) {
@@ -4542,6 +4543,7 @@ function _randomizeWeekCore(randTarget){
                 var lmm = getPortMacros(lm[p]);
                 totalKcal += lmm.kcal;
                 totalFatCal += lmm.fat * 9;
+                totalPro += lmm.pro;
               }
             }
             return;
@@ -4570,20 +4572,22 @@ function _randomizeWeekCore(randTarget){
             var pm = getPortMacros(port);
             totalKcal += pm.kcal;
             totalFatCal += pm.fat * 9;
+            totalPro += pm.pro;
           }
         });
 
-        // Score: calorie fit + fat penalty
-        // Fat penalty: if daily fat% > 30%, add the excess as penalty points
+        // Score: calorie fit + fat penalty + protein penalty
         var calDiff = Math.abs(totalKcal - target);
         var fatPct = totalKcal > 0 ? totalFatCal / totalKcal : 0;
-        var fatPenalty = fatPct > 0.30 ? (fatPct - 0.30) * 1000 : 0; // heavy penalty for fat over 30%
-        var score = calDiff + fatPenalty;
+        var fatPenalty = fatPct > 0.30 ? (fatPct - 0.30) * 1000 : 0;
+        var proTarget = PRO_TARGET[p] || 0;
+        var proPenalty = totalPro < proTarget ? (proTarget - totalPro) * 15 : 0; // 15 points per gram short
+        var score = calDiff + fatPenalty + proPenalty;
 
         if (score < bestScore) {
           bestScore = score;
           bestSel = trySel;
-          if (calDiff <= 100 && fatPct <= 0.30) break; // perfect — stop early
+          if (calDiff <= 100 && fatPct <= 0.30 && totalPro >= proTarget) break;
         }
       }
 
