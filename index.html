@@ -943,10 +943,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     remaining -= (newAmt - item.ing.amt) * item.calPerUnit;
   });
 
-  // Final snap pass
-  // For shared/leftover: snap the TOTAL cook amount, per-person is just math
-  // For solo: snap per-person directly (that IS the cook amount)
-  // wholeOnly items: always whole per-person regardless of context
+  // Final snap pass — per-portion snap to clean increments.
+  // Sum of 0.25-multiples is still on the 0.25 grid, so shared/leftover
+  // cook totals stay clean too (e.g. 1.5 + 1 = 2.5, 1.75 + 1.25 = 3).
   scalable.forEach(function(item) {
     const db = NUTRI_DB[item.ing.dbKey];
     if (!db) return;
@@ -964,31 +963,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     else if (db.pkg && db.pkg.type !== 'bulk') {
       // no snap
     }
-    // Shared/leftover: snap total cook amount, then divide back
-    else if (isSharedOrLeftover) {
-      const totalServings = totalServingsForSnap;
-      let totalAmt = amt * totalServings;
-      const unit = db.unit || '';
-      if (unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving') {
-        totalAmt = Math.round(totalAmt);
-        if (totalAmt < 1) totalAmt = 1;
-      } else if (unit === 'each') {
-        totalAmt = Math.round(totalAmt);
-        if (totalAmt < 1) totalAmt = 1;
-      } else if (unit==='clove'||unit==='cloves') {
-        totalAmt = Math.round(totalAmt);
-        if (totalAmt < 1) totalAmt = 1;
-      } else if (db.halfSnap || unit === 'tbsp') {
-        totalAmt = Math.round(totalAmt * 2) / 2;
-        if (totalAmt < 0.5) totalAmt = 0.5;
-      } else {
-        totalAmt = Math.round(totalAmt * 4) / 4;
-        if (totalAmt < 0.25) totalAmt = 0.25;
-      }
-      amt = totalAmt / totalServings;
-    }
-    // Solo meal: snap per-person to nearest increment
-    // Trim pass corrects overshoot, backfill corrects undershoot
+    // Per-portion snap to unit-appropriate grid
     else {
       const unit = db.unit || '';
       const snapFn = Math.round;
