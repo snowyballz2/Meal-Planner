@@ -1400,16 +1400,6 @@ const MEALS=[
     I('water',1.5,'liquid')
   ]},
 
- {id:'cottage_cheese_toast',label:'Cottage cheese & berry toast',slots:['breakfast'],
-  steps:['Toast bread. Spread yogurt on each slice.','Top with mixed berries. Drizzle with honey.'],
-  him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
-  ingredients:[
-    I('greek yogurt 0%',1,'protein'),
-    I('whole wheat toast',2,'carb'),
-    I('mixed berries',0.5,'fruit',false),
-    I('honey tbsp',0.5,'condiment',false)
-  ]},
-
  {id:'quinoa_breakfast_bowl',label:'Quinoa & egg breakfast bowl',slots:['breakfast'],
   steps:['Cook quinoa or use leftover.','Sauté kale and bell pepper in non-stick pan 2 min.','Add egg whites, scramble with veg.','Serve over quinoa. Season with salt, pepper.'],
   him:{fv:'1c veg'},her:{fv:'1c veg'},
@@ -1421,6 +1411,79 @@ const MEALS=[
     I('bell pepper',0.25,'veg'),
     I('salt',0.5,'fixed',false),
     I('black pepper',0.5,'fixed',false)
+  ]},
+
+ {id:'breakfast_burrito',label:'Breakfast burrito with black beans',slots:['breakfast'],
+  steps:['Warm tortilla in dry pan 30s per side.','Sauté bell pepper 2 min in non-stick pan.','Add black beans, warm through.','Pour in egg whites + whole egg, scramble with veg 2–3 min.','Spoon into tortilla, top with salsa, roll tightly.'],
+  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  ingredients:[
+    I('whole wheat tortilla',1,'carb'),
+    I('egg white',0.375,'protein'),
+    I('egg whole',1,'protein'),
+    I('black beans canned',0.5,'protein'),
+    I('bell pepper',0.5,'veg'),
+    I('baby spinach',0.5,'veg'),
+    I('salsa',2,'condiment',false),
+    I('black pepper',0.5,'fixed',false)
+  ]},
+
+ {id:'shakshuka',label:'Shakshuka with toast',slots:['breakfast'],
+  steps:['Sauté bell pepper in non-stick skillet 3 min.','Add marinara + spinach, simmer 3 min until spinach wilts.','Make wells in sauce, crack egg(s) into each + pour in egg whites. Cover, simmer 5–7 min until whites set.','Season with black pepper. Serve with toasted bread for dipping.'],
+  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  ingredients:[
+    I('egg whole',1,'protein'),
+    I('egg white',0.25,'protein'),
+    I('marinara',0.5,'veg'),
+    I('bell pepper',0.5,'veg'),
+    I('baby spinach',0.5,'veg'),
+    I('whole wheat toast',2,'carb'),
+    I('black pepper',0.5,'fixed',false)
+  ]},
+
+ {id:'chia_pudding',label:'Berry chia pudding',slots:['breakfast'],
+  steps:['Whisk chia, milk, protein powder, cinnamon in a jar until combined.','Refrigerate at least 4 hours (or overnight) to thicken.','Top with mixed berries before serving.'],
+  him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
+  ingredients:[
+    I('chia seeds',2,'fat'),
+    I('1% milk',1,'liquid'),
+    I('protein powder',1,'protein'),
+    I('oats',0.25,'carb'),
+    I('mixed berries',0.5,'fruit',false),
+    I('cinnamon',0.5,'fixed',false)
+  ]},
+
+ {id:'smoothie_bowl',label:'Berry smoothie bowl',slots:['breakfast'],
+  steps:['Blend frozen mixed berries, banana, yogurt, and protein powder until thick.','Pour into bowl.','Top with granola.'],
+  him:{fv:'1.5c fruit'},her:{fv:'1.5c fruit'},
+  ingredients:[
+    I('mixed berries',0.5,'fruit',false),
+    I('banana',0.5,'fruit',false),
+    I('greek yogurt 0%',0.75,'protein'),
+    I('protein powder',1,'protein'),
+    I('granola strawberry',0.25,'carb')
+  ]},
+
+ {id:'turkey_sweet_potato_hash',label:'Turkey & sweet potato hash',slots:['breakfast'],
+  steps:['Cube sweet potato small. Roast at 425°F 18–20 min (or pan-sauté covered 10 min).','Brown ground turkey in non-stick pan, breaking into crumbles.','Add bell pepper, cook 2 min.','Stir in sweet potato.','Crack egg into pan, cook sunny-side or scramble in. Season with black pepper.'],
+  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  ingredients:[
+    I('ground turkey 93',3,'protein'),
+    I('egg whole',1,'protein'),
+    I('sweet potato',1,'carb'),
+    I('bell pepper',0.5,'veg'),
+    I('baby spinach',0.5,'veg'),
+    I('black pepper',0.5,'fixed',false)
+  ]},
+
+ {id:'apple_cinnamon_oats',label:'Apple cinnamon protein oats',slots:['breakfast'],
+  steps:['Combine oats, milk, protein powder, cinnamon in a jar.','Dice apple, stir half into the oats.','Refrigerate overnight (or eat warm — microwave 90s).','Top with remaining apple before serving.'],
+  him:{fv:'1c fruit'},her:{fv:'1c fruit'},
+  ingredients:[
+    I('oats',0.375,'carb'),
+    I('1% milk',1,'liquid'),
+    I('protein powder',1,'protein'),
+    I('apple',0.75,'fruit',false),
+    I('cinnamon',0.5,'fixed',false)
   ]},
 
  {id:'quinoa_bowl',label:'Grilled chicken & quinoa bowl',slots:['lunch','dinner'],
