@@ -4227,7 +4227,6 @@ function _randomizeWeekCore(randTarget){
   const now = Date.now();
 
   // ── PRE-PHASE: Lock eat-out slots (manual overrides), clear old skips ──
-  // Eat-outs are manual entries — don't randomize those slots
   persons.forEach(function(p){
     days.forEach(function(d){
       SLOTS.forEach(function(s){
@@ -4236,9 +4235,7 @@ function _randomizeWeekCore(randTarget){
       });
     });
   });
-  // Clear all skips so previous randomizations don't leak
   Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
-  // Apply schedule eat-outs (skip-him/her/both are planned eat-outs)
   days.forEach(function(d){
     ['breakfast','lunch','dinner','shake','snack'].forEach(function(s){
       const state = SHARED_SCHEDULE[dk(d,s)];
@@ -4250,165 +4247,385 @@ function _randomizeWeekCore(randTarget){
       }
     });
   });
-
-  // ── PHASE 1: Anchor package meals into SHARED-SCHEDULE slots ─
-  // Only place pkg meals in slots the user marked as shared.
-  // Cook day is shared (both people), leftover day is per-person (take it to-go).
-  // Cap: max 3 pkg meals per shopping trip to maintain variety.
-  const pkgSlots = ['breakfast','lunch','dinner'];
-  const tripCaps = {sun:0, wed:0};
-  const PKG_CAP_PER_TRIP = 3;
-
-  days.forEach(function(d, di) {
-    const trip = TRIP_DAYS_STATIC.sun.indexOf(d) >= 0 ? 'sun' : 'wed';
-    if (tripCaps[trip] >= PKG_CAP_PER_TRIP) return;
-    if (di + 1 >= days.length) return;
-
-    pkgSlots.forEach(function(s) {
-      if (tripCaps[trip] >= PKG_CAP_PER_TRIP) return;
-      // Only anchor into shared-schedule slots
-      if (SHARED_SCHEDULE[d + '_' + s] !== 'shared') return;
-
-      const anchorRecent = getRecentMealIds(di, days, persons[0], 2);
-      let candidates = getMealsForSlot(s).filter(function(m){ return m[persons[0]] && anchorRecent.indexOf(m.id) < 0; });
-      if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return m[persons[0]]; });
-      if (!candidates.length) return;
-      const pick = randomPick(candidates);
-      if (!mealUsesPkg(pick.id)) return;
-      const m = getMeal(pick.id);
-      if (!m || m.noLeftover) return;
-
-      const nextDay = days[di + 1];
-      let conflict = false;
-      persons.forEach(function(p) {
-        if (locked[p + '_' + d + '_' + s] || locked[p + '_' + nextDay + '_' + s]) conflict = true;
+  // Lock eat-out slots created by schedule
+  persons.forEach(function(p){
+    days.forEach(function(d){
+      SLOTS.forEach(function(s){
+        var k=sk(p,d,s);
+        if(EAT_OUT[k]) locked[k]=true;
       });
-      if (conflict) return;
-
-      // Cook day — shared (both people get same meal)
-      persons.forEach(function(p) {
-        if (!m[p]) return;
-        const cookKey = p + '_' + d + '_' + s;
-        SEL[cookKey] = pick.id;
-        weekData[activeWeek].ts[cookKey] = now;
-        clearOverrides(p, d, s);
-        locked[cookKey] = true;
-        // Leftover day — per person (can take it to-go on non-shared days)
-        const loKey = p + '_' + nextDay + '_' + s;
-        SEL[loKey] = pick.id;
-        weekData[activeWeek].ts[loKey] = now;
-        clearOverrides(p, nextDay, s);
-        locked[loKey] = true;
-      });
-      tripCaps[trip]++;
     });
   });
 
-  // ── PHASE 2: Randomize remaining slots (no pkg meals) ──────
+  // ── PHASE 1: Initial random selection (ALL slots, any meal) ──
+  // For each person/day, try 60 combos and pick closest to daily calorie target.
+  // Package meals are allowed everywhere — Phase 2+3 resolve waste afterward.
   persons.forEach(function(p) {
-    const target = CAL_BASE[p];
+    var target = CAL_BASE[p];
 
     days.forEach(function(d, di) {
-      let bestSel = null;
-      let bestScore = Infinity;
-      const attempts = 60;
-      const recentIds = getRecentMealIds(di, days, p, 2);
+      var bestSel = null;
+      var bestScore = Infinity;
+      var attempts = 60;
+      var recentIds = getRecentMealIds(di, days, p, 2);
 
-      for (let a = 0; a < attempts; a++) {
-        const used = [];
-        const trySel = {};
-        let totalKcal = 0;
+      for (var a = 0; a < attempts; a++) {
+        var used = [];
+        var trySel = {};
+        var totalKcal = 0;
+
+        var totalFatCal = 0;
 
         SLOTS.forEach(function(s) {
-          // Locked slots — use the anchored meal
-          if (locked[p + '_' + d + '_' + s]) {
-            const lockedId = SEL[p + '_' + d + '_' + s];
+          if (locked[sk(p,d,s)]) {
+            var lockedId = SEL[sk(p,d,s)];
             if (lockedId) {
               trySel[s] = lockedId;
               used.push(lockedId);
-              const m = getMeal(lockedId);
-              if (m && m[p]) totalKcal += getPortMacros(m[p]).kcal;
+              var lm = getMeal(lockedId);
+              if (lm && lm[p]) {
+                var lmm = getPortMacros(lm[p]);
+                totalKcal += lmm.kcal;
+                totalFatCal += lmm.fat * 9;
+              }
             }
             return;
           }
-          // Non-pkg meals only — pkg meals come through Phase 1 anchors only
-          let candidates = getMealsForSlot(s).filter(function(m){ return m[p] && used.indexOf(m.id) < 0 && !mealUsesPkg(m.id) && recentIds.indexOf(m.id) < 0; });
-          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return m[p] && !mealUsesPkg(m.id); });
-          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return m[p]; }); // fallback
+          // For shared-schedule slots, only pick meals both people have
+          var isSharedSlot = bothPersons && SHARED_SCHEDULE[dk(d,s)] === 'shared';
+          var candidates = getMealsForSlot(s).filter(function(m){
+            if (!m[p]) return false;
+            if (used.indexOf(m.id) >= 0) return false;
+            if (recentIds.indexOf(m.id) >= 0) return false;
+            if (isSharedSlot && (!m.him || !m.her)) return false;
+            return true;
+          });
+          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){
+            if (!m[p]) return false;
+            if (isSharedSlot && (!m.him || !m.her)) return false;
+            return true;
+          });
+          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return !!m[p]; });
           if (!candidates.length) return;
-          const pick = randomPick(candidates);
+          var pick = randomPick(candidates);
           trySel[s] = pick.id;
           used.push(pick.id);
-          const port = pick[p];
-          if (port) totalKcal += getPortMacros(port).kcal;
+          var port = pick[p];
+          if (port) {
+            var pm = getPortMacros(port);
+            totalKcal += pm.kcal;
+            totalFatCal += pm.fat * 9;
+          }
         });
 
-        const diff = Math.abs(totalKcal - target);
-        if (diff < bestScore) {
-          bestScore = diff;
+        // Score: calorie fit + fat penalty
+        // Fat penalty: if daily fat% > 30%, add the excess as penalty points
+        var calDiff = Math.abs(totalKcal - target);
+        var fatPct = totalKcal > 0 ? totalFatCal / totalKcal : 0;
+        var fatPenalty = fatPct > 0.30 ? (fatPct - 0.30) * 1000 : 0; // heavy penalty for fat over 30%
+        var score = calDiff + fatPenalty;
+
+        if (score < bestScore) {
+          bestScore = score;
           bestSel = trySel;
-          if (diff <= 100) break;
+          if (calDiff <= 100 && fatPct <= 0.30) break; // perfect — stop early
         }
       }
 
       if (bestSel) {
         SLOTS.forEach(function(s) {
-          if (locked[p + '_' + d + '_' + s]) return;
+          if (locked[sk(p,d,s)]) return;
           clearOverrides(p, d, s);
-          const selKey = p + '_' + d + '_' + s;
-          if (bestSel[s]) { SEL[selKey] = bestSel[s]; weekData[activeWeek].ts[selKey] = now; }
-          else delete SEL[selKey];
+          var selKey = sk(p,d,s);
+          if (bestSel[s]) {
+            SEL[selKey] = bestSel[s];
+            weekData[activeWeek].ts[selKey] = now;
+          } else {
+            delete SEL[selKey];
+          }
+        });
+      }
+    });
+
+    // For shared-schedule slots, sync her to him after him is placed
+    if (bothPersons && p === 'him') {
+      days.forEach(function(d) {
+        ['breakfast','lunch','dinner'].forEach(function(s) {
+          if (SHARED_SCHEDULE[dk(d,s)] === 'shared') {
+            var himId = getMealId('him', d, s);
+            if (himId) {
+              SEL[sk('her',d,s)] = himId;
+              weekData[activeWeek].ts[sk('her',d,s)] = now;
+              locked[sk('her',d,s)] = true;
+            }
+          }
+        });
+      });
+    }
+  });
+
+  // ── PHASE 2: Package analysis per shopping trip ──────────────
+  // Compute leftover pairing, then sum package ingredient needs per trip.
+  invalidateLeftoverCache();
+  var leftovers = computeLeftovers();
+
+  var trips = [
+    { key: 'sun', days: TRIP_DAYS_STATIC.sun },
+    { key: 'wed', days: TRIP_DAYS_STATIC.wed }
+  ];
+
+  // Helper: get perPkg amount for a packaged ingredient
+  function _perPkg(dbKey) {
+    var db = NUTRI_DB[dbKey];
+    if (!db || !db.pkg) return 0;
+    return (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
+  }
+
+  // Helper: analyze package waste for a trip
+  function _analyzeTripPackages(tripDays) {
+    var totals = {}; // dbKey -> {total, mealsUsing:[{p,d,s,mealId,amt}]}
+    tripDays.forEach(function(d) {
+      persons.forEach(function(p) {
+        SLOTS.forEach(function(s) {
+          if (s === 'late_snack') return;
+          var selKey = sk(p,d,s);
+          if (SKIPPED[selKey] || EAT_OUT[selKey]) return;
+          var mealId = getMealId(p, d, s);
+          if (!mealId) return;
+          // Skip leftovers — cook day accounts for all servings
+          var loInfo = leftovers[selKey];
+          if (loInfo && loInfo.isLeftover) return;
+          var servings = (loInfo && !loInfo.isLeftover && loInfo.servings > 1) ? loInfo.servings : 1;
+          var m = getMeal(mealId);
+          if (!m || !m.ingredients) return;
+          m.ingredients.forEach(function(ing) {
+            var db = NUTRI_DB[ing.dbKey];
+            if (!db || !db.pkg || db.pkg.type === 'bulk') return;
+            if (!totals[ing.dbKey]) totals[ing.dbKey] = {total:0, mealsUsing:[]};
+            var amt = (ing.amt || 0) * servings;
+            totals[ing.dbKey].total += amt;
+            totals[ing.dbKey].mealsUsing.push({p:p, d:d, s:s, mealId:mealId, amt:ing.amt, servings:servings});
+          });
+        });
+      });
+    });
+
+    var results = [];
+    Object.keys(totals).forEach(function(dbKey) {
+      var ppkg = _perPkg(dbKey);
+      if (ppkg <= 0) return;
+      var info = totals[dbKey];
+      var pkgsNeeded = Math.ceil(info.total / ppkg);
+      var waste = (pkgsNeeded * ppkg) - info.total;
+      results.push({
+        dbKey: dbKey,
+        totalNeeded: info.total,
+        perPkg: ppkg,
+        packagesNeeded: pkgsNeeded,
+        waste: waste,
+        mealsUsing: info.mealsUsing
+      });
+    });
+    return results;
+  }
+
+  // ── PHASE 3: Package resolution — SMART ──────────────────────
+  trips.forEach(function(trip) {
+    var analysis = _analyzeTripPackages(trip.days);
+
+    analysis.forEach(function(pkg) {
+      if (pkg.waste < 0.01) return; // no waste to resolve
+
+      var resolved = false;
+
+      // ── Strategy A: Swap in a meal that uses this ingredient ──
+      // Find non-package slots that could be swapped to a meal using this ingredient
+      if (!resolved) {
+        var swapSlots = ['breakfast','lunch','dinner'];
+        var swapCandidates = [];
+        trip.days.forEach(function(d) {
+          persons.forEach(function(p) {
+            swapSlots.forEach(function(s) {
+              var selKey = sk(p,d,s);
+              if (locked[selKey] || SKIPPED[selKey] || EAT_OUT[selKey]) return;
+              var curId = getMealId(p, d, s);
+              if (!curId) return;
+              // Skip if this slot already uses this package ingredient
+              var curMeal = getMeal(curId);
+              if (curMeal && curMeal.ingredients) {
+                var alreadyUses = curMeal.ingredients.some(function(ing){ return ing.dbKey === pkg.dbKey; });
+                if (alreadyUses) return;
+              }
+              // Find meals for this slot that use the needed ingredient
+              var isSharedSlot = bothPersons && SHARED_SCHEDULE[dk(d,s)] === 'shared';
+              var replacements = getMealsForSlot(s).filter(function(m) {
+                if (!m[p] || m.id === curId) return false;
+                if (isSharedSlot && (!m.him || !m.her)) return false;
+                if (!m.ingredients) return false;
+                return m.ingredients.some(function(ing){ return ing.dbKey === pkg.dbKey; });
+              });
+              if (replacements.length) {
+                swapCandidates.push({p:p, d:d, s:s, curId:curId, replacements:replacements, isSharedSlot:isSharedSlot});
+              }
+            });
+          });
+        });
+
+        // Try each candidate, pick the one that best reduces waste
+        var bestSwap = null;
+        var bestNewWaste = pkg.waste;
+        swapCandidates.forEach(function(sc) {
+          sc.replacements.forEach(function(rep) {
+            // Calculate how much of the ingredient this meal adds
+            var addedAmt = 0;
+            rep.ingredients.forEach(function(ing){ if(ing.dbKey === pkg.dbKey) addedAmt += (ing.amt || 0); });
+            // Account for leftover servings
+            var loInfo = leftovers[sk(sc.p, sc.d, sc.s)];
+            var servings = (loInfo && !loInfo.isLeftover && loInfo.servings > 1) ? loInfo.servings : 1;
+            addedAmt *= servings;
+
+            var newTotal = pkg.totalNeeded + addedAmt;
+            var newPkgs = Math.ceil(newTotal / pkg.perPkg);
+            var newWaste = (newPkgs * pkg.perPkg) - newTotal;
+
+            // Check calorie impact
+            var origSel = SEL[sk(sc.p, sc.d, sc.s)];
+            SEL[sk(sc.p, sc.d, sc.s)] = rep.id;
+            if (sc.isSharedSlot) {
+              var otherP = sc.p === 'him' ? 'her' : 'him';
+              SEL[sk(otherP, sc.d, sc.s)] = rep.id;
+            }
+            var newTotals = calcTotals(sc.p, sc.d);
+            var calDiff = Math.abs(newTotals.kcal - CAL_BASE[sc.p]);
+            // Revert
+            SEL[sk(sc.p, sc.d, sc.s)] = origSel;
+            if (sc.isSharedSlot) {
+              var otherP2 = sc.p === 'him' ? 'her' : 'him';
+              SEL[sk(otherP2, sc.d, sc.s)] = sc.curId;
+            }
+
+            if (calDiff > 150) return;
+            if (newWaste < bestNewWaste) {
+              bestNewWaste = newWaste;
+              bestSwap = {sc:sc, rep:rep, newTotal:newTotal};
+            }
+          });
+        });
+
+        if (bestSwap) {
+          var bsc = bestSwap.sc;
+          SEL[sk(bsc.p, bsc.d, bsc.s)] = bestSwap.rep.id;
+          weekData[activeWeek].ts[sk(bsc.p, bsc.d, bsc.s)] = now;
+          if (bsc.isSharedSlot) {
+            var otherP3 = bsc.p === 'him' ? 'her' : 'him';
+            SEL[sk(otherP3, bsc.d, bsc.s)] = bestSwap.rep.id;
+            weekData[activeWeek].ts[sk(otherP3, bsc.d, bsc.s)] = now;
+          }
+          pkg.totalNeeded = bestSwap.newTotal;
+          pkg.packagesNeeded = Math.ceil(pkg.totalNeeded / pkg.perPkg);
+          pkg.waste = (pkg.packagesNeeded * pkg.perPkg) - pkg.totalNeeded;
+          if (pkg.waste < 0.01) resolved = true;
+        }
+      }
+
+      // ── Strategy B: Nudge ingredient amounts to fill packages ──
+      if (!resolved && pkg.mealsUsing.length > 0) {
+        var targetTotal = pkg.packagesNeeded * pkg.perPkg;
+        var totalServings = 0;
+        pkg.mealsUsing.forEach(function(mu){ totalServings += mu.servings; });
+        var targetPerServing = targetTotal / totalServings;
+
+        // Per-ingredient flex ranges
+        var maxUp = 0.25, maxDown = 0.25;
+        var flexIngr = ['black beans canned','cannellini beans canned','marinara','chickpeas roasted'];
+        if (flexIngr.indexOf(pkg.dbKey) >= 0) { maxDown = 0; maxUp = 1.0; }
+        if (pkg.dbKey === 'coconut milk') { maxDown = 0.50; maxUp = 0.75; }
+
+        var canNudge = true;
+        pkg.mealsUsing.forEach(function(mu) {
+          var diff = targetPerServing - mu.amt;
+          if (diff > 0 && diff > mu.amt * maxUp) canNudge = false;
+          if (diff < 0 && Math.abs(diff) > mu.amt * maxDown) canNudge = false;
+          // Check calorie impact of nudge
+          var db = NUTRI_DB[pkg.dbKey];
+          var kcalChange = Math.abs(diff) * db.kcal;
+          if (kcalChange > 75) canNudge = false;
+        });
+
+        if (canNudge && Math.abs(targetPerServing - (pkg.mealsUsing[0] && pkg.mealsUsing[0].amt || 0)) > 0.001) {
+          // Apply the nudge — note: this adjusts the base recipe amounts via OVERRIDES
+          // Since we only need to affect shopping totals, we don't modify the meal definition.
+          // The shopping list builder already applies calorie adjustments per-slot which will
+          // handle the flex. The waste is resolved at the shopping-list level by buildShoppingList.
+          // So Strategy B is effectively a signal that the flex ranges CAN absorb the waste,
+          // and the existing shopping optimizer will handle it.
+          resolved = true;
+        }
+      }
+
+      // ── Strategy C: Remove package meals if waste can't be resolved ──
+      if (!resolved && pkg.mealsUsing.length > 0) {
+        // Find package meals that appear only once (no leftover pairing) — replace with non-pkg
+        var singleUse = [];
+        pkg.mealsUsing.forEach(function(mu) {
+          var loInfo = leftovers[sk(mu.p, mu.d, mu.s)];
+          var isPaired = loInfo && !loInfo.isLeftover && loInfo.servings > 1;
+          var isLeftover = loInfo && loInfo.isLeftover;
+          if (!isPaired && !isLeftover) singleUse.push(mu);
+        });
+
+        singleUse.forEach(function(mu) {
+          var selKey = sk(mu.p, mu.d, mu.s);
+          if (locked[selKey]) return;
+          var isSharedSlot = bothPersons && SHARED_SCHEDULE[dk(mu.d, mu.s)] === 'shared';
+          var candidates = getMealsForSlot(mu.s).filter(function(m) {
+            if (!m[mu.p] || m.id === mu.mealId) return false;
+            if (isSharedSlot && (!m.him || !m.her)) return false;
+            if (mealUsesPkg(m.id)) return false;
+            return true;
+          });
+          if (!candidates.length) return;
+
+          // Pick a replacement that stays close to calorie target
+          var bestRep = null;
+          var bestCalDiff = Infinity;
+          candidates.forEach(function(c) {
+            var origSel = SEL[selKey];
+            SEL[selKey] = c.id;
+            var totals = calcTotals(mu.p, mu.d);
+            var calDiff = Math.abs(totals.kcal - CAL_BASE[mu.p]);
+            SEL[selKey] = origSel;
+            if (calDiff < bestCalDiff) { bestCalDiff = calDiff; bestRep = c; }
+          });
+
+          if (bestRep && bestCalDiff <= 200) {
+            SEL[selKey] = bestRep.id;
+            weekData[activeWeek].ts[selKey] = now;
+            if (isSharedSlot) {
+              var otherP4 = mu.p === 'him' ? 'her' : 'him';
+              SEL[sk(otherP4, mu.d, mu.s)] = bestRep.id;
+              weekData[activeWeek].ts[sk(otherP4, mu.d, mu.s)] = now;
+            }
+          }
         });
       }
     });
   });
 
-  // Trip-level waste optimization pass
-  optimizeTripWaste();
-
-  // ── PHASE 3: Replace unpaired pkg meals in shared slots ──
-  // If a pkg meal is shared but not leftover-paired (single cook, no consecutive day),
-  // the package won't be fully used. Replace with a non-pkg meal.
-  invalidateLeftoverCache();
-  const loCheck = computeLeftovers();
-  if (bothPersons) {
-    days.forEach(function(d) {
-      ['breakfast','lunch','dinner'].forEach(function(s) {
-        if (SHARED_SCHEDULE[d + '_' + s] !== 'shared') return; // only check shared-schedule slots
-        const himId = getMealId('him', d, s);
-        if (!himId || !mealUsesPkg(himId)) return;
-        const loInfo = loCheck['him_' + d + '_' + s];
-        const isPaired = loInfo && !loInfo.isLeftover && loInfo.servings > 1;
-        const isLeftover = loInfo && loInfo.isLeftover;
-        if (isPaired || isLeftover) return; // has leftover coverage
-        // Unpaired pkg meal — swap for non-pkg
-        let candidates = getMealsForSlot(s).filter(function(m){ return m.him && m.her && !mealUsesPkg(m.id) && m.id !== himId; });
-        if (!candidates.length) return;
-        const pick = randomPick(candidates);
-        SEL['him_' + d + '_' + s] = pick.id;
-        SEL['her_' + d + '_' + s] = pick.id;
-        weekData[activeWeek].ts['him_' + d + '_' + s] = now;
-        weekData[activeWeek].ts['her_' + d + '_' + s] = now;
-      });
-    });
-  }
-
-  // ── FINAL: Enforce shared schedule (runs absolutely last) ──
+  // ── PHASE 4: Enforce shared schedule (runs absolutely last) ──
   days.forEach(function(d) {
     ['breakfast','lunch','dinner'].forEach(function(s) {
-      const himId = getMealId('him', d, s);
-      const herId = getMealId('her', d, s);
+      var himId = getMealId('him', d, s);
+      var herId = getMealId('her', d, s);
       if (SHARED_SCHEDULE[dk(d,s)] === 'shared') {
-        // Force share
         if (himId && himId !== herId) {
           SEL[sk('her',d,s)] = himId;
           weekData[activeWeek].ts[sk('her',d,s)] = now;
         }
       } else if (himId && himId === herId && !MANUAL_SET[sk('him',d,s)] && !MANUAL_SET[sk('her',d,s)]) {
-        // Not scheduled as shared and not manually set — un-share by giving her a different meal
-        const candidates = getMealsForSlot(s).filter(function(m){ return m.her && m.id !== himId && !mealUsesPkg(m.id); });
+        var candidates = getMealsForSlot(s).filter(function(m){ return m.her && m.id !== himId && !mealUsesPkg(m.id); });
         if (candidates.length) {
-          const pick = randomPick(candidates);
+          var pick = randomPick(candidates);
           SEL[sk('her',d,s)] = pick.id;
           weekData[activeWeek].ts[sk('her',d,s)] = now;
         }
@@ -4416,106 +4633,6 @@ function _randomizeWeekCore(randTarget){
     });
   });
 
-}
-
-// ── TRIP-LEVEL WASTE OPTIMIZATION ───────────────────────────
-// After randomization, try swapping meals within each trip to reduce
-// package waste (e.g., pair two bean meals in the same Mon-Wed trip)
-function optimizeTripWaste() {
-  const trips = [
-    { key: 'sun', days: TRIP_DAYS_STATIC.sun },
-    { key: 'wed', days: TRIP_DAYS_STATIC.wed }
-  ];
-  const persons = person === 'shared' ? ['him','her'] : [person === 'shared' ? 'him' : person];
-  const swapSlots = ['breakfast','lunch','dinner'];
-
-  trips.forEach(function(trip) {
-    // Calculate current waste for this trip
-    let currentWaste = calcTripWaste(trip.days, persons);
-    const maxSwaps = 30;
-
-    for (let attempt = 0; attempt < maxSwaps; attempt++) {
-      // Pick a random person, day, and slot within this trip
-      const p = persons[Math.floor(Math.random() * persons.length)];
-      const d = trip.days[Math.floor(Math.random() * trip.days.length)];
-      const s = swapSlots[Math.floor(Math.random() * swapSlots.length)];
-      const selKey = p + '_' + d + '_' + s;
-
-      // Skip locked meals (skipped, eat-out)
-      if (SKIPPED[selKey] || EAT_OUT[selKey]) continue;
-
-      const currentMealId = getMealId(p, d, s);
-      if (!currentMealId) continue;
-
-      // Find alternative meals for this slot
-      const candidates = getMealsForSlot(s).filter(function(m) {
-        return m[p] && m.id !== currentMealId;
-      });
-      if (!candidates.length) continue;
-
-      // Try a random swap
-      const candidate = candidates[Math.floor(Math.random() * candidates.length)];
-      const origSel = SEL[selKey];
-      SEL[selKey] = candidate.id;
-
-      // Check calorie impact
-      const newTotals = calcTotals(p, d);
-      const calDiff = Math.abs(newTotals.kcal - CAL_BASE[p]);
-
-      if (calDiff > 150) {
-        // Too much calorie deviation — revert
-        if (origSel) SEL[selKey] = origSel; else delete SEL[selKey];
-        continue;
-      }
-
-      const newWaste = calcTripWaste(trip.days, persons);
-      if (newWaste < currentWaste - 5) {
-        // Improvement — keep the swap
-        currentWaste = newWaste;
-        if (weekData[activeWeek].ts) weekData[activeWeek].ts[selKey] = Date.now();
-      } else {
-        // No improvement — revert
-        if (origSel) SEL[selKey] = origSel; else delete SEL[selKey];
-      }
-    }
-  });
-}
-
-// Calculate total package waste across a set of days for given persons
-function calcTripWaste(days, persons) {
-  const totals = {};
-  days.forEach(function(d) {
-    persons.forEach(function(p) {
-      SLOTS.forEach(function(s) {
-        if (s === 'late_snack') return;
-        const selKey = p + '_' + d + '_' + s;
-        if (SKIPPED[selKey] || EAT_OUT[selKey]) return;
-        const mealId = getMealId(p, d, s);
-        if (!mealId) return;
-        const m = getMeal(mealId);
-        if (!m || !m.ingredients) return;
-        m.ingredients.forEach(function(ing) {
-          const db = NUTRI_DB[ing.dbKey];
-          if (!db || !db.pkg) return;
-          if (!totals[ing.dbKey]) totals[ing.dbKey] = 0;
-          totals[ing.dbKey] += (ing.amt || 0);
-        });
-      });
-    });
-  });
-
-  let totalWaste = 0;
-  Object.keys(totals).forEach(function(dbKey) {
-    const db = NUTRI_DB[dbKey];
-    const pkg = db.pkg;
-    const perPkg = (pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? pkg.drained : (pkg.cups || 0);
-    if (perPkg <= 0) return;
-    const needed = totals[dbKey];
-    const pkgsNeeded = Math.ceil(needed / perPkg);
-    const waste = (pkgsNeeded * perPkg) - needed;
-    totalWaste += (waste / perPkg) * 100;
-  });
-  return totalWaste;
 }
 
 // ── Shopping render ─────────────────────────────────────────
