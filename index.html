@@ -4793,43 +4793,44 @@ function _randomizeWeekCore(randTarget){
           });
         });
 
-        // Try each candidate, pick the one that best reduces waste
+        // Baseline TOTAL trip waste across ALL packages (before swap)
+        var baselineTripWaste = 0;
+        _analyzeTripPackages(trip.days).forEach(function(px){ baselineTripWaste += (px.waste || 0); });
+
+        // Try each candidate, pick the one that best reduces TOTAL trip waste
+        // (not just waste for this one package — a swap that fixes tofu but
+        // creates bean waste is a wash).
         var bestSwap = null;
-        var bestNewWaste = pkg.waste;
+        var bestTotalTripWaste = baselineTripWaste;
         swapCandidates.forEach(function(sc) {
           sc.replacements.forEach(function(rep) {
-            // Calculate how much of the ingredient this meal adds
-            var addedAmt = 0;
-            rep.ingredients.forEach(function(ing){ if(ing.dbKey === pkg.dbKey) addedAmt += (ing.amt || 0); });
-            // Account for leftover servings
-            var loInfo = leftovers[sk(sc.p, sc.d, sc.s)];
-            var servings = (loInfo && !loInfo.isLeftover && loInfo.servings > 1) ? loInfo.servings : 1;
-            addedAmt *= servings;
-
-            var newTotal = pkg.totalNeeded + addedAmt;
-            var newPkgs = Math.ceil(newTotal / pkg.perPkg);
-            var newWaste = (newPkgs * pkg.perPkg) - newTotal;
-
-            // Check calorie impact
+            // Temporarily apply swap
             var origSel = SEL[sk(sc.p, sc.d, sc.s)];
             SEL[sk(sc.p, sc.d, sc.s)] = rep.id;
+            var otherKey = null, otherOrig = null;
             if (sc.isSharedSlot) {
               var otherP = sc.p === 'him' ? 'her' : 'him';
-              SEL[sk(otherP, sc.d, sc.s)] = rep.id;
+              otherKey = sk(otherP, sc.d, sc.s);
+              otherOrig = SEL[otherKey];
+              SEL[otherKey] = rep.id;
             }
+            invalidateLeftoverCache();
+
+            // Score by total trip waste + calorie cost
+            var postSwapTripWaste = 0;
+            _analyzeTripPackages(trip.days).forEach(function(px){ postSwapTripWaste += (px.waste || 0); });
             var newTotals = calcTotals(sc.p, sc.d);
             var calDiff = Math.abs(newTotals.kcal - CAL_BASE[sc.p]);
+
             // Revert
             SEL[sk(sc.p, sc.d, sc.s)] = origSel;
-            if (sc.isSharedSlot) {
-              var otherP2 = sc.p === 'him' ? 'her' : 'him';
-              SEL[sk(otherP2, sc.d, sc.s)] = sc.curId;
-            }
+            if (otherKey) SEL[otherKey] = otherOrig;
+            invalidateLeftoverCache();
 
             if (calDiff > 150) return;
-            if (newWaste < bestNewWaste) {
-              bestNewWaste = newWaste;
-              bestSwap = {sc:sc, rep:rep, newTotal:newTotal};
+            if (postSwapTripWaste < bestTotalTripWaste) {
+              bestTotalTripWaste = postSwapTripWaste;
+              bestSwap = {sc:sc, rep:rep};
             }
           });
         });
@@ -4843,9 +4844,14 @@ function _randomizeWeekCore(randTarget){
             SEL[sk(otherP3, bsc.d, bsc.s)] = bestSwap.rep.id;
             weekData[activeWeek].ts[sk(otherP3, bsc.d, bsc.s)] = now;
           }
-          pkg.totalNeeded = bestSwap.newTotal;
-          pkg.packagesNeeded = Math.ceil(pkg.totalNeeded / pkg.perPkg);
-          pkg.waste = (pkg.packagesNeeded * pkg.perPkg) - pkg.totalNeeded;
+          invalidateLeftoverCache();
+          // Recompute this pkg's waste post-swap for downstream resolved check
+          var re = _analyzeTripPackages(trip.days).filter(function(px){return px.dbKey===pkg.dbKey;})[0];
+          if (re) {
+            pkg.totalNeeded = re.totalNeeded;
+            pkg.packagesNeeded = re.packagesNeeded;
+            pkg.waste = re.waste;
+          }
           if (pkg.waste < 0.01) resolved = true;
         }
       }
