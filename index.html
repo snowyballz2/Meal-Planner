@@ -4505,6 +4505,10 @@ function randomizeWeek(target){
   const randTarget=target||person; // use passed target or current person tab
   const savedSel = JSON.parse(JSON.stringify(SEL));
   const maxRetries = 10;
+  // Track the best retry so we don't end up using a random late-retry state
+  // that happens to be worse than an earlier one.
+  let bestWaste = Infinity;
+  let bestSEL = null;
   for (let retry = 0; retry < maxRetries; retry++) {
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
     Object.keys(savedSel).forEach(function(k){SEL[k]=savedSel[k];});
@@ -4519,7 +4523,16 @@ function randomizeWeek(target){
         grouped[cat].forEach(function(item){ if(item.wasteLabel) totalWaste++; });
       });
     });
-    if (totalWaste === 0 || retry === maxRetries - 1) break;
+    if (totalWaste < bestWaste) {
+      bestWaste = totalWaste;
+      bestSEL = JSON.parse(JSON.stringify(SEL));
+    }
+    if (totalWaste === 0) break;
+  }
+  // Restore best retry's selections (last retry's state may be worse)
+  if (bestSEL && bestWaste > 0) {
+    Object.keys(SEL).forEach(function(k){delete SEL[k];});
+    Object.keys(bestSEL).forEach(function(k){SEL[k]=bestSEL[k];});
   }
   invalidateLeftoverCache();renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
 }
