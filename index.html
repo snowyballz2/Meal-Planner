@@ -1916,6 +1916,145 @@ const MEALS=[
     I('dried thyme',0.5,'fixed',false)
   ]},
 
+ // ── Lean recipes (low fat, high protein) ──────────────────
+
+ {id:'turkey_lettuce_wraps',label:'Ground turkey lettuce wraps',slots:['lunch','dinner'],
+  steps:['Brown ground turkey in a pan over medium-high heat, breaking into crumbles.','Add soy sauce, ginger, garlic. Cook 1 min.','Add diced bell pepper and carrots. Cook 3–4 min until tender-crisp.','Spoon into lettuce cups. Top with scallion and sesame seeds.'],
+  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  ingredients:[
+    I('ground turkey 93',8,'protein'),
+    I('baby spinach',2,'veg'),
+    I('bell pepper',0.5,'veg'),
+    I('carrots',0.5,'veg'),
+    I('brown rice cooked',0.75,'carb'),
+    I('soy sauce',1,'condiment',false),
+    I('ginger',0.5,'fixed',false),
+    I('garlic',2,'fixed',false),
+    I('scallion',2,'veg',false),
+    I('sesame seeds',0.5,'condiment',false)
+  ]},
+
+ {id:'chicken_sweet_potato_bowl',label:'Chicken breast & sweet potato bowl',slots:['lunch','dinner'],
+  steps:['Preheat oven to 400°F. Cube sweet potato, toss with garlic powder and black pepper.','Roast sweet potato 20–25 min. Season chicken breast with cumin and salt.','Pan-sear chicken 5–6 min per side. Rest 3 min, slice.','Assemble: sweet potato base, chicken, spinach, salsa.'],
+  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  ingredients:[
+    I('chicken breast',7,'protein'),
+    I('sweet potato',1.25,'carb'),
+    I('baby spinach',1,'veg'),
+    I('salsa',3,'condiment',false),
+    I('garlic powder',0.5,'fixed',false),
+    I('cumin',0.5,'fixed',false),
+    I('black pepper',0.5,'fixed',false),
+    I('salt',0.5,'fixed',false)
+  ]},
+
+ {id:'lentil_chicken_bowl',label:'Lentil & grilled chicken bowl',slots:['lunch','dinner'],
+  steps:['Cook lentils: rinse, simmer in 2 cups water 20–25 min. Drain.','Season chicken with garlic powder, cumin, salt. Pan-sear 5–6 min per side.','Slice chicken. Sauté kale with garlic 2 min.','Assemble: lentils, chicken, kale. Squeeze lemon over top.'],
+  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  ingredients:[
+    I('chicken breast',6,'protein'),
+    I('lentils cooked',0.75,'carb'),
+    I('kale',1,'veg'),
+    I('garlic',1,'fixed',false),
+    I('lemon',0.5,'condiment',false),
+    I('garlic powder',0.5,'fixed',false),
+    I('cumin',0.5,'fixed',false),
+    I('salt',0.5,'fixed',false)
+  ]},
+
+ {id:'black_bean_rice_bowl',label:'Black bean & rice bowl',slots:['lunch','dinner'],
+  steps:['Warm black beans with cumin and garlic powder.','Heat brown rice. Sauté bell pepper and kale 3 min.','Assemble: rice, beans, veg. Top with salsa and lime.'],
+  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  ingredients:[
+    I('black beans canned',0.75,'protein'),
+    I('brown rice cooked',1,'carb'),
+    I('bell pepper',0.75,'veg'),
+    I('kale',1,'veg'),
+    I('salsa',3,'condiment',false),
+    I('cumin',0.5,'fixed',false),
+    I('garlic powder',0.5,'fixed',false),
+    I('lime',0.5,'condiment',false)
+  ]},
+
+ {id:'chickpea_curry_bowl',label:'Chickpea & spinach curry',slots:['lunch','dinner'],
+  steps:['Heat a pan over medium. Add red curry paste, stir 30 sec.','Add coconut milk, chickpeas, and spinach. Simmer 6–8 min.','Serve over brown rice.'],
+  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  ingredients:[
+    I('chickpeas roasted',0.75,'protein'),
+    I('brown rice cooked',1,'carb'),
+    I('baby spinach',1.5,'veg'),
+    I('coconut milk',0.25,'liquid'),
+    I('red curry paste',1,'condiment',false)
+  ]},
+
+ {id:'ground_chicken_stir_fry',label:'Ground chicken & veggie stir-fry',slots:['lunch','dinner'],
+  steps:['Brown ground chicken over medium-high heat.','Add broccoli, bell pepper, carrots. Stir-fry 4–5 min.','Add soy sauce, ginger, garlic. Toss.','Serve over brown rice.'],
+  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  ingredients:[
+    I('ground chicken',8,'protein'),
+    I('brown rice cooked',1,'carb'),
+    I('broccoli',0.75,'veg'),
+    I('bell pepper',0.5,'veg'),
+    I('carrots',0.5,'veg'),
+    I('soy sauce',1.5,'condiment',false),
+    I('ginger',0.5,'fixed',false),
+    I('garlic',2,'fixed',false)
+  ]},
+
+ {id:'shrimp_quinoa_bowl',label:'Shrimp & quinoa with roasted veg',slots:['lunch','dinner'],
+  steps:['Cook quinoa. Roast broccoli and zucchini at 425°F for 15 min.','Season shrimp with garlic powder and black pepper. Pan-sear 1–2 min per side.','Assemble: quinoa, roasted veg, shrimp. Squeeze lemon.'],
+  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  ingredients:[
+    I('shrimp',7,'protein'),
+    I('quinoa cooked',1,'carb'),
+    I('broccoli',0.75,'veg'),
+    I('zucchini',0.75,'veg'),
+    I('lemon',0.5,'condiment',false),
+    I('garlic powder',0.5,'fixed',false),
+    I('black pepper',0.5,'fixed',false)
+  ]},
+
+ {id:'lentil_soup_lean',label:'Lentil & vegetable soup',slots:['lunch','dinner'],
+  steps:['Sauté carrots, celery, garlic in broth 3–4 min.','Add lentils, remaining broth, Italian seasoning. Simmer 20 min.','Add kale. Cook 3 min until wilted. Season with salt and pepper.'],
+  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  ingredients:[
+    I('lentils cooked',0.75,'protein'),
+    I('kale',1,'veg'),
+    I('carrots',0.5,'veg'),
+    I('celery',1,'veg'),
+    I('chicken broth',2,'liquid'),
+    I('garlic',1,'fixed',false),
+    I('italian seasoning',0.5,'fixed',false),
+    I('salt',0.5,'fixed',false),
+    I('black pepper',0.5,'fixed',false)
+  ]},
+
+ {id:'turkey_zucchini_boats',label:'Turkey-stuffed zucchini boats',slots:['lunch','dinner'],
+  steps:['Preheat oven to 375°F. Halve zucchini lengthwise, scoop out centers.','Brown ground turkey with garlic, Italian seasoning, salt.','Stir in marinara and diced zucchini centers.','Fill boats. Top with optional cheese. Bake 20 min.'],
+  him:{fv:'2c veg'},her:{fv:'2c veg'},
+  ingredients:[
+    I('ground turkey 93',8,'protein'),
+    I('zucchini',2,'veg'),
+    I('marinara',0.5,'condiment'),
+    I('garlic',2,'fixed',false),
+    I('italian seasoning',0.5,'fixed',false),
+    I('salt',0.5,'fixed',false)
+  ]},
+
+ {id:'cannellini_kale_soup',label:'White bean & kale soup',slots:['lunch','dinner'],
+  steps:['Sauté garlic and carrots in broth 3 min.','Add beans, broth, Italian seasoning. Simmer 10 min.','Add kale. Cook 3 min. Season with salt, pepper, lemon juice.'],
+  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  ingredients:[
+    I('cannellini beans canned',0.75,'protein'),
+    I('kale',1.5,'veg'),
+    I('carrots',0.5,'veg'),
+    I('chicken broth',2,'liquid'),
+    I('garlic',2,'fixed',false),
+    I('lemon',0.5,'condiment',false),
+    I('italian seasoning',0.5,'fixed',false),
+    I('salt',0.5,'fixed',false)
+  ]},
+
 ];
 
 const DEFAULTS={
