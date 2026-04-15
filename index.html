@@ -5020,7 +5020,110 @@ function randomizeWeek(target){
   if (bestMisses > 0) {
     rerollMissDays(randTarget);
   }
+  // Trip-level flex scaling: proportionally scale flex-ingredient usage across
+  // all trip meals to hit clean package boundaries. Calorie-aware — skips any
+  // scale that would push a day beyond ±100 kcal.
+  applyTripFlexScaling(randTarget);
   invalidateLeftoverCache();renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
+}
+
+// Trip-level package-fitting scale for flex ingredients. Proportionally scales
+// ALL meals in a trip that use a flex ingredient (marinara, beans, coconut) to
+// hit the nearest clean package boundary. Respects per-ingredient flex ranges
+// and keeps every day within ±100 kcal of target.
+function applyTripFlexScaling(randTarget){
+  const FLEX = {
+    'marinara':                 {maxUp:1.0,  maxDown:0,    kcalCap:200},
+    'black beans canned':       {maxUp:0.5,  maxDown:0,    kcalCap:120},
+    'cannellini beans canned':  {maxUp:0.5,  maxDown:0,    kcalCap:120},
+    'chickpeas roasted':        {maxUp:0.5,  maxDown:0,    kcalCap:120},
+    'coconut milk':             {maxUp:0.75, maxDown:0.5,  kcalCap:200}
+  };
+  const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  ['sun','wed'].forEach(function(trip){
+    const days = TRIP_DAYS_STATIC[trip] || [];
+    Object.keys(FLEX).forEach(function(dbKey){
+      const db = NUTRI_DB[dbKey]; if (!db || !db.pkg) return;
+      const perPkg = (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
+      if (perPkg <= 0) return;
+      const cfg = FLEX[dbKey];
+
+      // Find all cook-day usages of this ingredient in this trip
+      invalidateLeftoverCache();
+      const leftovers = computeLeftovers();
+      const usages = []; // {p, d, s, idx, curAmt, lMult}
+      let tripTotal = 0;
+      days.forEach(function(d){
+        persons.forEach(function(p){
+          SLOTS.forEach(function(s){
+            if (s==='late_snack'||s==='shake') return;
+            const key = sk(p,d,s);
+            if (SKIPPED[key]||EAT_OUT[key]) return;
+            const lo = leftovers[key];
+            if (lo && lo.isLeftover) return;
+            const lMult = (lo && !lo.isLeftover && lo.servings > 1) ? lo.servings : 1;
+            const mealId = getMealId(p,d,s); if (!mealId) return;
+            const meal = MEALS.find(m=>m.id===mealId); if (!meal || !meal[p]) return;
+            const ovrIngr = applyOverrides(meal[p], p, d, s);
+            // Get adjusted amount from day-balanced data (matches what cards/shopping show)
+            const balanced = getBalancedSlotIngredients(p,d,s);
+            ovrIngr.forEach(function(ing, idx){
+              if (ing.dbKey !== dbKey) return;
+              let curAmt = ing.amt;
+              if (balanced) {
+                const bi = balanced.find(function(b){return b.dbKey === dbKey;});
+                if (bi) curAmt = bi.amt;
+              }
+              usages.push({p:p, d:d, s:s, idx:idx, curAmt:curAmt, lMult:lMult});
+              tripTotal += curAmt * lMult;
+            });
+          });
+        });
+      });
+      if (usages.length === 0 || tripTotal <= 0) return;
+
+      // Compute best target: nearest package multiple reachable within flex bounds
+      const pkgsCeil = Math.ceil(tripTotal / perPkg);
+      const pkgsFloor = Math.floor(tripTotal / perPkg);
+      const targetUp = pkgsCeil * perPkg;
+      const targetDown = pkgsFloor * perPkg;
+      const scaleUp = tripTotal > 0 ? targetUp / tripTotal : 1;
+      const scaleDown = tripTotal > 0 ? targetDown / tripTotal : 1;
+      let chosenScale = null;
+      // Prefer scaling UP to nearest pkg (buy an extra can, cook more)
+      if (targetUp > tripTotal + 0.01 && (scaleUp - 1) <= cfg.maxUp) {
+        chosenScale = scaleUp;
+      }
+      // Else try scaling DOWN to fewer packages (only if allowed)
+      else if (targetDown > 0 && targetDown < tripTotal - 0.01 && cfg.maxDown > 0 && (1 - scaleDown) <= cfg.maxDown) {
+        chosenScale = scaleDown;
+      }
+      if (chosenScale === null || Math.abs(chosenScale - 1) < 0.001) return;
+
+      // Calorie safety check: scaling must not push any day's total kcal past ±100
+      const dayDeltaKcal = {};
+      usages.forEach(function(u){
+        const perServAddKcal = (chosenScale - 1) * u.curAmt * db.kcal;
+        const dayKey = u.p + '_' + u.d;
+        dayDeltaKcal[dayKey] = (dayDeltaKcal[dayKey] || 0) + perServAddKcal;
+      });
+      let safe = true;
+      Object.keys(dayDeltaKcal).forEach(function(k){
+        const p = k.split('_')[0], d = k.split('_')[1];
+        const current = calcTotals(p, d).kcal;
+        const target = CAL_BASE[p];
+        const after = current + dayDeltaKcal[k];
+        if (after > target + 100 || after < target - 100) safe = false;
+      });
+      if (!safe) return;
+
+      // Apply overrides
+      usages.forEach(function(u){
+        setOverride(u.p, u.d, u.s, u.idx, 'amt', u.curAmt * chosenScale);
+      });
+      invalidateLeftoverCache();
+    });
+  });
 }
 
 // For each day whose per-person goals aren't all met, try random meal swaps
