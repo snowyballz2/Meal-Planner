@@ -841,7 +841,6 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
   const targetKcal = totalScalableKcal + targetDelta;
   let uniformScale = totalScalableKcal > 0 ? targetKcal / totalScalableKcal : 1;
   if (uniformScale < 0.1) uniformScale = 0.1; // safety floor
-  if (uniformScale > 1.75) uniformScale = 1.75; // cap at 75% scale-up — beyond this the recipe is wrong for the slot
 
   // Apply uniform scale with per-role constraints
   scalable.forEach(function(item) {
