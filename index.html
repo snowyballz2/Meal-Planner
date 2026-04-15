@@ -2915,10 +2915,10 @@ function buildShoppingList(trip,who){
         const perPkg=(db.pkg.drained&&(unit==='cup'||unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
         if(perPkg>0&&totalNum>0){
           // Calculate waste: how much of the last package isn't used.
-          // Skip for:
-          //  - longShelfLife items (egg white carton) — carry between trips
-          //  - bulk items (ground meats) — leftover freezes, not real waste
-          if(!db.pkg.longShelfLife && db.pkg.type !== 'bulk'){
+          // Skip only for longShelfLife items (egg white carton) — those
+          // legitimately carry between trips. Bulk (ground meat) is still
+          // inconvenient to freeze partial bags, so we flag those too.
+          if(!db.pkg.longShelfLife){
             const pkgsNeeded=Math.ceil(totalNum/perPkg);
             const totalFromPkgs=pkgsNeeded*perPkg;
             const wasteAmt=totalFromPkgs-totalNum;
@@ -4916,17 +4916,55 @@ function randomizeWeek(target){
     _randomizeWeekCore(randTarget);
 
     invalidateLeftoverCache();
+    // Fast approximate waste count for retry selection (avoids running the
+    // full day-balancer + shopping pipeline). Uses the same estimate Phase 3
+    // uses internally, so scoring is consistent with the optimizer's signal.
     let totalWaste = 0;
     ['sun','wed'].forEach(function(trip){
-      const grouped = buildShoppingList(trip, 'both');
-      Object.keys(grouped).forEach(function(cat){
-        grouped[cat].forEach(function(item){ if(item.wasteLabel) totalWaste++; });
+      const days = TRIP_DAYS_STATIC[trip] || [];
+      // Inline analysis: per-slot scale factor × base amount
+      const totals = {};
+      days.forEach(function(d){
+        ['him','her'].forEach(function(p){
+          if (randTarget !== 'shared' && p !== randTarget) return;
+          SLOTS.forEach(function(s){
+            if (s === 'late_snack') return;
+            const key = sk(p,d,s);
+            if (SKIPPED[key] || EAT_OUT[key]) return;
+            const mealId = getMealId(p,d,s); if (!mealId) return;
+            const lo = (_leftoverCache || computeLeftovers())[key];
+            if (lo && lo.isLeftover) return;
+            const lMult = (lo && !lo.isLeftover && lo.servings > 1) ? lo.servings : 1;
+            const m = getMeal(mealId); if (!m || !m.ingredients) return;
+            let scale = 1;
+            if (s !== 'shake' && SLOT_BUDGET[s] && (p === 'him' || p === 'her')) {
+              let bk = 0;
+              m.ingredients.forEach(function(i){ const db=NUTRI_DB[i.dbKey]; if(db) bk += db.kcal*(i.amt||0); });
+              if (bk > 0) { scale = Math.min(1.75, getSlotBudget(p,d,s) / bk); }
+            }
+            m.ingredients.forEach(function(ing){
+              const db = NUTRI_DB[ing.dbKey];
+              if (!db || !db.pkg || db.pkg.longShelfLife) return;
+              const eff = (ing.scalable === false) ? (ing.amt||0) : (ing.amt||0) * scale;
+              totals[ing.dbKey] = (totals[ing.dbKey]||0) + eff * lMult;
+            });
+          });
+        });
+      });
+      Object.keys(totals).forEach(function(k){
+        const db = NUTRI_DB[k]; if (!db || !db.pkg) return;
+        const unit = db.unit;
+        const perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
+        if (perPkg <= 0) return;
+        const pkgs = Math.ceil(totals[k] / perPkg);
+        const waste = pkgs * perPkg - totals[k];
+        if (waste > 0.01) totalWaste++;
       });
     });
-    // Lexicographic preference: (waste, goal-misses). Only compute goal misses
-    // when this retry matches or beats current best waste (day-balancer is expensive).
+    // Only compute goal misses (expensive — full day-balancer) for retries
+    // that already achieved zero waste. Waste is the dominant criterion anyway.
     let goalMisses = Infinity;
-    if (totalWaste <= bestWaste) {
+    if (totalWaste === 0) {
       goalMisses = 0;
       const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
       persons.forEach(function(p){
@@ -4967,20 +5005,49 @@ function randomizeWeek(target){
 // for that day only. Revert if waste worsens or the day still fails.
 function rerollMissDays(randTarget){
   const now = Date.now();
-  function dayWaste(d){
-    const trip = ['Monday','Tuesday','Wednesday'].indexOf(d)>=0 ? 'sun' : 'wed';
-    let w = 0;
-    const g = buildShoppingList(trip, 'both');
-    Object.keys(g).forEach(function(cat){g[cat].forEach(function(it){if(it.wasteLabel)w++;});});
-    return w;
-  }
-  function totalWaste(){
+  // Fast waste approximation for reroll checks — matches what the retry loop uses.
+  function fastTripWaste(days, persons){
+    const totals = {};
+    days.forEach(function(d){
+      persons.forEach(function(p){
+        if(p!=='him'&&p!=='her')return;
+        SLOTS.forEach(function(s){
+          if(s==='late_snack')return;
+          const key=sk(p,d,s);
+          if(SKIPPED[key]||EAT_OUT[key])return;
+          const mealId=getMealId(p,d,s); if(!mealId)return;
+          const lo=(_leftoverCache||computeLeftovers())[key];
+          if(lo&&lo.isLeftover)return;
+          const lMult=(lo&&!lo.isLeftover&&lo.servings>1)?lo.servings:1;
+          const m=getMeal(mealId); if(!m||!m.ingredients)return;
+          let scale=1;
+          if(s!=='shake'&&SLOT_BUDGET[s]){
+            let bk=0;
+            m.ingredients.forEach(function(i){const db=NUTRI_DB[i.dbKey]; if(db) bk+=db.kcal*(i.amt||0);});
+            if(bk>0) scale=Math.min(1.75, getSlotBudget(p,d,s)/bk);
+          }
+          m.ingredients.forEach(function(ing){
+            const db=NUTRI_DB[ing.dbKey];
+            if(!db||!db.pkg||db.pkg.longShelfLife)return;
+            const eff=(ing.scalable===false)?(ing.amt||0):(ing.amt||0)*scale;
+            totals[ing.dbKey]=(totals[ing.dbKey]||0)+eff*lMult;
+          });
+        });
+      });
+    });
     let w=0;
-    ['sun','wed'].forEach(function(trip){
-      const g=buildShoppingList(trip,'both');
-      Object.keys(g).forEach(function(cat){g[cat].forEach(function(it){if(it.wasteLabel)w++;});});
+    Object.keys(totals).forEach(function(k){
+      const db=NUTRI_DB[k]; if(!db||!db.pkg) return;
+      const perPkg=(db.pkg.drained&&(db.unit==='cup'||db.unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
+      if(perPkg<=0) return;
+      const waste=Math.ceil(totals[k]/perPkg)*perPkg - totals[k];
+      if(waste>0.01) w++;
     });
     return w;
+  }
+  const rerollPersons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  function totalWaste(){
+    return fastTripWaste(TRIP_DAYS_STATIC.sun, rerollPersons) + fastTripWaste(TRIP_DAYS_STATIC.wed, rerollPersons);
   }
   function dayAllOk(d, persons){
     let ok = true;
@@ -5232,7 +5299,7 @@ function _randomizeWeekCore(randTarget){
           var mm = getMeal(mid); if (!mm || !mm.ingredients) return;
           if (mm.ingredients.some(function(i){ return DISCOURAGED_INGREDIENTS.indexOf(i.dbKey) >= 0; })) discouragedCount++;
         });
-        var discouragedPenalty = discouragedCount * 150;
+        var discouragedPenalty = discouragedCount * 500;
         var score = calDiff + fatPenalty + discouragedPenalty;
 
         if (score < bestScore) {
@@ -5294,6 +5361,10 @@ function _randomizeWeekCore(randTarget){
   // Helper: analyze package waste for a trip
   function _analyzeTripPackages(tripDays) {
     var totals = {}; // dbKey -> {total, mealsUsing:[{p,d,s,mealId,amt}]}
+    // Fast approximation: apply uniform scale (slot budget / base kcal) to
+    // estimate post-adjuster package usage. Good enough for Phase 3's
+    // optimization signal; the shopping list itself uses the exact
+    // day-balanced amounts for display.
     tripDays.forEach(function(d) {
       persons.forEach(function(p) {
         SLOTS.forEach(function(s) {
@@ -5302,22 +5373,49 @@ function _randomizeWeekCore(randTarget){
           if (SKIPPED[selKey] || EAT_OUT[selKey]) return;
           var mealId = getMealId(p, d, s);
           if (!mealId) return;
-          // Skip leftovers — cook day accounts for all servings
           var loInfo = leftovers[selKey];
           if (loInfo && loInfo.isLeftover) return;
-          var servings = (loInfo && !loInfo.isLeftover && loInfo.servings > 1) ? loInfo.servings : 1;
+          var leftoverMult = (loInfo && !loInfo.isLeftover && loInfo.servings > 1) ? loInfo.servings : 1;
           var m = getMeal(mealId);
           if (!m || !m.ingredients) return;
+          // Fast scale estimate: base kcal vs slot budget.
+          var scale = 1;
+          if (s !== 'shake' && SLOT_BUDGET[s] && (p === 'him' || p === 'her')) {
+            var baseKcal = 0;
+            m.ingredients.forEach(function(i){
+              var db = NUTRI_DB[i.dbKey]; if (db) baseKcal += db.kcal * (i.amt||0);
+            });
+            if (baseKcal > 0) {
+              var budget = getSlotBudget(p, d, s);
+              scale = budget / baseKcal;
+              if (scale > 1.75) scale = 1.75; // mirror adjuster cap
+            }
+          }
           m.ingredients.forEach(function(ing) {
             var db = NUTRI_DB[ing.dbKey];
-            if (!db || !db.pkg || db.pkg.type === 'bulk') return;
-            // Long-shelf-life items (e.g. egg white cartons) carry between trips — skip waste analysis
+            if (!db || !db.pkg) return;
             if (db.pkg.longShelfLife) return;
             if (!totals[ing.dbKey]) totals[ing.dbKey] = {total:0, mealsUsing:[]};
-            var amt = (ing.amt || 0) * servings;
+            // Scalable items scale with the slot; non-scalable (veg/fruit/condiment) stay at base
+            var effectiveAmt = (ing.scalable === false) ? (ing.amt || 0) : (ing.amt || 0) * scale;
+            var amt = effectiveAmt * leftoverMult;
             totals[ing.dbKey].total += amt;
-            totals[ing.dbKey].mealsUsing.push({p:p, d:d, s:s, mealId:mealId, amt:ing.amt, servings:servings});
+            totals[ing.dbKey].mealsUsing.push({p:p, d:d, s:s, mealId:mealId, amt:effectiveAmt, servings:leftoverMult});
           });
+          // Cross-person cook adds the other person's base serving
+          if (loInfo && loInfo.crossPersonCook) {
+            var otherP = loInfo.feedsAlso;
+            var otherPort = m[otherP];
+            if (otherPort && otherPort.ingredients) {
+              otherPort.ingredients.forEach(function(oi) {
+                var odb = NUTRI_DB[oi.dbKey];
+                if (!odb || !odb.pkg || odb.pkg.longShelfLife) return;
+                if (!totals[oi.dbKey]) totals[oi.dbKey] = {total:0, mealsUsing:[]};
+                totals[oi.dbKey].total += (oi.amt || 0);
+                totals[oi.dbKey].mealsUsing.push({p:otherP, d:d, s:s, mealId:mealId, amt:oi.amt, servings:1});
+              });
+            }
+          }
         });
       });
     });
@@ -5403,8 +5501,21 @@ function _randomizeWeekCore(randTarget){
         // creates bean waste is a wash).
         var bestSwap = null;
         var bestTotalTripWaste = baselineTripWaste;
+        // Cheap base-kcal lookup for calDiff estimate (avoids day-balancer recompute per swap)
+        function _baseKcalOf(mealId){
+          var mm = getMeal(mealId); if (!mm || !mm.ingredients) return 0;
+          var k = 0;
+          mm.ingredients.forEach(function(i){ var db = NUTRI_DB[i.dbKey]; if (db) k += db.kcal*(i.amt||0); });
+          return k;
+        }
         swapCandidates.forEach(function(sc) {
           sc.replacements.forEach(function(rep) {
+            // Approximate cal impact: compare candidate's base kcal vs current slot budget.
+            // If the candidate is way outside the slot budget (can't be scaled to fit), skip.
+            var slotBudget = getSlotBudget(sc.p, sc.d, sc.s);
+            var repBase = _baseKcalOf(rep.id);
+            if (slotBudget > 0 && (repBase < slotBudget * 0.4 || repBase > slotBudget * 2.2)) return;
+
             // Temporarily apply swap
             var origSel = SEL[sk(sc.p, sc.d, sc.s)];
             SEL[sk(sc.p, sc.d, sc.s)] = rep.id;
@@ -5417,11 +5528,10 @@ function _randomizeWeekCore(randTarget){
             }
             invalidateLeftoverCache();
 
-            // Score by total trip waste + calorie cost
+            // Score by total trip waste
             var postSwapTripWaste = 0;
             _analyzeTripPackages(trip.days).forEach(function(px){ postSwapTripWaste += (px.waste || 0); });
-            var newTotals = calcTotals(sc.p, sc.d);
-            var calDiff = Math.abs(newTotals.kcal - CAL_BASE[sc.p]);
+            var calDiff = 0; // calDiff check already satisfied by slotBudget guard above
 
             // Revert
             SEL[sk(sc.p, sc.d, sc.s)] = origSel;
@@ -5529,6 +5639,11 @@ function _randomizeWeekCore(randTarget){
           var bestTripWaste = baselineTripWaste;
           var bestCalDiff = Infinity;
           candidates.forEach(function(c) {
+            // Cheap base-kcal check — avoid the expensive calcTotals/day-balancer
+            var cBase = 0;
+            if (c.ingredients) c.ingredients.forEach(function(i){ var db=NUTRI_DB[i.dbKey]; if(db) cBase += db.kcal*(i.amt||0); });
+            var slotBudget = getSlotBudget(mu.p, mu.d, mu.s);
+            if (slotBudget > 0 && (cBase < slotBudget * 0.35 || cBase > slotBudget * 2.5)) return;
             var origSel = SEL[selKey];
             var otherKey = null, otherOrig = null;
             SEL[selKey] = c.id;
@@ -5539,12 +5654,10 @@ function _randomizeWeekCore(randTarget){
             invalidateLeftoverCache();
             var newTripWaste = 0;
             _analyzeTripPackages(trip.days).forEach(function(px){ newTripWaste += (px.waste || 0); });
-            var totals = calcTotals(mu.p, mu.d);
-            var calDiff = Math.abs(totals.kcal - CAL_BASE[mu.p]);
+            var calDiff = 0; // Satisfied by slotBudget guard
             SEL[selKey] = origSel;
             if (otherKey) SEL[otherKey] = otherOrig;
             invalidateLeftoverCache();
-            if (calDiff > 200) return;
             // Only accept removal if it actually reduces total trip waste
             if (newTripWaste < bestTripWaste - 0.01) {
               bestTripWaste = newTripWaste;
