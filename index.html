@@ -387,7 +387,7 @@ var NUTRI_DB = {
   'filet mignon':          {kcal:57,  pro:6.6,fat:3.2, carb:0,   unit:'oz'},
   'shrimp':                {kcal:24,  pro:5.7,fat:0.3, carb:0,   unit:'oz'},
   'canned tuna':{kcal:27.5,pro:6.5,fat:0.25,carb:0,unit:'oz',brand:'Starkist',altUnits:{can:4,g:113},pkg:{size:5,unit:'oz',drained:4}},
-  'tofu firm':             {kcal:20,  pro:2.2,fat:1.1, carb:0.5, unit:'oz',pkg:{size:14,unit:'oz',drained:14}},
+  'tofu firm':             {kcal:20,  pro:2.2,fat:1.1, carb:0.5, unit:'oz',pkg:{size:14,unit:'oz',drained:14,type:'container'}},
   'silken tofu':           {kcal:15,  pro:1.7,fat:0.7, carb:0.3, unit:'oz', brand:'Nature\'s Tofu', altUnits:{g:85},pkg:{size:14,unit:'oz',drained:14}},
   // Dairy & alt
   'greek yogurt 0%':       {kcal:120, pro:24, fat:0,   carb:7,   unit:'cup', brand:'Fage', altUnits:{g:227}},
@@ -2633,18 +2633,18 @@ function shopQtyWithCount(dbKey,qtyObj){
   // Package conversion (cans, cartons, pouches) — skip for bulk items
   if(db.pkg&&db.pkg.type!=='bulk'){
     const pkg=db.pkg;
+    const label=pkg.type||'can';
     if(pkg.drained&&qtyObj.unit==='cup'){
       const cans=Math.ceil(qtyObj.num/pkg.drained);
-      return cans+' can'+(cans>1?'s':'')+' ('+pkg.size+pkg.unit+')';
+      return cans+' '+label+(cans>1?'s':'')+' ('+pkg.size+pkg.unit+')';
     }
     if(pkg.cups&&qtyObj.unit==='cup'){
       const units=Math.ceil(qtyObj.num/pkg.cups);
-      const label=pkg.type||'can';
       return units+' '+label+(units>1?'s':'')+' ('+pkg.size+pkg.unit+')';
     }
     if(pkg.drained&&qtyObj.unit==='oz'){
       const cans=Math.ceil(qtyObj.num/pkg.drained);
-      return cans+' can'+(cans>1?'s':'')+' ('+pkg.size+pkg.unit+')';
+      return cans+' '+label+(cans>1?'s':'')+' ('+pkg.size+pkg.unit+')';
     }
   }
 
