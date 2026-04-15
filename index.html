@@ -544,7 +544,13 @@ function buildDisplayText(dbKey, amt) {
   const db = NUTRI_DB[dbKey];
   let unit = db ? db.unit : '';
   if (unit === 'each') unit = '';
-  return fmtFrac(amt) + (unit ? ' ' + unit : '') + ' ' + dbKey;
+  let text = fmtFrac(amt) + (unit ? ' ' + unit : '') + ' ' + dbKey;
+  // Show egg count for liquid egg whites: "½ cup (4) egg white"
+  if (dbKey === 'egg white' && unit === 'cup') {
+    const eggCount = Math.round(amt * 8); // 1 cup = 8 egg whites
+    text = fmtFrac(amt) + ' cup (' + eggCount + ') egg white';
+  }
+  return text;
 }
 
 // Expand meal.ingredients into him/her ingredient arrays for rendering
