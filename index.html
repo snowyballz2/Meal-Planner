@@ -789,6 +789,18 @@ function getPrimaryProtein(m, titleCase) {
 function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedOrLeftover) {
   if (Math.abs(targetDelta) < 5) return ingredients.map(function(i){return {ing:i,newAmt:i.amt};});
 
+  // If the recipe is close to budget, leave it unchanged
+  // Threshold: 15% of base kcal OR 80 kcal, whichever is smaller
+  var baseKcal = 0;
+  ingredients.forEach(function(ing) {
+    var db = NUTRI_DB[ing.dbKey]; if (!db) return;
+    baseKcal += db.kcal * ing.amt;
+  });
+  var threshold = Math.min(baseKcal * 0.15, 80);
+  if (Math.abs(targetDelta) < threshold) {
+    return ingredients.map(function(i){return {ing:i,newAmt:i.amt};});
+  }
+
   // Classify scalable ingredients
   const scalable = [];
   ingredients.forEach(function(ing, idx) {
