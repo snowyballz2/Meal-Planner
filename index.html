@@ -377,7 +377,7 @@ var NUTRI_DB = {
   // Proteins
   'protein powder':        {kcal:97.5,pro:21, fat:1,   carb:2,   unit:'scoop', brand:'Raw Grass Fed Whey', altUnits:{tbsp:5}},
   'creatine':              {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'scoop', brand:'Promix'},
-  'egg white':             {kcal:17,  pro:3.6,fat:0.1, carb:0.2, unit:'each'},
+  'egg white':             {kcal:133, pro:26.7,fat:0,  carb:0,   unit:'cup', note:'liquid carton; ¼ cup = 2 egg whites; 32oz carton = 4 cups'},
   'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each'},
   'chicken breast':        {kcal:31,  pro:5.8,fat:0.7, carb:0,   unit:'oz'},
   'chicken thigh':         {kcal:36,  pro:4.8,fat:1.8, carb:0,   unit:'oz'},
@@ -891,7 +891,8 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
           if(swaps>0){
             adjustments[eggWholeIdx]=wholeAmt-swaps;
             if(eggWhiteIdx>=0){
-              adjustments[eggWhiteIdx]=(adjustments[eggWhiteIdx]!==undefined?adjustments[eggWhiteIdx]:ingredients[eggWhiteIdx].amt)+swaps;
+              // 1 egg whole = 0.125 cups liquid egg white
+              adjustments[eggWhiteIdx]=(adjustments[eggWhiteIdx]!==undefined?adjustments[eggWhiteIdx]:ingredients[eggWhiteIdx].amt)+(swaps*0.125);
             }
           }
         }
@@ -962,11 +963,12 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     // Solo meal: snap per-person directly
     else {
       const unit = db.unit || '';
-      const isEgg = (item.ing.dbKey === 'egg white' || item.ing.dbKey === 'egg whole');
+      const isEggWhole = (item.ing.dbKey === 'egg whole');
       if (unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving') {
         amt = Math.round(amt);
         if (amt < 1) amt = 1;
-      } else if (unit === 'each' && isEgg) {
+      } else if (unit === 'each' && isEggWhole) {
+        // Egg whole: must be whole number for solo (can't crack half)
         amt = Math.round(amt);
         if (amt < 1) amt = 1;
       } else if (unit === 'each') {
@@ -1149,7 +1151,7 @@ const MEALS=[
   steps:['Heat avocado oil in a non-stick pan over medium heat.','Add diced bell pepper and cook 2 min, stirring occasionally.','Add spinach and stir until just wilted, about 1 min.','Whisk egg whites and whole egg together with a pinch of garlic powder and black pepper.','Pour eggs over the veg. Let set 10 sec, then gently fold and scramble until just cooked, 3–4 min. Remove from heat while still slightly glossy — they carry-over cook.','Toast bread. Slice avocado. Plate everything together.'],
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
-    I('egg white',6,'protein'),
+    I('egg white',0.75,'protein'),
     I('egg whole',1,'protein'),
     I('baby spinach',1,'veg'),
     I('bell pepper',0.25,'veg'),
@@ -1189,7 +1191,7 @@ const MEALS=[
   ingredients:[
     I('oat flour',0.5,'carb'),
     I('protein powder',1,'protein'),
-    I('egg white',2,'protein'),
+    I('egg white',0.25,'protein'),
     I('water',0.5,'liquid'),
     I('mixed berries',0.5,'fruit',false),
     I('maple syrup',1,'carb'),
@@ -1202,7 +1204,7 @@ const MEALS=[
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
     I('canned tuna',5,'protein'),
-    I('egg white',3,'protein'),
+    I('egg white',0.375,'protein'),
     I('egg whole',1,'protein'),
     I('bell pepper',0.25,'veg'),
     I('kale',1,'veg'),
@@ -1217,7 +1219,7 @@ const MEALS=[
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
     I('egg whole',2,'protein'),
-    I('egg white',3,'protein'),
+    I('egg white',0.375,'protein'),
     I('kale',1,'veg'),
     I('bell pepper',0.25,'veg'),
     I('whole wheat toast',2,'carb'),
@@ -1231,7 +1233,7 @@ const MEALS=[
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
     I('egg whole',2,'protein'),
-    I('egg white',2,'protein'),
+    I('egg white',0.25,'protein'),
     I('baby spinach',1,'veg'),
     I('carrots',0.25,'veg'),
     I('brown rice cooked',0.5,'carb'),
@@ -1273,7 +1275,7 @@ const MEALS=[
     I('brown rice cooked',0.5,'carb'),
     I('water',2,'liquid'),
     I('egg whole',1,'protein'),
-    I('egg white',2,'protein'),
+    I('egg white',0.25,'protein'),
     I('kale',1,'veg'),
     I('soy sauce',0.33,'condiment',false),
     I('sesame oil',0.5,'fat')
@@ -1596,7 +1598,7 @@ const MEALS=[
     I('zucchini',1.5,'veg'),
     I('marinara',0.75,'condiment'),
     I('kale',1,'veg'),
-    I('egg white',1,'protein'),
+    I('egg white',0.125,'protein'),
     I('italian seasoning',0.5,'fixed',false),
     I('garlic',1,'fixed',false)
   ]},
