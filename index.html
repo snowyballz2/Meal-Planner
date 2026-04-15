@@ -1142,22 +1142,16 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, isSharedO
     const cleanTotal = pkgsNeeded * perPkg;
     const targetPerServing = cleanTotal / totalServings;
 
-    // Flex ranges matching shopping optimizer
-    const flexIngr = ['black beans canned', 'cannellini beans canned', 'marinara', 'chickpeas roasted'];
-    let maxDown = 0.25, maxUp = 0.25; // default ±25%
-    if (flexIngr.indexOf(ing.dbKey) >= 0) { maxDown = 0; maxUp = 1.0; } // beans/marinara: no reduce, +100% up
-    if (ing.dbKey === 'coconut milk') { maxDown = 0.50; maxUp = 0.75; }
+    // Per-meal nudge: small adjustments only (±0.25 cup / ±1 oz)
+    // Big waste problems are solved by the randomizer's Phase 3 (meal pairing), not per-meal nudging
+    const maxNudge = (db.unit === 'cup') ? 0.25 : (db.unit === 'oz') ? 2 : 0.25;
 
-    // Nudge up or down to hit clean package boundary — NO SNAPPING
-    // The exact fraction (e.g. 0.4375) is the right amount to eliminate waste
     const nudgeChange = targetPerServing - currentAmt;
     const absChange = Math.abs(nudgeChange);
-    const isUp = nudgeChange > 0;
-    const withinFlex = isUp ? (absChange <= currentAmt * maxUp) : (absChange <= currentAmt * maxDown);
-    if (absChange > 0.01 && withinFlex) {
-      // Check calorie impact — only nudge if within ±75 kcal
+    if (absChange > 0.01 && absChange <= maxNudge) {
+      // Check calorie impact — only nudge if within ±50 kcal
       const kcalImpact = absChange * db.kcal;
-      if (kcalImpact <= 75) {
+      if (kcalImpact <= 50) {
         // Enforce minAmt and wholeOnly
         let nudged = targetPerServing;
         // wholeOnly items or unit:each/slice must round to whole numbers
