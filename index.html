@@ -429,7 +429,7 @@ var NUTRI_DB = {
   'zucchini':              {kcal:20,  pro:1.5,fat:0.2, carb:3.5, unit:'cup', produce:{perWhole:1.5,label:'medium zucchini'}},
   'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup'},
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}},
-  'celery':                {kcal:6,   pro:0.3,fat:0.1, carb:1.2, unit:'each', cupsEach:0.5},
+  'celery':                {kcal:6,   pro:0.3,fat:0.1, carb:1.2, unit:'each', cupsEach:0.5, wholeOnly:true},
   'egg noodles dry':       {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup'},
   'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',pkg:{size:32,unit:'oz',cups:4,type:'carton'}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75},
@@ -492,7 +492,7 @@ var NUTRI_DB = {
   'gochugaru':             {kcal:10,  pro:0.3,fat:0.1, carb:2,   unit:'tbsp'},
   'sugar':                 {kcal:48,  pro:0,  fat:0,   carb:12,  unit:'tbsp'},
   'shallot':               {kcal:30,  pro:1,  fat:0,   carb:7,   unit:'each', cupsEach:0.25},
-  'cucumber':              {kcal:16,  pro:0.7,fat:0.1, carb:3.6, unit:'each', cupsEach:1.5},
+  'cucumber':              {kcal:11,  pro:0.5,fat:0.1, carb:2.4, unit:'cup', produce:{perWhole:1.5,label:'cucumber'}},
   'red curry paste':{kcal:20,pro:0,fat:0,carb:4,unit:'tbsp',brand:'Maesri'},
   'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup'},
   // Packaged / grab-and-go
@@ -2022,7 +2022,7 @@ const MEALS=[
   steps:['Slice cucumber. Dip in hummus.'],
   him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
   ingredients:[
-    I('cucumber',1,'veg',false),
+    I('cucumber',1.5,'veg',false),
     I('hummus',3,'fat')
   ]},
 
@@ -2094,7 +2094,7 @@ const MEALS=[
     I('white miso',0.5,'condiment',false),
     I('gochugaru',0.5,'condiment',false),
     I('rice vinegar',1,'condiment',false),
-    I('cucumber',0.5,'veg'),
+    I('cucumber',0.75,'veg'),
     I('scallion',1,'veg'),
     I('sesame seeds',1,'fixed',false)
   ]},
