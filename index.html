@@ -5047,74 +5047,104 @@ function rerollMissDays(randTarget){
     return ok;
   }
   const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
-  const maxRerolls = 25;
+  // Count how many primary goals a day misses (per person, summed)
+  function missCount(d){
+    let misses = 0;
+    persons.forEach(function(p){
+      if(p!=='him'&&p!=='her')return;
+      const calT=CAL_BASE[p], proT=PRO_TARGET[p];
+      const t=calcTotals(p,d);
+      const fv=computeDailyFV(p,d);
+      const mk=t.pro*4+t.fat*9+t.carb*4;
+      const carbPct=mk>0?(t.carb*4)/mk:0;
+      const fatPct=mk>0?(t.fat*9)/mk:0;
+      if(Math.abs(t.kcal-calT)>100)misses++;
+      if(t.pro<proT)misses++;
+      if(carbPct>0.55)misses++;
+      if(fatPct>0.30)misses++;
+      if(fv.veg<3)misses++;
+      if(fv.fruit<1)misses++;
+    });
+    return misses;
+  }
+
+  const maxIters = 7;
   DAYS.forEach(function(d){
     if (dayAllOk(d, persons)) return;
     const baseWaste = totalWaste();
-    // Snapshot this day's selections for both persons
     const snap = {};
     persons.forEach(function(p){
       SLOTS.forEach(function(s){ snap[sk(p,d,s)] = SEL[sk(p,d,s)]; });
     });
-    let bestDaySel = Object.assign({}, snap);
-    let bestDayOk = false;
-    for (let attempt = 0; attempt < maxRerolls; attempt++) {
-      // Random pick new meals for this day (respect locks + shared schedule).
-      // Only re-roll slots whose current meal is NON-package — package meals
-      // are locked in by the waste optimizer and shouldn't be swapped out.
-      // Also don't pick a package meal as replacement.
-      persons.forEach(function(p){
-        SLOTS.forEach(function(s){
+
+    // Iterate: each loop, find the single best non-pkg meal swap that reduces
+    // miss count for this day, without increasing waste. Stop when the day
+    // passes, or no improving swap exists.
+    for (let iter = 0; iter < maxIters; iter++) {
+      if (dayAllOk(d, persons)) break;
+      const currentMisses = missCount(d);
+      let bestSwap = null;
+      let bestMisses = currentMisses;
+
+      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+        persons.forEach(function(p){
           const key = sk(p,d,s);
           if (EAT_OUT[key] || SKIPPED[key]) return;
-          if (s === 'shake' || s === 'late_snack') return;
           const currentId = SEL[key];
-          if (currentId && mealUsesPkg(currentId)) return; // protect pkg meals
+          if (currentId && mealUsesPkg(currentId)) return; // never remove pkg meals
           const isShared = SHARED_SCHEDULE[dk(d,s)] === 'shared';
+          // If shared and we're processing her, skip — him already tried every swap
+          if (isShared && p === 'her') return;
+          const otherP = p==='him'?'her':'him';
           const candidates = getMealsForSlot(s).filter(function(m){
             if (!m[p]) return false;
-            if (isShared && (!m.him || !m.her)) return false;
-            if (mealUsesPkg(m.id)) return false; // never swap IN a pkg meal
+            if (isShared && !m[otherP]) return false;
+            if (mealUsesPkg(m.id)) return false; // never introduce pkg meals
+            if (m.id === currentId) return false;
             return true;
           });
-          if (!candidates.length) return;
-          const pick = randomPick(candidates);
-          SEL[key] = pick.id;
-          weekData[activeWeek].ts[key] = now;
+          candidates.forEach(function(c){
+            const origSel = SEL[key];
+            let otherKey = null, otherOrig = null;
+            SEL[key] = c.id;
+            if (isShared) {
+              otherKey = sk(otherP, d, s);
+              otherOrig = SEL[otherKey];
+              SEL[otherKey] = c.id;
+            }
+            invalidateLeftoverCache();
+            const newMisses = missCount(d);
+            const newWaste = totalWaste();
+            // Accept swap only if strictly fewer misses AND waste unchanged
+            if (newMisses < bestMisses && newWaste <= baseWaste) {
+              bestMisses = newMisses;
+              bestSwap = { key, otherKey, id: c.id };
+            }
+            // Revert for next candidate
+            SEL[key] = origSel;
+            if (otherKey) SEL[otherKey] = otherOrig;
+          });
         });
       });
-      // Enforce shared schedule for this day
-      ['breakfast','lunch','dinner'].forEach(function(s){
-        if (SHARED_SCHEDULE[dk(d,s)] === 'shared'){
-          const himId = getMealId('him', d, s);
-          if (himId) { SEL[sk('her',d,s)] = himId; weekData[activeWeek].ts[sk('her',d,s)] = now; }
-        }
-      });
-      invalidateLeftoverCache();
-      // Check waste (must not worsen)
-      if (totalWaste() > baseWaste) continue;
-      // Check goals
-      if (dayAllOk(d, persons)) {
-        // Capture this best
-        bestDaySel = {};
-        persons.forEach(function(p){
-          SLOTS.forEach(function(s){ bestDaySel[sk(p,d,s)] = SEL[sk(p,d,s)]; });
-        });
-        bestDayOk = true;
+
+      if (!bestSwap) {
+        invalidateLeftoverCache();
         break;
       }
+      // Apply the best swap and iterate
+      SEL[bestSwap.key] = bestSwap.id;
+      weekData[activeWeek].ts[bestSwap.key] = now;
+      if (bestSwap.otherKey) {
+        SEL[bestSwap.otherKey] = bestSwap.id;
+        weekData[activeWeek].ts[bestSwap.otherKey] = now;
+      }
+      invalidateLeftoverCache();
     }
-    if (!bestDayOk) {
-      // Revert to original snapshot (no improvement found)
+
+    // Final safety check — revert if waste worsened (shouldn't happen, but belt+suspenders)
+    if (totalWaste() > baseWaste) {
       Object.keys(snap).forEach(function(k){ SEL[k] = snap[k]; });
       invalidateLeftoverCache();
-    } else {
-      // Even the "best" found might have tipped waste in another trip;
-      // verify and revert if so.
-      if (totalWaste() > baseWaste) {
-        Object.keys(snap).forEach(function(k){ SEL[k] = snap[k]; });
-        invalidateLeftoverCache();
-      }
     }
   });
 }
