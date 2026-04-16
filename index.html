@@ -1051,13 +1051,16 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     });
     let overBy=postKcal-effectiveBudget;
     if(overBy>50){
-      // Sort scalable items by calorie contribution (highest first)
+      // Sort scalable items: trim fat first, then carb, then protein last.
+      // Within each role, highest calorie contribution first.
+      const trimRolePriority={fat:0,carb:1,other:2,protein:3};
       const trimItems=scalable.filter(function(item){
-        return !fatDropped[item.idx] && item.role!=='veg';
+        return !fatDropped[item.idx] && item.role!=='veg' && item.role!=='fruit';
       }).map(function(item){
         const amt=adjustments[item.idx]!==undefined?adjustments[item.idx]:item.ing.amt;
-        return {idx:item.idx,ing:item.ing,kcal:item.calPerUnit*amt,calPerUnit:item.calPerUnit,amt:amt};
-      }).sort(function(a,b){return b.kcal-a.kcal;});
+        const rp=trimRolePriority[item.role]!==undefined?trimRolePriority[item.role]:2;
+        return {idx:item.idx,ing:item.ing,kcal:item.calPerUnit*amt,calPerUnit:item.calPerUnit,amt:amt,rp:rp};
+      }).sort(function(a,b){return a.rp!==b.rp?a.rp-b.rp:b.kcal-a.kcal;});
 
       let safety=20;
       while(overBy>50&&trimItems.length&&safety-->0){
@@ -3223,9 +3226,43 @@ function getDayBalancedIngredients(p,d){
     const adj=slotAdj!==0?adjustIngredients(ingr,slotAdj,s,hints,mts)
                          :ingr.map(function(i){return {ing:i,newAmt:i.amt};});
     slots[s]=adj.map(function(a){
-      return {dbKey:a.ing.dbKey, amt:a.newAmt, role:a.ing.role,
+      var amt=a.newAmt;
+      // Cap veg/fruit at 2× original recipe amount
+      if((a.ing.role==='veg'||a.ing.role==='fruit')&&a.ing.amt>0&&amt>a.ing.amt*2){
+        amt=a.ing.amt*2;
+      }
+      return {dbKey:a.ing.dbKey, amt:amt, role:a.ing.role,
               scalable:a.ing.scalable, origAmt:a.ing.amt};
     });
+
+    // Per-slot budget enforcement: if the slot exceeds its budget by >50 kcal
+    // (from snap rounding, veg boosts, etc.), trim fat then carb to fit.
+    // This prevents lunch/snack overages from crushing dinner's residual.
+    if(s!=='dinner'&&s!=='shake'&&SLOT_BUDGET[s]){
+      var slotBudget=getSlotBudget(p,d,s);
+      var slotKcal=0;
+      slots[s].forEach(function(i){var db=NUTRI_DB[i.dbKey];if(db)slotKcal+=db.kcal*i.amt;});
+      var slotOver=slotKcal-slotBudget;
+      if(slotOver>50){
+        var trimRoles=['fat','carb','protein'];
+        for(var ri=0;ri<trimRoles.length&&slotOver>20;ri++){
+          for(var si=0;si<slots[s].length&&slotOver>20;si++){
+            var item=slots[s][si];
+            if(item.role!==trimRoles[ri]||item.scalable===false)continue;
+            var db=NUTRI_DB[item.dbKey];if(!db)continue;
+            var grid=db.unit==='oz'?1:db.unit==='cup'?0.25:db.unit==='tbsp'?0.5:1;
+            if(db.wholeOnly)grid=1;
+            var minAmt=item.role==='fat'?0.25:(item.origAmt||item.amt)*0.3;
+            if(db.minAmt&&db.minAmt>minAmt)minAmt=db.minAmt;
+            while(slotOver>20&&item.amt>minAmt+grid*0.5){
+              item.amt-=grid;
+              if(item.amt<minAmt)item.amt=minAmt;
+              slotOver-=db.kcal*grid;
+            }
+          }
+        }
+      }
+    }
   });
 
   // Pass 2: different-day leftover slots — pinned from cook day's cache.
@@ -3477,9 +3514,14 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
   // not-scalable so the calorie adjuster doesn't scale them, but the
   // day-level balancer CAN scale them UP to meet the daily fv floor).
   function boostFV(role){
-    // Prefer scaling an item already in the recipe with unit=cup so 0.25 step is meaningful
+    // Prefer scaling an item already in the recipe with unit=cup so 0.25 step is meaningful.
+    // Cap at 2× original recipe amount — no single ingredient should more than double.
     const items=itemsByRole(role, true).filter(function(x){
-      return x.db.unit==='cup' || (x.db.unit==='each' && x.db.cupsEach);
+      if(x.db.unit!=='cup' && !(x.db.unit==='each' && x.db.cupsEach))return false;
+      // Skip items already at or above 2× their original recipe amount
+      var maxAmt=(x.origAmt||x.cur)*2;
+      if(x.cur>=maxAmt)return false;
+      return true;
     });
     if(!items.length)return null;
     // Pick cheapest-kcal-per-cup (so adding veg/fruit minimizes calorie cost)
@@ -6085,6 +6127,48 @@ function _randomizeWeekCore(randTarget){
         SEL[key] = pick.id;
         weekData[activeWeek].ts[key] = now;
       });
+    });
+  });
+
+  // ── PHASE 1.6: Swap over-budget snacks ────────────────────────
+  // Snack budgets are small (10% of daily cal). Whole-item snacks (RXBAR,
+  // eggs+apple) can't be scaled down. If a snack's base kcal exceeds the
+  // slot budget by >50 kcal, replace with a lower-cal alternative.
+  persons.forEach(function(p){
+    if(p!=='him'&&p!=='her')return;
+    days.forEach(function(d){
+      var key=sk(p,d,'snack');
+      if(locked[key]||SKIPPED[key]||EAT_OUT[key])return;
+      var mealId=getMealId(p,d,'snack');
+      if(!mealId)return;
+      var m=getMeal(mealId);
+      if(!m||!m[p])return;
+      var baseKcal=0;
+      if(m.ingredients)m.ingredients.forEach(function(i){
+        var db=NUTRI_DB[i.dbKey];if(db)baseKcal+=db.kcal*i.amt;
+      });
+      var budget=getSlotBudget(p,d,'snack');
+      if(baseKcal<=budget+50)return;
+      // Over budget — find a snack that fits
+      var isShared=bothPersons&&SHARED_SCHEDULE[dk(d,'snack')]==='shared';
+      var candidates=getMealsForSlot('snack').filter(function(cm){
+        if(!cm[p]||cm.id===mealId)return false;
+        if(isShared&&(!cm.him||!cm.her))return false;
+        var ck=0;
+        if(cm.ingredients)cm.ingredients.forEach(function(i){
+          var db=NUTRI_DB[i.dbKey];if(db)ck+=db.kcal*i.amt;
+        });
+        return ck<=budget+50;
+      });
+      if(!candidates.length)return;
+      var pick=randomPick(candidates);
+      SEL[key]=pick.id;
+      weekData[activeWeek].ts[key]=now;
+      if(isShared){
+        var otherP=p==='him'?'her':'him';
+        SEL[sk(otherP,d,'snack')]=pick.id;
+        weekData[activeWeek].ts[sk(otherP,d,'snack')]=now;
+      }
     });
   });
 
