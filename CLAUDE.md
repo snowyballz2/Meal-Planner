@@ -275,9 +275,9 @@ Expanding/collapsing a meal card in the Him tab mirrors the same slot's state in
 ## Current State & Next Steps (as of 2026-04-16)
 
 ### What's working
-- **Daily macro goals**: ~94% strict hit rate (20-run sample). All misses are borderline fat% (30.1–31%) or rare carb% (55.1%). Calories, protein, veg, fruit all 100%.
+- **Daily macro goals**: ~90% strict hit rate (30-run sample). All misses are borderline fat% (30.1–31%) or rare carb% (55.1%). Calories, protein, veg, fruit all 100%.
 - **Secondary goals**: 100% hit rate (±150 cal, <35% fat, <60% carbs, pro min-10, ≥2c veg, ≥0.5c fruit)
-- **Zero waste**: ~85% of runs (17/20) achieve honest zero waste
+- **Zero waste**: ~77% of runs (23/30) achieve honest zero waste
 - **Data integrity**: `verifyInvariants()` checks 5 invariants after every randomize — 0 violations across 20 runs
 - **Leftover pair consistency**: 100% — leftover days show exactly what was cooked
 - **Meal variety**: avg ~33 unique meals per week, no dead meals
@@ -290,7 +290,7 @@ All data consumers read from `getBalancedSlotIngredients(p, d, s)`. No special c
 
 **`getDayBalancedIngredients` pipeline:**
 1. Classify slots: same-day leftovers, different-day leftovers, normal slots
-2. **Pass 1**: Compute non-leftover slots via per-slot adjuster. Shakes included as frozen raw amounts. Dinner target computed from actual amounts already in slots (not recomputed inline).
+2. **Pass 1**: Compute non-leftover slots via per-slot adjuster. Shakes included as frozen raw amounts. Dinner target computed from actual amounts already in slots (not recomputed inline). Veg/fruit capped at 2× original recipe amount. Per-slot budget enforcement trims fat→carb→protein if non-dinner slot exceeds budget by >50 kcal.
 3. **Pass 2**: Different-day leftovers pinned from cook day's cache, frozen.
 4. **Day-level macro balancer**: `dailyMacros()` counts same-day cook slots × `sameDayCookServings` so the balancer tracks live amounts. Frozen slots (leftovers, shakes) contribute to totals but can't be modified.
 5. **Post-balancer calorie correction**: If frozen leftovers push daily total >50 kcal off target, proportionally trims non-frozen ingredients. Fat trimmed first (with floor snap), then carb, then protein last. Accounts for `sameDayCookServings` multiplier.
@@ -315,8 +315,15 @@ All data consumers read from `getBalancedSlotIngredients(p, d, s)`. No special c
 13. **Cross-person cook card display**: Shows real combined batch (his balanced × his servings + her balanced × her servings), not his × totalServings.
 14. **Calorie correction fat snap**: Fat-role ingredients floor when trimming (over target), other roles round nearest.
 15. **Simplified buildShoppingList**: Just adds each slot's balanced amounts. No leftover multiplier, no cross-person logic, no shake branch.
+16. **Post-snap trim preserves protein**: `adjustIngredients` trim step now trims fat→carb→protein (was highest-kcal-first regardless of role). Prevents salmon/chicken from being crushed when dinner absorbs calorie residual.
+17. **Phase 1.6 — swap over-budget snacks**: Whole-item snacks (RXBAR, eggs+apple) that can't be scaled for Her's 164 kcal budget are replaced. Snack over-budget rate 39% → 16%.
+18. **Phase 1.7 — swap solo-pkg snacks**: If a snack is the only meal in the trip using a pkg ingredient, swap to non-pkg to avoid opening a package for one snack.
+19. **Veg/fruit 2× cap**: After per-slot adjuster, veg/fruit capped at 2× original recipe amount (was unlimited — broccoli hit 260%).
+20. **Per-slot budget enforcement**: Non-dinner slots trimmed fat→carb→protein if >50 kcal over budget after adjuster.
+21. **Post-balance waste pass**: After full balanced pipeline, nudges pkg ingredient amounts across the trip to hit clean package boundaries. Reverts any day where goals break.
 
 ### Items for future sessions
+- **Waste vs goals tension**: The day balancer and calorie correction can shift pkg amounts after the waste optimizer runs. Excluding pkg from the balancer was tested but net-negative (fewer tools for macro balancing). The post-balance waste pass helps (~77% zero-waste) but can't fix all cases. Deeper fix: tighter coordination between waste optimizer and balanced pipeline.
 - **Cross-person leftover pinning**: Her's portion is computed independently for her eating day (correct for her calories) but not pinned to cook time. Shopping handles this correctly (adds each slot individually). Card display is fixed. Lower priority.
 - **Secondary goal UI**: Could display as "yellow zone" vs "green zone" on the stats bar
 - **Meal variety audit**: some meals like `turkey_meatballs_din` and `edamame_orange_eve` are heavily favored
