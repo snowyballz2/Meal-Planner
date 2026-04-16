@@ -3136,18 +3136,41 @@ function getDayBalancedIngredients(p,d){
   const key=pk(p,d);
   if(_dayBalancedCache[key])return _dayBalancedCache[key];
   const slots={};
+  const frozenSlots={};
   const leftovers=(typeof computeLeftovers==='function')?computeLeftovers():{};
-  // Step 1: per-slot adjust as baseline
+
+  // Identify same-person leftover slots so we can process them in pass 2
+  // (after cook slots are computed). This avoids infinite recursion for
+  // same-day leftovers (cook at lunch, eat leftover at dinner).
+  const leftoverInfo={}; // slot -> {lo, mealId}
   SLOTS.forEach(function(s){
     if(s==='shake'||s==='late_snack')return;
+    const selKey=sk(p,d,s);
+    if(SKIPPED[selKey]||EAT_OUT[selKey])return;
+    const lo=leftovers[selKey];
+    if(lo&&lo.isLeftover&&!lo.crossPerson){
+      const port=getPort(p,d,s);
+      if(port){
+        const ingr=applyOverrides(port,p,d,s);
+        if(ingr&&ingr.length&&ingr[0].dbKey!==undefined){
+          leftoverInfo[s]={lo:lo, mealId:getMealId(p,d,s)};
+        }
+      }
+    }
+  });
+
+  // Pass 1: non-leftover slots (cook days, normal slots)
+  SLOTS.forEach(function(s){
+    if(s==='shake'||s==='late_snack')return;
+    if(leftoverInfo[s])return; // handled in pass 2
     const selKey=sk(p,d,s);
     if(SKIPPED[selKey]||EAT_OUT[selKey])return;
     const port=getPort(p,d,s); if(!port)return;
     const ingr=applyOverrides(port,p,d,s);
     if(!ingr||!ingr.length||ingr[0].dbKey===undefined)return;
+    const lo=leftovers[selKey];
     const slotAdj=getSlotAdjustment(p,d,s);
     const hints=buildMacroHints(p,d,s);
-    const lo=leftovers[selKey];
     const mts=(lo&&!lo.isLeftover)?(lo.totalServings||lo.servings||1):1;
     const adj=slotAdj!==0?adjustIngredients(ingr,slotAdj,s,hints,mts)
                          :ingr.map(function(i){return {ing:i,newAmt:i.amt};});
@@ -3156,8 +3179,82 @@ function getDayBalancedIngredients(p,d){
               scalable:a.ing.scalable, origAmt:a.ing.amt};
     });
   });
+
+  // Pass 2: leftover slots — copy from cook day's balanced amounts.
+  // You eat whatever was portioned at cook time, not what the balancer wishes.
+  Object.keys(leftoverInfo).forEach(function(s){
+    var info=leftoverInfo[s];
+    var lo=info.lo, mealId=info.mealId;
+    var cookSlot=null;
+
+    function findCookSlot(sourceSlots, sourceDay){
+      ['breakfast','lunch','dinner','snack'].forEach(function(cs){
+        if(cookSlot)return;
+        if(getMealId(p,sourceDay,cs)!==mealId)return;
+        // Must be the cook entry, not another leftover
+        var clo=leftovers[sk(p,sourceDay,cs)];
+        if(clo&&!clo.isLeftover&&sourceSlots[cs])cookSlot=cs;
+      });
+      return cookSlot?sourceSlots[cookSlot]:null;
+    }
+
+    var cookAmts=null;
+    if(lo.cookDay===d){
+      // Same-day leftover: cook slot already computed in pass 1
+      cookAmts=findCookSlot(slots,d);
+    } else {
+      // Different-day leftover: recursive lookup (safe — cook day is earlier)
+      var cookDaySlots=getDayBalancedIngredients(p,lo.cookDay);
+      if(cookDaySlots) cookAmts=findCookSlot(cookDaySlots,lo.cookDay);
+    }
+
+    if(cookAmts){
+      slots[s]=cookAmts.map(function(i){
+        return {dbKey:i.dbKey,amt:i.amt,role:i.role,
+                scalable:i.scalable,origAmt:i.origAmt};
+      });
+      frozenSlots[s]=true;
+    } else {
+      // Fallback: cook slot not found, run adjuster normally
+      var port=getPort(p,d,s); if(!port)return;
+      var ingr=applyOverrides(port,p,d,s);
+      if(!ingr||!ingr.length||ingr[0].dbKey===undefined)return;
+      var slotAdj=getSlotAdjustment(p,d,s);
+      var hints=buildMacroHints(p,d,s);
+      var adj=slotAdj!==0?adjustIngredients(ingr,slotAdj,s,hints,1)
+                         :ingr.map(function(i){return {ing:i,newAmt:i.amt};});
+      slots[s]=adj.map(function(a){
+        return {dbKey:a.ing.dbKey, amt:a.newAmt, role:a.ing.role,
+                scalable:a.ing.scalable, origAmt:a.ing.amt};
+      });
+    }
+  });
+
   // Step 2: iterative macro balancing across slots
-  balanceDayMacros(p,d,slots);
+  // Frozen slots (leftovers) contribute to daily totals but can't be modified
+  balanceDayMacros(p,d,slots,frozenSlots);
+
+  // Re-sync same-day leftovers: the balancer may have modified the cook slot,
+  // so the copy made in pass 2 is now stale. Re-copy post-balancer amounts.
+  Object.keys(leftoverInfo).forEach(function(s){
+    var info=leftoverInfo[s];
+    if(info.lo.cookDay!==d)return;
+    var cs=null;
+    ['breakfast','lunch','dinner','snack'].forEach(function(c){
+      if(cs)return;
+      if(getMealId(p,d,c)===info.mealId){
+        var clo=leftovers[sk(p,d,c)];
+        if(clo&&!clo.isLeftover&&slots[c])cs=c;
+      }
+    });
+    if(cs){
+      slots[s]=slots[cs].map(function(i){
+        return {dbKey:i.dbKey,amt:i.amt,role:i.role,
+                scalable:i.scalable,origAmt:i.origAmt};
+      });
+    }
+  });
+
   _dayBalancedCache[key]=slots;
   return slots;
 }
@@ -3167,7 +3264,8 @@ function getBalancedSlotIngredients(p,d,s){
   return all[s]||null;
 }
 
-function balanceDayMacros(p,d,slots){
+function balanceDayMacros(p,d,slots,frozenSlots){
+  frozenSlots=frozenSlots||{};
   const proTarget=PRO_TARGET[p]||0;
   if(!proTarget)return;
 
@@ -3205,6 +3303,7 @@ function balanceDayMacros(p,d,slots){
   function itemsByRole(role, ignoreScalableFalse){
     const out=[];
     Object.keys(slots).forEach(function(s){
+      if(frozenSlots[s])return; // leftover slots: pre-cooked, can't modify
       slots[s].forEach(function(i,idx){
         if(!ignoreScalableFalse && i.scalable===false)return;
         if(role&&i.role!==role)return;
@@ -5663,6 +5762,12 @@ function _randomizeWeekCore(randTarget){
     var maxPhase3Iters = 6;
     var prevTripWaste = Infinity;
     for (var ph3iter = 0; ph3iter < maxPhase3Iters; ph3iter++) {
+    // Recompute leftovers each iteration — Strategy A swaps can break
+    // leftover pairings, making the old snapshot stale. Without this,
+    // _analyzeTripPackages overcounts servings for broken pairs and
+    // Strategy C can't detect solo pkg meals that Strategy A created.
+    invalidateLeftoverCache();
+    leftovers = computeLeftovers();
     var analysis = _analyzeTripPackages(trip.days);
     var currentTripWaste = 0;
     analysis.forEach(function(p){ currentTripWaste += (p.waste || 0); });

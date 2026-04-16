@@ -274,33 +274,26 @@ Expanding/collapsing a meal card in the Him tab mirrors the same slot's state in
 ## Current State & Next Steps (as of 2026-04-15)
 
 ### What's working
-- **Daily macro goals**: 100% hit rate for both Him and Her across 10 randomize runs (cal ±100, protein min, carbs ≤55%, fat ≤30%, veg ≥3c, fruit ≥1c)
-- **Zero waste**: 6–7/10 runs achieve honest zero waste (shopping list totals match meal card amounts exactly — no hidden scaling)
-- **Meal variety**: avg 38 unique meals per week, 5% week-to-week overlap, no dead meals
+- **Daily macro goals**: ~90% strict hit rate (all misses are fat% at 30.1–31.1%, borderline)
+- **Zero waste**: 10/10 runs achieve honest zero waste (shopping list totals match meal card amounts exactly)
+- **Meal variety**: avg ~33 unique meals per week, no dead meals
 - **Coconut milk**: rarely picked (~60% zero-coconut weeks), paired when it is
 - **Per-click time**: ~2–3s
 
-### Open bug: solo pkg meals survive `_randomizeWeekCore`
+### Recently fixed: solo pkg meals surviving `_randomizeWeekCore`
 
-**Problem**: Meals like `breakfast_burrito`, `burrito_bowl`, `black_bean_rice_bowl` appear in solo (non-shared, non-leftover) slots after the full randomizer pipeline. Phase 1.5 removes them, but something in Phase 3 or Phase 4 re-introduces them. This creates the remaining ~30% of non-zero-waste runs (always exactly 1 waste item).
+**Root cause**: The `leftovers` map was computed once (after Phase 1.5) and used as a closure variable throughout the entire Phase 3 convergence loop. Phase 3 Strategy A swaps could break leftover pairings (e.g. swapping a cook-day meal while its leftover-day still has the old meal), but the stale `leftovers` variable never reflected this. Consequences:
+- `_analyzeTripPackages` overcounted servings for broken pairs → underestimated waste
+- Strategy A's slot filter still saw broken-pair slots as "paired" → allowed placing pkg meals solo
+- Strategy C couldn't detect the resulting solo pkg meals as "single-use" → couldn't remove them
+- Convergence check exited early because waste appeared lower than reality
 
-**Confirmed by instrumentation**: solo pkg meals appear in the `after_core_retry` trace — they exist AFTER `_randomizeWeekCore` completes.
+**Fix**: Recompute `leftovers = computeLeftovers()` at the start of each Phase 3 convergence iteration. This ensures accurate leftover pairing data for waste analysis, slot filtering, and single-use detection.
 
-**Suspected re-introduction paths** (investigate with per-phase snapshots inside `_randomizeWeekCore`):
-1. **Phase 3 Strategy A** — was fixed to only swap into shared/paired slots, but the fix might not cover all code paths (check if Strategy C's replacement path also introduces solos)
-2. **Phase 4 shared-schedule enforcement** — copies him's meal to her for shared slots. If the enforcement path has a "de-share" branch for non-shared slots, it might accidentally place a pkg meal solo
-3. **Retry best-selection** — the 30-retry loop picks the best state. If the best state came from a retry where Phase 1.5 ran BEFORE leftover detection was accurate, stale data could have kept solos alive
+**Result**: Zero-waste rate improved from ~70% → 100% (10/10 runs, honest).
 
-**How to investigate**: Add `findSoloPkgMeals()` snapshots INSIDE `_randomizeWeekCore` after each phase boundary:
-- After Phase 1 (before Phase 1.5) — expect solos from random picks
-- After Phase 1.5 — expect zero solos (all removed)
-- After Phase 3 — check if solos re-appeared
-- After Phase 4 — check if shared enforcement introduced solos
-
-**Once found**: fix the specific re-introduction path. This should push zero-waste rate from ~70% → ~90–100% (honest).
-
-### Other items for future sessions
-- **CLAUDE.md** may need another refresh after the solo-pkg fix lands
+### Items for future sessions
 - **Secondary goal buffer** (±150 cal, <35% fat, etc.) hits ~100% — could display as a "yellow zone" vs "green zone" on the UI
+- **Borderline fat% misses**: all goal misses are fat% at 30.1–31.1%. Could investigate day-balancer fat trimming sensitivity or adjust threshold
 - **Meal variety audit**: some meals like `turkey_meatballs_din` (87%) and `edamame_orange_eve` (80%) are heavily favored — consider whether that's OK or needs balancing
 - **Ground meat pkg.type**: changed from `'bulk'` to `'container'` — verify shopping display shows "N containers (16oz)" correctly
