@@ -5042,8 +5042,8 @@ function applyTripFlexScaling(randTarget){
     'tofu firm':                {maxUp:1.0,  maxDown:0,    kcalCap:300},
     'silken tofu':              {maxUp:1.0,  maxDown:0,    kcalCap:300},
     'canned tuna':              {maxUp:0.75, maxDown:0.25, kcalCap:200}, // opened quickly — small down-flex OK
-    'ground turkey 93':         {maxUp:0.75, maxDown:0,    kcalCap:300}, // 38 kcal/oz, 16oz bag — avoid freezing partial
-    'ground chicken':           {maxUp:0.75, maxDown:0,    kcalCap:300}  // 35 kcal/oz, 16oz bag
+    'ground turkey 93':         {maxUp:0.75, maxDown:0.10, kcalCap:300}, // 38 kcal/oz, 16oz bag — small down-flex avoids buying an extra bag
+    'ground chicken':           {maxUp:0.75, maxDown:0.10, kcalCap:300}  // 35 kcal/oz, 16oz bag
   };
   const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
   ['sun','wed'].forEach(function(trip){
