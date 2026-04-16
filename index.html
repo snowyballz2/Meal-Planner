@@ -3747,6 +3747,34 @@ function verifyInvariants(){
     });
   });
 
+  // ── Invariant 6: Per-meal Protein/Carb ratio change <50% ──
+  // The balanced P/C ratio shouldn't deviate more than 50% from the
+  // original recipe ratio. Catches the day balancer distorting meal identity.
+  ['him','her'].forEach(function(p){
+    DAYS.forEach(function(d){
+      ['breakfast','lunch','snack','dinner'].forEach(function(s2){
+        var key2=sk(p,d,s2);
+        if(SKIPPED[key2]||EAT_OUT[key2])return;
+        var mealId2=getMealId(p,d,s2);if(!mealId2)return;
+        var meal2=getMeal(mealId2);if(!meal2||!meal2.ingredients)return;
+        var bal2=getBalancedSlotIngredients(p,d,s2);
+        if(!bal2)return;
+        // Use the BASE recipe ingredients (not scaled/overridden)
+        var rawPro=0,rawCarb=0,balPro=0,balCarb=0;
+        meal2.ingredients.forEach(function(i){var db=NUTRI_DB[i.dbKey];if(db){rawPro+=db.pro*i.amt;rawCarb+=db.carb*i.amt;}});
+        bal2.forEach(function(i){var db=NUTRI_DB[i.dbKey];if(db){balPro+=db.pro*i.amt;balCarb+=db.carb*i.amt;}});
+        if(rawCarb<1||balCarb<1)return;
+        var rawRatio=rawPro/rawCarb;
+        var balRatio=balPro/balCarb;
+        var pctChange=Math.abs(balRatio-rawRatio)/rawRatio*100;
+        if(pctChange>50){
+          violations.push('INV6 P/C-ratio: '+p+' '+d+'/'+s2+' '+mealId2
+            +' raw='+rawRatio.toFixed(2)+' bal='+balRatio.toFixed(2)+' (+'+pctChange.toFixed(0)+'%)');
+        }
+      });
+    });
+  });
+
   return violations;
 }
 
