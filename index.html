@@ -3173,7 +3173,51 @@ function getDayBalancedIngredients(p,d){
       return;
     }
 
-    const slotAdj=getSlotAdjustment(p,d,s);
+    // For dinner: compute target from actual amounts already in slots
+    // (including frozen leftovers and same-day cook multipliers) rather than
+    // the standalone getSlotAdjustment which recomputes everything from scratch
+    // and doesn't know about leftover context.
+    var slotAdj;
+    if(s==='dinner'&&(p==='him'||p==='her')&&getAdjTargets(p,d).dinner){
+      var othersKcal=0;
+      // Sum all slots already computed in this pass
+      Object.keys(slots).forEach(function(s2){
+        var mult=sameDayCookServings[s2]||1;
+        slots[s2].forEach(function(i){
+          var db=NUTRI_DB[i.dbKey];if(db)othersKcal+=db.kcal*i.amt*mult;
+        });
+      });
+      // Add different-day leftovers not yet materialized
+      Object.keys(diffDayLeftovers).forEach(function(s2){
+        if(s2==='dinner')return;
+        var info=diffDayLeftovers[s2];
+        var cdSlots=getDayBalancedIngredients(p,info.lo.cookDay);
+        if(!cdSlots)return;
+        var cs=null;
+        ['breakfast','lunch','dinner','snack'].forEach(function(c){
+          if(cs)return;
+          if(getMealId(p,info.lo.cookDay,c)===info.mealId){
+            var clo=leftovers[sk(p,info.lo.cookDay,c)];
+            if(clo&&!clo.isLeftover&&cdSlots[c])cs=c;
+          }
+        });
+        if(cs){cdSlots[cs].forEach(function(i){
+          var db=NUTRI_DB[i.dbKey];if(db)othersKcal+=db.kcal*i.amt;
+        });}
+      });
+      // Add same-day leftover slots of non-dinner cook slots (already counted via mult above)
+      // Add eat-outs and late snack
+      SLOTS.forEach(function(s2){
+        if(EAT_OUT[sk(p,d,s2)])othersKcal+=(EAT_OUT[sk(p,d,s2)].kcal||0);
+      });
+      var lsn=LATE_SNACK[pk(p,d)];
+      if(lsn)othersKcal+=(lsn.kcal||0);
+      var dinnerBase=computeMacros(ingr).kcal;
+      slotAdj=CAL_BASE[p]-othersKcal-dinnerBase;
+      if(Math.abs(slotAdj)<=10)slotAdj=0;
+    } else {
+      slotAdj=getSlotAdjustment(p,d,s);
+    }
     const hints=buildMacroHints(p,d,s);
     const mts=(lo&&!lo.isLeftover)?(lo.totalServings||lo.servings||1):1;
     const adj=slotAdj!==0?adjustIngredients(ingr,slotAdj,s,hints,mts)
