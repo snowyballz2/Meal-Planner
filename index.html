@@ -3475,12 +3475,8 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
 
   function bestAdd(role){
     // Highest pro/kcal (for protein) or lowest kcal/g of macro (for other roles).
-    // Non-pkg first. Cap at 2× original recipe amount to preserve meal identity.
-    const all=itemsByRole(role).filter(function(x){
-      // Don't boost any ingredient beyond 2× its original recipe amount
-      var maxAmt=(x.origAmt||x.cur)*2;
-      return x.cur<maxAmt;
-    });
+    // Non-pkg first.
+    const all=itemsByRole(role);
     const nonPkg=all.filter(function(x){return !x.isPkg;});
     const pool=nonPkg.length?nonPkg:all;
     if(role==='protein'){
@@ -3494,18 +3490,12 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
   }
 
   function bestTrim(roles){
-    // Trim fat first, then carb, then protein last. Within each role,
-    // highest-kcal-contribution first. Non-pkg preferred.
-    const trimPriority={fat:0,carb:1,protein:2};
+    // Highest-kcal-contribution to trim, non-pkg first.
     const all=[];
     roles.forEach(function(r){itemsByRole(r).forEach(function(x){all.push(x);});});
     const nonPkg=all.filter(function(x){return !x.isPkg;});
     const pool=nonPkg.length?nonPkg:all;
-    pool.sort(function(a,b){
-      var ap=trimPriority[a.role]!==undefined?trimPriority[a.role]:1;
-      var bp=trimPriority[b.role]!==undefined?trimPriority[b.role]:1;
-      return ap!==bp?ap-bp:(b.db.kcal*b.cur)-(a.db.kcal*a.cur);
-    });
+    pool.sort(function(a,b){return (b.db.kcal*b.cur)-(a.db.kcal*a.cur);});
     for(let i=0;i<pool.length;i++){
       const t=pool[i];
       const dec=incrementFor(t.db);
