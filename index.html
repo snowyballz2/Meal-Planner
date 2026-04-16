@@ -4553,8 +4553,8 @@ function buildMealCardHtml(s, person, day, other){
   //   - Non-shared Big Cook (solo leftovers or cross-person cook): total batch size
   //   - Otherwise: 1
   const cookServings = showCombinedOnThisTab ? (loInfo.totalServings||loInfo.servings||1) : 1;
-  const displayServings = cookServings;
-  const ingrSectionTitle=displayServings>1?'🥗 Combined ingredients (serves '+displayServings+')':'🥗 Ingredients';
+  let displayServings = cookServings;
+  let ingrSectionTitle=displayServings>1?'🥗 Combined ingredients (serves '+displayServings+')':'🥗 Ingredients';
   if (port.ingredients && port.ingredients.length && port.ingredients[0].dbKey !== undefined) {
     // Get ingredients with overrides applied
     const ovrIngr = applyOverrides(port,person,day,s);
@@ -4633,6 +4633,10 @@ function buildMealCardHtml(s, person, day, other){
     }
     if(cookBal&&xOtherBal){
       var sameServings=loInfo.servings||1;
+      var realTotalServings=sameServings+xOtherServings;
+      // Fix the serves label to reflect the real count
+      displayServings=realTotalServings;
+      ingrSectionTitle='🥗 Combined ingredients (serves '+realTotalServings+')';
       var ovrIngr2=applyOverrides(port,person,day,s);
       ingrHtml=cookBal.map(function(ci,idx){
         var otherAmt=0;
