@@ -5447,8 +5447,9 @@ function snapBatchTotals(){
         var firstBal=portions[0].bal;
         firstBal.forEach(function(ingr,idx){
           var db=NUTRI_DB[ingr.dbKey];if(!db)return;
-          // Skip packaged ingredients — their amounts may be intentionally
-          // off-grid from the package nudge (e.g. 2.625 cup beans = 3 cans).
+          // Skip packaged ingredients — their total is measured by opening
+          // whole packages (e.g. 3 cans = 5.25 cups). The per-serving amount
+          // is just total ÷ servings, nobody measures it directly.
           if(db.pkg&&!db.pkg.longShelfLife&&db.pkg.type!=='bulk')return;
           var unit=db.unit||'';
           var grid=0.25;
