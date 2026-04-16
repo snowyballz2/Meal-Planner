@@ -2944,7 +2944,7 @@ function buildShoppingList(trip,who){
             const pkgsNeeded=Math.ceil(totalNum/perPkg);
             const totalFromPkgs=pkgsNeeded*perPkg;
             const wasteAmt=totalFromPkgs-totalNum;
-            if(wasteAmt>0.01){
+            if(wasteAmt>0.05){
               const wasteInPkgs=wasteAmt/perPkg;
               const pkgType=db.pkg.type||'can';
               item.wasteLabel=fmtFrac(wasteInPkgs)+' '+pkgType+' unused';
