@@ -2828,14 +2828,15 @@ function buildShoppingList(trip,who){
   const persons=who==='both'?['him','her']:who==='him'?['him']:['her'];
   const items={};
 
+  // Simple approach: add each slot's final amounts directly.
+  // No leftover multiplier logic — leftover days are pinned to cook-day
+  // amounts, so adding each day individually gives the correct total.
+  // Every consumer reads from the same source: getBalancedSlotIngredients.
   persons.forEach(function(p){
     days.forEach(function(d){
       SLOTS.forEach(function(s){
-        // Late night snack is not in shopping list
         if(s==='late_snack')return;
-        // Custom mode: only include selected meals
         if(trip==='custom'&&!CUSTOM_SHOP_SEL[sk(p,d,s)])return;
-        // Skip eat-out and skipped meals
         if(SKIPPED[sk(p,d,s)])return;
         if(EAT_OUT[sk(p,d,s)])return;
 
@@ -2844,44 +2845,21 @@ function buildShoppingList(trip,who){
         const m=getMeal(id);
         if(!m||!m[p])return;
         const port=m[p];
+        if(!port.ingredients||!port.ingredients.length||port.ingredients[0].dbKey===undefined)return;
 
-        // Leftover handling: skip ALL leftovers (within-person AND cross-person)
-        // Cook day handles qty for all servings it feeds
-        const leftovers=computeLeftovers();
-        const loKey=sk(p,d,s);
-        const loInfo=leftovers[loKey];
-        if(loInfo&&loInfo.isLeftover)return;
-        const leftoverMultiplier=(loInfo&&!loInfo.isLeftover&&loInfo.servings>1)?loInfo.servings:1;
-
-        // Get calorie adjustment for this slot
-        // Each person gets their own calorie adjustment — same ratios, different portion sizes
-        const slotAdj = getSlotAdjustment(p,d,s);
-
-        // Use ingredients as source of truth for shopping when available
-        if(port.ingredients && port.ingredients.length && port.ingredients[0].dbKey!==undefined){
-          const ingr = applyOverrides(port,p,d,s);
-          // Use day-balanced ingredients so shopping qty matches what the
-          // meal cards and daily totals display.
-          const balanced = getBalancedSlotIngredients(p,d,s);
-          let finalIngr;
-          if(balanced){
-            finalIngr = balanced.map(function(i){return {dbKey:i.dbKey, amt:i.amt, role:i.role};});
-          } else {
-            finalIngr = ingr.map(function(i){return {dbKey:i.dbKey,amt:i.amt,role:i.role};});
-          }
-          finalIngr.forEach(function(fi){
-            addShopIngredient(items,fi.dbKey,fi.amt*leftoverMultiplier,p);
+        // All slots (including shake): read final balanced amounts.
+        // One source of truth — no special cases.
+        const balanced=getBalancedSlotIngredients(p,d,s);
+        if(balanced){
+          balanced.forEach(function(i){
+            addShopIngredient(items,i.dbKey,i.amt,p);
           });
-          // Cross-person cook: also add the other person's portion
-          if(loInfo&&loInfo.crossPersonCook){
-            const otherP=loInfo.feedsAlso;
-            const otherPort=m[otherP];
-            if(otherPort&&otherPort.ingredients&&otherPort.ingredients.length){
-              otherPort.ingredients.forEach(function(oi){
-                addShopIngredient(items,oi.dbKey,oi.amt,otherP);
-              });
-            }
-          }
+        } else {
+          // Fallback: raw amounts
+          const ingr=applyOverrides(port,p,d,s);
+          ingr.forEach(function(i){
+            addShopIngredient(items,i.dbKey,i.amt,p);
+          });
         }
       });
     });
@@ -3139,36 +3117,62 @@ function getDayBalancedIngredients(p,d){
   const frozenSlots={};
   const leftovers=(typeof computeLeftovers==='function')?computeLeftovers():{};
 
-  // Identify same-person leftover slots so we can process them in pass 2
-  // (after cook slots are computed). This avoids infinite recursion for
-  // same-day leftovers (cook at lunch, eat leftover at dinner).
-  const leftoverInfo={}; // slot -> {lo, mealId}
+  // Classify leftover slots: same-day vs different-day.
+  // Same-day leftovers are NOT added to slots before the balancer — the
+  // balancer counts them via sameDayCookServings so it always sees the
+  // live cook-slot amounts. Different-day leftovers are pinned from
+  // their (already cached) cook day and frozen.
+  const sameDayLeftovers={}; // leftover slot -> cook slot
+  const diffDayLeftovers={}; // leftover slot -> {lo, mealId}
+  const sameDayCookServings={}; // cook slot -> total servings (cook + same-day leftovers)
   SLOTS.forEach(function(s){
     if(s==='shake'||s==='late_snack')return;
     const selKey=sk(p,d,s);
     if(SKIPPED[selKey]||EAT_OUT[selKey])return;
     const lo=leftovers[selKey];
-    if(lo&&lo.isLeftover&&!lo.crossPerson){
-      const port=getPort(p,d,s);
-      if(port){
-        const ingr=applyOverrides(port,p,d,s);
-        if(ingr&&ingr.length&&ingr[0].dbKey!==undefined){
-          leftoverInfo[s]={lo:lo, mealId:getMealId(p,d,s)};
+    if(!lo||!lo.isLeftover||lo.crossPerson)return;
+    const port=getPort(p,d,s);if(!port)return;
+    const ingr=applyOverrides(port,p,d,s);
+    if(!ingr||!ingr.length||ingr[0].dbKey===undefined)return;
+    const mealId=getMealId(p,d,s);
+    if(lo.cookDay===d){
+      // Same-day leftover: find the cook slot on this day
+      ['breakfast','lunch','dinner','snack'].forEach(function(cs){
+        if(sameDayLeftovers[s])return;
+        if(getMealId(p,d,cs)===mealId){
+          var clo=leftovers[sk(p,d,cs)];
+          if(clo&&!clo.isLeftover){
+            sameDayLeftovers[s]=cs;
+            sameDayCookServings[cs]=(sameDayCookServings[cs]||1)+1;
+          }
         }
-      }
+      });
+    } else {
+      diffDayLeftovers[s]={lo:lo, mealId:mealId};
     }
   });
 
-  // Pass 1: non-leftover slots (cook days, normal slots)
+  // Pass 1: non-leftover slots (cook days, normal slots, shakes).
+  // Same-day leftovers are excluded — handled after the balancer.
   SLOTS.forEach(function(s){
-    if(s==='shake'||s==='late_snack')return;
-    if(leftoverInfo[s])return; // handled in pass 2
+    if(s==='late_snack')return;
+    if(sameDayLeftovers[s]||diffDayLeftovers[s])return;
     const selKey=sk(p,d,s);
     if(SKIPPED[selKey]||EAT_OUT[selKey])return;
     const port=getPort(p,d,s); if(!port)return;
     const ingr=applyOverrides(port,p,d,s);
     if(!ingr||!ingr.length||ingr[0].dbKey===undefined)return;
     const lo=leftovers[selKey];
+
+    // Shake: raw amounts, no adjustment. Frozen so balancer doesn't touch.
+    if(s==='shake'){
+      slots[s]=ingr.map(function(i){
+        return {dbKey:i.dbKey,amt:i.amt,role:i.role,scalable:i.scalable,origAmt:i.amt};
+      });
+      frozenSlots[s]=true;
+      return;
+    }
+
     const slotAdj=getSlotAdjustment(p,d,s);
     const hints=buildMacroHints(p,d,s);
     const mts=(lo&&!lo.isLeftover)?(lo.totalServings||lo.servings||1):1;
@@ -3180,74 +3184,38 @@ function getDayBalancedIngredients(p,d){
     });
   });
 
-  // Pass 2: leftover slots — copy from cook day's balanced amounts.
-  // You eat whatever was portioned at cook time, not what the balancer wishes.
-  Object.keys(leftoverInfo).forEach(function(s){
-    var info=leftoverInfo[s];
-    var lo=info.lo, mealId=info.mealId;
+  // Pass 2: different-day leftover slots — pinned from cook day's cache.
+  Object.keys(diffDayLeftovers).forEach(function(s){
+    var info=diffDayLeftovers[s];
+    var cookDaySlots=getDayBalancedIngredients(p,info.lo.cookDay);
+    if(!cookDaySlots){return;}
     var cookSlot=null;
-
-    function findCookSlot(sourceSlots, sourceDay){
-      ['breakfast','lunch','dinner','snack'].forEach(function(cs){
-        if(cookSlot)return;
-        if(getMealId(p,sourceDay,cs)!==mealId)return;
-        // Must be the cook entry, not another leftover
-        var clo=leftovers[sk(p,sourceDay,cs)];
-        if(clo&&!clo.isLeftover&&sourceSlots[cs])cookSlot=cs;
-      });
-      return cookSlot?sourceSlots[cookSlot]:null;
-    }
-
-    var cookAmts=null;
-    if(lo.cookDay===d){
-      // Same-day leftover: cook slot already computed in pass 1
-      cookAmts=findCookSlot(slots,d);
-    } else {
-      // Different-day leftover: recursive lookup (safe — cook day is earlier)
-      var cookDaySlots=getDayBalancedIngredients(p,lo.cookDay);
-      if(cookDaySlots) cookAmts=findCookSlot(cookDaySlots,lo.cookDay);
-    }
-
-    if(cookAmts){
-      slots[s]=cookAmts.map(function(i){
+    ['breakfast','lunch','dinner','snack'].forEach(function(cs){
+      if(cookSlot)return;
+      if(getMealId(p,info.lo.cookDay,cs)===info.mealId){
+        var clo=leftovers[sk(p,info.lo.cookDay,cs)];
+        if(clo&&!clo.isLeftover&&cookDaySlots[cs])cookSlot=cs;
+      }
+    });
+    if(cookSlot){
+      slots[s]=cookDaySlots[cookSlot].map(function(i){
         return {dbKey:i.dbKey,amt:i.amt,role:i.role,
                 scalable:i.scalable,origAmt:i.origAmt};
       });
       frozenSlots[s]=true;
-    } else {
-      // Fallback: cook slot not found, run adjuster normally
-      var port=getPort(p,d,s); if(!port)return;
-      var ingr=applyOverrides(port,p,d,s);
-      if(!ingr||!ingr.length||ingr[0].dbKey===undefined)return;
-      var slotAdj=getSlotAdjustment(p,d,s);
-      var hints=buildMacroHints(p,d,s);
-      var adj=slotAdj!==0?adjustIngredients(ingr,slotAdj,s,hints,1)
-                         :ingr.map(function(i){return {ing:i,newAmt:i.amt};});
-      slots[s]=adj.map(function(a){
-        return {dbKey:a.ing.dbKey, amt:a.newAmt, role:a.ing.role,
-                scalable:a.ing.scalable, origAmt:a.ing.amt};
-      });
     }
   });
 
-  // Step 2: iterative macro balancing across slots
-  // Frozen slots (leftovers) contribute to daily totals but can't be modified
-  balanceDayMacros(p,d,slots,frozenSlots);
+  // Day-level macro balancing. sameDayCookServings tells the balancer to
+  // count same-day cook slots × total servings (the leftover tracks the
+  // cook slot live, so the balancer always has the true daily picture).
+  balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings);
 
-  // Re-sync same-day leftovers: the balancer may have modified the cook slot,
-  // so the copy made in pass 2 is now stale. Re-copy post-balancer amounts.
-  Object.keys(leftoverInfo).forEach(function(s){
-    var info=leftoverInfo[s];
-    if(info.lo.cookDay!==d)return;
-    var cs=null;
-    ['breakfast','lunch','dinner','snack'].forEach(function(c){
-      if(cs)return;
-      if(getMealId(p,d,c)===info.mealId){
-        var clo=leftovers[sk(p,d,c)];
-        if(clo&&!clo.isLeftover&&slots[c])cs=c;
-      }
-    });
-    if(cs){
+  // Post-balancer: materialize same-day leftovers as copies of their
+  // (now finalized) cook slot.
+  Object.keys(sameDayLeftovers).forEach(function(s){
+    var cs=sameDayLeftovers[s];
+    if(slots[cs]){
       slots[s]=slots[cs].map(function(i){
         return {dbKey:i.dbKey,amt:i.amt,role:i.role,
                 scalable:i.scalable,origAmt:i.origAmt};
@@ -3264,22 +3232,22 @@ function getBalancedSlotIngredients(p,d,s){
   return all[s]||null;
 }
 
-function balanceDayMacros(p,d,slots,frozenSlots){
+function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
   frozenSlots=frozenSlots||{};
+  sameDayCookServings=sameDayCookServings||{};
   const proTarget=PRO_TARGET[p]||0;
   if(!proTarget)return;
 
   function dailyMacros(){
     let kcal=0,pro=0,fat=0,carb=0;
-    const shakeMeal=getMeal(getMealId(p,d,'shake'));
-    if(shakeMeal&&shakeMeal[p]){
-      const sm=getPortMacrosOvr(shakeMeal[p],p,d,'shake');
-      kcal+=sm.kcal||0;pro+=sm.pro||0;fat+=sm.fat||0;carb+=sm.carb||0;
-    }
+    // Shake, adjusted slots, and frozen leftovers are all in slots now.
+    // Same-day leftovers are NOT in slots — count them via cook slot × servings.
     Object.keys(slots).forEach(function(s){
+      var mult=sameDayCookServings[s]||1;
       slots[s].forEach(function(i){
         const db=NUTRI_DB[i.dbKey]; if(!db)return;
-        kcal+=db.kcal*i.amt;pro+=db.pro*i.amt;fat+=db.fat*i.amt;carb+=db.carb*i.amt;
+        kcal+=db.kcal*i.amt*mult;pro+=db.pro*i.amt*mult;
+        fat+=db.fat*i.amt*mult;carb+=db.carb*i.amt*mult;
       });
     });
     SLOTS.forEach(function(s){
@@ -3454,6 +3422,153 @@ function balanceDayMacros(p,d,slots,frozenSlots){
 
     if(!changed)break;
   }
+}
+
+// ── Runtime invariant checker ──────────────────────────────────
+// Validates that all data consumers agree on ingredient amounts.
+// Call after randomizeWeek or manually from console.
+function verifyInvariants(){
+  const violations=[];
+  const leftovers=computeLeftovers();
+  invalidateDayBalancedCache();
+
+  // ── Invariant 1: Leftover pair consistency ──
+  // Same-person leftover days must have identical amounts to their cook day.
+  ['him','her'].forEach(function(p){
+    DAYS.forEach(function(d){
+      ['breakfast','lunch','dinner'].forEach(function(s){
+        const lo=leftovers[sk(p,d,s)];
+        if(!lo||!lo.isLeftover||lo.crossPerson)return;
+        const mealId=getMealId(p,d,s);
+        const cookDay=lo.cookDay;
+        // Find cook slot
+        var cookSlot=null;
+        ['breakfast','lunch','dinner','snack'].forEach(function(cs){
+          if(cookSlot)return;
+          if(getMealId(p,cookDay,cs)===mealId){
+            var clo=leftovers[sk(p,cookDay,cs)];
+            if(clo&&!clo.isLeftover)cookSlot=cs;
+          }
+        });
+        if(!cookSlot)return;
+        const cookB=getBalancedSlotIngredients(p,cookDay,cookSlot);
+        const leftB=getBalancedSlotIngredients(p,d,s);
+        if(!cookB||!leftB)return;
+        cookB.forEach(function(ci){
+          const li=leftB.filter(function(x){return x.dbKey===ci.dbKey;})[0];
+          if(!li||Math.abs(ci.amt-li.amt)>0.001){
+            violations.push('INV1 leftover-pair: '+p+' '+d+'/'+s+' '+ci.dbKey
+              +' cook='+ci.amt.toFixed(2)+' left='+(li?li.amt.toFixed(2):'MISSING'));
+          }
+        });
+      });
+    });
+  });
+
+  // ── Invariant 2: calcTotals ↔ balanced cache agreement ──
+  // The macros from calcTotals must match summing balanced slot ingredients.
+  // All slots (including shake) go through the balanced cache — no special cases.
+  ['him','her'].forEach(function(p){
+    DAYS.forEach(function(d){
+      const tots=calcTotals(p,d);
+      let bKcal=0;
+      SLOTS.forEach(function(s2){
+        if(s2==='late_snack'){
+          const ls=LATE_SNACK[pk(p,d)];
+          if(ls)bKcal+=(ls.kcal||0);
+          return;
+        }
+        const key2=sk(p,d,s2);
+        if(SKIPPED[key2])return;
+        if(EAT_OUT[key2]){bKcal+=(EAT_OUT[key2].kcal||0);return;}
+        const bal2=getBalancedSlotIngredients(p,d,s2);
+        if(bal2){
+          bal2.forEach(function(i){const db=NUTRI_DB[i.dbKey];if(db)bKcal+=db.kcal*i.amt;});
+        } else {
+          const port2=getPort(p,d,s2);
+          if(port2){const m2=getPortMacrosOvr(port2,p,d,s2);bKcal+=m2.kcal;}
+        }
+      });
+      if(Math.abs(tots.kcal-Math.round(bKcal))>2){
+        violations.push('INV2 calcTotals-vs-balanced: '+p+' '+d
+          +' calcTotals='+tots.kcal+' balanced='+Math.round(bKcal));
+      }
+    });
+  });
+
+  // ── Invariant 3: Shopping ↔ balanced cache agreement ──
+  // Sum each slot's final amounts (same logic as buildShoppingList) and
+  // compare with what the shopping list actually reports.
+  ['sun','wed'].forEach(function(trip){
+    const tripDays=TRIP_DAYS_STATIC[trip]||[];
+    const shopList=buildShoppingList(trip,'both');
+    const expected={}; // dbKey -> {him:0, her:0}
+    ['him','her'].forEach(function(p){
+      tripDays.forEach(function(d){
+        SLOTS.forEach(function(s2){
+          if(s2==='late_snack')return;
+          const key2=sk(p,d,s2);
+          if(SKIPPED[key2]||EAT_OUT[key2])return;
+          const mealId=getMealId(p,d,s2);if(!mealId)return;
+          const m2=getMeal(mealId);if(!m2||!m2[p])return;
+          const port2=m2[p];
+          if(!port2.ingredients||!port2.ingredients.length||port2.ingredients[0].dbKey===undefined)return;
+          // All slots (including shake): one source of truth
+          const bal=getBalancedSlotIngredients(p,d,s2);
+          if(bal){
+            bal.forEach(function(i){
+              if(!expected[i.dbKey])expected[i.dbKey]={him:0,her:0};
+              expected[i.dbKey][p]+=i.amt;
+            });
+          }
+        });
+      });
+    });
+    Object.keys(shopList).forEach(function(cat){
+      shopList[cat].forEach(function(item){
+        const exp=expected[item.dbKey];
+        if(!exp)return;
+        const shopHis=(item.hisSum?item.hisSum.num:0);
+        const shopHer=(item.herSum?item.herSum.num:0);
+        if(Math.abs(shopHis-exp.him)>0.05){
+          violations.push('INV3 shop-vs-balanced: '+trip+' '+item.dbKey
+            +' him shop='+shopHis.toFixed(2)+' balanced='+exp.him.toFixed(2));
+        }
+        if(Math.abs(shopHer-exp.her)>0.05){
+          violations.push('INV3 shop-vs-balanced: '+trip+' '+item.dbKey
+            +' her shop='+shopHer.toFixed(2)+' balanced='+exp.her.toFixed(2));
+        }
+      });
+    });
+  });
+
+  // ── Invariant 5: Card macros ↔ calcTotals agreement ──
+  // For each slot, computeCardMacros kcal must match what calcTotals counts.
+  ['him','her'].forEach(function(p){
+    DAYS.forEach(function(d){
+      ['breakfast','lunch','snack','dinner'].forEach(function(s2){
+        const key2=sk(p,d,s2);
+        if(SKIPPED[key2]||EAT_OUT[key2])return;
+        const port2=getPort(p,d,s2);if(!port2)return;
+        const ingr2=applyOverrides(port2,p,d,s2);
+        if(!ingr2||!ingr2.length||ingr2[0].dbKey===undefined)return;
+        // Card macros
+        const card=computeCardMacros(port2,p,d,s2,1,false,1);
+        // Balanced macros (what calcTotals uses)
+        const bal=getBalancedSlotIngredients(p,d,s2);
+        if(!bal)return;
+        let balKcal=0;
+        bal.forEach(function(i){const db=NUTRI_DB[i.dbKey];if(db)balKcal+=db.kcal*i.amt;});
+        balKcal=Math.round(balKcal);
+        if(Math.abs(card.pm.kcal-balKcal)>5){
+          violations.push('INV5 card-vs-balanced: '+p+' '+d+'/'+s2
+            +' card='+card.pm.kcal+' balanced='+balKcal);
+        }
+      });
+    });
+  });
+
+  return violations;
 }
 
 function openCalPopup(p){
@@ -3648,39 +3763,25 @@ function calcTotals(p,d){
       return;
     }
     const eoKey=sk(p,d,s);
-    // Skipped meals contribute nothing
     if(SKIPPED[eoKey])return;
-    // Eat out uses entered values directly
     if(EAT_OUT[eoKey]){
       const eo=EAT_OUT[eoKey];
       kcal+=(eo.kcal||0);pro+=(eo.pro||0);fat+=(eo.fat||0);carb+=(eo.carb||0);
       return;
     }
-    const port=getPort(p,d,s);
-    if(!port)return;
-
-    // Shake: use as-is (no adjustment)
-    if(s==='shake'||!SLOT_BUDGET[s]||(p!=='him'&&p!=='her')){
-      const m=getPortMacrosOvr(port,p,d,s);
-      kcal+=m.kcal;pro+=m.pro;fat+=m.fat;carb+=m.carb;
+    // All ingredient-based slots (including shake): read from balanced cache.
+    // Shake is in the cache as raw amounts; adjusted slots have final amounts.
+    const balanced=getBalancedSlotIngredients(p,d,s);
+    if(balanced){
+      balanced.forEach(function(i){
+        const db=NUTRI_DB[i.dbKey]; if(!db)return;
+        kcal+=db.kcal*i.amt;pro+=db.pro*i.amt;fat+=db.fat*i.amt;carb+=db.carb*i.amt;
+      });
       return;
     }
-
-    // Adjustable slots: target their budget
-    const ingr=applyOverrides(port,p,d,s);
-    if(ingr && ingr.length && ingr[0].dbKey!==undefined){
-      // Use day-balanced ingredients (per-slot adjust + whole-day macro balance)
-      const balanced=getBalancedSlotIngredients(p,d,s);
-      if(balanced){
-        balanced.forEach(function(i){
-          const db=NUTRI_DB[i.dbKey]; if(!db)return;
-          kcal+=db.kcal*i.amt;pro+=db.pro*i.amt;fat+=db.fat*i.amt;carb+=db.carb*i.amt;
-        });
-      } else {
-        const m=computeMacros(ingr);
-        kcal+=m.kcal;pro+=m.pro;fat+=m.fat;carb+=m.carb;
-      }
-    } else {
+    // Fallback for non-ingredient meals or non-him/her
+    const port=getPort(p,d,s);
+    if(port){
       const m=getPortMacrosOvr(port,p,d,s);
       kcal+=m.kcal;pro+=m.pro;fat+=m.fat;carb+=m.carb;
     }
@@ -4249,7 +4350,26 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
       pm = ovrMacros;
     }
   } else {
-    pm = ovrMacros;
+    // slotAdj === 0: per-slot adjuster didn't change anything, but the
+    // day-level balancer may have. Use balanced amounts if available.
+    const adjIngr0 = applyOverrides(port,person,day,s);
+    const balanced0 = (adjIngr0 && adjIngr0.length && adjIngr0[0].dbKey!==undefined)
+                      ? getBalancedSlotIngredients(person,day,s) : null;
+    if(balanced0){
+      pm = {kcal:0,pro:0,fat:0,carb:0};
+      balanced0.forEach(function(i){
+        const db=NUTRI_DB[i.dbKey]; if(!db)return;
+        pm.kcal+=Math.round(db.kcal*i.amt);pm.pro+=Math.round(db.pro*i.amt);
+        pm.fat+=Math.round(db.fat*i.amt);pm.carb+=Math.round(db.carb*i.amt);
+      });
+      ingrHtml = balanced0.map(function(i, idx) {
+        var origIng = adjIngr0[idx]||{dbKey:i.dbKey,amt:i.origAmt||i.amt,role:i.role,scalable:i.scalable};
+        return buildIngrEditRow(origIng, i.amt*cookServings, person, day, s, idx);
+      }).join('');
+      ingrHtml='<div class="ingr-edit-grid">'+ingrHtml+'</div>';
+    } else {
+      pm = ovrMacros;
+    }
   }
   return {pm:pm, adjBanner:adjBanner, ingrHtml:ingrHtml};
 }
@@ -5115,6 +5235,8 @@ function randomizeWeek(target){
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
     Object.keys(bestSEL).forEach(function(k){SEL[k]=bestSEL[k];});
   }
+  // SEL changed — leftover cache from last retry is stale
+  invalidateLeftoverCache();
   // Targeted day re-rolls: fix any remaining miss-days without breaking waste.
   if (bestMisses > 0) {
     rerollMissDays(randTarget);
@@ -5123,7 +5245,11 @@ function randomizeWeek(target){
   // all trip meals to hit clean package boundaries. Calorie-aware — skips any
   // scale that would push a day beyond ±100 kcal.
   applyTripFlexScaling(randTarget);
-  invalidateLeftoverCache();renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
+  invalidateLeftoverCache();
+  // Runtime invariant check — alert on any data inconsistency
+  var inv=verifyInvariants();
+  if(inv.length)console.warn('INVARIANT VIOLATIONS ('+inv.length+'):\n'+inv.join('\n'));
+  renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
 }
 
 // Trip-level package-fitting scale for flex ingredients. Proportionally scales
@@ -5717,17 +5843,36 @@ function _randomizeWeekCore(randTarget){
             totals[ing.dbKey].total += amt;
             totals[ing.dbKey].mealsUsing.push({p:p, d:d, s:s, mealId:mealId, amt:effectiveAmt, servings:leftoverMult});
           });
-          // Cross-person cook adds the other person's base serving
+          // Cross-person cook adds the other person's scaled serving
           if (loInfo && loInfo.crossPersonCook) {
             var otherP = loInfo.feedsAlso;
             var otherPort = m[otherP];
             if (otherPort && otherPort.ingredients) {
+              // Compute scale for other person's portion (same approach as primary)
+              var otherScale = 1;
+              var feedsDay = loInfo.feedsDay || d;
+              var feedsSlot = null;
+              ['breakfast','lunch','dinner','snack'].forEach(function(os){
+                if(feedsSlot)return;
+                if(getMealId(otherP,feedsDay,os)===mealId)feedsSlot=os;
+              });
+              if (feedsSlot && SLOT_BUDGET[feedsSlot]) {
+                var otherBase = 0;
+                otherPort.ingredients.forEach(function(oi){
+                  var odb = NUTRI_DB[oi.dbKey]; if(odb) otherBase += odb.kcal*(oi.amt||0);
+                });
+                if (otherBase > 0) {
+                  otherScale = getSlotBudget(otherP, feedsDay, feedsSlot) / otherBase;
+                  if (otherScale > 1.75) otherScale = 1.75;
+                }
+              }
               otherPort.ingredients.forEach(function(oi) {
                 var odb = NUTRI_DB[oi.dbKey];
                 if (!odb || !odb.pkg || odb.pkg.longShelfLife) return;
                 if (!totals[oi.dbKey]) totals[oi.dbKey] = {total:0, mealsUsing:[]};
-                totals[oi.dbKey].total += (oi.amt || 0);
-                totals[oi.dbKey].mealsUsing.push({p:otherP, d:d, s:s, mealId:mealId, amt:oi.amt, servings:1});
+                var oAmt = (oi.scalable === false) ? (oi.amt || 0) : (oi.amt || 0) * otherScale;
+                totals[oi.dbKey].total += oAmt;
+                totals[oi.dbKey].mealsUsing.push({p:otherP, d:feedsDay, s:feedsSlot||s, mealId:mealId, amt:oAmt, servings:1});
               });
             }
           }
