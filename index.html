@@ -5540,6 +5540,41 @@ function _randomizeWeekCore(randTarget){
     }
   });
 
+  // ── PHASE 1.5: Remove solo package meals ─────────────────────
+  // A package meal that isn't shared or part of a leftover pair wastes most
+  // of its package (e.g. 0.5 cup beans from a 1.75 cup can). Replace with
+  // a non-pkg alternative now, before Phase 2/3 waste analysis.
+  invalidateLeftoverCache();
+  var leftoversPh15 = computeLeftovers();
+  days.forEach(function(d){
+    persons.forEach(function(p){
+      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+        var key = sk(p,d,s);
+        if (locked[key] || SKIPPED[key] || EAT_OUT[key]) return;
+        var mealId = getMealId(p,d,s);
+        if (!mealId || !mealUsesPkg(mealId)) return;
+        // Check: is this slot shared?
+        var isShared = bothPersons && SHARED_SCHEDULE[dk(d,s)] === 'shared';
+        if (isShared) return; // shared = at least 2 portions, keep
+        // Check: is this meal part of a leftover chain (cook or leftover)?
+        var lo = leftoversPh15[key];
+        if (lo) return; // any leftover info = it's paired, keep
+        // Solo pkg meal with no pairing — replace with non-pkg
+        var isSharedForFilter = bothPersons && SHARED_SCHEDULE[dk(d,s)] === 'shared';
+        var candidates = getMealsForSlot(s).filter(function(m){
+          if (!m[p] || m.id === mealId) return false;
+          if (isSharedForFilter && (!m.him || !m.her)) return false;
+          if (mealUsesPkg(m.id)) return false;
+          return true;
+        });
+        if (!candidates.length) return;
+        var pick = randomPick(candidates);
+        SEL[key] = pick.id;
+        weekData[activeWeek].ts[key] = now;
+      });
+    });
+  });
+
   // ── PHASE 2: Package analysis per shopping trip ──────────────
   // Compute leftover pairing, then sum package ingredient needs per trip.
   invalidateLeftoverCache();
