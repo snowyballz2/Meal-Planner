@@ -3317,7 +3317,7 @@ function balanceDayMacros(p,d,slots){
       changed=true;
     }
     // Priority 2: carb% over 55 (trim carb, add protein)
-    else if(carbOver>0.005){
+    else if(carbOver>0.001){
       const trim=bestTrim(['carb']);
       if(!trim)break;
       slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
@@ -3329,7 +3329,7 @@ function balanceDayMacros(p,d,slots){
       changed=true;
     }
     // Priority 3: fat% over 30 (trim fat, add protein)
-    else if(fatOver>0.005){
+    else if(fatOver>0.001){
       const trim=bestTrim(['fat']);
       if(!trim)break;
       slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
