@@ -5369,14 +5369,185 @@ function clearWeek(){
   Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
   invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();autoSaveWeek();
 }
+// ── Snap batch totals ──────────────────────────────────────────
+// After balanced amounts are computed for all days, snap each cook-day
+// ingredient's TOTAL batch to the unit grid (whole oz, 0.25 cup, etc.),
+// then split back proportionally across servings.
+function snapBatchTotals(){
+  invalidateDayBalancedCache();
+  ['him','her'].forEach(function(p){
+    DAYS.forEach(function(d){ getDayBalancedIngredients(p,d); });
+  });
+  var leftovers=computeLeftovers();
+  var affectedDays={}; // p_d -> {p, d} — days needing re-balance
+
+  // For each cook slot (same-person or shared), snap batch totals
+  ['him','her'].forEach(function(p){
+    DAYS.forEach(function(d){
+      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+        var lo=leftovers[sk(p,d,s)];
+        if(!lo||lo.isLeftover)return; // only process cook entries
+        if(lo.servings<=1&&!lo.crossPersonCook&&!lo.shared)return; // solo, no batch
+        // For shared meals, only process the primary cook (skip sharedWith entry
+        // to avoid double-processing the same batch)
+        if(lo.sharedWith)return;
+
+        var mealId=getMealId(p,d,s);
+        var cookBal=_dayBalancedCache[pk(p,d)];
+        if(!cookBal||!cookBal[s])return;
+
+        // Collect all portions: this person's servings + other person's if shared/cross
+        var portions=[]; // [{p, d, s, servings, bal}]
+        portions.push({p:p, d:d, s:s, servings:lo.servings||1, bal:cookBal[s]});
+
+        // Find same-person leftover slots (they're copies of cook, same amounts)
+        // They share the cook portion, already accounted for via servings count
+
+        // Cross-person cook: find the other person's portion
+        if(lo.crossPersonCook){
+          var otherP=lo.feedsAlso;
+          var feedsDay=lo.feedsDay;
+          var otherSlot=null;
+          ['breakfast','lunch','dinner','snack'].forEach(function(os){
+            if(otherSlot)return;
+            if(getMealId(otherP,feedsDay,os)===mealId){
+              var olo=leftovers[sk(otherP,feedsDay,os)];
+              if(olo&&olo.isLeftover)otherSlot=os;
+            }
+          });
+          if(otherSlot){
+            var otherCache=_dayBalancedCache[pk(otherP,feedsDay)];
+            if(otherCache&&otherCache[otherSlot]){
+              // Find other person's servings
+              var otherLo=leftovers[sk(otherP,feedsDay,otherSlot)];
+              var otherServings=1;
+              if(otherLo&&!otherLo.isLeftover)otherServings=otherLo.servings||1;
+              portions.push({p:otherP, d:feedsDay, s:otherSlot, servings:otherServings, bal:otherCache[otherSlot]});
+            }
+          }
+        }
+
+        // For shared same-day (him and her have same meal, same day, same slot)
+        if(lo.shared){
+          var otherP2=p==='him'?'her':'him';
+          var otherCache2=_dayBalancedCache[pk(otherP2,d)];
+          if(otherCache2&&otherCache2[s]){
+            var otherLo2=leftovers[sk(otherP2,d,s)];
+            var otherSrv2=(otherLo2&&!otherLo2.isLeftover)?(otherLo2.servings||1):1;
+            // Only add if not already in portions (avoid double-counting)
+            var alreadyAdded=portions.some(function(pp){return pp.p===otherP2&&pp.d===d&&pp.s===s;});
+            if(!alreadyAdded){
+              portions.push({p:otherP2, d:d, s:s, servings:otherSrv2, bal:otherCache2[s]});
+            }
+          }
+        }
+
+        // For each ingredient, compute total batch, snap, redistribute
+        var anySnapped=false;
+        var firstBal=portions[0].bal;
+        firstBal.forEach(function(ingr,idx){
+          var db=NUTRI_DB[ingr.dbKey];if(!db)return;
+          // Skip packaged ingredients — their amounts may be intentionally
+          // off-grid from the package nudge (e.g. 2.625 cup beans = 3 cans).
+          if(db.pkg&&!db.pkg.longShelfLife&&db.pkg.type!=='bulk')return;
+          var unit=db.unit||'';
+          var grid=0.25;
+          if(unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving')grid=1;
+          else if(unit==='cup')grid=0.25;
+          else if(unit==='tbsp'||db.halfSnap)grid=0.5;
+          else if(unit==='each')grid=db.wholeOnly?1:0.25;
+          if(db.wholeOnly)grid=1;
+
+          // Sum total batch
+          var totalBatch=0;
+          var partAmts=[];
+          portions.forEach(function(pp,pi){
+            var item=pp.bal[idx];
+            if(!item||item.dbKey!==ingr.dbKey)return;
+            var contrib=item.amt*pp.servings;
+            totalBatch+=contrib;
+            partAmts.push({pi:pi,amt:item.amt,servings:pp.servings,contrib:contrib});
+          });
+          if(totalBatch<grid*0.5)return;
+
+          var snapped=Math.round(totalBatch/grid)*grid;
+          if(snapped<grid)snapped=grid;
+          if(db.minAmt&&snapped<db.minAmt)snapped=db.minAmt;
+          if(Math.abs(snapped-totalBatch)<0.001)return;
+
+          anySnapped=true;
+          // Redistribute proportionally
+          partAmts.forEach(function(pa){
+            var share=(totalBatch>0)?(pa.contrib/totalBatch):0;
+            var newContrib=snapped*share;
+            var newAmt=pa.servings>0?newContrib/pa.servings:pa.amt;
+            var pp=portions[pa.pi];
+            pp.bal[idx].amt=newAmt;
+            // Track affected days for re-balance
+            if(!affectedDays[pp.p+'_'+pp.d])affectedDays[pp.p+'_'+pp.d]={p:pp.p,d:pp.d};
+
+            // Update same-person leftover copies
+            DAYS.forEach(function(d2){
+              ['breakfast','lunch','dinner','snack'].forEach(function(s2){
+                if(d2===pp.d&&s2===pp.s)return;
+                var lo2=leftovers[sk(pp.p,d2,s2)];
+                if(!lo2||!lo2.isLeftover||lo2.crossPerson)return;
+                if(getMealId(pp.p,d2,s2)!==mealId)return;
+                var cache2=_dayBalancedCache[pk(pp.p,d2)];
+                if(cache2&&cache2[s2]&&cache2[s2][idx]&&cache2[s2][idx].dbKey===ingr.dbKey){
+                  cache2[s2][idx].amt=newAmt;
+                  if(!affectedDays[pp.p+'_'+d2])affectedDays[pp.p+'_'+d2]={p:pp.p,d:d2};
+                }
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+
+  // Re-run the day balancer for each affected day with cook/leftover
+  // slots frozen. The balancer adjusts free slots around the snapped amounts.
+  Object.keys(affectedDays).forEach(function(key){
+    var ad=affectedDays[key];
+    var slots=_dayBalancedCache[pk(ad.p,ad.d)];
+    if(!slots)return;
+    // Freeze cook and leftover slots (they have snapped amounts)
+    var frozenSlots={};
+    var sameDayCookServings={};
+    Object.keys(slots).forEach(function(s2){
+      var lo2=leftovers[sk(ad.p,ad.d,s2)];
+      if(s2==='shake'){frozenSlots[s2]=true;return;}
+      if(lo2&&lo2.isLeftover){frozenSlots[s2]=true;return;}
+      if(lo2&&!lo2.isLeftover&&(lo2.servings>1||lo2.crossPersonCook||lo2.shared)){
+        // Cook slot — freeze it (snapped), but track servings for dailyMacros
+        frozenSlots[s2]=true;
+        // Check for same-day leftovers of this cook slot
+        var mealId2=getMealId(ad.p,ad.d,s2);
+        ['breakfast','lunch','dinner','snack'].forEach(function(s3){
+          if(s3===s2)return;
+          if(getMealId(ad.p,ad.d,s3)===mealId2){
+            var lo3=leftovers[sk(ad.p,ad.d,s3)];
+            if(lo3&&lo3.isLeftover&&!lo3.crossPerson){
+              frozenSlots[s3]=true;
+            }
+          }
+        });
+      }
+    });
+    balanceDayMacros(ad.p,ad.d,slots,frozenSlots,sameDayCookServings);
+  });
+}
+
 // ── Post-balance waste pass ────────────────────────────────────
 // After the full balanced pipeline (adjuster + balancer + calorie correction),
 // check each trip for pkg waste. For each ingredient with waste, nudge the
 // final balanced amounts to hit a clean package boundary. Revert any day
 // where the nudge breaks a primary goal.
 function postBalanceWastePass(){
-  // Force balanced cache for all days
-  invalidateDayBalancedCache();
+  // Force balanced cache for all days (snapBatchTotals already did this)
+  // Just ensure cache is populated
+  if(!_dayBalancedCache[pk('him','Monday')])invalidateDayBalancedCache();
   ['him','her'].forEach(function(p){
     DAYS.forEach(function(d){ getDayBalancedIngredients(p,d); });
   });
@@ -5590,6 +5761,10 @@ function randomizeWeek(target){
   // scale that would push a day beyond ±100 kcal.
   applyTripFlexScaling(randTarget);
   invalidateLeftoverCache();
+  // Snap batch totals: snap each cook-day ingredient's total batch to
+  // the unit grid, then split back proportionally. Re-runs day balancers
+  // for affected days with snapped amounts frozen.
+  snapBatchTotals();
   // Post-balance waste pass: nudge final balanced amounts to hit clean
   // package boundaries. Runs after the full pipeline so it works with
   // real numbers, not approximations. Reverts any day where goals break.
