@@ -1137,7 +1137,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
       kcalCap = 200;
     }
     // Beans/chickpeas are calorie-dense (~200-230 kcal/cup) — allow only +50%.
-    else if (['black beans canned','cannellini beans canned','chickpeas roasted'].indexOf(ing.dbKey) >= 0) {
+    else if (['black beans canned','cannellini beans canned','black beans dried','cannellini beans dried','chickpeas roasted','chickpeas dried'].indexOf(ing.dbKey) >= 0) {
       maxNudgeUp = currentAmt * 0.5;
       maxNudgeDown = 0;
       kcalCap = 120;
@@ -1433,7 +1433,7 @@ const MEALS=[
     I('whole wheat tortilla',1,'carb'),
     I('egg white',0.375,'protein'),
     I('egg whole',1,'protein'),
-    I('black beans canned',0.5,'protein'),
+    I('black beans dried',0.5,'protein'),
     I('bell pepper',0.5,'veg'),
     I('baby spinach',0.5,'veg'),
     I('salsa',2,'condiment',false),
@@ -1495,7 +1495,7 @@ const MEALS=[
   steps:['Warm cannellini beans in a non-stick pan 1 min, mashing lightly.','Add spinach, cook 1 min until wilted.','Pour in egg whites + whole egg, scramble 2–3 min.','Crush garlic and stir in at the end. Season with black pepper. Serve with toast.'],
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
-    I('cannellini beans canned',0.5,'protein'),
+    I('cannellini beans dried',0.5,'protein'),
     I('egg whole',1,'protein'),
     I('egg white',0.5,'protein'),
     I('baby spinach',1,'veg'),
@@ -1610,7 +1610,7 @@ const MEALS=[
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
     I('shrimp',6,'protein'),
-    I('black beans canned',0.5,'carb'),
+    I('black beans dried',0.5,'carb'),
     I('brown rice cooked',1,'carb'),
     I('broccoli',0.75,'veg'),
     I('bell pepper',0.25,'veg'),
@@ -1628,7 +1628,7 @@ const MEALS=[
   him:{fv:'2c veg'},her:{fv:'2c veg'},
   ingredients:[
     I('canned tuna',6,'protein'),
-    I('cannellini beans canned',0.75,'carb'),
+    I('cannellini beans dried',0.75,'carb'),
     I('kale',2,'veg'),
     I('zucchini',0.5,'veg'),
     I('carrots',0.5,'veg'),
@@ -1642,7 +1642,7 @@ const MEALS=[
   him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
   ingredients:[
     I('chicken breast',6,'protein'),
-    I('cannellini beans canned',0.5,'carb'),
+    I('cannellini beans dried',0.5,'carb'),
     I('kale',1,'veg'),
     I('carrots',0.5,'veg'),
     I('celery',1,'veg'),
@@ -1656,7 +1656,7 @@ const MEALS=[
   him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
   ingredients:[
     I('chicken breast',6,'protein'),
-    I('black beans canned',0.5,'carb'),
+    I('black beans dried',0.5,'carb'),
     I('brown rice cooked',0.75,'carb'),
     I('kale',1,'veg'),
     I('salsa',4,'condiment',false),
@@ -1825,7 +1825,7 @@ const MEALS=[
   him:{fv:'1 fruit'},her:{fv:'1 fruit'},
   ingredients:[
     I('egg whole',2,'protein',false),
-    I('chickpeas roasted',0.25,'carb'),
+    I('chickpeas dried',0.25,'carb'),
     I('orange',1,'fruit',false)
   ]},
 
@@ -2064,7 +2064,7 @@ const MEALS=[
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
     I('chicken breast',6,'protein'),
-    I('cannellini beans canned',0.75,'carb'),
+    I('cannellini beans dried',0.75,'carb'),
     I('poblano',0.5,'veg'),
     I('scallion',1,'veg'),
     I('heavy cream',2,'fat'),
@@ -2198,7 +2198,7 @@ const MEALS=[
   steps:['Warm black beans with cumin and garlic powder.','Heat brown rice. Sauté bell pepper and kale 3 min.','Assemble: rice, beans, veg. Top with salsa and lime.'],
   him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
   ingredients:[
-    I('black beans canned',1,'protein'),
+    I('black beans dried',1,'protein'),
     I('brown rice cooked',1,'carb'),
     I('bell pepper',0.75,'veg'),
     I('kale',1,'veg'),
@@ -2212,7 +2212,7 @@ const MEALS=[
   steps:['Heat a pan over medium. Add red curry paste, stir 30 sec.','Add coconut milk, chickpeas, edamame, and spinach. Simmer 6–8 min.','Serve over brown rice.'],
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
-    I('chickpeas roasted',0.75,'protein'),
+    I('chickpeas dried',0.75,'protein'),
     I('edamame',0.5,'protein'),
     I('brown rice cooked',1,'carb'),
     I('baby spinach',1.5,'veg'),
@@ -2279,7 +2279,7 @@ const MEALS=[
   steps:['Sauté garlic and carrots in broth 3 min.','Add beans, broth, Italian seasoning. Simmer 10 min.','Add kale. Cook 3 min.','Stir in egg whites — they form ribbons in the hot soup. Season with salt, pepper, lemon juice.'],
   him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
   ingredients:[
-    I('cannellini beans canned',1,'protein'),
+    I('cannellini beans dried',1,'protein'),
     I('egg white',0.25,'protein'),
     I('kale',1.5,'veg'),
     I('carrots',0.5,'veg'),
@@ -2769,10 +2769,10 @@ var SHOP_DISPLAY_NAMES={
   'black pepper':'Black pepper','italian seasoning':'Italian seasoning',
   'garlic powder':'Garlic powder','onion powder':'Onion powder',
   'chili flake':'Chili flakes','red pepper flake':'Red pepper flakes',
-  'black beans canned':'Black beans, canned','black beans dried':'Black beans, dried',
-  'cannellini beans canned':'Cannellini beans, canned','cannellini beans dried':'Cannellini beans, dried',
+  'black beans canned':'Black beans, canned','black beans dried':'Black beans, cooked',
+  'cannellini beans canned':'Cannellini beans, canned','cannellini beans dried':'Cannellini beans, cooked',
   'lentils cooked':'Lentils, cooked','lentils dried':'Lentils, dried',
-  'chickpeas roasted':'Chickpeas','chickpeas dried':'Chickpeas, dried'
+  'chickpeas roasted':'Chickpeas','chickpeas dried':'Chickpeas, cooked'
 };
 function shopQtyWithCount(dbKey,qtyObj){
   const base=fmtQty(qtyObj);
@@ -4290,7 +4290,7 @@ function buildPrepBanner(day){
     'salmon':1,'halibut':1,'filet mignon':1,'shrimp':1,'tofu firm':1,'silken tofu':1};
 
   // Bean dbKeys that need overnight soaking (NOT lentils)
-  const soakBeans={'black beans canned':'black beans','cannellini beans canned':'cannellini beans','chickpeas roasted':'chickpeas'};
+  const soakBeans={'black beans canned':'black beans','black beans dried':'black beans','cannellini beans canned':'cannellini beans','cannellini beans dried':'cannellini beans','chickpeas roasted':'chickpeas','chickpeas dried':'chickpeas'};
 
   // Veggie prep keywords
   const vegPrepRe=/\b(dice|chop|cut|slice|mince|julienne)\b/i;
@@ -5595,7 +5595,7 @@ function postBalanceWastePass(){
 
       // Flex ranges per ingredient (match waste optimizer)
       var maxFlexPct=0.25;
-      if(['black beans canned','cannellini beans canned','chickpeas roasted'].indexOf(dbKey)>=0)maxFlexPct=0.75;
+      if(['black beans canned','cannellini beans canned','black beans dried','cannellini beans dried','chickpeas roasted','chickpeas dried'].indexOf(dbKey)>=0)maxFlexPct=0.75;
       if(dbKey==='marinara')maxFlexPct=1.0;
       if(dbKey==='coconut milk')maxFlexPct=direction==='up'?0.75:0.50;
       if(dbKey==='chicken broth')maxFlexPct=direction==='up'?1.0:0.50;
@@ -5784,8 +5784,11 @@ function applyTripFlexScaling(randTarget){
   const FLEX = {
     'marinara':                 {maxUp:1.0,  maxDown:0,    kcalCap:200},
     'black beans canned':       {maxUp:0.75, maxDown:0.25, kcalCap:180},
+    'black beans dried':        {maxUp:0.75, maxDown:0.25, kcalCap:180},
     'cannellini beans canned':  {maxUp:0.75, maxDown:0.25, kcalCap:180},
+    'cannellini beans dried':   {maxUp:0.75, maxDown:0.25, kcalCap:180},
     'chickpeas roasted':        {maxUp:0.75, maxDown:0.25, kcalCap:180},
+    'chickpeas dried':          {maxUp:0.75, maxDown:0.25, kcalCap:180},
     'coconut milk':             {maxUp:0.75, maxDown:0.5,  kcalCap:200},
     'chicken broth':            {maxUp:1.0,  maxDown:0.5,  kcalCap:100}, // 15 kcal/cup, very low cal impact
     'tofu firm':                {maxUp:1.0,  maxDown:0,    kcalCap:300},
@@ -5935,6 +5938,8 @@ function applyTripFlexScaling(randTarget){
 // for that day only. Revert if waste worsens or the day still fails.
 function rerollMissDays(randTarget){
   const now = Date.now();
+  var noRandomizeIds={};
+  MEALS.forEach(function(m){if(m.noRandomize)noRandomizeIds[m.id]=true;});
   // Fast waste approximation for reroll checks — matches what the retry loop uses.
   function fastTripWaste(days, persons){
     const totals = {};
@@ -6046,6 +6051,7 @@ function rerollMissDays(randTarget){
           const otherP = p==='him'?'her':'him';
           const candidates = getMealsForSlot(s).filter(function(m){
             if (!m[p]) return false;
+            if (noRandomizeIds[m.id]) return false;
             if (isShared && !m[otherP]) return false;
             if (mealUsesPkg(m.id)) return false; // never introduce pkg meals
             if (m.id === currentId) return false;
@@ -6102,6 +6108,10 @@ function _randomizeWeekCore(randTarget){
   const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
   const bothPersons = persons.length > 1 || randTarget === 'shared';
   const locked = {};
+
+  // Build noRandomize exclusion set (high-fat meals only assignable manually)
+  const noRandomizeIds={};
+  MEALS.forEach(function(m){if(m.noRandomize)noRandomizeIds[m.id]=true;});
 
   if(!weekData[activeWeek].ts) weekData[activeWeek].ts={};
   const now = Date.now();
@@ -6187,6 +6197,7 @@ function _randomizeWeekCore(randTarget){
           var isSharedSlot = bothPersons && SHARED_SCHEDULE[dk(d,s)] === 'shared';
           var candidates = getMealsForSlot(s).filter(function(m){
             if (!m[p]) return false;
+            if (noRandomizeIds[m.id]) return false;
             if (used.indexOf(m.id) >= 0) return false;
             if (recentIds.indexOf(m.id) >= 0) return false;
             if (isSharedSlot && (!m.him || !m.her)) return false;
@@ -6194,10 +6205,11 @@ function _randomizeWeekCore(randTarget){
           });
           if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){
             if (!m[p]) return false;
+            if (noRandomizeIds[m.id]) return false;
             if (isSharedSlot && (!m.him || !m.her)) return false;
             return true;
           });
-          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return !!m[p]; });
+          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return !!m[p] && !noRandomizeIds[m.id]; });
           if (!candidates.length) return;
           var pick = randomPick(candidates);
           trySel[s] = pick.id;
@@ -6294,6 +6306,7 @@ function _randomizeWeekCore(randTarget){
         var isSharedForFilter = bothPersons && SHARED_SCHEDULE[dk(d,s)] === 'shared';
         var candidates = getMealsForSlot(s).filter(function(m){
           if (!m[p] || m.id === mealId) return false;
+          if (noRandomizeIds[m.id]) return false;
           if (isSharedForFilter && (!m.him || !m.her)) return false;
           if (mealUsesPkg(m.id)) return false;
           return true;
@@ -6329,6 +6342,7 @@ function _randomizeWeekCore(randTarget){
       var isShared=bothPersons&&SHARED_SCHEDULE[dk(d,'snack')]==='shared';
       var candidates=getMealsForSlot('snack').filter(function(cm){
         if(!cm[p]||cm.id===mealId)return false;
+        if(noRandomizeIds[cm.id])return false;
         if(isShared&&(!cm.him||!cm.her))return false;
         var ck=0;
         if(cm.ingredients)cm.ingredients.forEach(function(i){
@@ -6382,6 +6396,7 @@ function _randomizeWeekCore(randTarget){
         var isShared=bothPersons&&SHARED_SCHEDULE[dk(ss.d,'snack')]==='shared';
         var candidates=getMealsForSlot('snack').filter(function(cm){
           if(!cm[ss.p]||cm.id===ss.mealId)return false;
+          if(noRandomizeIds[cm.id])return false;
           if(isShared&&(!cm.him||!cm.her))return false;
           if(mealUsesPkg(cm.id))return false;
           return true;
@@ -6569,6 +6584,7 @@ function _randomizeWeekCore(randTarget){
               // Find meals for this slot that use the needed ingredient
               var replacements = getMealsForSlot(s).filter(function(m) {
                 if (!m[p] || m.id === curId) return false;
+                if (noRandomizeIds[m.id]) return false;
                 if (isSharedSlot && (!m.him || !m.her)) return false;
                 if (!m.ingredients) return false;
                 return m.ingredients.some(function(ing){ return ing.dbKey === pkg.dbKey; });
@@ -6664,7 +6680,7 @@ function _randomizeWeekCore(randTarget){
 
         // Per-ingredient flex ranges
         var maxUp = 0.25, maxDown = 0.25;
-        var flexIngr = ['black beans canned','cannellini beans canned','marinara','chickpeas roasted'];
+        var flexIngr = ['black beans canned','black beans dried','cannellini beans canned','cannellini beans dried','marinara','chickpeas roasted','chickpeas dried'];
         if (flexIngr.indexOf(pkg.dbKey) >= 0) { maxDown = 0; maxUp = 1.0; }
         if (pkg.dbKey === 'coconut milk') { maxDown = 0.50; maxUp = 0.75; }
 
@@ -6712,6 +6728,7 @@ function _randomizeWeekCore(randTarget){
           var isSharedSlot = bothPersons && SHARED_SCHEDULE[dk(mu.d, mu.s)] === 'shared';
           var candidates = getMealsForSlot(mu.s).filter(function(m) {
             if (!m[mu.p] || m.id === mu.mealId) return false;
+            if (noRandomizeIds[m.id]) return false;
             if (isSharedSlot && (!m.him || !m.her)) return false;
             if (mealUsesPkg(m.id)) return false;
             return true;
@@ -6781,7 +6798,7 @@ function _randomizeWeekCore(randTarget){
           weekData[activeWeek].ts[sk('her',d,s)] = now;
         }
       } else if (himId && himId === herId && !MANUAL_SET[sk('him',d,s)] && !MANUAL_SET[sk('her',d,s)]) {
-        var candidates = getMealsForSlot(s).filter(function(m){ return m.her && m.id !== himId && !mealUsesPkg(m.id); });
+        var candidates = getMealsForSlot(s).filter(function(m){ return m.her && m.id !== himId && !mealUsesPkg(m.id) && !noRandomizeIds[m.id]; });
         if (candidates.length) {
           var pick = randomPick(candidates);
           SEL[sk('her',d,s)] = pick.id;
