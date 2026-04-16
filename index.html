@@ -5676,7 +5676,8 @@ function _randomizeWeekCore(randTarget){
       var resolved = false;
 
       // ── Strategy A: Swap in a meal that uses this ingredient ──
-      // Find non-package slots that could be swapped to a meal using this ingredient
+      // Only swap into SHARED or LEFTOVER-PAIRED slots — never place a pkg meal
+      // solo (Phase 1.5 already cleaned those out; don't recreate them).
       if (!resolved) {
         var swapSlots = ['breakfast','lunch','dinner'];
         var swapCandidates = [];
@@ -5685,6 +5686,11 @@ function _randomizeWeekCore(randTarget){
             swapSlots.forEach(function(s) {
               var selKey = sk(p,d,s);
               if (locked[selKey] || SKIPPED[selKey] || EAT_OUT[selKey]) return;
+              // Only allow swaps into shared slots or leftover-paired slots
+              var isSharedSlot = bothPersons && SHARED_SCHEDULE[dk(d,s)] === 'shared';
+              var loInfo = leftovers[selKey];
+              var isPaired = !!(loInfo && (loInfo.servings > 1 || loInfo.totalServings > 1 || loInfo.crossPersonCook || loInfo.isLeftover));
+              if (!isSharedSlot && !isPaired) return; // solo slot — skip
               var curId = getMealId(p, d, s);
               if (!curId) return;
               // Skip if this slot already uses this package ingredient
@@ -5694,7 +5700,6 @@ function _randomizeWeekCore(randTarget){
                 if (alreadyUses) return;
               }
               // Find meals for this slot that use the needed ingredient
-              var isSharedSlot = bothPersons && SHARED_SCHEDULE[dk(d,s)] === 'shared';
               var replacements = getMealsForSlot(s).filter(function(m) {
                 if (!m[p] || m.id === curId) return false;
                 if (isSharedSlot && (!m.him || !m.her)) return false;
