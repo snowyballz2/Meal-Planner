@@ -3375,13 +3375,15 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
   function dailyFV(){
     let veg=0, fruit=0;
     Object.keys(slots).forEach(function(s){
+      // Same-day cook slots feed multiple servings — count all of them
+      var mult=sameDayCookServings[s]||1;
       slots[s].forEach(function(i){
         const db=NUTRI_DB[i.dbKey]; if(!db)return;
         let cups=0;
         if(db.unit==='cup')cups=i.amt;
         else if(db.unit==='each'&&typeof db.cupsEach==='number')cups=i.amt*db.cupsEach;
-        if(i.role==='veg')veg+=cups;
-        else if(i.role==='fruit')fruit+=cups;
+        if(i.role==='veg')veg+=cups*mult;
+        else if(i.role==='fruit')fruit+=cups*mult;
       });
     });
     return {veg:veg,fruit:fruit};
@@ -4863,8 +4865,8 @@ function updateStatsBar(){
     const stats=statsEl.querySelectorAll('.stat');
     if(stats[0]){const v=stats[0].querySelector('.v');if(v){const txt=v.childNodes[0];if(txt)txt.textContent=t.kcal.toLocaleString();}}
     if(stats[1]){const v=stats[1].querySelector('.v');if(v)v.textContent=t.pro+'g';}
-    if(stats[2]){const v=stats[2].querySelector('.v');if(v)v.textContent=t.fat+'g';}
-    if(stats[3]){const v=stats[3].querySelector('.v');if(v)v.textContent=t.carb+'g';}
+    if(stats[2]){const v=stats[2].querySelector('.v');if(v)v.textContent=t.carb+'g';}
+    if(stats[3]){const v=stats[3].querySelector('.v');if(v)v.textContent=t.fat+'g';}
   }
 }
 function saveEatOut(p,d,s){
@@ -4971,17 +4973,17 @@ function onIngrAmt(p,d,s,idx,val){
   if(isNaN(amt)||amt<0)return;
   setOverride(p,d,s,idx,'amt',amt);
   MANUAL_SET[sk(p,d,s)]=true;
-  renderMeals();
+  renderMeals();autoSaveWeek();
 }
 function onIngrSwap(p,d,s,idx,newKey){
   setOverride(p,d,s,idx,'dbKey',newKey);
   MANUAL_SET[sk(p,d,s)]=true;
-  renderMeals();
+  renderMeals();autoSaveWeek();
 }
 function onIngrReset(p,d,s){
   clearOverrides(p,d,s);
   delete MANUAL_SET[sk(p,d,s)];
-  renderMeals();
+  renderMeals();autoSaveWeek();
 }
 // ── PACKAGE WASTE UTILITIES ─────────────────────────────────
 // Check if a meal uses any large-package ingredients
