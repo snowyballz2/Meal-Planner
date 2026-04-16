@@ -5143,59 +5143,41 @@ function applyTripFlexScaling(randTarget){
       });
       if (!hasTrimCapacity) return;
 
-      // Snapshot each affected slot's current override for this ingredient
-      // so we can revert if the scale breaks any primary daily goal.
-      const snapshot = usages.map(function(u){
-        const ovs = getOverrides(u.p, u.d, u.s);
-        const existing = ovs ? ovs.find(function(o){return o.idx === u.idx;}) : null;
-        return {u:u, prevAmt: existing && existing.amt !== undefined ? existing.amt : null};
-      });
-
-      // Apply overrides. The day-balancer re-runs (cache invalidated) and will
-      // trim carb/fat to absorb the added kcal.
+      // Per-usage scaling: try each meal individually. If scaling that day's
+      // usage breaks a daily goal, skip it and move on. This way we get as
+      // close to the package boundary as possible without blowing any day.
+      function checkDayGoals(p, d){
+        var t = calcTotals(p, d);
+        var fv = computeDailyFV(p, d);
+        var mk = t.pro*4 + t.fat*9 + t.carb*4;
+        return (Math.abs(t.kcal - CAL_BASE[p]) <= 100) && (t.pro >= (PRO_TARGET[p]||0))
+            && (mk === 0 || (t.carb*4)/mk <= 0.55) && (mk === 0 || (t.fat*9)/mk <= 0.30)
+            && (fv.veg >= 3) && (fv.fruit >= 1);
+      }
       usages.forEach(function(u){
+        // Snapshot this specific override
+        var ovs = getOverrides(u.p, u.d, u.s);
+        var existing = ovs ? ovs.find(function(o){return o.idx === u.idx;}) : null;
+        var prevAmt = existing && existing.amt !== undefined ? existing.amt : null;
+        // Apply scaled amount
         setOverride(u.p, u.d, u.s, u.idx, 'amt', u.curAmt * chosenScale);
-      });
-      invalidateLeftoverCache();
-
-      // Verify every primary goal on every affected day still holds post-scale.
-      let goalsOk = true;
-      const affectedDays = {};
-      usages.forEach(function(u){ affectedDays[u.p + '|' + u.d] = true; });
-      Object.keys(affectedDays).forEach(function(key){
-        if (!goalsOk) return;
-        const parts = key.split('|');
-        const p = parts[0], d = parts[1];
-        const t = calcTotals(p, d);
-        const fv = computeDailyFV(p, d);
-        const mk = t.pro*4 + t.fat*9 + t.carb*4;
-        const calOk = Math.abs(t.kcal - CAL_BASE[p]) <= 100;
-        const proOk = t.pro >= (PRO_TARGET[p]||0);
-        const carbOk = mk === 0 || (t.carb*4)/mk <= 0.55;
-        const fatOk = mk === 0 || (t.fat*9)/mk <= 0.30;
-        const vegOk = fv.veg >= 3;
-        const fruitOk = fv.fruit >= 1;
-        if (!(calOk && proOk && carbOk && fatOk && vegOk && fruitOk)) goalsOk = false;
-      });
-
-      if (!goalsOk) {
-        // Revert: restore prior per-ingredient override amount or remove it entirely
-        snapshot.forEach(function(s){
-          const u = s.u;
-          if (s.prevAmt !== null) {
-            setOverride(u.p, u.d, u.s, u.idx, 'amt', s.prevAmt);
+        invalidateLeftoverCache();
+        // Check if this day still hits all goals (day-balancer re-runs via calcTotals)
+        if (!checkDayGoals(u.p, u.d)) {
+          // Revert just this usage — day can't absorb it
+          if (prevAmt !== null) {
+            setOverride(u.p, u.d, u.s, u.idx, 'amt', prevAmt);
           } else {
-            // Remove just this idx from the slot's override list
-            const ovs = getOverrides(u.p, u.d, u.s);
-            if (ovs) {
-              const filtered = ovs.filter(function(o){return o.idx !== u.idx;});
+            var ovrList = getOverrides(u.p, u.d, u.s);
+            if (ovrList) {
+              var filtered = ovrList.filter(function(o){return o.idx !== u.idx;});
               if (filtered.length) OVERRIDES[sk(u.p,u.d,u.s)] = filtered;
               else delete OVERRIDES[sk(u.p,u.d,u.s)];
             }
           }
-        });
-        invalidateLeftoverCache();
-      }
+          invalidateLeftoverCache();
+        }
+      });
     });
   });
 }
