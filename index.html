@@ -4617,13 +4617,27 @@ function buildMealCardHtml(s, person, day, other){
       }
     });
     var xOtherBal=xOtherSlot?getBalancedSlotIngredients(xOtherP,xFeedsDay,xOtherSlot):null;
+    // Other person may have their own same-person leftovers of this meal
+    var xOtherLo=xOtherSlot?leftovers[sk(xOtherP,xFeedsDay,xOtherSlot)]:null;
+    var xOtherServings=(xOtherLo&&!xOtherLo.isLeftover)?(xOtherLo.servings||1):
+                       (xOtherLo&&xOtherLo.isLeftover)?1:1;
+    // If the other person's entry is a leftover, find their cook entry to get servings
+    if(xOtherLo&&xOtherLo.isLeftover){
+      // Scan for the other person's cook entry for this meal
+      ['breakfast','lunch','dinner','snack'].forEach(function(cs){
+        var clo=leftovers[sk(xOtherP,xFeedsDay,cs)];
+        if(clo&&!clo.isLeftover&&getMealId(xOtherP,xFeedsDay,cs)===xMealId){
+          xOtherServings=clo.servings||1;
+        }
+      });
+    }
     if(cookBal&&xOtherBal){
       var sameServings=loInfo.servings||1;
       var ovrIngr2=applyOverrides(port,person,day,s);
       ingrHtml=cookBal.map(function(ci,idx){
         var otherAmt=0;
         xOtherBal.forEach(function(oi){if(oi.dbKey===ci.dbKey)otherAmt=oi.amt;});
-        var combinedAmt=ci.amt*sameServings+otherAmt;
+        var combinedAmt=ci.amt*sameServings+otherAmt*xOtherServings;
         var origIng=ovrIngr2[idx]||{dbKey:ci.dbKey,amt:ci.origAmt||ci.amt,role:ci.role,scalable:ci.scalable};
         return buildIngrEditRow(origIng,Math.round(combinedAmt*1000)/1000,person,day,s,idx);
       }).join('');
