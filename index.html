@@ -3313,13 +3313,16 @@ function getDayBalancedIngredients(p,d){
         });
       });
 
-      function snapAmt(amt,db){
+      function snapAmt(amt,db,role){
         var unit=db.unit,grid=0.25;
         if(unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving')grid=1;
         else if(unit==='cup')grid=0.25;
         else if(unit==='tbsp'||db.halfSnap)grid=0.5;
         else if(unit==='each')grid=db.wholeOnly?1:0.25;
-        var snapped=Math.round(amt/grid)*grid;
+        // When trimming (over target), round fat DOWN to bias toward closing
+        // the gap. Other roles use nearest to preserve macro ratios.
+        var rnd=(calGap>0&&role==='fat')?Math.floor:(calGap<0&&role==='fat')?Math.ceil:Math.round;
+        var snapped=rnd(amt/grid)*grid;
         return snapped<grid?grid:snapped;
       }
 
@@ -3341,7 +3344,7 @@ function getDayBalancedIngredients(p,d){
         items.forEach(function(fi){
           var newAmt=fi.amt*scale;
           if(fi.db.minAmt&&newAmt<fi.db.minAmt)newAmt=fi.db.minAmt;
-          newAmt=snapAmt(newAmt,fi.db);
+          newAmt=snapAmt(newAmt,fi.db,fi.role);
           // Effective daily kcal change = per-portion change × servings
           var diff=fi.db.kcal*(fi.amt-newAmt)*fi.mult;
           absorbed+=diff;
