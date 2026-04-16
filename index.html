@@ -5327,6 +5327,121 @@ function clearWeek(){
   Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
   invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();autoSaveWeek();
 }
+// ── Post-balance waste pass ────────────────────────────────────
+// After the full balanced pipeline (adjuster + balancer + calorie correction),
+// check each trip for pkg waste. For each ingredient with waste, nudge the
+// final balanced amounts to hit a clean package boundary. Revert any day
+// where the nudge breaks a primary goal.
+function postBalanceWastePass(){
+  // Force balanced cache for all days
+  invalidateDayBalancedCache();
+  ['him','her'].forEach(function(p){
+    DAYS.forEach(function(d){ getDayBalancedIngredients(p,d); });
+  });
+
+  ['sun','wed'].forEach(function(trip){
+    var tripDays=TRIP_DAYS_STATIC[trip]||[];
+    // Sum pkg ingredients from balanced cache
+    var pkgInfo={};
+    ['him','her'].forEach(function(p){
+      tripDays.forEach(function(d){
+        SLOTS.forEach(function(s){
+          if(s==='late_snack'||s==='shake')return;
+          if(SKIPPED[sk(p,d,s)]||EAT_OUT[sk(p,d,s)])return;
+          var bal=getBalancedSlotIngredients(p,d,s);
+          if(!bal)return;
+          bal.forEach(function(bi,idx){
+            var db=NUTRI_DB[bi.dbKey];
+            if(!db||!db.pkg||db.pkg.longShelfLife)return;
+            if(db.pkg.type==='bulk')return;
+            var unit=db.unit;
+            var perPkg=(db.pkg.drained&&(unit==='cup'||unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
+            if(perPkg<=0)return;
+            if(!pkgInfo[bi.dbKey])pkgInfo[bi.dbKey]={total:0,perPkg:perPkg,unit:unit,usages:[]};
+            pkgInfo[bi.dbKey].total+=bi.amt;
+            pkgInfo[bi.dbKey].usages.push({p:p,d:d,s:s,idx:idx,amt:bi.amt});
+          });
+        });
+      });
+    });
+
+    Object.keys(pkgInfo).forEach(function(dbKey){
+      var info=pkgInfo[dbKey];
+      var pkgs=Math.ceil(info.total/info.perPkg);
+      var waste=pkgs*info.perPkg-info.total;
+      if(waste<0.05)return;
+
+      var db=NUTRI_DB[dbKey];
+      // Try filling UP (add waste across usages) vs fitting DOWN (remove to fewer pkgs)
+      var upDelta=waste;
+      var downDelta=info.total-(pkgs-1)*info.perPkg;
+      // Pick smaller change; prefer up (adding is less disruptive to macros)
+      var direction=(upDelta<=downDelta)?'up':'down';
+      var target=direction==='up'?upDelta:downDelta;
+
+      // Flex ranges per ingredient (match waste optimizer)
+      var maxFlexPct=0.25;
+      if(['black beans canned','cannellini beans canned','chickpeas roasted'].indexOf(dbKey)>=0)maxFlexPct=0.75;
+      if(dbKey==='marinara')maxFlexPct=1.0;
+      if(dbKey==='coconut milk')maxFlexPct=direction==='up'?0.75:0.50;
+      if(dbKey==='chicken broth')maxFlexPct=direction==='up'?1.0:0.50;
+      if(dbKey==='silken tofu')maxFlexPct=1.0;
+
+      // Snap grid for this ingredient
+      var grid=0.25;
+      if(info.unit==='oz')grid=1;
+      else if(info.unit==='cup')grid=0.25;
+
+      // Distribute delta across usages proportionally
+      var adjustments=[];
+      var totalAbsorbed=0;
+      info.usages.forEach(function(u){
+        var share=(info.total>0)?(u.amt/info.total)*target:0;
+        var maxFlex=u.amt*maxFlexPct;
+        if(share>maxFlex)share=maxFlex;
+        var newAmt=direction==='up'?u.amt+share:u.amt-share;
+        newAmt=Math.round(newAmt/grid)*grid;
+        if(newAmt<grid)newAmt=grid;
+        if(db.minAmt&&newAmt<db.minAmt)newAmt=db.minAmt;
+        totalAbsorbed+=Math.abs(newAmt-u.amt);
+        adjustments.push({u:u,newAmt:newAmt,oldAmt:u.amt});
+      });
+
+      if(totalAbsorbed<0.01)return;
+
+      // Apply tentatively
+      adjustments.forEach(function(a){
+        var daySlots=_dayBalancedCache[pk(a.u.p,a.u.d)];
+        if(daySlots&&daySlots[a.u.s])daySlots[a.u.s][a.u.idx].amt=a.newAmt;
+      });
+
+      // Check goals for each affected day — revert that day if broken
+      var affectedDays={};
+      adjustments.forEach(function(a){affectedDays[a.u.p+'_'+a.u.d]=a;});
+      Object.keys(affectedDays).forEach(function(key){
+        var parts=key.split('_');
+        var ap=parts[0],ad=parts[1];
+        var t=calcTotals(ap,ad);
+        var tgt=CAL_BASE[ap],pm=ap==='him'?180:120;
+        var mk=t.pro*4+t.fat*9+t.carb*4;
+        var fatPct=mk>0?(t.fat*9)/mk:0;
+        var carbPct=mk>0?(t.carb*4)/mk:0;
+        var fv=computeDailyFV(ap,ad);
+        var broken=Math.abs(t.kcal-tgt)>100||t.pro<pm||carbPct>0.55||fatPct>0.30||fv.veg<3||fv.fruit<1;
+        if(broken){
+          // Revert all adjustments for this day
+          adjustments.forEach(function(a){
+            if(a.u.p===ap&&a.u.d===ad){
+              var daySlots=_dayBalancedCache[pk(a.u.p,a.u.d)];
+              if(daySlots&&daySlots[a.u.s])daySlots[a.u.s][a.u.idx].amt=a.oldAmt;
+            }
+          });
+        }
+      });
+    });
+  });
+}
+
 function randomizeWeek(target){
   sharedSchedOpen=false;
   const randTarget=target||person; // use passed target or current person tab
@@ -5433,6 +5548,10 @@ function randomizeWeek(target){
   // scale that would push a day beyond ±100 kcal.
   applyTripFlexScaling(randTarget);
   invalidateLeftoverCache();
+  // Post-balance waste pass: nudge final balanced amounts to hit clean
+  // package boundaries. Runs after the full pipeline so it works with
+  // real numbers, not approximations. Reverts any day where goals break.
+  postBalanceWastePass();
   // Runtime invariant check — alert on any data inconsistency
   var inv=verifyInvariants();
   if(inv.length)console.warn('INVARIANT VIOLATIONS ('+inv.length+'):\n'+inv.join('\n'));
