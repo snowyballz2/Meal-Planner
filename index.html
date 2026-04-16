@@ -6172,6 +6172,57 @@ function _randomizeWeekCore(randTarget){
     });
   });
 
+  // ── PHASE 1.7: Swap snacks that are the sole user of a package ──
+  // If a snack is the only meal in the trip using a pkg ingredient,
+  // it opens a whole package just for one snack. Replace with non-pkg.
+  ['sun','wed'].forEach(function(tripKey){
+    var tripDays=TRIP_DAYS_STATIC[tripKey]||[];
+    // Build pkg usage map: dbKey -> {snackSlots:[], otherSlots:[]}
+    var pkgUsage={};
+    persons.forEach(function(p){
+      tripDays.forEach(function(d){
+        ['breakfast','lunch','snack','dinner'].forEach(function(s){
+          var key=sk(p,d,s);
+          if(locked[key]||SKIPPED[key]||EAT_OUT[key])return;
+          var mid=getMealId(p,d,s);if(!mid)return;
+          var m=getMeal(mid);if(!m||!m.ingredients)return;
+          m.ingredients.forEach(function(i){
+            var db=NUTRI_DB[i.dbKey];
+            if(!db||!db.pkg||db.pkg.longShelfLife||db.pkg.type==='bulk')return;
+            if(!pkgUsage[i.dbKey])pkgUsage[i.dbKey]={snackSlots:[],otherSlots:[]};
+            if(s==='snack')pkgUsage[i.dbKey].snackSlots.push({p:p,d:d,key:key,mealId:mid});
+            else pkgUsage[i.dbKey].otherSlots.push({p:p,d:d,s:s});
+          });
+        });
+      });
+    });
+    // For each pkg used ONLY in snack slots, swap those snacks to non-pkg
+    Object.keys(pkgUsage).forEach(function(dbKey){
+      var usage=pkgUsage[dbKey];
+      if(usage.otherSlots.length>0)return; // other meals share this pkg, fine
+      if(!usage.snackSlots.length)return;
+      usage.snackSlots.forEach(function(ss){
+        if(locked[ss.key])return;
+        var isShared=bothPersons&&SHARED_SCHEDULE[dk(ss.d,'snack')]==='shared';
+        var candidates=getMealsForSlot('snack').filter(function(cm){
+          if(!cm[ss.p]||cm.id===ss.mealId)return false;
+          if(isShared&&(!cm.him||!cm.her))return false;
+          if(mealUsesPkg(cm.id))return false;
+          return true;
+        });
+        if(!candidates.length)return;
+        var pick=randomPick(candidates);
+        SEL[ss.key]=pick.id;
+        weekData[activeWeek].ts[ss.key]=now;
+        if(isShared){
+          var otherP=ss.p==='him'?'her':'him';
+          SEL[sk(otherP,ss.d,'snack')]=pick.id;
+          weekData[activeWeek].ts[sk(otherP,ss.d,'snack')]=now;
+        }
+      });
+    });
+  });
+
   // ── PHASE 2: Package analysis per shopping trip ──────────────
   // Compute leftover pairing, then sum package ingredient needs per trip.
   invalidateLeftoverCache();
