@@ -3225,14 +3225,19 @@ function getDayBalancedIngredients(p,d){
     const mts=(lo&&!lo.isLeftover)?(lo.totalServings||lo.servings||1):1;
     const adj=slotAdj!==0?adjustIngredients(ingr,slotAdj,s,hints,mts)
                          :ingr.map(function(i){return {ing:i,newAmt:i.amt};});
+    // Look up base recipe amounts for veg/fruit cap
+    var mealDef=getMeal(getMealId(p,d,s));
+    var baseAmts={};
+    if(mealDef&&mealDef.ingredients)mealDef.ingredients.forEach(function(ri){baseAmts[ri.dbKey]=ri.amt;});
     slots[s]=adj.map(function(a){
       var amt=a.newAmt;
-      // Cap veg/fruit at 2× original recipe amount
-      if((a.ing.role==='veg'||a.ing.role==='fruit')&&a.ing.amt>0&&amt>a.ing.amt*2){
-        amt=a.ing.amt*2;
+      // Cap veg/fruit at 2× BASE RECIPE amount (not adjuster output)
+      var recipeAmt=baseAmts[a.ing.dbKey]||a.ing.amt;
+      if((a.ing.role==='veg'||a.ing.role==='fruit')&&recipeAmt>0&&amt>recipeAmt*2){
+        amt=recipeAmt*2;
       }
       return {dbKey:a.ing.dbKey, amt:amt, role:a.ing.role,
-              scalable:a.ing.scalable, origAmt:a.ing.amt};
+              scalable:a.ing.scalable, origAmt:a.ing.amt, recipeAmt:recipeAmt};
     });
 
     // Per-slot budget enforcement: if the slot exceeds its budget by >50 kcal
@@ -3449,7 +3454,7 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
         if(role&&i.role!==role)return;
         const db=NUTRI_DB[i.dbKey]; if(!db)return;
         const isPkg=!!(db.pkg&&db.pkg.type!=='bulk'&&!db.pkg.longShelfLife);
-        out.push({slot:s,idx:idx,db:db,cur:i.amt,isPkg:isPkg,role:i.role,origAmt:i.origAmt,dbKey:i.dbKey});
+        out.push({slot:s,idx:idx,db:db,cur:i.amt,isPkg:isPkg,role:i.role,origAmt:i.origAmt,recipeAmt:i.recipeAmt,dbKey:i.dbKey});
       });
     });
     return out;
@@ -3518,8 +3523,9 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     // Cap at 2× original recipe amount — no single ingredient should more than double.
     const items=itemsByRole(role, true).filter(function(x){
       if(x.db.unit!=='cup' && !(x.db.unit==='each' && x.db.cupsEach))return false;
-      // Skip items already at or above 2× their original recipe amount
-      var maxAmt=(x.origAmt||x.cur)*2;
+      // Skip items already at or above 2× their BASE RECIPE amount
+      var baseAmt=x.recipeAmt||x.origAmt||x.cur;
+      var maxAmt=baseAmt*2;
       if(x.cur>=maxAmt)return false;
       return true;
     });
