@@ -203,8 +203,8 @@ Early-exits on `(totalWaste=0, goalMisses=0)`. Otherwise keeps the best-scoring 
 
 ## Shopping
 
-- `buildShoppingList(trip, who)` aggregates ingredients per trip (Mon-Wed, Thu-Sun). Uses day-balanced ingredients via `getBalancedSlotIngredients` so amounts match what the meal cards display. (Leftover days are skipped — cook day carries the full batch.)
-- **No shopping-level scaling** — `hisSum`/`herSum` are NEVER modified. They reflect exact recipe usage. Any previous "package optimizer" that silently adjusted totals has been removed (was lying about amounts).
+- `buildShoppingList(trip, who)` adds each slot's balanced amounts individually via `getBalancedSlotIngredients`. No leftover multiplier logic, no cross-person cook handling, no shake special case. Every slot (including leftover days and shakes) contributes its balanced amounts directly. Leftover days are pinned to cook-day amounts, so adding each day individually gives the correct batch total.
+- **No shopping-level scaling** — `hisSum`/`herSum` are NEVER modified. They reflect exact balanced amounts.
 - `shopQtyWithCount()` converts the ingredient qty into a shopping label:
   - `pkg` → count of packages (e.g. "1 container (14oz)" for tofu, "1 carton (32oz)" for egg white, "2 cartons (14oz)" for silken tofu)
   - `produce.perWhole` → whole-produce count (e.g. "3 cucumbers", "1 head broccoli")
@@ -252,8 +252,9 @@ Function-scoped variables use `const`/`let` (only ~40 top-level globals remain a
 - `buildMealSelectOpts(slotMeals, activeId)` — grouped `<option>` HTML for meal selector
 - `computeCardMacros(port, person, day, s, cookServings, showBanner, mealTotalServings)` — adjusted macros + ingredient HTML. Reads from the day-balanced cache.
 - `computeDailyFV(p, d)` — returns `{veg, fruit}` cup totals for a person/day using post-adjustment ingredient amounts. For test/diagnostic evals (goal check).
-- `getDayBalancedIngredients(p, d)` — cached map of `{slot: [{dbKey, amt, role, scalable, origAmt}, …]}` after per-slot adjust + whole-day macro balance.
-- `getBalancedSlotIngredients(p, d, s)` — shortcut for one slot.
+- `getDayBalancedIngredients(p, d)` — **single source of truth** for all ingredient amounts. Cached map of `{slot: [{dbKey, amt, role, scalable, origAmt}, …]}`. Pipeline: classify leftovers → Pass 1 (non-leftover slots via per-slot adjuster; shakes as frozen raw) → Pass 2 (different-day leftovers pinned from cook day cache, frozen) → day-level macro balancer (same-day cook slots counted × servings via `sameDayCookServings`) → post-balancer calorie correction (fat-first trim/boost to close residual gap) → materialize same-day leftovers from finalized cook slots.
+- `getBalancedSlotIngredients(p, d, s)` — shortcut for one slot. Every consumer reads from here: `calcTotals`, `buildShoppingList`, `computeCardMacros`, `renderSharedCard`, `computeDailyFV`.
+- `verifyInvariants()` — runtime assertion checker. 5 invariants: leftover pair consistency, calcTotals↔balanced agreement, shopping↔balanced agreement, card↔balanced agreement. Runs after every `randomizeWeek`, warns on violations.
 - `invalidateDayBalancedCache()` — invalidates when `invalidateLeftoverCache` runs.
 - `lsGet(key, fallback)` / `lsSet(key, val)` — localStorage with JSON parse/stringify
 - `lsGetRaw(key)` / `lsSetRaw(key, val)` — localStorage raw string access
@@ -264,36 +265,59 @@ Expanding/collapsing a meal card in the Him tab mirrors the same slot's state in
 
 ## Key Files
 
-- `index.html` — the entire app (single file, ~7140 lines)
+- `index.html` — the entire app (single file, ~7500 lines)
 - `manifest.json` — PWA manifest (standalone, dark theme)
 - `sw.js` — service worker (network-first caching, GitHub API passthrough)
 - `icon.jpeg` — app icon (favicon + apple-touch-icon + PWA icon)
 - `CLAUDE.md` — this architecture doc
 - `Archive/` — backup copies of previous versions
 
-## Current State & Next Steps (as of 2026-04-15)
+## Current State & Next Steps (as of 2026-04-16)
 
 ### What's working
-- **Daily macro goals**: ~90% strict hit rate (all misses are fat% at 30.1–31.1%, borderline)
-- **Zero waste**: 10/10 runs achieve honest zero waste (shopping list totals match meal card amounts exactly)
+- **Daily macro goals**: ~94% strict hit rate (20-run sample). All misses are borderline fat% (30.1–31%) or rare carb% (55.1%). Calories, protein, veg, fruit all 100%.
+- **Secondary goals**: 100% hit rate (±150 cal, <35% fat, <60% carbs, pro min-10, ≥2c veg, ≥0.5c fruit)
+- **Zero waste**: ~85% of runs (17/20) achieve honest zero waste
+- **Data integrity**: `verifyInvariants()` checks 5 invariants after every randomize — 0 violations across 20 runs
+- **Leftover pair consistency**: 100% — leftover days show exactly what was cooked
 - **Meal variety**: avg ~33 unique meals per week, no dead meals
 - **Coconut milk**: rarely picked (~60% zero-coconut weeks), paired when it is
 - **Per-click time**: ~2–3s
 
-### Recently fixed: solo pkg meals surviving `_randomizeWeekCore`
+### Single source of truth architecture (established 2026-04-16)
 
-**Root cause**: The `leftovers` map was computed once (after Phase 1.5) and used as a closure variable throughout the entire Phase 3 convergence loop. Phase 3 Strategy A swaps could break leftover pairings (e.g. swapping a cook-day meal while its leftover-day still has the old meal), but the stale `leftovers` variable never reflected this. Consequences:
-- `_analyzeTripPackages` overcounted servings for broken pairs → underestimated waste
-- Strategy A's slot filter still saw broken-pair slots as "paired" → allowed placing pkg meals solo
-- Strategy C couldn't detect the resulting solo pkg meals as "single-use" → couldn't remove them
-- Convergence check exited early because waste appeared lower than reality
+All data consumers read from `getBalancedSlotIngredients(p, d, s)`. No special cases for shakes, leftovers, cross-person cooks, or any other slot type. The balanced cache is the only place amounts live.
 
-**Fix**: Recompute `leftovers = computeLeftovers()` at the start of each Phase 3 convergence iteration. This ensures accurate leftover pairing data for waste analysis, slot filtering, and single-use detection.
+**`getDayBalancedIngredients` pipeline:**
+1. Classify slots: same-day leftovers, different-day leftovers, normal slots
+2. **Pass 1**: Compute non-leftover slots via per-slot adjuster. Shakes included as frozen raw amounts. Dinner target computed from actual amounts already in slots (not recomputed inline).
+3. **Pass 2**: Different-day leftovers pinned from cook day's cache, frozen.
+4. **Day-level macro balancer**: `dailyMacros()` counts same-day cook slots × `sameDayCookServings` so the balancer tracks live amounts. Frozen slots (leftovers, shakes) contribute to totals but can't be modified.
+5. **Post-balancer calorie correction**: If frozen leftovers push daily total >50 kcal off target, proportionally trims non-frozen ingredients. Fat trimmed first (with floor snap), then carb, then protein last. Accounts for `sameDayCookServings` multiplier.
+6. **Materialize same-day leftovers**: Copy finalized cook slot amounts to same-day leftover slots.
 
-**Result**: Zero-waste rate improved from ~70% → 100% (10/10 runs, honest).
+**Cook day card display** for cross-person cooks: shows real combined batch = cook person's balanced × their servings + other person's balanced × their servings. "Serves N" label uses actual total.
+
+### Recently fixed (2026-04-16 session)
+
+1. **Stale leftovers in Phase 3**: Recompute `leftovers` each convergence iteration. Zero-waste ~70% → ~85%.
+2. **Fictional leftover-day amounts**: Leftover days were independently balanced, showing fantasy numbers. Now pinned to cook-day amounts. 100% pair consistency.
+3. **Same-day leftover balancer timing**: Leftovers were copied pre-balance then re-synced post-balance (stale during balancing). Now excluded from slots during balancing; `dailyMacros()` counts cook slot × servings.
+4. **Shakes in balanced cache**: Eliminated all shake special cases across calcTotals, buildShoppingList, verifyInvariants.
+5. **Cross-person cook shopping**: Was using raw amounts for other person's portion. Now uses balanced amounts.
+6. **Cross-person cook waste optimizer**: Was missing scale factor for other person's portion.
+7. **computeCardMacros when slotAdj=0**: Was skipping balanced cache. Now always reads from cache.
+8. **Missing invalidateLeftoverCache after bestSEL restore**: Stale cache could affect rerollMissDays.
+9. **Fat/carb swapped in stats bar**: `updateStatsBar` wrote fat to carbs position and vice versa during live editing.
+10. **dailyFV missing sameDayCookServings multiplier**: Veg/fruit undercounted for same-day cook slots.
+11. **Missing autoSaveWeek on ingredient edits**: `onIngrAmt`, `onIngrSwap`, `onIngrReset` now persist changes.
+12. **Dinner target used inline recomputation**: Now reads actual balanced amounts from already-computed slots.
+13. **Cross-person cook card display**: Shows real combined batch (his balanced × his servings + her balanced × her servings), not his × totalServings.
+14. **Calorie correction fat snap**: Fat-role ingredients floor when trimming (over target), other roles round nearest.
+15. **Simplified buildShoppingList**: Just adds each slot's balanced amounts. No leftover multiplier, no cross-person logic, no shake branch.
 
 ### Items for future sessions
-- **Secondary goal buffer** (±150 cal, <35% fat, etc.) hits ~100% — could display as a "yellow zone" vs "green zone" on the UI
-- **Borderline fat% misses**: all goal misses are fat% at 30.1–31.1%. Could investigate day-balancer fat trimming sensitivity or adjust threshold
-- **Meal variety audit**: some meals like `turkey_meatballs_din` (87%) and `edamame_orange_eve` (80%) are heavily favored — consider whether that's OK or needs balancing
-- **Ground meat pkg.type**: changed from `'bulk'` to `'container'` — verify shopping display shows "N containers (16oz)" correctly
+- **Cross-person leftover pinning**: Her's portion is computed independently for her eating day (correct for her calories) but not pinned to cook time. Shopping handles this correctly (adds each slot individually). Card display is fixed. Lower priority.
+- **Secondary goal UI**: Could display as "yellow zone" vs "green zone" on the stats bar
+- **Meal variety audit**: some meals like `turkey_meatballs_din` and `edamame_orange_eve` are heavily favored
+- **Ground meat pkg.type**: changed from `'bulk'` to `'container'` — verify shopping display
