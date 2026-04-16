@@ -1,6 +1,6 @@
 # Family Meal Planner — Architecture Summary
 
-Single-file HTML/JS PWA (`index.html`, ~6860 lines) for two people ("Him"/"Her") with nutrition tracking, shopping lists, package waste elimination, and cloud sync. Installable on mobile via `manifest.json` + `sw.js` service worker.
+Single-file HTML/JS PWA (`index.html`, ~7140 lines) for two people ("Him"/"Her") with nutrition tracking, shopping lists, package waste elimination, and cloud sync. Installable on mobile via `manifest.json` + `sw.js` service worker.
 
 ## Data Layer
 
@@ -12,7 +12,7 @@ Single-file HTML/JS PWA (`index.html`, ~6860 lines) for two people ("Him"/"Her")
   - `pkg` — packaged items with `{size, unit, drained/cups, type}`. Types: `'can'` (default), `'container'` (tofu), `'jar'` (marinara), `'carton'` (broth, egg white), `'pouch'` (tuna pouch), `'bulk'` (ground meats — skip shopping-list conversion)
   - `pkg.longShelfLife` — carton carries between trips; excluded from waste analysis and package nudge (egg white)
   - `produce: {perWhole, label}` — converts cup counts → whole-produce counts for the shopping list (bell pepper, broccoli, cucumber, zucchini, sweet potato, etc.)
-- **DISCOURAGED_INGREDIENTS** — `['coconut milk']`. Phase 1 scoring adds a 150-point penalty per meal using one, so the randomizer picks them rarely unless needed for waste closure.
+- **DISCOURAGED_INGREDIENTS** — `['coconut milk']`. Phase 1 scoring adds a 500-point penalty per meal using one, so the randomizer picks them rarely (~60% of weeks have 0 coconut). When coconut IS picked, Phase 3 pairs it with other coconut meals to fill the can.
 - **MEALS[]** — recipes using `I(dbKey, amt, role, scalable)`. Single base amount per ingredient (no separate him/her). Calorie system scales per person. Roles: protein, carb, fat, veg, condiment, fruit, liquid, fixed.
 - **DEFAULTS** — weekly meal assignments per person per slot.
 - **CAL_BASE** — daily calorie targets (`{him:2800, her:1900}`).
@@ -69,7 +69,12 @@ pass knows the true batch size for shared/leftover cooks:
    - `wholeOnly` → always whole
    - Shared/leftover totals stay clean because the sum of 0.25-multiples is on the 0.25 grid (removed the old total-level snap branch)
    - Packaged items snap too; the package nudge can still refine within ±0.25 to hit clean package boundaries (this is why some amounts legitimately end up off-grid, e.g. 2.625 cup beans when 2 × 2.625 = 3 full cans)
-6. **Package nudge**: Per-meal nudge capped at ±0.25 cup / ±2 oz and ±50 kcal. Skips `longShelfLife` items.
+6. **Package nudge**: Per-meal nudge with per-ingredient flex ranges:
+   - Default: ±0.25 cup / ±2 oz, ±50 kcal
+   - Marinara: +100% up (low cal, 66 kcal/cup)
+   - Beans/chickpeas: +50% up, ±120 kcal
+   - Coconut milk: +75% up / -50% down
+   - Skips `longShelfLife` items.
 
 Shared meals: each person gets their own portion (his adjusted + her adjusted = shared total).
 
@@ -84,8 +89,8 @@ Pipeline:
 2. Compute daily totals (shake + adjusted slots + eat-outs + late snack).
 3. Iteratively apply cal-neutral ingredient swaps (prefer non-pkg items):
    - **Protein short**: +protein one grid step, -carb/fat of equal kcal
-   - **Carb% > 55**: -carb one grid step, +protein of equal kcal
-   - **Fat% > 30**: -fat one grid step, +protein of equal kcal
+   - **Carb% > 55**: -carb one grid step, +protein of equal kcal (threshold 0.1%)
+   - **Fat% > 30**: -fat one grid step, +protein of equal kcal (threshold 0.1%)
    - **Veg < 3c**: +veg one grid step (no trim — veg is so low-cal the min-grid trim would remove way more kcal than the veg adds)
 4. Cached per (p, d); invalidated via `invalidateLeftoverCache`.
 5. Fruit is NOT boosted — user preference, and most days hit naturally.
@@ -108,16 +113,19 @@ Session state survives refresh via `sessionStorage['mealPlannerPageState']`: `to
 Achieves 100% zero-waste on `Randomize` clicks via a multi-layer pipeline:
 
 1. **Phase 1 (random picks)**: 60 attempts per person/day. Scoring uses **scaled-to-slot-budget** kcal (not raw base kcal) so meals with low base kcal like smoothies aren't systematically skipped. Score = `calDiff + fatPenalty + discouragedPenalty`. Early exit when `calDiff ≤ 100 && fatPct ≤ 0.30`.
-2. **Phase 2**: Package analysis per trip (Mon–Wed / Thu–Sun) via `_analyzeTripPackages`.
-3. **Phase 3**: Convergence loop (up to 6 iterations per trip) that greedily reduces total trip waste:
-   - **Strategy A**: Swap non-package slots to meals that use the wasting ingredient. Scores every candidate by **total trip waste across all packages** (not just this one) so a swap that fixes tofu but opens bean waste gets rejected.
-   - **Strategy B**: Mark as resolvable-by-nudge if per-meal nudge can close the gap (shopping optimizer handles the numbers).
+2. **Phase 1.5 (solo pkg removal)**: After Phase 1 + shared-schedule sync, scans every slot. Any pkg meal that is NOT shared and NOT part of a leftover chain gets replaced with a non-pkg alternative. Prevents the #1 waste source: a single 0.5 cup bean meal opening a 1.75 cup can with no pairing.
+3. **Phase 2**: Package analysis per trip (Mon–Wed / Thu–Sun) via `_analyzeTripPackages`. Uses per-slot **scaled estimates** (budget/baseKcal ratio × base amounts) for speed — not the full day-balancer.
+4. **Phase 3**: Convergence loop (up to 6 iterations per trip) that greedily reduces total trip waste:
+   - **Strategy A**: Swap non-package slots to meals that use the wasting ingredient. Scores every candidate by **total trip waste across all packages** (not just this one) so a swap that fixes tofu but opens bean waste gets rejected. Uses cheap base-kcal guard instead of full calcTotals for speed.
+   - **Strategy B**: Mark as resolvable-by-nudge if per-meal nudge can close the gap.
    - **Strategy C**: Remove a single-use package meal only if the removal **strictly reduces** total trip waste. Preserves meals like `silken_tofu_smoothie` when Strategy A has paired them.
-4. **Final**: Enforces shared schedule.
-5. **Shopping optimizer**: Scales trip totals toward clean package boundaries with per-ingredient flex (`black beans/cannellini/marinara/chickpeas` +100%, `coconut milk` +75%).
-6. **Retry loop**: 30 internal retries per `randomizeWeek` click, keeping the **best-waste state** (not the last one). Exits early on zero waste.
-7. **`minAmt`**: Prevents adjuster from zeroing out packaged ingredients.
-8. **Waste warnings**: Amber "⚠️ ½ can unused" on shopping list items with any remaining waste. Skipped for `longShelfLife` cartons.
+5. **Final**: Enforces shared schedule.
+6. **Retry loop**: 30 internal retries per `randomizeWeek` click. Uses fast approximate waste counting during retries (not buildShoppingList). Keeps best by (totalWaste, goalMisses) lexicographic. Exits early on (0, 0).
+7. **Smart day re-roll** (`rerollMissDays`): scored single-slot swaps for miss-days (see Randomizer section).
+8. **Trip-level flex scaling** (`applyTripFlexScaling`): after all retries + re-rolls, proportionally scales ALL meals in a trip using a flex ingredient to hit the nearest package boundary. Per-usage: each day checks daily goals post-scale; reverts that specific day if any goal breaks. Day-balancer auto-compensates by trimming carb/fat.
+   - Flex ranges: marinara +100%, beans/chickpeas +75%, coconut +75%/-50%, broth +100%/-50%, tofu +100%, tuna +75%/-25%, ground meats +75%
+9. **`minAmt`**: Prevents adjuster from zeroing out packaged ingredients.
+10. **Waste display**: Shopping list `hisSum`/`herSum` are NEVER modified — they reflect exact cook amounts from meal cards. Waste = `ceil(total/perPkg)*perPkg - total`. Displayed as "⚠️ ½ can unused". Skipped for `longShelfLife` (egg white) items. Bulk (ground meats) included since freezing partial bags is inconvenient.
 
 ### Meal portion sizing for zero-waste
 
@@ -161,13 +169,13 @@ Early-exits on `(totalWaste=0, goalMisses=0)`. Otherwise keeps the best-scoring 
 - **Package meals are never swapped out** (waste optimizer owns them) and **never swapped in** (can't introduce new pkg dependencies).
 - Reverts if total waste worsens.
 
-**Scoring penalties**: `fatPenalty = (fatPct - 0.30) × 1000` if daily fat > 30%. `discouragedPenalty = 150 × (meals using any DISCOURAGED_INGREDIENT)`.
+**Scoring penalties**: `fatPenalty = (fatPct - 0.30) × 1000` if daily fat > 30%. `discouragedPenalty = 500 × (meals using any DISCOURAGED_INGREDIENT)`.
 
-**Result quality** (measured 50 runs × 350 person-days each):
-- Zero-waste rate ~100%
+**Result quality** (measured 10 runs × 350 person-days each):
+- Zero-waste rate ~100% (honest — shopping list matches card totals exactly)
 - Per-person per-day "all 6 primary goals met": Him ~100%, Her ~98%
 - Perfect weeks (both people, all 14 days, all 6 goals, zero waste): ~85%
-- Per-click time ~1s on desktop.
+- Per-click time ~2–3s on desktop.
 
 **Meal variety preserved**: avg 38 unique meals per 7-day week (out of ~85 DB meals), week-to-week overlap ~5%. The goal-aware scoring slightly favors meals that reliably hit targets (e.g. turkey_meatballs_din, edamame snacks) but no meal is dead.
 
@@ -195,13 +203,13 @@ Early-exits on `(totalWaste=0, goalMisses=0)`. Otherwise keeps the best-scoring 
 
 ## Shopping
 
-- `buildShoppingList(trip, who)` aggregates ingredients per trip (Mon-Wed, Thu-Sun). For each person/day/slot it runs `adjustIngredients` to get the **adjusted** per-person amount, then sums. (Leftover days are skipped — cook day carries the full batch.)
-- Package optimizer scales totals toward clean package boundaries within per-ingredient flex.
-- `shopQtyWithCount()` converts the ingredient qty into a shopping label using whichever the ingredient supports:
-  - `pkg` → count of packages (e.g. "1 container (14oz)" for tofu, "1 carton (32oz)" for egg white)
+- `buildShoppingList(trip, who)` aggregates ingredients per trip (Mon-Wed, Thu-Sun). Uses day-balanced ingredients via `getBalancedSlotIngredients` so amounts match what the meal cards display. (Leftover days are skipped — cook day carries the full batch.)
+- **No shopping-level scaling** — `hisSum`/`herSum` are NEVER modified. They reflect exact recipe usage. Any previous "package optimizer" that silently adjusted totals has been removed (was lying about amounts).
+- `shopQtyWithCount()` converts the ingredient qty into a shopping label:
+  - `pkg` → count of packages (e.g. "1 container (14oz)" for tofu, "1 carton (32oz)" for egg white, "2 cartons (14oz)" for silken tofu)
   - `produce.perWhole` → whole-produce count (e.g. "3 cucumbers", "1 head broccoli")
   - `type:'bulk'` → raw quantity (no conversion)
-- Waste warnings on any remaining package waste. Skipped for `longShelfLife` items.
+- Waste = `ceil(total/perPkg) * perPkg - total`. Displayed as "⚠️ ½ can unused". Skipped for `longShelfLife` items.
 - Egg whites are a separate line from whole eggs ("Egg, white" vs "Egg, whole").
 
 ## Shared Tab
@@ -256,7 +264,7 @@ Expanding/collapsing a meal card in the Him tab mirrors the same slot's state in
 
 ## Key Files
 
-- `index.html` — the entire app (single file, ~6860 lines)
+- `index.html` — the entire app (single file, ~7140 lines)
 - `manifest.json` — PWA manifest (standalone, dark theme)
 - `sw.js` — service worker (network-first caching, GitHub API passthrough)
 - `icon.jpeg` — app icon (favicon + apple-touch-icon + PWA icon)
