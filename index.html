@@ -4598,6 +4598,38 @@ function buildMealCardHtml(s, person, day, other){
   const pm = macroResult.pm;
   const adjBanner = macroResult.adjBanner;
   if(macroResult.ingrHtml) ingrHtml = macroResult.ingrHtml;
+
+  // Cross-person cook: replace ingredient HTML with real combined amounts.
+  // The cook person's portion × their servings + other person's actual portion.
+  // cookServings used above was totalServings (him×2), which is wrong when
+  // portions differ. Rebuild with the real amounts.
+  if(loInfo&&loInfo.crossPersonCook){
+    var cookBal=getBalancedSlotIngredients(person,day,s);
+    var xOtherP=loInfo.feedsAlso;
+    var xFeedsDay=loInfo.feedsDay;
+    var xMealId=getMealId(person,day,s);
+    var xOtherSlot=null;
+    ['breakfast','lunch','dinner','snack'].forEach(function(os){
+      if(xOtherSlot)return;
+      if(getMealId(xOtherP,xFeedsDay,os)===xMealId){
+        var olo=leftovers[sk(xOtherP,xFeedsDay,os)];
+        if(olo&&olo.isLeftover)xOtherSlot=os;
+      }
+    });
+    var xOtherBal=xOtherSlot?getBalancedSlotIngredients(xOtherP,xFeedsDay,xOtherSlot):null;
+    if(cookBal&&xOtherBal){
+      var sameServings=loInfo.servings||1;
+      var ovrIngr2=applyOverrides(port,person,day,s);
+      ingrHtml=cookBal.map(function(ci,idx){
+        var otherAmt=0;
+        xOtherBal.forEach(function(oi){if(oi.dbKey===ci.dbKey)otherAmt=oi.amt;});
+        var combinedAmt=ci.amt*sameServings+otherAmt;
+        var origIng=ovrIngr2[idx]||{dbKey:ci.dbKey,amt:ci.origAmt||ci.amt,role:ci.role,scalable:ci.scalable};
+        return buildIngrEditRow(origIng,Math.round(combinedAmt*1000)/1000,person,day,s,idx);
+      }).join('');
+      ingrHtml='<div class="ingr-edit-grid">'+ingrHtml+'</div>';
+    }
+  }
   const mFat=pm.fat||0,mCarb=pm.carb||0;
   let mMacroKcal=pm.pro*4+mFat*9+mCarb*4;
   if(!mMacroKcal)mMacroKcal=pm.kcal||1;
