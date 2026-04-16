@@ -3231,10 +3231,12 @@ function getDayBalancedIngredients(p,d){
     if(mealDef&&mealDef.ingredients)mealDef.ingredients.forEach(function(ri){baseAmts[ri.dbKey]=ri.amt;});
     slots[s]=adj.map(function(a){
       var amt=a.newAmt;
-      // Cap veg/fruit at 2× BASE RECIPE amount (not adjuster output)
       var recipeAmt=baseAmts[a.ing.dbKey]||a.ing.amt;
-      if((a.ing.role==='veg'||a.ing.role==='fruit')&&recipeAmt>0&&amt>recipeAmt*2){
-        amt=recipeAmt*2;
+      // Veg/fruit: ALWAYS use base recipe amount. The per-slot adjuster
+      // must not scale them. Only the daily-level boostFV can increase
+      // them to meet the 3-cup veg floor. Nothing else touches them.
+      if(a.ing.role==='veg'||a.ing.role==='fruit'){
+        amt=recipeAmt;
       }
       return {dbKey:a.ing.dbKey, amt:amt, role:a.ing.role,
               scalable:a.ing.scalable, origAmt:a.ing.amt, recipeAmt:recipeAmt};
@@ -3347,6 +3349,7 @@ function getDayBalancedIngredients(p,d){
         var mult=sameDayCookServings[s2]||1;
         slots[s2].forEach(function(i,idx){
           if(i.scalable===false)return;
+          if(i.role==='veg'||i.role==='fruit')return; // veg/fruit locked
           var db=NUTRI_DB[i.dbKey];if(!db)return;
           var iKcal=db.kcal*i.amt;
           if(iKcal<=0)return;
@@ -3503,6 +3506,7 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     pool.sort(function(a,b){return (b.db.kcal*b.cur)-(a.db.kcal*a.cur);});
     for(let i=0;i<pool.length;i++){
       const t=pool[i];
+      if(t.role==='veg'||t.role==='fruit')continue; // never trim veg/fruit
       const dec=incrementFor(t.db);
       const newAmt=t.cur-dec;
       if(newAmt<0)continue;
