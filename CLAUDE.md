@@ -1,6 +1,6 @@
 # Family Meal Planner — Architecture Summary
 
-Single-file HTML/JS PWA (`index.html`, ~7900 lines) for two people ("Him"/"Her") with nutrition tracking, shopping lists, package waste elimination, and cloud sync. Installable on mobile via `manifest.json` + `sw.js` service worker.
+Single-file HTML/JS PWA (`index.html`, ~10,300 lines) for two people ("Him"/"Her") with nutrition tracking, shopping lists, package waste elimination, and cloud sync. Installable on mobile via `manifest.json` + `sw.js` service worker.
 
 ## ⚠ Invariant & Communication Rules (read first)
 
@@ -343,7 +343,7 @@ Uses CSS custom properties (`:root` vars) for theming. Key reusable classes:
 
 ## Key Files
 
-- `index.html` — the entire app (single file, ~8900 lines; includes `window.MPStress` harness)
+- `index.html` — the entire app (single file, ~10,300 lines; includes `window.MPStress` harness)
 - `manifest.json` — PWA manifest (standalone, dark theme)
 - `sw.js` — service worker (network-first caching, GitHub API passthrough)
 - `icon.jpeg` — app icon
