@@ -375,51 +375,55 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 // ══════════════════════════════════════════════════════════════
 var NUTRI_DB = {
   // Proteins
-  'protein powder':        {kcal:97.5,pro:21, fat:1,   carb:2,   unit:'scoop', brand:'Raw Grass Fed Whey', altUnits:{tbsp:5}},
+  'protein powder':        {kcal:97.5,pro:21, fat:1,   carb:2,   unit:'scoop', brand:'Raw Grass Fed Whey', altUnits:{tbsp:5}, minAmt:1, maxAmt:1},
   'creatine':              {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'scoop', brand:'Promix'},
-  'egg white':             {kcal:133, pro:26.7,fat:0,  carb:0,   unit:'cup', note:'liquid carton; ¼ cup = 2 egg whites; 32oz carton = 4 cups', pkg:{size:32,unit:'oz',cups:4,type:'carton',longShelfLife:true}},
-  'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each'},
-  'chicken breast':        {kcal:31,  pro:5.8,fat:0.7, carb:0,   unit:'oz'},
-  'chicken thigh':         {kcal:36,  pro:4.8,fat:1.8, carb:0,   unit:'oz'},
-  'ground turkey 93':      {kcal:38,  pro:5.3,fat:1.8, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}},
-  'salmon':                {kcal:52,  pro:5.7,fat:3.1, carb:0,   unit:'oz'},
-  'halibut':               {kcal:26,  pro:5.3,fat:0.4, carb:0,   unit:'oz'},
-  'filet mignon':          {kcal:57,  pro:6.6,fat:3.2, carb:0,   unit:'oz'},
-  'shrimp':                {kcal:24,  pro:5.7,fat:0.3, carb:0,   unit:'oz'},
-  'canned tuna':{kcal:27.5,pro:6.5,fat:0.25,carb:0,unit:'oz',brand:'Starkist',altUnits:{can:4,g:113},pkg:{size:5,unit:'oz',drained:4}},
-  'tofu firm':             {kcal:20,  pro:2.2,fat:1.1, carb:0.5, unit:'oz',pkg:{size:14,unit:'oz',drained:14,type:'container'}},
-  'silken tofu':           {kcal:15,  pro:1.7,fat:0.7, carb:0.3, unit:'oz', brand:'Nature\'s Tofu', altUnits:{g:85},pkg:{size:14,unit:'oz',drained:14,type:'carton'}},
+  'egg white':             {kcal:133, pro:26.7,fat:0,  carb:0,   unit:'cup', note:'liquid carton; ¼ cup = 2 egg whites; 32oz carton = 4 cups', pkg:{size:32,unit:'oz',cups:4,type:'carton',longShelfLife:true}, minAmt:0.25, maxAmt:1},
+  'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each', minAmt:1, maxAmt:6},
+  'chicken breast':        {kcal:31,  pro:5.8,fat:0.7, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
+  'chicken thigh':         {kcal:36,  pro:4.8,fat:1.8, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
+  'ground turkey 93':      {kcal:38,  pro:5.3,fat:1.8, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}, minAmt:3, maxAmt:12},
+  'salmon':                {kcal:52,  pro:5.7,fat:3.1, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
+  'halibut':               {kcal:26,  pro:5.3,fat:0.4, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
+  'filet mignon':          {kcal:57,  pro:6.6,fat:3.2, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
+  'shrimp':                {kcal:24,  pro:5.7,fat:0.3, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
+  'canned tuna':{kcal:27.5,pro:6.5,fat:0.25,carb:0,unit:'oz',brand:'Starkist',altUnits:{can:4,g:113},pkg:{size:5,unit:'oz',drained:4}, minAmt:2, maxAmt:8},
+  'tofu firm':             {kcal:20,  pro:2.2,fat:1.1, carb:0.5, unit:'oz',pkg:{size:14,unit:'oz',drained:14,type:'container'}, minAmt:3, minAmtSolo:3, maxAmt:8},
+  'silken tofu':           {kcal:15,  pro:1.7,fat:0.7, carb:0.3, unit:'oz', brand:'Nature\'s Tofu', altUnits:{g:85},pkg:{size:14,unit:'oz',drained:14,type:'carton'}, minAmt:3, minAmtSolo:3, maxAmt:8},
   // Dairy & alt
-  'greek yogurt 0%':       {kcal:120, pro:24, fat:0,   carb:7,   unit:'cup', brand:'Fage', altUnits:{g:227}},
-  'cashew milk (sweetened)':{kcal:130, pro:4,  fat:10,  carb:8,   unit:'cup', brand:'Elmhurst', altUnits:{floz:8,ml:240}},
+  'greek yogurt 0%':       {kcal:120, pro:24, fat:0,   carb:7,   unit:'cup', brand:'Fage', altUnits:{g:227}, minAmt:0.5, maxAmt:2},
+  'cashew milk (sweetened)':{kcal:130, pro:4,  fat:10,  carb:8,   unit:'cup', brand:'Elmhurst', altUnits:{floz:8,ml:240}, minAmt:0.25, maxAmt:2},
   'heavy cream':           {kcal:52,  pro:0.3,fat:5.5, carb:0.4, unit:'tbsp', minAmt:0.25, maxAmt:2},
   'cheddar jack':          {kcal:110, pro:7,  fat:9,   carb:0.5, unit:'oz', minAmt:0.25, maxAmt:2},
   'butter':{kcal:102,pro:0,fat:11.5,carb:0,unit:'tbsp', minAmt:0.25, maxAmt:2},
   // Grains & starches (ALL COOKED values per cup)
-  'oats':                  {kcal:300, pro:10, fat:5,   carb:54,  unit:'cup', brand:'365', altUnits:{g:80}},
-  'oats tbsp':             {kcal:19,  pro:0.6,fat:0.3, carb:3.4, unit:'tbsp', brand:'365'},
-  'brown rice cooked':            {kcal:216, pro:5,  fat:1.8, carb:45,  unit:'cup', note:'cooked; 1 dry cup = 2.5 cups cooked', altUnits:{g:195}},
-  'quinoa cooked':                {kcal:222, pro:8,  fat:3.6, carb:39,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:185}},
-  'farro cooked':                 {kcal:170, pro:7,  fat:1,   carb:37,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:170}},
-  'whole wheat pasta cooked':     {kcal:174, pro:7.5,fat:0.8, carb:37,  unit:'cup', note:'cooked', altUnits:{g:137}},
-  'whole wheat toast':     {kcal:70,  pro:3.6,fat:1,   carb:12,  unit:'slice', wholeOnly:true},
-  'whole wheat tortilla':  {kcal:130, pro:4,  fat:3,   carb:22,  unit:'each', wholeOnly:true},
-  'rice vermicelli cooked':       {kcal:190, pro:3.2,fat:0.4, carb:44,  unit:'cup', note:'cooked'},
-  'udon noodles cooked':   {kcal:210, pro:7,  fat:1,   carb:42,  unit:'cup', note:'cooked'},
-  'oat flour':             {kcal:520, pro:20, fat:10,  carb:88,  unit:'cup', brand:'One Degree', altUnits:{g:132}},
-  'sweet potato':          {kcal:114, pro:2.1,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1.25,label:'large sweet potato'}},
-  'yukon potato':          {kcal:118, pro:2.5,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1,label:'medium potato'}},
+  'oats':                  {kcal:300, pro:10, fat:5,   carb:54,  unit:'cup', brand:'365', altUnits:{g:80}, minAmt:0.25, maxAmt:1},
+  'oats tbsp':             {kcal:19,  pro:0.6,fat:0.3, carb:3.4, unit:'tbsp', brand:'365', minAmt:1, maxAmt:8},
+  'brown rice cooked':            {kcal:216, pro:5,  fat:1.8, carb:45,  unit:'cup', note:'cooked; 1 dry cup = 2.5 cups cooked', altUnits:{g:195}, minAmt:0.25, maxAmt:1.5},
+  'quinoa cooked':                {kcal:222, pro:8,  fat:3.6, carb:39,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:185}, minAmt:0.25, maxAmt:1.5},
+  'farro cooked':                 {kcal:170, pro:7,  fat:1,   carb:37,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:170}, minAmt:0.25, maxAmt:1.5},
+  'whole wheat pasta cooked':     {kcal:174, pro:7.5,fat:0.8, carb:37,  unit:'cup', note:'cooked', altUnits:{g:137}, minAmt:0.25, maxAmt:1.5},
+  // wholeOnly: per-portion amounts must be whole numbers (no half-slices/half-tortillas).
+  // minAmt:1 and minAmtSolo:1 match — even in shared batches, each person gets ≥1 whole.
+  // unifyCrossPersonRatios rounds per-portion to whole for wholeOnly items instead of
+  // preserving strict kcal ratios (physical serving reality).
+  'whole wheat toast':     {kcal:70,  pro:3.6,fat:1,   carb:12,  unit:'slice', wholeOnly:true, minAmt:1, minAmtSolo:1, maxAmt:3},
+  'whole wheat tortilla':  {kcal:130, pro:4,  fat:3,   carb:22,  unit:'each', wholeOnly:true, minAmt:1, minAmtSolo:1, maxAmt:3},
+  'rice vermicelli cooked':       {kcal:190, pro:3.2,fat:0.4, carb:44,  unit:'cup', note:'cooked', minAmt:0.25, maxAmt:1.5},
+  'udon noodles cooked':   {kcal:210, pro:7,  fat:1,   carb:42,  unit:'cup', note:'cooked', minAmt:0.25, maxAmt:1.5},
+  'oat flour':             {kcal:520, pro:20, fat:10,  carb:88,  unit:'cup', brand:'One Degree', altUnits:{g:132}, minAmt:0.125, maxAmt:0.5},
+  'sweet potato':          {kcal:114, pro:2.1,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1.25,label:'large sweet potato'}, minAmt:0.25, maxAmt:1.5},
+  'yukon potato':          {kcal:118, pro:2.5,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1,label:'medium potato'}, minAmt:0.25, maxAmt:1.5},
   // Beans & legumes (cooked/canned values)
-  'black beans canned':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'canned, drained',minAmt:0.5,pkg:{size:15.5,unit:'oz',drained:1.75}},
-  'black beans cooked':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)'},
-  'cannellini beans canned':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',brand:'Goya',altUnits:{g:244},minAmt:0.5,pkg:{size:15.5,unit:'oz',drained:1.75}},
-  'cannellini beans cooked':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)'},
-  'lentils cooked':               {kcal:230, pro:18, fat:0.8, carb:40,  unit:'cup', note:'cooked', altUnits:{g:198}},
-  'lentils dried':{kcal:230,pro:18,fat:0.8,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked'},
-  'chickpeas cooked':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)'},
-  'edamame':               {kcal:188, pro:18, fat:8,   carb:14,  unit:'cup'},
-  'hummus':                {kcal:25,  pro:1.2,fat:1.4, carb:2,   unit:'tbsp'},
-  'chickpeas roasted':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',brand:'Giant',altUnits:{g:260},pkg:{size:15.5,unit:'oz',drained:1.75}},
+  'black beans canned':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'canned, drained',minAmt:0.5,maxAmt:1.5,pkg:{size:15.5,unit:'oz',drained:1.75}},
+  'black beans cooked':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:1.5},
+  'cannellini beans canned':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',brand:'Goya',altUnits:{g:244},minAmt:0.5,maxAmt:1.5,pkg:{size:15.5,unit:'oz',drained:1.75}},
+  'cannellini beans cooked':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:1.5},
+  'lentils cooked':               {kcal:230, pro:18, fat:0.8, carb:40,  unit:'cup', note:'cooked', altUnits:{g:198}, minAmt:0.5, maxAmt:1.5},
+  'lentils dried':{kcal:230,pro:18,fat:0.8,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked',minAmt:0.5,maxAmt:1.5},
+  'chickpeas cooked':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:1.5},
+  'edamame':               {kcal:188, pro:18, fat:8,   carb:14,  unit:'cup', minAmt:0.5, maxAmt:1.5},
+  'hummus':                {kcal:25,  pro:1.2,fat:1.4, carb:2,   unit:'tbsp', minAmt:1, maxAmt:6},
+  'chickpeas roasted':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',brand:'Giant',altUnits:{g:260},minAmt:0.5,maxAmt:1.5,pkg:{size:15.5,unit:'oz',drained:1.75}},
   // Vegetables — minAmt / maxAmt per serving (3c absolute cap also enforced in snap passes)
   'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:5,label:'bag spinach (5oz)'}, minAmt:0.5, maxAmt:3},
   'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:3,label:'bunch kale'}, minAmt:0.5, maxAmt:3},
@@ -432,8 +436,8 @@ var NUTRI_DB = {
   'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.5, maxAmt:2},
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.5, maxAmt:2},
   'celery':                {kcal:6,   pro:0.3,fat:0.1, carb:1.2, unit:'each', cupsEach:0.5, wholeOnly:true, minAmt:1, minAmtSolo:2, maxAmt:4},
-  'egg noodles dry':       {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup'},
-  'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',pkg:{size:32,unit:'oz',cups:4,type:'carton'}},
+  'egg noodles dry':       {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', minAmt:0.125, maxAmt:1.5},
+  'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:2,pkg:{size:32,unit:'oz',cups:4,type:'carton'}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75, minAmt:0.5, minAmtSolo:1, maxAmt:2},
   'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each', cupsEach:0.125, wholeWhenSolo:true, minAmt:1, minAmtSolo:2, maxAmt:4},
   'bok choy':              {kcal:9,   pro:1,  fat:0.1, carb:1.5, unit:'cup', produce:{perWhole:2,label:'head bok choy'}, minAmt:0.5, maxAmt:3},
@@ -446,6 +450,8 @@ var NUTRI_DB = {
   'acai':                  {kcal:70,  pro:1,  fat:1.5, carb:13,  unit:'cup', brand:'Sambazon', altUnits:{g:115}, minAmt:0.25, maxAmt:1},
   'lime':                  {kcal:20,  pro:0.5,fat:0.1, carb:7,   unit:'each', minAmt:0.25, maxAmt:1},
   // Fats & oils
+  // NOTE: sesame oil + olive oil are dressing/sauce oils, NOT pan-sauté oils.
+  // They do NOT get minAmtSolo (unlike avocado oil which is for sautéing).
   'sesame oil':            {kcal:120, pro:0,  fat:13.5,carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1.5},
   'almond butter':         {kcal:95,  pro:3.5,fat:8.5, carb:3.5, unit:'tbsp', brand:'365', altUnits:{g:32}, minAmt:0.5, maxAmt:2},
   'peanut butter':         {kcal:90,  pro:4,  fat:7.5, carb:3.5, unit:'tbsp', brand:'Kirkland Organic', altUnits:{g:32}, minAmt:0.5, maxAmt:2},
@@ -456,22 +462,25 @@ var NUTRI_DB = {
   'chia seeds':            {kcal:58,  pro:2,  fat:3.7, carb:5,   unit:'tbsp', minAmt:0.25, maxAmt:2},
   'sesame seeds':          {kcal:51,  pro:1.5,fat:4.5, carb:2.1, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'peanuts':               {kcal:54,  pro:2.3,fat:4.5, carb:2,   unit:'tbsp', minAmt:0.5, maxAmt:2},
-  'honey tbsp':            {kcal:64,  pro:0.1,fat:0,   carb:17,  unit:'tbsp', halfSnap:true},
-  'maple syrup':           {kcal:52,  pro:0,  fat:0,   carb:13,  unit:'tbsp'},
-  'granola strawberry':    {kcal:450, pro:12, fat:39,  carb:27,  unit:'cup', brand:'Carbonaut Strawberry Vanilla', altUnits:{g:90}},
+  // minAmt:0.25 is the batch/shared floor; minAmtSolo:0.5 keeps the meaningful-portion
+  // floor for single-portion cooks. Narrow 0.5/1 window + ~2:1 shared kcal ratio makes
+  // per-portion min impossible otherwise (see korean_rice_bowl shared dinner case).
+  'honey tbsp':            {kcal:64,  pro:0.1,fat:0,   carb:17,  unit:'tbsp', halfSnap:true, minAmt:0.25, minAmtSolo:0.5, maxAmt:1},
+  'maple syrup':           {kcal:52,  pro:0,  fat:0,   carb:13,  unit:'tbsp', minAmt:0.25, minAmtSolo:0.5, maxAmt:1},
+  'granola strawberry':    {kcal:450, pro:12, fat:39,  carb:27,  unit:'cup', brand:'Carbonaut Strawberry Vanilla', altUnits:{g:90}, minAmt:0.25, maxAmt:0.75},
   'baking powder':         {kcal:6,   pro:0,  fat:0,   carb:3,   unit:'tbsp', halfSnap:true},
   // Sauces & seasonings
-  'soy sauce':             {kcal:9,   pro:0.9,fat:0,   carb:1,   unit:'tbsp'},
-  'fish sauce':            {kcal:6,   pro:1,  fat:0,   carb:0.7, unit:'tbsp'},
-  'gochujang':             {kcal:30,  pro:0.9,fat:0.3, carb:6,   unit:'tbsp', halfSnap:true},
-  'rice vinegar':          {kcal:3,   pro:0,  fat:0,   carb:0,   unit:'tbsp', halfSnap:true},
-  'red wine vinegar':      {kcal:3,   pro:0,  fat:0,   carb:0,   unit:'tbsp'},
-  'balsamic vinegar':      {kcal:14,  pro:0.1,fat:0,   carb:3,   unit:'tbsp'},
-  'salsa':                 {kcal:5,   pro:0.2,fat:0,   carb:1,   unit:'tbsp'},
+  'soy sauce':             {kcal:9,   pro:0.9,fat:0,   carb:1,   unit:'tbsp', minAmt:0.5, maxAmt:3},
+  'fish sauce':            {kcal:6,   pro:1,  fat:0,   carb:0.7, unit:'tbsp', minAmt:0.5, maxAmt:2},
+  'gochujang':             {kcal:30,  pro:0.9,fat:0.3, carb:6,   unit:'tbsp', halfSnap:true, minAmt:0.5, maxAmt:2},
+  'rice vinegar':          {kcal:3,   pro:0,  fat:0,   carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.5, maxAmt:2},
+  'red wine vinegar':      {kcal:3,   pro:0,  fat:0,   carb:0,   unit:'tbsp', minAmt:0.5, maxAmt:2},
+  'balsamic vinegar':      {kcal:14,  pro:0.1,fat:0,   carb:3,   unit:'tbsp', minAmt:0.5, maxAmt:2},
+  'salsa':                 {kcal:5,   pro:0.2,fat:0,   carb:1,   unit:'tbsp', minAmt:1, maxAmt:4},
   'marinara':{kcal:66,pro:2,fat:1.5,carb:12,unit:'cup',pkg:{size:24,unit:'oz',cups:3,type:'jar'}},
-  'white miso':{kcal:33,pro:2,fat:1,carb:4.3,unit:'tbsp'},
-  'tomatillo sauce':       {kcal:5,   pro:0.2,fat:0.2, carb:1,   unit:'tbsp'},
-  'broth concentrate':     {kcal:15,  pro:1.5,fat:0,   carb:1.5, unit:'tbsp', halfSnap:true},
+  'white miso':{kcal:33,pro:2,fat:1,carb:4.3,unit:'tbsp',minAmt:0.5,maxAmt:2},
+  'tomatillo sauce':       {kcal:5,   pro:0.2,fat:0.2, carb:1,   unit:'tbsp', minAmt:1, maxAmt:3},
+  'broth concentrate':     {kcal:15,  pro:1.5,fat:0,   carb:1.5, unit:'tbsp', halfSnap:true, minAmt:0.5, maxAmt:2},
   'water':                 {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'cup'},
   'cinnamon':              {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'salt':                  {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
@@ -492,34 +501,34 @@ var NUTRI_DB = {
   'lemon':                 {kcal:12,  pro:0.5,fat:0.1, carb:4,   unit:'each'},
   'ginger':                {kcal:6,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'lemongrass':            {kcal:5,   pro:0,  fat:0,   carb:1.2, unit:'tbsp'},
-  'ground chicken':        {kcal:35,  pro:5.8,fat:1.3, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}},
+  'ground chicken':        {kcal:35,  pro:5.8,fat:1.3, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}, minAmt:4, maxAmt:12},
   'oyster sauce':          {kcal:9,   pro:0.3,fat:0,   carb:2,   unit:'tbsp'},
   'dark soy sauce':        {kcal:10,  pro:0.9,fat:0,   carb:1.5, unit:'tbsp'},
   'tahini':                {kcal:89,  pro:2.6,fat:8,   carb:3,   unit:'tbsp', minAmt:0.25, maxAmt:2},
   'mirin':                 {kcal:35,  pro:0,  fat:0,   carb:7,   unit:'tbsp'},
-  'gochugaru':             {kcal:10,  pro:0.3,fat:0.1, carb:2,   unit:'tbsp'},
-  'sugar':                 {kcal:48,  pro:0,  fat:0,   carb:12,  unit:'tbsp'},
+  'gochugaru':             {kcal:10,  pro:0.3,fat:0.1, carb:2,   unit:'tbsp', minAmt:0.25, maxAmt:1},
+  'sugar':                 {kcal:48,  pro:0,  fat:0,   carb:12,  unit:'tbsp', minAmt:0.25, minAmtSolo:0.5, maxAmt:1},
   'shallot':               {kcal:30,  pro:1,  fat:0,   carb:7,   unit:'each', cupsEach:0.25, minAmt:1, maxAmt:3},
   'cucumber':              {kcal:11,  pro:0.5,fat:0.1, carb:2.4, unit:'cup', produce:{perWhole:1.5,label:'cucumber'}, minAmt:0.5, maxAmt:2},
-  'red curry paste':{kcal:20,pro:0,fat:0,carb:4,unit:'tbsp',brand:'Maesri'},
-  'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup'},
+  'red curry paste':{kcal:20,pro:0,fat:0,carb:4,unit:'tbsp',brand:'Maesri',minAmt:0.25,maxAmt:1},
+  'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', minAmt:0.25, maxAmt:1.5},
   // Packaged / grab-and-go
-  'rxbar':{kcal:180,pro:12,fat:6,carb:24,unit:'each',brand:'RXBar',altUnits:{g:52},wholeOnly:true},
-  'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz',type:'pouch'},wholeOnly:true},
+  'rxbar':{kcal:180,pro:12,fat:6,carb:24,unit:'each',brand:'RXBar',altUnits:{g:52},wholeOnly:true,minAmt:1,maxAmt:2},
+  'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz',type:'pouch'},wholeOnly:true,minAmt:1,maxAmt:1},
   'triscuit':              {kcal:20,  pro:0.4,fat:0.7, carb:3.3, unit:'each', wholeOnly:true},
   // Milks
-  'coconut milk':{kcal:420,pro:1,fat:14,carb:2,unit:'cup',brand:'Chaokoh',minAmt:0.25,maxAmt:1,pkg:{size:13.5,unit:'oz',cups:1.7}},
-  'coconut water':         {kcal:50,  pro:0,  fat:0,   carb:12,  unit:'cup', brand:'H2C'},
-  'oat milk':              {kcal:100, pro:3,  fat:2,   carb:17,  unit:'cup', brand:'Elmhurst'},
-  '1% milk':               {kcal:110, pro:8,  fat:2.5, carb:13,  unit:'cup', brand:'Horizon Organic'},
+  'coconut milk':{kcal:420,pro:1,fat:14,carb:2,unit:'cup',brand:'Chaokoh',minAmt:0.125,maxAmt:0.5},
+  'coconut water':         {kcal:50,  pro:0,  fat:0,   carb:12,  unit:'cup', brand:'H2C', minAmt:0.25, maxAmt:2},
+  'oat milk':              {kcal:100, pro:3,  fat:2,   carb:17,  unit:'cup', brand:'Elmhurst', minAmt:0.25, maxAmt:2},
+  '1% milk':               {kcal:110, pro:8,  fat:2.5, carb:13,  unit:'cup', brand:'Horizon Organic', minAmt:0.5, maxAmt:2},
   // Supplements
   'green supplement':      {kcal:30,  pro:0,  fat:0,   carb:7,   unit:'scoop', brand:'NuEthix'},
   'fish oil':              {kcal:35,  pro:1,  fat:3,   carb:1,   unit:'serving', brand:'Nature Made', wholeOnly:true},
   // Pancake mix
-  'kodiak pancakes':       {kcal:440, pro:30, fat:5,   carb:74,  unit:'cup', brand:'Kodiak', altUnits:{g:126}},
+  'kodiak pancakes':       {kcal:440, pro:30, fat:5,   carb:74,  unit:'cup', brand:'Kodiak', altUnits:{g:126}, minAmt:0.5, maxAmt:1},
   // Granola variants
-  'granola cinnamon':      {kcal:480, pro:12, fat:42,  carb:30,  unit:'cup', brand:'Carbonaut Cinnamon Apple', altUnits:{g:90}},
-  'granola kind zero':     {kcal:390, pro:15, fat:30,  carb:30,  unit:'cup', brand:'Kind Zero Apple Cinnamon', altUnits:{g:90}},
+  'granola cinnamon':      {kcal:480, pro:12, fat:42,  carb:30,  unit:'cup', brand:'Carbonaut Cinnamon Apple', altUnits:{g:90}, minAmt:0.25, maxAmt:0.75},
+  'granola kind zero':     {kcal:390, pro:15, fat:30,  carb:30,  unit:'cup', brand:'Kind Zero Apple Cinnamon', altUnits:{g:90}, minAmt:0.25, maxAmt:0.75},
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -1286,7 +1295,7 @@ const MEALS=[
     I('black pepper',0.5,'fixed',false)
   ]},
 
- {id:'yogurt_bowl_post',label:'Greek yogurt power bowl',slots:['breakfast'],noLeftover:true,
+ {id:'yogurt_bowl_post',label:'Greek yogurt power bowl',slots:['breakfast','snack'],noLeftover:true,
   steps:['Bring 1.5 cups water to a boil in a small saucepan.','Add oats, reduce to medium-low, and cook 5 min stirring occasionally until thick and creamy.','While oats cook, spoon Greek yogurt into a bowl.','Pour oats alongside the yogurt (don\'t mix — keep them separate for texture contrast).','Top with mixed berries, chia seeds, a dollop of almond butter, and a drizzle of honey.'],
   him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
   ingredients:[
@@ -1431,7 +1440,7 @@ const MEALS=[
     I('black pepper',0.5,'fixed',false)
   ]},
 
- {id:'yogurt_oat_bowl',label:'Protein yogurt & oat bowl',slots:['breakfast'],
+ {id:'yogurt_oat_bowl',label:'Protein yogurt & oat bowl',slots:['breakfast','snack'],
   steps:['Cook oats with water per package directions.','Layer in a bowl: oats on bottom, yogurt on top.','Top with banana slices and a drizzle of honey.'],
   him:{fv:'1c fruit'},her:{fv:'1c fruit'},
   ingredients:[
@@ -1612,7 +1621,7 @@ const MEALS=[
   steps:['Cube sweet potato small. Roast at 425°F 18–20 min (or pan-sauté covered 10 min).','Brown ground turkey in non-stick pan, breaking into crumbles.','Add bell pepper, cook 2 min.','Stir in sweet potato.','Crack egg into pan, cook sunny-side or scramble in. Season with black pepper.'],
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
-    I('ground turkey 93',3,'protein'),
+    I('ground turkey 93',4,'protein'),
     I('egg whole',1,'protein'),
     I('sweet potato',1,'carb'),
     I('bell pepper',0.5,'veg'),
@@ -1828,7 +1837,10 @@ const MEALS=[
     I('orange',1,'fruit',false)
   ]},
 
- {id:'yogurt_apple_cinnamon',label:'Greek yogurt bowl with apple & cinnamon',slots:['snack'],
+ {id:'yogurt_apple_cinnamon',label:'Greek yogurt bowl with apple & cinnamon',slots:['breakfast','snack'],
+  // noRatioCheck: yogurt-dominant meal, only fruit is locked — scaling yogurt
+  // to budget mechanically inflates P:C. Ratio drift is by design.
+  noRatioCheck:true,
   steps:['Spoon Greek yogurt into a bowl. Top with diced apple and a generous sprinkle of cinnamon.'],
   him:{fv:'1.5c fruit'},her:{fv:'1.5c fruit'},
   ingredients:[
@@ -1837,7 +1849,9 @@ const MEALS=[
     I('cinnamon',0.5,'fixed',false)
   ]},
 
- {id:'yogurt_banana_honey',label:'Greek yogurt with banana & honey',slots:['snack'],
+ {id:'yogurt_banana_honey',label:'Greek yogurt with banana & honey',slots:['breakfast','snack'],
+  // noRatioCheck: yogurt-dominant meal, no scalable carb source — ratio drift is design.
+  noRatioCheck:true,
   steps:['Spoon Greek yogurt into a bowl. Slice banana on top. Drizzle honey.'],
   him:{fv:'1c fruit'},her:{fv:'1c fruit'},
   ingredients:[
@@ -1864,7 +1878,9 @@ const MEALS=[
     I('orange',1,'fruit',false)
   ]},
 
- {id:'yogurt_snack',label:'Greek yogurt + berries',slots:['snack'],
+ {id:'yogurt_snack',label:'Greek yogurt + berries',slots:['breakfast','snack'],
+  // noRatioCheck: yogurt-dominant meal, only fruit + capped honey — ratio drift is design.
+  noRatioCheck:true,
   steps:['Spoon yogurt into bowl. Add berries. Drizzle honey.'],
   him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
   ingredients:[
@@ -1980,26 +1996,6 @@ const MEALS=[
     I('lemon',0.5,'condiment',false)
   ]},
 
- {id:'yogurt_berry_eve',label:'Greek yogurt, granola & berries',slots:['snack'],
-  steps:['Spoon yogurt into bowl. Add granola, berries, honey.'],
-  him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
-  ingredients:[
-    I('greek yogurt 0%',1,'protein'),
-    I('granola strawberry',0.25,'carb'),
-    I('mixed berries',0.5,'fruit',false),
-    I('honey tbsp',1,'condiment')
-  ]},
-
- {id:'yogurt_orange_eve',label:'Greek yogurt, granola & orange',slots:['snack'],
-  steps:['Segment orange. Top yogurt with granola, orange, honey.'],
-  him:{fv:'1 fruit'},her:{fv:'1 fruit'},
-  ingredients:[
-    I('greek yogurt 0%',1,'protein'),
-    I('granola strawberry',0.25,'carb'),
-    I('orange',1,'fruit',false),
-    I('honey tbsp',1,'condiment')
-  ]},
-
  {id:'miso_edamame',label:'Miso soup with edamame & egg white',slots:['snack'],
   steps:['Bring water to a simmer. Lower heat — do NOT boil miso (kills probiotics).','Whisk miso into a ladle of hot water until smooth, then stir into pot.','Add silken tofu cubes and shelled edamame. Simmer 2 min.','Slowly drizzle whisked egg whites into the broth while stirring gently — forms soft ribbons.','Top with sliced scallion.'],
   him:{fv:''},her:{fv:''},
@@ -2022,7 +2018,7 @@ const MEALS=[
     I('sesame seeds',1,'fat')
   ]},
 
- {id:'yogurt_parfait_eve',label:'Greek yogurt parfait',slots:['snack'],
+ {id:'yogurt_parfait_eve',label:'Greek yogurt parfait',slots:['breakfast','snack'],
   steps:['Layer yogurt, granola, berries. Drizzle honey.'],
   him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
   ingredients:[
@@ -2034,14 +2030,6 @@ const MEALS=[
 
  // ── Lighter snacks (130-170 kcal range, designed for her budget) ──
 
- {id:'yogurt_berries_light',label:'Greek yogurt & berries',slots:['snack'],
-  steps:['Scoop yogurt into a bowl. Top with berries.'],
-  him:{fv:'0.25c fruit'},her:{fv:'0.25c fruit'},
-  ingredients:[
-    I('greek yogurt 0%',0.5,'protein'),
-    I('mixed berries',0.25,'fruit',false)
-  ]},
-
  {id:'tuna_crackers_light',label:'Tuna pouch + crackers',slots:['snack'],
   steps:['Open tuna pouch. Eat with crackers.'],
   him:{},her:{},
@@ -2051,6 +2039,10 @@ const MEALS=[
   ]},
 
  {id:'shrimp_cucumber_plate',label:'Chilled shrimp with cucumber & dill',slots:['snack'],
+  // noRatioCheck: intentionally low-carb shrimp+veg snack. Any protein scale-up
+  // mechanically inflates P:C ratio because there's no carb source to match.
+  // Excluded from INV6 distortion check.
+  noRatioCheck:true,
   steps:['Arrange cooked chilled shrimp on a plate with sliced cucumber.','Sprinkle dill and a squeeze of lemon over the top. Black pepper to taste.'],
   him:{fv:'1c veg'},her:{fv:'1c veg'},
   ingredients:[
@@ -2147,8 +2139,8 @@ const MEALS=[
     I('bell pepper',0.5,'veg'),
     I('shallot',1,'veg'),
     I('baby spinach',0.5,'veg'),
-    I('coconut milk',0.4,'liquid'),
-    I('jasmine rice cooked',0.75,'carb'),
+    I('coconut milk',0.25,'liquid'),
+    I('jasmine rice cooked',1.25,'carb'),
     I('red curry paste',0.5,'condiment',false),
     I('avocado oil',0.125,'fat',false),
     I('ginger',0.125,'fixed',false),
@@ -3194,8 +3186,16 @@ var PRO_TARGET=lsGet('mealPlannerProTarget',{him:180,her:120});
 // Macro ratio limits: carbs < 50% of kcal calories, fat < 30% of kcal calories
 var MACRO_LIMITS={maxCarbPct:0.55,maxFatPct:0.30};
 // Ingredients the randomizer should avoid unless needed for macros/waste.
-// Meals containing any of these get a mild score penalty in Phase 1.
+// Phase 1 scoring adds a strong penalty per meal containing any of these
+// (3000/meal dominates typical calDiff). Reroll/swap phases filter them
+// from candidate pools via `mealUsesDiscouraged` so only Phase 1 primary
+// selection can introduce them — keeps them truly rare.
 var DISCOURAGED_INGREDIENTS=['coconut milk'];
+function mealUsesDiscouraged(mealOrId){
+  var m = (typeof mealOrId === 'string') ? getMeal(mealOrId) : mealOrId;
+  if(!m || !m.ingredients) return false;
+  return m.ingredients.some(function(i){ return DISCOURAGED_INGREDIENTS.indexOf(i.dbKey) >= 0; });
+}
 
 // Build macro hints for the calorie adjuster based on person, day, slot
 function buildMacroHints(p,d,s){
@@ -3514,9 +3514,28 @@ function getDayBalancedIngredients(p,d){
         var absorbed=0;
         items.forEach(function(fi){
           var newAmt=fi.amt*scale;
-          if(fi.db.minAmt&&newAmt<fi.db.minAmt)newAmt=fi.db.minAmt;
+          // Solo-aware min: use minAmtSolo when the slot is a solo cook
+          // (mts=1) and the ingredient has one defined. Keeps pan-oil floors
+          // intact when the post-balance correction trims fat to close a gap.
+          var _fiLo = leftovers[sk(p,d,fi.slot)];
+          var _fiMts = (_fiLo && !_fiLo.isLeftover) ? (_fiLo.totalServings||_fiLo.servings||1) : 1;
+          var _fiMin = (_fiMts===1 && typeof fi.db.minAmtSolo==='number') ? fi.db.minAmtSolo
+                     : (typeof fi.db.minAmt==='number' ? fi.db.minAmt : 0);
+          if(_fiMin && newAmt<_fiMin) newAmt=_fiMin;
           if(fi.db.maxAmt&&newAmt>fi.db.maxAmt)newAmt=fi.db.maxAmt;
           newAmt=snapAmt(newAmt,fi.db,fi.role);
+          // Snap may round UP past maxAmt when the cap doesn't land on the
+          // grid (e.g. protein powder grid=1 with maxAmt=1.5 → Math.round(1.5)=2).
+          // Re-clamp after snap: floor to the nearest grid step at-or-below maxAmt.
+          if(fi.db.maxAmt!=null && newAmt>fi.db.maxAmt){
+            var u=fi.db.unit,g=0.25;
+            if(u==='oz'||u==='slice'||u==='scoop'||u==='serving')g=1;
+            else if(u==='cup')g=0.25;
+            else if(u==='tbsp'||fi.db.halfSnap)g=0.5;
+            else if(u==='each')g=fi.db.wholeOnly?1:0.25;
+            newAmt=Math.floor(fi.db.maxAmt/g)*g;
+            if(newAmt<g)newAmt=g;
+          }
           // Effective daily kcal change = per-portion change × servings
           var diff=fi.db.kcal*(fi.amt-newAmt)*fi.mult;
           absorbed+=diff;
@@ -3542,6 +3561,20 @@ function getBalancedSlotIngredients(p,d,s){
 function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
   frozenSlots=frozenSlots||{};
   sameDayCookServings=sameDayCookServings||{};
+  // Solo-slot map for this (p,d) so bestTrim respects minAmtSolo (pan-oil
+  // floor, aromatic quality) and doesn't trim avocado oil below 0.5 in a
+  // solo breakfast, etc. computeLeftovers() is cached — cheap repeat call.
+  var _lvMap = (typeof computeLeftovers==='function') ? computeLeftovers() : {};
+  function _isSoloSlot(s){
+    var lo = _lvMap[sk(p,d,s)];
+    var mts = (lo && !lo.isLeftover) ? (lo.totalServings || lo.servings || 1) : 1;
+    return mts === 1;
+  }
+  function _trimFloor(db, slot){
+    if(!db) return 0;
+    if(_isSoloSlot(slot) && typeof db.minAmtSolo === 'number') return db.minAmtSolo;
+    return (typeof db.minAmt === 'number') ? db.minAmt : 0;
+  }
   const proTarget=PRO_TARGET[p]||0;
   if(!proTarget)return;
 
@@ -3654,6 +3687,10 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
           if(slotKcal > slotBudget*1.5) continue;
         }
       }
+      // Cap 3: per-serving maxAmt (INV13 threshold). Prevents balancer from
+      // pushing egg white past 1c, protein powder past 1.5 scoops, etc. —
+      // caught 3 above-max fires in the threshold-pass stress run.
+      if(item.db.maxAmt != null && (item.cur + pInc) > item.db.maxAmt) continue;
       return item;
     }
     return null;
@@ -3674,7 +3711,11 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
       if(newAmt<0)continue;
       if(t.role==='fat'&&newAmt<0.25)continue;
       if(t.role!=='fat'&&newAmt<(t.origAmt||0)*0.3)continue;
-      if(t.db.minAmt&&newAmt<t.db.minAmt)continue;
+      // Use solo-aware floor: minAmtSolo when applicable (e.g. avocado oil 0.5
+      // in solo slots), else minAmt. Without this, a solo breakfast could trim
+      // avocado oil to 0.125 — below the pan-sauté floor.
+      const _tf = _trimFloor(t.db, t.slot);
+      if(_tf && newAmt < _tf) continue;
       return {item:t,dec:dec};
     }
     return null;
@@ -3728,12 +3769,17 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
 
     let changed=false;
 
-    // Priority 1: protein shortfall (swap +pro, -carb/fat)
+    // Priority 1: protein shortfall (swap +pro, -fat first, then -carb)
     // Threshold is 7g: days within −7 of target are an acceptable variance.
     // Balancer effort on borderline cases often spikes fat% or kcal without
     // closing the gap meaningfully; leave them alone.
+    // Carb floor (40%): if daily carb% is already below the 40% floor, don't
+    // let the balancer trim carb further — only fat is eligible. Prevents
+    // runaway rice/pasta trims when chasing protein on a carb-short day.
+    const carbFloor = 0.40;
     if(proGap>7){
-      const trim=bestTrim(['carb','fat']);
+      const trimRoles = (carbPct <= carbFloor) ? ['fat'] : ['fat','carb'];
+      const trim=bestTrim(trimRoles);
       if(!trim)break;
       const trimKcalStep=trim.dec*trim.item.db.kcal;
       const pItem=bestAdd('protein', trimKcalStep);
@@ -3744,7 +3790,11 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
       changed=true;
     }
     // Priority 2: carb% over 55 (trim carb, add protein)
+    // Carb floor safety: if somehow carb% is already at/below floor, stop
+    // — shouldn't fire normally since we're here only when >55%, but guards
+    // against cumulative trimming landing below the floor in a single loop.
     else if(carbOver>0.001){
+      if(carbPct <= carbFloor) break;
       const trim=bestTrim(['carb']);
       if(!trim)break;
       slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
@@ -3971,6 +4021,11 @@ function verifyInvariants(){
   // ── Invariant 6: Per-meal Protein/Carb ratio change <50% ──
   // The balanced P/C ratio shouldn't deviate more than 50% from the
   // original recipe ratio. Catches the day balancer distorting meal identity.
+  // Ingredients whose bal amount equals their `minAmtSolo` are EXCLUDED from
+  // both raw+bal sums — hitting the solo floor is the threshold system doing
+  // its job (e.g. avocado oil scaled to 0.5 for a single-portion sauté), not
+  // balancer distortion. Same skip applies to the recipe base side so we
+  // compare apples-to-apples.
   ['him','her'].forEach(function(p){
     DAYS.forEach(function(d){
       ['breakfast','lunch','snack','dinner'].forEach(function(s2){
@@ -3978,12 +4033,24 @@ function verifyInvariants(){
         if(SKIPPED[key2]||EAT_OUT[key2])return;
         var mealId2=getMealId(p,d,s2);if(!mealId2)return;
         var meal2=getMeal(mealId2);if(!meal2||!meal2.ingredients)return;
+        // Recipes can opt out with `noRatioCheck:true` — for dishes that are
+        // structurally low-carb (shrimp+cucumber, etc.) where any protein
+        // scale-up mechanically inflates P:C ratio. The meal is intentionally
+        // unbalanced on P:C; judging distortion against its base is noise.
+        if(meal2.noRatioCheck)return;
         var bal2=getBalancedSlotIngredients(p,d,s2);
         if(!bal2)return;
+        // Build a set of dbKeys whose balanced amount hit minAmtSolo — exclude
+        // them from both the raw (recipe) side and the balanced side.
+        var skipKeys={};
+        bal2.forEach(function(i){
+          var db=NUTRI_DB[i.dbKey]; if(!db||db.minAmtSolo==null) return;
+          if(Math.abs(i.amt - db.minAmtSolo) < 0.01) skipKeys[i.dbKey]=true;
+        });
         // Use the BASE recipe ingredients (not scaled/overridden)
         var rawPro=0,rawCarb=0,balPro=0,balCarb=0;
-        meal2.ingredients.forEach(function(i){var db=NUTRI_DB[i.dbKey];if(db){rawPro+=db.pro*i.amt;rawCarb+=db.carb*i.amt;}});
-        bal2.forEach(function(i){var db=NUTRI_DB[i.dbKey];if(db){balPro+=db.pro*i.amt;balCarb+=db.carb*i.amt;}});
+        meal2.ingredients.forEach(function(i){if(skipKeys[i.dbKey])return;var db=NUTRI_DB[i.dbKey];if(db){rawPro+=db.pro*i.amt;rawCarb+=db.carb*i.amt;}});
+        bal2.forEach(function(i){if(skipKeys[i.dbKey])return;var db=NUTRI_DB[i.dbKey];if(db){balPro+=db.pro*i.amt;balCarb+=db.carb*i.amt;}});
         if(rawCarb<1||balCarb<1)return;
         var rawRatio=rawPro/rawCarb;
         var balRatio=balPro/balCarb;
@@ -4027,6 +4094,11 @@ function verifyInvariants(){
         var ratios=[];
         cookBal.forEach(function(ci){
           var db=NUTRI_DB[ci.dbKey];if(!db)return;
+          // wholeOnly items (tortilla, toast, rxbar, eggs, tuna pouch) round
+          // per-portion to whole numbers in unifyCrossPersonRatios — their
+          // ratios don't follow the batch's kcal-proportional split by design.
+          // Exempt from INV7 so the per-portion rounding doesn't report drift.
+          if(db.wholeOnly)return;
           var oi=null;
           for(var k=0;k<otherBal.length;k++){
             if(otherBal[k].dbKey===ci.dbKey){oi=otherBal[k];break;}
@@ -5728,7 +5800,6 @@ const PKG_FLEX_CONFIG = {
   'cannellini beans cooked':  {maxUp:0.75, maxDown:0.25, kcalCap:180},
   'chickpeas roasted':        {maxUp:0.75, maxDown:0.25, kcalCap:180},
   'chickpeas cooked':         {maxUp:0.75, maxDown:0.25, kcalCap:180},
-  'coconut milk':             {maxUp:0.75, maxDown:0.5,  kcalCap:200},
   'chicken broth':            {maxUp:1.0,  maxDown:0.5,  kcalCap:100}, // 15 kcal/cup, very low cal impact
   'tofu firm':                {maxUp:1.0,  maxDown:0,    kcalCap:300},
   'silken tofu':              {maxUp:1.0,  maxDown:0,    kcalCap:300},
@@ -6632,6 +6703,21 @@ function unifyCrossPersonRatios(skipRebuild){
             if(!pe.item)return;
             pe.item.amt=ideals[idx]*scaleFactor;
           });
+          // wholeOnly override: per-portion must be whole (can't serve 0.5 of a
+          // tortilla or slice of toast). Break strict kcal-proportional split
+          // here — each portion rounds to its own whole number, enforcing min
+          // and max. INV7 exempts wholeOnly items (different grid from
+          // fractional ingredients; ratios can't survive rounding anyway).
+          if(db.wholeOnly){
+            portionItems.forEach(function(pe){
+              if(!pe.item)return;
+              var w=Math.round(pe.item.amt);
+              if(floor>0 && w<floor) w=Math.ceil(floor);
+              if(db.maxAmt!=null && w>db.maxAmt) w=Math.floor(db.maxAmt);
+              if(w<1) w=1;
+              pe.item.amt=w;
+            });
+          }
         });
 
         portionInfo.forEach(function(pi){
@@ -6914,7 +7000,6 @@ function postBalanceWastePass(){
       var maxFlexPct=0.25;
       if(['black beans canned','cannellini beans canned','black beans cooked','cannellini beans cooked','chickpeas roasted','chickpeas cooked'].indexOf(dbKey)>=0)maxFlexPct=0.75;
       if(dbKey==='marinara')maxFlexPct=1.0;
-      if(dbKey==='coconut milk')maxFlexPct=direction==='up'?0.75:0.50;
       if(dbKey==='chicken broth')maxFlexPct=direction==='up'?1.0:0.50;
       if(dbKey==='silken tofu')maxFlexPct=1.0;
 
@@ -7439,6 +7524,7 @@ function rerollMissDays(randTarget){
             if (noRandomizeIds[m.id]) return false;
             if (isShared && !m[otherP]) return false;
             if (mealUsesPkg(m.id)) return false; // never introduce pkg meals
+            if (mealUsesDiscouraged(m)) return false; // never swap TO coconut etc.
             if (m.id === currentId) return false;
             // Variety: reject new cook within 5 days (per person) unless it
             // would extend an existing batch as leftover.
@@ -7570,6 +7656,7 @@ function rerollInv14Violations(randTarget){
         if(!m[t.p])return false;
         if(noRandomizeIds[m.id])return false;
         if(isShared&&!m[otherP])return false;
+        if(mealUsesDiscouraged(m))return false; // never swap TO coconut etc.
         if(m.id===t.mealId)return false;
         if(t.s!=='snack'){
           if(lastWk.indexOf(m.id)>=0)return false;
@@ -7794,15 +7881,18 @@ function _randomizeWeekCore(randTarget){
         // worse than a chicken-breast alternative. Hard goal still 0.30 —
         // we accept a few more borderline misses in exchange for variety.
         var fatPenalty = fatPct > 0.31 ? (fatPct - 0.31) * 3000 : 0;
-        // Mild penalty per meal containing a discouraged ingredient (coconut milk etc.).
-        // Still allows picks when cal/macro fit requires it; just biases away by default.
+        // Strong penalty per meal containing a discouraged ingredient (coconut milk).
+        // 3000/meal dominates typical calDiff (0-500) so coconut meals only pick
+        // when no reasonable alternative fits. Ratio-wise, coconut milk is fat-dense
+        // and the dishes that use it (shrimp_coconut_curry, coconut_turkey_curry,
+        // coconut_chia_pudding) are top INV6 offenders — keep them rare.
         var discouragedCount = 0;
         SLOTS.forEach(function(s2){
           var mid = trySel[s2]; if (!mid) return;
           var mm = getMeal(mid); if (!mm || !mm.ingredients) return;
           if (mm.ingredients.some(function(i){ return DISCOURAGED_INGREDIENTS.indexOf(i.dbKey) >= 0; })) discouragedCount++;
         });
-        var discouragedPenalty = discouragedCount * 500;
+        var discouragedPenalty = discouragedCount * 3000;
         var score = calDiff + fatPenalty + discouragedPenalty;
 
         if (score < bestScore) {
@@ -8130,6 +8220,7 @@ function _randomizeWeekCore(randTarget){
               var replacements = getMealsForSlot(s).filter(function(m) {
                 if (!m[p] || m.id === curId) return false;
                 if (noRandomizeIds[m.id]) return false;
+                if (mealUsesDiscouraged(m)) return false; // never swap TO coconut etc.
                 if (isSharedSlot && (!m.him || !m.her)) return false;
                 if (!m.ingredients) return false;
                 if (s==='lunch'||s==='dinner') {
@@ -8293,6 +8384,7 @@ function _randomizeWeekCore(randTarget){
             if (noRandomizeIds[m.id]) return false;
             if (isSharedSlot && (!m.him || !m.her)) return false;
             if (mealUsesPkg(m.id)) return false;
+            if (mealUsesDiscouraged(m)) return false; // never swap TO coconut etc.
             if (mu.s==='lunch'||mu.s==='dinner') {
               if (p3cLastWk.indexOf(m.id) >= 0) return false;
               if (p3cRecent.indexOf(m.id) >= 0 && !isBatchLeftoverEligible(mu.d, mu.s, m.id)) return false;
@@ -8376,6 +8468,7 @@ function _randomizeWeekCore(randTarget){
         var candidates = getMealsForSlot(s).filter(function(m){
           if (!m.her || m.id === himId) return false;
           if (mealUsesPkg(m.id)) return false;
+          if (mealUsesDiscouraged(m)) return false; // never swap TO coconut etc.
           if (noRandomizeIds[m.id]) return false;
           if (s==='lunch'||s==='dinner') {
             if (p4LastWk.indexOf(m.id) >= 0) return false;
