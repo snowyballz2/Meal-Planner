@@ -414,34 +414,41 @@ var NUTRI_DB = {
   'sweet potato':          {kcal:114, pro:2.1,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1.25,label:'large sweet potato'}, minAmt:0.25, maxAmt:1.5},
   'yukon potato':          {kcal:118, pro:2.5,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1,label:'medium potato'}, minAmt:0.25, maxAmt:1.5},
   // Beans & legumes (cooked/canned values)
-  'black beans canned':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'canned, drained',minAmt:0.5,maxAmt:1.5,pkg:{size:15.5,unit:'oz',drained:1.75}},
-  'black beans cooked':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:1.5},
-  'cannellini beans canned':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',brand:'Goya',altUnits:{g:244},minAmt:0.5,maxAmt:1.5,pkg:{size:15.5,unit:'oz',drained:1.75}},
-  'cannellini beans cooked':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:1.5},
-  'lentils cooked':               {kcal:230, pro:18, fat:0.8, carb:40,  unit:'cup', note:'cooked', altUnits:{g:198}, minAmt:0.5, maxAmt:1.5},
-  'lentils dried':{kcal:230,pro:18,fat:0.8,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked',minAmt:0.5,maxAmt:1.5},
-  'chickpeas cooked':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:1.5},
-  'edamame':               {kcal:188, pro:18, fat:8,   carb:14,  unit:'cup', minAmt:0.5, maxAmt:1.5},
+  'black beans canned':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'canned, drained',minAmt:0.5,maxAmt:2,pkg:{size:15.5,unit:'oz',drained:1.75}},
+  'black beans cooked':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:2},
+  'cannellini beans canned':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',brand:'Goya',altUnits:{g:244},minAmt:0.5,maxAmt:2,pkg:{size:15.5,unit:'oz',drained:1.75}},
+  'cannellini beans cooked':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:2},
+  'lentils cooked':               {kcal:230, pro:18, fat:0.8, carb:40,  unit:'cup', note:'cooked', altUnits:{g:198}, minAmt:0.5, maxAmt:2},
+  'lentils dried':{kcal:230,pro:18,fat:0.8,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked',minAmt:0.5,maxAmt:2},
+  'chickpeas cooked':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:2},
+  'edamame':               {kcal:188, pro:18, fat:8,   carb:14,  unit:'cup', minAmt:0.5, maxAmt:2},
   'hummus':                {kcal:25,  pro:1.2,fat:1.4, carb:2,   unit:'tbsp', minAmt:1, maxAmt:6},
-  'chickpeas roasted':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',brand:'Giant',altUnits:{g:260},minAmt:0.5,maxAmt:1.5,pkg:{size:15.5,unit:'oz',drained:1.75}},
+  'chickpeas roasted':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',brand:'Giant',altUnits:{g:260},minAmt:0.5,maxAmt:2,pkg:{size:15.5,unit:'oz',drained:1.75}},
   // Vegetables — minAmt / maxAmt per serving (3c absolute cap also enforced in snap passes)
-  'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:5,label:'bag spinach (5oz)'}, minAmt:0.5, maxAmt:3},
-  'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:3,label:'bunch kale'}, minAmt:0.5, maxAmt:3},
-  'broccoli':              {kcal:31,  pro:2.6,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'head broccoli'}, minAmt:0.5, maxAmt:2},
-  'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.5, maxAmt:2},
-  'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.5, maxAmt:2},
-  'grape tomatoes':        {kcal:27,  pro:1.3,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'pint grape tomatoes'}, minAmt:0.5, maxAmt:2},
+  // Veg maxAmts: per-serving caps. Kcal-proportional unify in shared batches
+  // gives Him 1.5-1.7× Her's portion — caps bind on Him, batch scales DOWN,
+  // Her drops proportionally from recipe base. Leaf veg 2c, standard 1.5c,
+  // aromatics untouched (already small caps).
+  // Non-aromatic veg: minAmt 0.25 (respects recipe bases that intend "a sprinkle"
+  // like 0.25c bell pepper in hummus_wrap). Solo cooks use same 0.25 floor
+  // (no minAmtSolo override needed — _effMin falls back to minAmt).
+  'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:5,label:'bag spinach (5oz)'}, minAmt:0.25, maxAmt:2},
+  'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:3,label:'bunch kale'}, minAmt:0.25, maxAmt:2},
+  'broccoli':              {kcal:31,  pro:2.6,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'head broccoli'}, minAmt:0.25, maxAmt:1.5},
+  'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, maxAmt:1.5},
+  'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.25, maxAmt:1.5},
+  'grape tomatoes':        {kcal:27,  pro:1.3,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'pint grape tomatoes'}, minAmt:0.25, maxAmt:1.5},
   'red onion':             {kcal:64,  pro:1.8,fat:0.2, carb:15,  unit:'cup', produce:{perWhole:1,label:'medium red onion'}, minAmt:0.1, minAmtSolo:0.2, maxAmt:0.5},
-  'zucchini':              {kcal:20,  pro:1.5,fat:0.2, carb:3.5, unit:'cup', produce:{perWhole:1.5,label:'medium zucchini'}, minAmt:0.5, maxAmt:2},
-  'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.5, maxAmt:2},
-  'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.5, maxAmt:2},
-  'celery':                {kcal:6,   pro:0.3,fat:0.1, carb:1.2, unit:'each', cupsEach:0.5, wholeOnly:true, minAmt:1, minAmtSolo:2, maxAmt:4},
+  'zucchini':              {kcal:20,  pro:1.5,fat:0.2, carb:3.5, unit:'cup', produce:{perWhole:1.5,label:'medium zucchini'}, minAmt:0.25, maxAmt:1.5},
+  'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.25, maxAmt:1.5},
+  'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.25, maxAmt:1.5},
+  'celery':                {kcal:6,   pro:0.3,fat:0.1, carb:1.2, unit:'each', cupsEach:0.5, wholeOnly:true, minAmt:1, minAmtSolo:2, maxAmt:3},
   'egg noodles dry':       {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', minAmt:0.125, maxAmt:1.5},
   'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:2,pkg:{size:32,unit:'oz',cups:4,type:'carton'}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75, minAmt:0.5, minAmtSolo:1, maxAmt:2},
   'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each', cupsEach:0.125, wholeWhenSolo:true, minAmt:1, minAmtSolo:2, maxAmt:4},
-  'bok choy':              {kcal:9,   pro:1,  fat:0.1, carb:1.5, unit:'cup', produce:{perWhole:2,label:'head bok choy'}, minAmt:0.5, maxAmt:3},
-  'bean sprouts':          {kcal:31,  pro:3,  fat:0.2, carb:6,   unit:'cup', minAmt:0.5, maxAmt:2},
+  'bok choy':              {kcal:9,   pro:1,  fat:0.1, carb:1.5, unit:'cup', produce:{perWhole:2,label:'head bok choy'}, minAmt:0.25, maxAmt:2},
+  'bean sprouts':          {kcal:31,  pro:3,  fat:0.2, carb:6,   unit:'cup', minAmt:0.25, maxAmt:1.5},
   // Fruits
   'banana':                {kcal:105, pro:1.3,fat:0.4, carb:27,  unit:'each', cupsEach:1, minAmt:0.5, maxAmt:1},
   'apple':                 {kcal:95,  pro:0.5,fat:0.3, carb:25,  unit:'each', cupsEach:1.5, minAmt:0.5, maxAmt:1},
@@ -498,9 +505,9 @@ var NUTRI_DB = {
   'chili flake':           {kcal:6,   pro:0.3,fat:0.3, carb:0.9, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'red pepper flake':      {kcal:6,   pro:0.3,fat:0.3, carb:0.9, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'garlic':{kcal:4,pro:0.2,fat:0,carb:1,unit:'cloves',minAmt:0.5,maxAmt:4},
-  'lemon':                 {kcal:12,  pro:0.5,fat:0.1, carb:4,   unit:'each'},
+  'lemon':                 {kcal:12,  pro:0.5,fat:0.1, carb:4,   unit:'each', minAmt:0.25, maxAmt:1},
   'ginger':                {kcal:6,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
-  'lemongrass':            {kcal:5,   pro:0,  fat:0,   carb:1.2, unit:'tbsp'},
+  'lemongrass':            {kcal:5,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', minAmt:0.5, maxAmt:2},
   'ground chicken':        {kcal:35,  pro:5.8,fat:1.3, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}, minAmt:4, maxAmt:12},
   'oyster sauce':          {kcal:9,   pro:0.3,fat:0,   carb:2,   unit:'tbsp'},
   'dark soy sauce':        {kcal:10,  pro:0.9,fat:0,   carb:1.5, unit:'tbsp'},
@@ -509,7 +516,7 @@ var NUTRI_DB = {
   'gochugaru':             {kcal:10,  pro:0.3,fat:0.1, carb:2,   unit:'tbsp', minAmt:0.25, maxAmt:1},
   'sugar':                 {kcal:48,  pro:0,  fat:0,   carb:12,  unit:'tbsp', minAmt:0.25, minAmtSolo:0.5, maxAmt:1},
   'shallot':               {kcal:30,  pro:1,  fat:0,   carb:7,   unit:'each', cupsEach:0.25, minAmt:1, maxAmt:3},
-  'cucumber':              {kcal:11,  pro:0.5,fat:0.1, carb:2.4, unit:'cup', produce:{perWhole:1.5,label:'cucumber'}, minAmt:0.5, maxAmt:2},
+  'cucumber':              {kcal:11,  pro:0.5,fat:0.1, carb:2.4, unit:'cup', produce:{perWhole:1.5,label:'cucumber'}, minAmt:0.25, maxAmt:1.5},
   'red curry paste':{kcal:20,pro:0,fat:0,carb:4,unit:'tbsp',brand:'Maesri',minAmt:0.25,maxAmt:1},
   'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', minAmt:0.25, maxAmt:1.5},
   // Packaged / grab-and-go
@@ -2112,6 +2119,32 @@ const MEALS=[
   ingredients:[
     I('cucumber',1.5,'veg',false),
     I('hummus',3,'fat')
+  ]},
+
+ // ── Mid-sized snacks (200-280 kcal, for Him's 256 kcal snack budget) ──
+ {id:'pb_apple_slices',label:'Apple slices with peanut butter',slots:['snack'],
+  steps:['Slice apple into wedges.','Serve with peanut butter for dipping.'],
+  him:{fv:'1 fruit'},her:{fv:'1 fruit'},
+  ingredients:[
+    I('apple',1,'fruit',false),
+    I('peanut butter',2,'fat')
+  ]},
+
+ {id:'pb_banana',label:'Banana with peanut butter',slots:['snack'],
+  steps:['Slice banana lengthwise.','Spread peanut butter across the slices.'],
+  him:{fv:'1 fruit'},her:{fv:'1 fruit'},
+  ingredients:[
+    I('banana',1,'fruit',false),
+    I('peanut butter',2,'fat')
+  ]},
+
+ {id:'edamame_salted',label:'Edamame with sea salt & lime',slots:['snack'],
+  steps:['Steam or microwave edamame 3 min until warm.','Squeeze lime over the pods, sprinkle with flaky salt.'],
+  him:{},her:{},
+  ingredients:[
+    I('edamame',1,'protein'),
+    I('lime',0.5,'fixed',false),
+    I('salt',0.25,'fixed',false)
   ]},
 
  {id:'white_bean_chicken_chili',label:'White Bean Chicken Chili with Poblano & Cheddar',slots:['lunch','dinner'],
@@ -6234,6 +6267,9 @@ function boostBatchVegForDailyTarget(){
           // Find a veg ingredient in the batch with headroom (< 3× base,
           // 4× for leaf veg spinach/kale/bok choy, all <35 kcal/cup).
           // Hard user cap: no portion may exceed 3c per serving post-boost.
+          // Cap check scans ALL portions — previously only checked current
+          // person's side, letting the other person balloon past 3× base
+          // when proportional scaling redistributed the boost.
           for(var k=0;k<bal.length;k++){
             var bi=bal[k];
             if(bi.role!=='veg')continue;
@@ -6241,13 +6277,23 @@ function boostBatchVegForDailyTarget(){
             if(!db||db.unit!=='cup')continue;
             var base=recipeBase[bi.dbKey];
             var isLeaf=(bi.dbKey==='baby spinach'||bi.dbKey==='kale'||bi.dbKey==='bok choy');
-            // Per-ingredient maxAmt (if defined) takes precedence; fallback
-            // to baseAmt × (4 leaf / 3 other).
             if(!base)continue;
             var relMax=base*(isLeaf?4:3);
             var absMax=(db.maxAmt!=null)?db.maxAmt:relMax;
             var capAmt=Math.min(relMax, absMax);
-            if(bi.amt>=capAmt)continue;
+            // Check the MAX amount across all portions against the cap
+            var maxPortionAmt=0;
+            anchorLo.portions.forEach(function(pt){
+              var pbal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
+              if(!pbal)return;
+              for(var kk=0;kk<pbal.length;kk++){
+                if(pbal[kk].dbKey===bi.dbKey){
+                  if(pbal[kk].amt>maxPortionAmt)maxPortionAmt=pbal[kk].amt;
+                  break;
+                }
+              }
+            });
+            if(maxPortionAmt>=capAmt)continue;
             picked={anchorKey:anchorKey,anchorLo:anchorLo,dbKey:bi.dbKey};
             break;
           }
@@ -7113,7 +7159,7 @@ function randomizeWeek(target, seed){
   }
   try {
   const savedSel = JSON.parse(JSON.stringify(SEL));
-  const maxRetries = 30;
+  const maxRetries = 60;
   // Track the best retry — prefer (zero waste, then zero goal-misses).
   // Score lexicographic: (totalWaste, goalMisses, inv14Count). Lower is better.
   // INV14 as third key biases selector away from retries that produce more
@@ -7245,6 +7291,11 @@ function randomizeWeek(target, seed){
   if (bestMisses > 0) {
     rerollMissDays(randTarget);
   }
+  // Bidirectional snack-size swap: for any day off kcal target by >100,
+  // swap the snack to one whose base kcal tightens the delta (either up
+  // or down — moves closer to target). Complements rerollMissDays by
+  // accepting swaps that shrink delta even when miss count is tied.
+  rerollKcalOffSnacks(randTarget);
   // INV14 resolver: swap the later cook in any same-meal-within-5d pair if
   // a valid alternative exists that doesn't worsen waste or day misses.
   rerollInv14Violations(randTarget);
@@ -7583,13 +7634,106 @@ function rerollMissDays(randTarget){
 }
 
 // Targeted INV14 resolver — runs after rerollMissDays. For each INV14 pair
-// (same-meal household cooks within 5 days), try swapping the LATER cook to
-// a non-conflicting meal. Accept the swap only if:
-//   - INV14 count strictly decreases
+// Bidirectional snack swap to tighten kcal delta. For each day where the
+// day kcal is off target by >100, try swapping the snack to a meal whose
+// base kcal moves the day closer to target (either bigger snack if under,
+// smaller if over). Accept only if:
+//   - |new kcalDelta| < |current kcalDelta| (strictly closer to target)
+//   - Total day misses don't increase
 //   - Trip waste doesn't increase
-//   - The affected day's miss count doesn't increase
-// If no candidate fits any pair, give up (INV14 stays >0, still tracking-only
-// but at least we tried). Max 5 iterations to avoid thrashing.
+//   - INV14 count doesn't increase
+// Complements rerollMissDays which uses miss-count reduction — this pass
+// catches cases where a better-sized snack keeps the day's miss count the
+// same but tightens the kcal delta (e.g. -130 → -80, both still misses).
+function rerollKcalOffSnacks(randTarget){
+  const now = Date.now();
+  const noRandomizeIds={};
+  MEALS.forEach(function(m){if(m.noRandomize)noRandomizeIds[m.id]=true;});
+  const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  function totalWaste(){
+    return _fastTripWasteForPersons(TRIP_DAYS_STATIC.sun, persons)
+         + _fastTripWasteForPersons(TRIP_DAYS_STATIC.wed, persons);
+  }
+  function dayMissCount(d){
+    let misses=0;
+    persons.forEach(function(p){
+      if(p!=='him'&&p!=='her')return;
+      const calT=CAL_BASE[p], proT=PRO_TARGET[p];
+      const t=calcTotals(p,d);
+      const fv=computeDailyFV(p,d);
+      const mk=t.pro*4+t.fat*9+t.carb*4;
+      const carbPct=mk>0?(t.carb*4)/mk:0;
+      const fatPct=mk>0?(t.fat*9)/mk:0;
+      if(Math.abs(t.kcal-calT)>100)misses++;
+      if(t.pro<proT)misses++;
+      if(carbPct>0.55)misses++;
+      if(fatPct>0.30)misses++;
+      if(fv.veg<3)misses++;
+      if(fv.fruit<1)misses++;
+    });
+    return misses;
+  }
+  function dayKcalDelta(p,d){ return calcTotals(p,d).kcal - CAL_BASE[p]; }
+
+  DAYS.forEach(function(d){
+    persons.forEach(function(p){
+      if(p!=='him'&&p!=='her')return;
+      const key = sk(p,d,'snack');
+      if(SKIPPED[key]||EAT_OUT[key])return;
+      const curId = SEL[key];
+      if(!curId)return;
+      if(mealUsesPkg(curId))return;
+      const curDelta = dayKcalDelta(p,d);
+      if(Math.abs(curDelta)<=100)return;           // day is on-target
+      const dIdx = DAYS.indexOf(d);
+      const recent = getRecentMealIds(dIdx, DAYS, 4);
+      const lastWk = getLastWeekMealIds();
+      // Snacks are exempt from the 5-day household-repeat rule (small pool).
+      const candidates = getMealsForSlot('snack').filter(function(m){
+        if(!m[p])return false;
+        if(noRandomizeIds[m.id])return false;
+        if(mealUsesPkg(m.id))return false;
+        if(mealUsesDiscouraged(m))return false;
+        if(m.id===curId)return false;
+        return true;
+      });
+      if(!candidates.length)return;
+
+      const baselineWaste = totalWaste();
+      const baselineMisses = dayMissCount(d);
+      const baselineInv14 = countInv14();
+      let bestSwap = null;
+      let bestAbsDelta = Math.abs(curDelta);
+
+      candidates.forEach(function(c){
+        const origSel = SEL[key];
+        SEL[key] = c.id;
+        invalidateLeftoverCache();
+        const newDelta = dayKcalDelta(p,d);
+        const newAbsDelta = Math.abs(newDelta);
+        const newMisses = dayMissCount(d);
+        const newWaste = totalWaste();
+        const newInv14 = countInv14();
+        if(newAbsDelta < bestAbsDelta
+            && newMisses <= baselineMisses
+            && newWaste <= baselineWaste
+            && newInv14 <= baselineInv14){
+          bestAbsDelta = newAbsDelta;
+          bestSwap = c.id;
+        }
+        SEL[key] = origSel;
+        invalidateLeftoverCache();
+      });
+
+      if(bestSwap){
+        SEL[key] = bestSwap;
+        weekData[activeWeek].ts[key] = now;
+        invalidateLeftoverCache();
+      }
+    });
+  });
+}
+
 function rerollInv14Violations(randTarget){
   const now = Date.now();
   const noRandomizeIds={};
@@ -7684,7 +7828,12 @@ function rerollInv14Violations(randTarget){
         const newWaste=totalWaste();
         const newInv14=countInv14();
         const newMisses=dayMissCount(t.d);
-        if(newInv14<baselineInv14 && newWaste<=baselineWaste && newMisses<=baselineMisses){
+        // Accept if INV14 strictly decreases AND waste doesn't grow AND
+        // misses rise by at most 2. The +2 miss tolerance is deliberate: we're
+        // willing to trade up to two day-misses for closing an INV14 hard-feeling
+        // violation since it's more important to prevent same-meal-within-5d
+        // than to chase a couple of goal misses.
+        if(newInv14<baselineInv14 && newWaste<=baselineWaste && newMisses<=baselineMisses+2){
           // Accept — keep SEL mutated
           weekData[activeWeek].ts[key]=now;
           if(otherKey)weekData[activeWeek].ts[otherKey]=now;
@@ -7821,36 +7970,35 @@ function _randomizeWeekCore(randTarget){
             if (isSharedSlot && (!m.him || !m.her)) return false;
             return true;
           });
-          // Fallback cascade — keep variety filter as long as possible so INV14
-          // doesn't fire via a candidate-empty bypass. Order: drop `used` first
-          // (same-day duplicate is least-bad), then shared-slot constraint, and
-          // only drop variety as true last resort.
+          // Fallback cascade — for lunch/dinner, `used` AND variety filter are
+          // BOTH preserved in all fallbacks. Only `shared` may be dropped. This
+          // prevents both same-day-dupe (INV14 gap=0) and within-5d repeats
+          // (INV14 gap=1..4). If variety leaves no candidate, the retry loop
+          // picks a different combo on another retry.
+          // For snacks, used/variety are irrelevant (exempt in primary), so
+          // snack fallback can drop shared + used progressively.
           if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){
             if (!m[p]) return false;
             if (noRandomizeIds[m.id]) return false;
-            if (s !== 'snack') {
-              if (lastWeekIds.indexOf(m.id) >= 0) return false;
-              if (recentIds.indexOf(m.id) >= 0 && !isBatchLeftoverEligible(d, s, m.id)) return false;
-            }
-            if (isSharedSlot && (!m.him || !m.her)) return false;
-            return true;
-          });
-          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){
-            if (!m[p]) return false;
-            if (noRandomizeIds[m.id]) return false;
+            if (used.indexOf(m.id) >= 0) return false;
             if (s !== 'snack') {
               if (lastWeekIds.indexOf(m.id) >= 0) return false;
               if (recentIds.indexOf(m.id) >= 0 && !isBatchLeftoverEligible(d, s, m.id)) return false;
             }
             return true;
           });
-          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){
+          // Snack-only fallback: drop `used` (small pool can repeat same day).
+          if (!candidates.length && s === 'snack') candidates = getMealsForSlot(s).filter(function(m){
             if (!m[p]) return false;
             if (noRandomizeIds[m.id]) return false;
             if (isSharedSlot && (!m.him || !m.her)) return false;
             return true;
           });
-          if (!candidates.length) candidates = getMealsForSlot(s).filter(function(m){ return !!m[p] && !noRandomizeIds[m.id]; });
+          // Snack absolute last resort: any snack for this person.
+          if (!candidates.length && s === 'snack') candidates = getMealsForSlot(s).filter(function(m){ return !!m[p] && !noRandomizeIds[m.id]; });
+          // Lunch/dinner: if variety + used still produces empty pool, give up
+          // on this slot for THIS retry. The retry loop will pick different
+          // earlier meals that avoid this dead-end. Prevents INV14 hard fires.
           if (!candidates.length) return;
           var pick = randomPick(candidates);
           trySel[s] = pick.id;
