@@ -9966,6 +9966,11 @@ window.MPStress=(function(){
       });
     });
     var timing=performance.now()-t0;
+    // Capture post-randomize state BEFORE restore — lets inspectRun/inspectDay
+    // re-enter the exact finalized state of this seed for ingredient-level
+    // drill-down. Includes all captured globals (SEL, weekData.last.sel, etc.)
+    // via the same snapshot() helper. Small cost: a few KB per run.
+    var postSnap=snapshot();
     restore(snap);
     // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16) from the "real fail" list
     var nonInv6=violations.filter(function(v){
@@ -9979,7 +9984,78 @@ window.MPStress=(function(){
     });
     // Capture ALL INV14 violations (not just sampled) for investigation
     var inv14Violations=violations.filter(function(v){return v.startsWith('INV14 ');});
-    return{mode:mode,seed:seed,config:cfg,days:days,invCounts:invCounts,invSample:violations.slice(0,20),invSampleNonInv6:nonInv6,vegCeilings:vegCeilings,leftoversEaten:leftoversEaten,picks:picks,inv14Violations:inv14Violations,timing:timing};
+    return{mode:mode,seed:seed,config:cfg,days:days,invCounts:invCounts,invSample:violations.slice(0,20),invSampleNonInv6:nonInv6,vegCeilings:vegCeilings,leftoversEaten:leftoversEaten,picks:picks,inv14Violations:inv14Violations,timing:timing,postSnap:postSnap};
+  }
+
+  // Inspect helpers — restore the saved post-randomize state for a specific
+  // seed/run so the caller can use window.getBalancedSlotIngredients, calcTotals,
+  // getMealId, etc. as if the randomize just finished. Caller MUST call
+  // MPStress.exitInspect() when done to restore original state.
+  var _inspectEntrySnap = null;
+  function _findRun(runs, seedOrIndex){
+    if(!runs || !runs.length) return null;
+    if(typeof seedOrIndex==='number' && seedOrIndex>=0 && seedOrIndex<runs.length && runs[seedOrIndex].seed!==seedOrIndex){
+      // treat as seed if it doesn't match index position's seed
+      var bySeed=runs.find(function(r){return r.seed===seedOrIndex;});
+      if(bySeed) return bySeed;
+      return runs[seedOrIndex];
+    }
+    return runs.find(function(r){return r.seed===seedOrIndex;}) || runs[seedOrIndex] || null;
+  }
+  function inspectRun(seedOrIndex, runsArray){
+    var runs = runsArray || window._stressRuns || [];
+    var r = _findRun(runs, seedOrIndex);
+    if(!r || !r.postSnap) return {err:'no run or no postSnap — stress must have been run with this runOne version'};
+    if(!_inspectEntrySnap) _inspectEntrySnap = snapshot();
+    restore(r.postSnap);
+    return {seed:r.seed, mode:r.mode, restored:true, tip:'use window.getBalancedSlotIngredients, calcTotals, getMealId. Call MPStress.exitInspect() when done.'};
+  }
+  function exitInspect(){
+    if(_inspectEntrySnap){
+      restore(_inspectEntrySnap);
+      _inspectEntrySnap = null;
+      return {restored:true};
+    }
+    return {err:'not in inspect mode'};
+  }
+  function inspectDay(seedOrIndex, p, d, runsArray){
+    var runs = runsArray || window._stressRuns || [];
+    var r = _findRun(runs, seedOrIndex);
+    if(!r || !r.postSnap) return {err:'no run or no postSnap'};
+    var entry = snapshot();
+    try{
+      restore(r.postSnap);
+      var slots={};
+      ['shake','breakfast','lunch','snack','dinner'].forEach(function(s){
+        var mealId = getMealId(p,d,s);
+        var bal = getBalancedSlotIngredients(p,d,s);
+        if(!bal) return;
+        var meal = getMeal(mealId);
+        var kcal=0,pro=0,carb=0,fat=0;
+        var ingredients = bal.map(function(i){
+          var db = NUTRI_DB[i.dbKey]; if(!db) return null;
+          kcal += db.kcal*i.amt; pro += db.pro*i.amt; carb += db.carb*i.amt; fat += db.fat*i.amt;
+          var baseAmt = meal && meal.ingredients ? (meal.ingredients.find(function(bi){return bi.dbKey===i.dbKey;})||{}).amt : null;
+          return {dbKey:i.dbKey,role:i.role,unit:db.unit,base:baseAmt,bal:+i.amt.toFixed(3),kcal:+(db.kcal*i.amt).toFixed(0)};
+        }).filter(function(x){return x;});
+        slots[s]={mealId:mealId,mealName:meal?meal.name:null,kcal:Math.round(kcal),pro:+pro.toFixed(1),carb:+carb.toFixed(1),fat:+fat.toFixed(1),ingredients:ingredients};
+      });
+      var totals = calcTotals(p,d);
+      var fv = computeDailyFV(p,d);
+      return {
+        seed:r.seed, person:p, day:d,
+        totals: {
+          kcal:totals.kcal, target:CAL_BASE[p], delta:totals.kcal-CAL_BASE[p],
+          pro:totals.pro, proTarget:PRO_TARGET[p],
+          carbPct:+(totals.carb*4/totals.kcal*100).toFixed(1),
+          fatPct:+(totals.fat*9/totals.kcal*100).toFixed(1),
+          veg:+fv.veg.toFixed(2), fruit:+fv.fruit.toFixed(2)
+        },
+        slots:slots
+      };
+    }finally{
+      restore(entry);
+    }
   }
 
   function aggregate(runs){
@@ -10498,7 +10574,7 @@ window.MPStress=(function(){
     try{localStorage.removeItem('mealPlannerStressBaseline');}catch(e){}
     console.log('[MPStress] baseline cleared');
   }
-  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore};
+  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect};
 })();
 
 </script>
