@@ -741,6 +741,11 @@ Full 100-run capture showed **459 INV6 fires, max pct 569% (`viet_noodle_bowl` 6
 | Worst INV6 pct | 569% | p99=194% | far tighter |
 | Timing avg | 885ms | **1320ms** | +435ms from 60 retries |
 
+### Stress-test state-dependence finding (end of session)
+**Confirmed**: `MPStress.runStandard()` results depend on starting `SEL` + `weekData.last.sel`. Same seed + different starting state = different output (tested: primary 98.07% at session state vs 98.21% from clean state; INV14=0 vs INV14=2 on identical seeds). `snapshot()`/`restore()` preserves internal consistency WITHIN a run but `runStandard` doesn't force a clean initial state. User accepts this non-determinism as "variety in stress testing" — do NOT auto-clear in `runStandard`.
+
+**New inspect API** (added 2026-04-22, commit c06ddfc): each `runOne` now captures a `postSnap` before restoring state. `MPStress.inspectDay(seed, p, d)` returns the per-slot ingredient breakdown for any preserved run (read-only). `MPStress.inspectRun(seed)` restores the seed's finalized state into live globals (pair with `MPStress.exitInspect()`). Use these for post-hoc drill-down instead of trying to re-reproduce a seed fresh.
+
 ### Open items for next session
 - **Recipe normalization** ongoing. Still 20+ lunch/dinner off-target (see prior session's list). `coconut_turkey_curry` and `turkey_sweet_potato_hash` done this session.
 - **Retry time cost** — 1.3s avg is snappy for interactive use but ~2× what we had. Could profile hot path inside retry loop if user wants to reduce.
