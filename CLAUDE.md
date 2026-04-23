@@ -805,3 +805,75 @@ Memory: [`feedback_no_cant_happen_dismissals.md`](~/.claude/projects/-Users-chri
 - **Test 1 vs Test 2 verdict divergence on Fix #3** — worth tracking. If future fixes show similar split, may indicate Test 1's seed set is pathological for some pipeline regions.
 - **Phase 1 dead-end reproducer** (parked) — Fix #2 is verified mathematically + instrumented (zero fires on standard test). If recipe pool ever shrinks, a synthetic reproducer (force `getMealsForSlot('lunch')` to return [], pre-populate SEL, observe no `delete SEL[*_lunch]` after randomize) would prove the fix's effect. Not built this session.
 - **runStandard2 timing variance** — saw runs as long as 4.8s during state-evolved measurement. Worth investigating if state evolution pushes specific code paths into pathological retry counts.
+
+## Session 2026-04-23 — 24 recipe rewrites, critical cache bug, maxAmtSolo infra, pkg-nudge removal
+
+**Headline**: `runStandard` **98.07% → 99.14%** (+1.07pp carry-over). `runStandard2` **97.64% → 99.36%** (+1.72pp). All hard INVs 0 on both. Four commits pushed.
+
+### What landed (in commit order)
+
+**Commit `daa9db8` — Recipe normalization** (24 rewrites, 2 deletions, `white rice cooked` added to NUTRI_DB, full curry overhaul):
+
+- Lunch/dinner outliers fixed: `hummus_wrap` 387→610 (chicken 5→8oz + 1→2 tortillas, "2 wraps per serving"), `chicken_sweet_potato_bowl` 390→567 (+lentils 0.5c + chicken 7→9oz; renamed "Chicken, sweet potato & lentil bowl"), `spicy_tofu_chicken_noodles` 795→687 (fat% 39→26%), `lentil_chicken_bowl` 410→590 (+avocado oil 0.5), `shrimp_quinoa_bowl` 439→571 (+avocado oil 0.5), `viet_vermicelli` 444→590 (+peanuts 1 tbsp — classic Viet garnish, +variety), `thai_peanut_noodle` 775→595 (PB 2→1 + sesame oil 1→0.25; fat% 39→25%), `filet_din` 718→543 (filet 7→5 + potato 1.25→1.5 + oil 1→0.25 — fat% still 33% structurally; user accepted "this one is just gonna have to show up with healthier meals"), `white_bean_chicken_chili` 710→598 (cream→yogurt + cheddar 1.5→1oz + oil 0.5→0.25 + chicken 6→8; fat% 46→28%), `roast_chicken_din` 498→602 (chicken 7→9 + farro 0.75→1c).
+- Breakfast outliers fixed: `sweet_potato_egg_hash` 242→408 (+2 whole eggs + 1c spinach + bell pepper 0.5→1c; renamed "Sweet potato & egg hash"), `shakshuka` 297→435 (eggs 1→2 + whites 0.25→0.5 + marinara 0.5→1c), `chicken_breakfast_wrap` 314→450 (+1 whole egg + whites 0.25c + chicken 5→6oz; renamed "Chicken & egg breakfast wrap"), `savory_congee` 315→418 (+1 whole egg + chicken 3→4oz), `white_bean_scramble` 320→457 (beans 0.5→1c + spinach 1→2c + avocado oil 0.25 tbsp), `yogurt_bowl_post`→`yogurt_bowl_sweet` 597→395 (oats 0.75→0.5 + honey 1→0.5 + no almond butter; renamed), `protein_pancakes` 576→455 (maple 1→0.5 + no AB + cinnamon).
+- Snack outliers fixed: `tuna_crackers_apple` 385→285, `tuna_crackers_orange` 352→252 (triscuits 10→5 on both).
+- **Full curry sauce overhaul**: standardized all 4 coconut curry recipes at 0.25c coconut + consistent "dry-bloom paste → whisk coconut + water → sauce" method. `red_curry` renamed "Crispy tofu red curry with jasmine rice". `shrimp_coconut_curry` coconut 0.5→0.25c + paste 1→1.5 + shrimp 5→7oz. `coconut_turkey_curry` paste 0.5→1 + water step. `chickpea_curry_bowl` rice 1→0.5c + edamame 0.5→0.75c (mixed into rice base).
+- **Deleted** `coconut_chia_pudding` + `coconut_oatmeal` (redundant coconut breakfasts; discouraged-penalty + off-target).
+- **Rice-cooker + Instant-Pot assumption** applied to ALL cooking steps (14 rice/grain recipes, 7 dried-bean recipes). Recipe steps now say "warm jasmine rice (from rice cooker)" / "chickpeas (from Instant Pot)" instead of raw-cooking instructions.
+- **Authenticity fixes**: brown rice → jasmine (Thai curry, Chinese congee) or **white rice** (Korean juk, Korean egg bowl, Korean rice bowl, bibimbap — Koreans use short-grain white rice). Added `white rice cooked` DB entry (identical macros to jasmine, different label for shopping accuracy).
+
+**Commit `484a572` — Critical cache bug fix + maxAmtSolo infra + snack swap move**:
+
+- **CRITICAL: snapshot/restore cache bug**. `snapshot()` didn't capture `_dayBalancedCache` or `_leftoverCache`. On round-trip (snapshot → mess up state → restore), **11 of 14 days drifted by −52 to +11 kcal** because the post-randomize pipeline mutations (unify/snap/waste/boost — 7 ops) live in the cache, not source state. Meant `inspectDay` silently showed DIFFERENT numbers than `runOne` captured. All prior per-day drill-downs were reading wrong numbers. Fix: added `_dayBalancedCache` + `_leftoverCache` to snapshot/restore. Verified: 0 of 14 days drift now.
+- **maxAmtSolo infrastructure** parallel to existing `minAmtSolo`. Added `_effMax(db)` helper in adjustIngredients + solo-aware max in INV13 verifier. Updated 4 enforcement sites in adjustIngredients. Batch-pipeline ops (snap/unify) still use `db.maxAmt` (batch context).
+- Solo caps applied: `avocado oil` / `olive oil` / `sesame oil` **maxAmtSolo:1 tbsp** (max stays 1.5 for batches). `1% milk` **maxAmtSolo:1 cup** (max stays 2).
+- Protein maxAmt bumps for more proportional scaling headroom: `chicken breast` / `chicken thigh` 12→16 oz. `tofu firm` / `silken tofu` 8→12 oz.
+- **`rerollKcalOffSnacks` moved to end-of-pipeline** and rewritten cache-preserving. Previously ran at step 3 (pre-batch-pipeline); saw pre-pipeline kcal. Days that shifted post-pipeline weren't caught. Now runs just before `verifyInvariants`. Cache-preserving mutation: only replaces `cached.snack` per (p,d); never `invalidateLeftoverCache()`. Snacks are never batch members so mutating just snack is safe. Batch slots (lunch/dinner) + other days keep pipeline mutations.
+
+**Commit `c765922` — Per-meal pkg nudge removed** (−76 lines dead code, fixes double-scaling bug):
+
+- Per-meal pkg nudge (in `adjustIngredients`) and `applyTripFlexScaling` both fit pkg ingredients to packages with +100% flex caps. They **stacked**, letting marinara scale to 3.55× base (0.75c → 2.66c on turkey_meatballs_din) — far above either's intent. This was the root cause of Tuesday's over-pumped lunch in the run-93 −192 kcal investigation.
+- `applyTripFlexScaling` is strictly more capable (trip-level view, same flex caps, same kcal caps, plus cal-neutral carb/fat backfill). INV4 enforces all pkg ingredients are in `PKG_FLEX_CONFIG` so trip-flex has full coverage.
+- Removed the 70-line per-meal nudge block + dead `remaining` variable.
+- **Test 2 +0.43pp improvement** (98.93→99.36) — real gain attributed to eliminating the double-scaling that caused bogus over-allocations cascading into other slot imbalances.
+
+### Investigation: Test 2 run 93 him/Thursday −192 kcal (batch-cook cascade)
+
+First investigation using the fixed cache-preserving `inspectDay`. Traced the day to a batch-cooking issue:
+- Thursday's lunch is a LEFTOVER from Tuesday's dinner cook (burrito_bowl).
+- Tuesday's dinner (the cook anchor) was sized to Tuesday-dinner's budget — which `balanceDayMacros` had trimmed from 896 to 665 in a fat-to-protein swap (avocado cut, yogurt added).
+- Tuesday's LUNCH got over-pumped to 1181 (vs budget 896) by a combination of `balanceDayMacros` protein bumps + `applyTripFlexScaling` marinara push + the per-meal nudge double-scaling.
+- Thursday's lunch inherits the under-sized Tuesday cook → 665 vs Thursday's 896 budget → −231 lunch kcal → −192 day delta.
+
+**Three architectural issues surfaced**:
+1. **Per-meal nudge + trip-flex double-scaling** (fixed in `c765922`)
+2. **Day balancer doesn't consider cook-anchor status** — will trim a slot that's feeding a future leftover, not knowing it'll propagate.
+3. **No batch-aware sizing** — when a cook feeds multiple days, its amount is sized to cook-day's slot budget alone. Weighted across all fed days would be better.
+
+### Stress baselines (carry-forward to next session)
+
+```js
+// Test 1 (deterministic, seeds 12345..12444):
+localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({primary:99.14, inv6:229, inv14:1, inv15Him:2.9, inv16Her:2.8, hardFail:0, closedPct:0.0, avgVariance:95.1, missCounts:{kcalLow:1, kcalHigh:0, pro:1, carbPct:1, fatPct:2, veg:3, fruit:4}, timingAvg:1288, mode:'standard'}));
+
+// Test 2 (true randomized + state-evolving):
+localStorage.setItem('mealPlannerStressBaseline2', JSON.stringify({primary:99.36, inv6:245, inv14:0, inv15Him:3.0, inv16Her:3.1, hardFail:0, closedPct:0.0, avgVariance:94.9, missCounts:{kcalLow:2, kcalHigh:1, pro:0, carbPct:2, fatPct:2, veg:2, fruit:0}, timingAvg:1230, mode:'standard2'}));
+```
+
+### Open items for next session
+
+Top priorities (user-flagged):
+- **Audit `adjustIngredients` for total-day-macro awareness**. Does it consider total macros across shake + breakfast + lunch + dinner + snack when scaling per-slot, or only lunch/dinner? Currently it scales per-slot to per-slot budget, then `balanceDayMacros` does cross-slot corrections. The question: should per-slot scaling factor in the whole-day picture first (e.g., if day pro is already high, don't over-scale the highest-pro slot)? Investigation could surface similar architectural redundancies as the per-meal pkg nudge.
+- **More maxAmtSolo caps**. Current coverage: oils (avocado/olive/sesame), milk. Audit what other ingredients should have tighter solo caps. Candidates to consider: condiments (soy sauce, honey — already has solo split), fats (butter, heavy cream, tahini), seeds (chia, sesame seeds), protein powders, cheese.
+- **Per-meal pkg nudge removal suggests broader architectural audit**. We found an entirely redundant AND harmful pipeline step that nobody had caught. Worth a full pass on pipeline ordering/redundancy: do any other steps stack with each other's effects? Candidates: `unifyCrossPersonRatios` runs twice (once pre-waste, once post) — intentional, but verify it's not over-correcting. `snapBatchTotals` + `snapBatchTotalsToGrid` — different granularities, verify intent. `boostBatchVegForDailyTarget` — check interaction with solo grid snap.
+
+Architectural follow-ups surfaced this session:
+- **Batch-aware cook sizing**: when a slot is a cook anchor feeding future-day leftovers, consider target budgets across all fed days, not just cook-day's slot budget.
+- **Cook-anchor priority in `balanceDayMacros`**: don't trim cook-slot ingredients when doing day-level macro balancing (they propagate to leftovers).
+- **Marinara double-scale root cause is fixed** but may want to verify other pkg items don't have similar layered scaling paths (check `boostBatchVegForDailyTarget` + `applyTripFlexScaling` for veg items).
+
+Carried from prior sessions:
+- Recipe normalization: remaining 8 "intentionally light" snacks below 150 snack band (accepted as design category).
+- `his_shake` 239 kcal under 250 shake band floor (trivial, 11 kcal).
+- Phase 1 dead-end reproducer (parked), Test 1 vs Test 2 verdict divergence tracking, runStandard2 timing variance investigation.
+- INV6 is 2.29/run Test 1, 2.45/run Test 2 — tracking only. Promotion to hard would require tighter balancer constraints.
