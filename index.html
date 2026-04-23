@@ -1001,13 +1001,6 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     // Backfill moved to after snap pass (below)
   }
 
-  // Calculate remaining calorie gap (needed by second-pass removal and package nudge)
-  let remaining = targetDelta;
-  scalable.forEach(function(item) {
-    const newAmt = adjustments[item.idx] !== undefined ? adjustments[item.idx] : item.ing.amt;
-    remaining -= (newAmt - item.ing.amt) * item.calPerUnit;
-  });
-
   // Final snap pass — per-portion snap to clean increments.
   // Sum of 0.25-multiples is still on the 0.25 grid, so shared/leftover
   // cook totals stay clean too (e.g. 1.5 + 1 = 2.5, 1.75 + 1.25 = 3).
@@ -1026,8 +1019,8 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     }
     // Per-portion snap to unit-appropriate grid.
     // Packaged items also get snapped here so per-portion reads cleanly
-    // (e.g. 1.75 cup chicken broth, not 1.597). The package nudge that
-    // runs after can still tune within ±0.25 to hit clean pkg totals.
+    // (e.g. 1.75 cup chicken broth, not 1.597). Trip-level package fitting
+    // is handled by applyTripFlexScaling (runs later in the pipeline).
     else {
       const unit = db.unit || '';
       const snapFn = Math.round;
@@ -1160,83 +1153,14 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     }
   }
 
-  // Package-aware nudge: after calorie scaling, nudge packaged ingredients toward
-  // clean package boundaries. Uses the same flex ranges as the shopping optimizer.
-  // This reduces waste at the source instead of relying on trip-level rounding.
-  ingredients.forEach(function(ing, idx) {
-    const db = NUTRI_DB[ing.dbKey];
-    if (!db) return;
-    if (!ing.scalable) return;
-    const currentAmt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
-    if (currentAmt <= 0) return;
-
-    // Package nudge only — eggs handled by the final snap pass.
-    // Skip long-shelf-life items (egg white) — they don't need per-trip pkg alignment.
-    if (!db.pkg || db.pkg.type === 'bulk' || db.pkg.longShelfLife) return;
-
-    // Get package size in the ingredient's unit
-    const perPkg = (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
-    if (perPkg <= 0) return;
-
-    // Total servings for this specific meal (shared + leftover days in one batch).
-    // Falls back to 1 for solo single-meal cooks.
-    const totalServings = totalServingsForSnap;
-
-    const totalNeeded = currentAmt * totalServings;
-    const pkgsNeeded = Math.ceil(totalNeeded / perPkg);
-    const cleanTotal = pkgsNeeded * perPkg;
-    const targetPerServing = cleanTotal / totalServings;
-
-    // Per-ingredient nudge flex ranges. Default is tight (±0.25 cup / ±2 oz
-    // so per-meal calories don't drift). Beans/marinara/chickpeas tolerate
-    // wider upward scaling — extra serving of those doesn't hurt. Coconut
-    // milk similarly flexes up to fill its 1.7c can.
-    let maxNudgeUp = (db.unit === 'cup') ? 0.25 : (db.unit === 'oz') ? 2 : 0.25;
-    let maxNudgeDown = maxNudgeUp;
-    let kcalCap = 50;
-    // Marinara is low-cal (~66 kcal/cup) — can double usage to fit a jar without much cal impact.
-    if (ing.dbKey === 'marinara') {
-      maxNudgeUp = currentAmt;   // +100%
-      maxNudgeDown = 0;
-      kcalCap = 200;
-    }
-    // Beans/chickpeas are calorie-dense (~200-230 kcal/cup) — allow only +50%.
-    else if (['black beans canned','cannellini beans canned','black beans cooked','cannellini beans cooked','chickpeas roasted','chickpeas cooked'].indexOf(ing.dbKey) >= 0) {
-      maxNudgeUp = currentAmt * 0.5;
-      maxNudgeDown = 0;
-      kcalCap = 120;
-    }
-    else if (ing.dbKey === 'coconut milk') {
-      maxNudgeUp = currentAmt * 0.75;
-      maxNudgeDown = currentAmt * 0.5;
-      kcalCap = 200;
-    }
-
-    const nudgeChange = targetPerServing - currentAmt;
-    const absChange = Math.abs(nudgeChange);
-    const limit = nudgeChange > 0 ? maxNudgeUp : maxNudgeDown;
-    if (absChange > 0.01 && absChange <= limit) {
-      // Check calorie impact
-      const kcalImpact = absChange * db.kcal;
-      if (kcalImpact <= kcalCap) {
-        // Enforce minAmt and wholeOnly
-        let nudged = targetPerServing;
-        // wholeOnly items or unit:each/slice must round to whole numbers
-        if (db.wholeOnly || db.unit === 'each' || db.unit === 'slice') {
-          nudged = Math.round(nudged);
-          if (nudged < 1) nudged = 1;
-        }
-        if (db.minAmt && nudged < db.minAmt) nudged = db.minAmt;
-        if (nudged > 0) {
-          remaining -= (nudged - currentAmt) * db.kcal;
-          adjustments[idx] = nudged;
-        }
-      }
-    }
-  });
-
-  // No second pass removal — the uniform scale + constraints handle everything.
-  // Any remaining gap is accepted rather than deleting ingredients.
+  // Per-meal package nudge REMOVED 2026-04-23. It used to run here and nudge
+  // each pkg ingredient toward its own jar/can boundary with a +100%-of-current
+  // flex for marinara (and lesser flex for beans/coconut). The problem: it
+  // stacked on top of applyTripFlexScaling's own +100% cap, letting marinara
+  // scale 3.55× (0.75c → 2.66c on turkey_meatballs_din) — well above either
+  // layer's intent. applyTripFlexScaling now owns all trip-level package
+  // fitting; per-meal nudge was redundant and only created the double-scale
+  // bug. See PKG_FLEX_CONFIG for per-ingredient flex caps enforced at trip level.
 
   // Final minAmt/maxAmt sweep — catches non-scalable items (never touched by
   // the scalable loop) so INV13 holds even for fixed/condiment ingredients
