@@ -1265,7 +1265,7 @@ function computeAdjustedMacros(ingredients, targetDelta, slot, macroHints, mealT
 const MEALS=[
  {id:'his_shake',label:'Protein, creatine & banana berry oat shake',slots:['shake'],
   steps:['Add water to blender first.','Add banana, berries, oats, protein, creatine, cinnamon.','Blend 30–45 sec until smooth.','Drink immediately before workout.'],
-  him:{fv:'1.5c fruit'},her:null,
+  him:{},her:null,
   ingredients:[
     I('protein powder',1,'protein',false),
     I('creatine',1,'fixed',false),
@@ -1278,7 +1278,7 @@ const MEALS=[
 
  {id:'her_shake',label:'Protein, creatine & acai oat shake',slots:['shake'],
   steps:['Add cashew milk to blender first.','Add banana, acai, oats, protein, creatine.','Blend 30–45 sec. Optional: add 1 tbsp peanut butter.'],
-  him:null,her:{fv:'0.5c fruit'},
+  him:null,her:{},
   ingredients:[
     I('protein powder',1,'protein',false),
     I('creatine',1,'fixed',false),
@@ -1291,7 +1291,7 @@ const MEALS=[
 
  {id:'egg_scramble',label:'Egg white scramble & toast',slots:['breakfast'],
   steps:['Heat non-stick pan over medium heat with light oil spray.','Add diced bell pepper and cook 2 min, stirring occasionally.','Add spinach and stir until just wilted, about 1 min.','Whisk egg whites and whole egg together with a pinch of garlic powder and black pepper.','Pour eggs over the veg. Let set 10 sec, then gently fold and scramble until just cooked, 3–4 min. Remove from heat while still slightly glossy — they carry-over cook.','Toast bread. Plate everything together.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('egg white',0.75,'protein'),
     I('egg whole',1,'protein'),
@@ -1304,7 +1304,7 @@ const MEALS=[
 
  {id:'yogurt_bowl_post',label:'Greek yogurt power bowl',slots:['breakfast','snack'],noLeftover:true,
   steps:['Bring 1.5 cups water to a boil in a small saucepan.','Add oats, reduce to medium-low, and cook 5 min stirring occasionally until thick and creamy.','While oats cook, spoon Greek yogurt into a bowl.','Pour oats alongside the yogurt (don\'t mix — keep them separate for texture contrast).','Top with mixed berries, chia seeds, a dollop of almond butter, and a drizzle of honey.'],
-  him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
+  him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',1,'protein'),
     I('oats',0.75,'carb'),
@@ -1316,7 +1316,7 @@ const MEALS=[
 
  {id:'overnight_oats',label:'Overnight oats with berries',slots:['breakfast'],
   steps:['The night before: combine oats, water, and chia seeds in a jar or container. Stir well, seal, and refrigerate overnight.','In the morning: give it a good stir — it will have thickened considerably.','Top with mixed berries and almond butter. Eat cold straight from the jar, or microwave 60–90 sec if you prefer it warm.'],
-  him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
+  him:{},her:{},
   ingredients:[
     I('oats',0.75,'carb'),
     I('water',0.75,'liquid'),
@@ -1327,7 +1327,7 @@ const MEALS=[
 
  {id:'protein_pancakes',label:'Protein pancakes',slots:['breakfast'],
   steps:['In a bowl, whisk together oat flour, protein powder, and baking powder.','Add egg whites and water. Whisk until smooth — batter will be thick. Let rest 2 min.','Heat a non-stick pan over medium heat. Pour ¼ cup portions onto the pan. Cook 2–3 min per side.','Stack and top with mixed berries, almond butter, and maple syrup.'],
-  him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
+  him:{},her:{},
   ingredients:[
     I('oat flour',0.5,'carb'),
     I('protein powder',1,'protein'),
@@ -1341,7 +1341,7 @@ const MEALS=[
 
  {id:'tuna_scramble',label:'Tuna scramble & toast',slots:['breakfast'],
   steps:['Drain tuna thoroughly and break into flakes with a fork.','Heat avocado oil in a non-stick pan over medium heat. Add diced bell pepper, cook 2 min.','Add kale and stir until wilted, about 1 min.','Whisk egg whites and whole egg together. Pour over the veg.','Add flaked tuna. Fold and scramble gently 3–4 min until just set.','Season with garlic powder and black pepper. Serve with toast.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('canned tuna',5,'protein'),
     I('egg white',0.375,'protein'),
@@ -1356,7 +1356,7 @@ const MEALS=[
 
  {id:'egg_omelet',label:'Egg & kale omelet with toast',slots:['breakfast'],
   steps:['Whisk eggs together with garlic powder, black pepper.','Heat non-stick pan over medium heat with light oil spray. Add bell pepper 2 min.','Add kale, stir until wilted.','Pour egg mixture over veg. Let cook undisturbed 1–2 min.','When center is almost set, fold omelet in half.','Serve immediately with toast.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('egg whole',2,'protein'),
     I('egg white',0.375,'protein'),
@@ -1369,7 +1369,7 @@ const MEALS=[
 
  {id:'korean_egg_bowl',label:'Korean-style egg & veggie rice bowl',slots:['breakfast'],
   steps:['Cook rice or use pre-cooked rice — microwave 90 sec.','Fry eggs: heat a small pan over medium heat with a drop of sesame oil. Crack eggs in, cover with a lid for 2 min for runny yolk.','In the same pan, sauté spinach and shredded carrots in sesame oil for 1–2 min.','Assemble the bowl: rice base, veg on top, eggs on top of that.','Drizzle with soy sauce and rice vinegar. Add gochujang to taste. Sprinkle sesame seeds.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('egg whole',2,'protein'),
     I('egg white',0.25,'protein'),
@@ -1385,7 +1385,7 @@ const MEALS=[
 
  {id:'thai_tofu_scramble',label:'Thai-spiced tofu scramble & toast',slots:['breakfast'],
   steps:['Press tofu and crumble. Heat non-stick pan with light oil spray. Sauté carrots 2 min.','Add crumbled tofu. Cook 4–5 min until golden.','Add spinach, soy sauce. Stir until wilted. Serve with toast.'],
-  him:{fv:'1.5c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('tofu firm',7,'protein'),
     I('baby spinach',1.5,'veg'),
@@ -1396,7 +1396,7 @@ const MEALS=[
 
  {id:'viet_noodle_bowl',label:'Vietnamese egg & noodle bowl',slots:['breakfast'],
   steps:['Soft-boil eggs: simmer 6–7 min, ice bath, peel.','Soak vermicelli in hot water 5 min. Drain.','Wilt spinach + carrots in a non-stick pan 1–2 min.','Assemble: noodles, veg, halved eggs. Drizzle soy, vinegar.'],
-  him:{fv:'1.5c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('egg whole',2,'protein',false),
     I('rice vermicelli cooked',1.25,'carb'),
@@ -1408,7 +1408,7 @@ const MEALS=[
 
  {id:'korean_juk',label:'Korean egg & rice porridge (Juk)',slots:['breakfast'],
   steps:['Rinse rice. Combine with 2 cups water. Bring to boil, reduce to medium-low. Cook 20–25 min until thick and creamy.','Stir in chopped kale 2 min.','Whisk eggs, slowly stir into porridge for silky ribbons. Cook 1 min.','Season with soy sauce and sesame oil. Top with sesame seeds.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('brown rice cooked',0.5,'carb'),
     I('water',2,'liquid'),
@@ -1424,7 +1424,7 @@ const MEALS=[
 
  {id:'chicken_breakfast_wrap',label:'Chicken & veggie breakfast wrap',slots:['breakfast'],
   steps:['Season chicken breast with garlic powder, black pepper. Pan-sear 5–6 min per side. Slice thin.','Warm tortilla. Layer spinach, chicken, bell pepper, salsa.','Roll tightly. Cut in half.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',5,'protein'),
     I('whole wheat tortilla',1,'carb'),
@@ -1437,7 +1437,7 @@ const MEALS=[
 
  {id:'sweet_potato_egg_hash',label:'Sweet potato & egg white hash',slots:['breakfast'],
   steps:['Dice sweet potato small. Cook in non-stick pan with oil spray over medium heat, covered, 8–10 min until tender.','Add diced bell pepper, cook 2 min.','Push hash to one side. Pour egg whites on the other side, scramble 2–3 min.','Mix together. Season with garlic powder, black pepper. Serve with toast.'],
-  him:{fv:'0.5c veg'},her:{fv:'0.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('egg white',0.5,'protein'),
     I('sweet potato',0.75,'carb'),
@@ -1449,7 +1449,7 @@ const MEALS=[
 
  {id:'yogurt_oat_bowl',label:'Protein yogurt & oat bowl',slots:['breakfast','snack'],
   steps:['Cook oats with water per package directions.','Layer in a bowl: oats on bottom, yogurt on top.','Top with banana slices and a drizzle of honey.'],
-  him:{fv:'1c fruit'},her:{fv:'1c fruit'},
+  him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',0.75,'protein'),
     I('oats',0.5,'carb'),
@@ -1459,7 +1459,7 @@ const MEALS=[
 
  {id:'turkey_egg_scramble',label:'Ground turkey & egg white scramble',slots:['breakfast'],
   steps:['Brown ground turkey in non-stick pan, breaking into crumbles.','Add spinach and bell pepper, cook 2 min.','Pour in egg whites, scramble everything together 2–3 min.','Season with garlic powder, black pepper. Serve with toast.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('ground turkey 93',4,'protein'),
     I('egg white',0.5,'protein'),
@@ -1472,7 +1472,7 @@ const MEALS=[
 
  {id:'banana_protein_oats',label:'Banana protein oatmeal',slots:['breakfast'],
   steps:['Cook oats with water. Stir in protein powder while hot.','Top with sliced banana and mixed berries.','Drizzle with maple syrup.'],
-  him:{fv:'1.5c fruit'},her:{fv:'1.5c fruit'},
+  him:{},her:{},
   ingredients:[
     I('oats',0.75,'carb'),
     I('protein powder',1,'protein',false),
@@ -1484,7 +1484,7 @@ const MEALS=[
 
  {id:'quinoa_breakfast_bowl',label:'Quinoa & egg breakfast bowl',slots:['breakfast'],
   steps:['Cook quinoa or use leftover.','Sauté kale and bell pepper in non-stick pan 2 min.','Add egg whites, scramble with veg.','Serve over quinoa. Season with salt, pepper.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('quinoa cooked',0.75,'carb'),
     I('egg white',0.5,'protein'),
@@ -1497,7 +1497,7 @@ const MEALS=[
 
  {id:'breakfast_burrito',label:'Breakfast burrito with black beans',slots:['breakfast'],
   steps:['Warm tortilla in dry pan 30s per side.','Sauté bell pepper 2 min in non-stick pan.','Add black beans, warm through.','Pour in egg whites + whole egg, scramble with veg 2–3 min.','Spoon into tortilla, top with salsa, roll tightly.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('whole wheat tortilla',1,'carb'),
     I('egg white',0.375,'protein'),
@@ -1511,7 +1511,7 @@ const MEALS=[
 
  {id:'shakshuka',label:'Shakshuka with toast',slots:['breakfast'],
   steps:['Sauté bell pepper in non-stick skillet 3 min.','Add marinara + spinach, simmer 3 min until spinach wilts.','Make wells in sauce, crack egg(s) into each + pour in egg whites. Cover, simmer 5–7 min until whites set.','Season with black pepper. Serve with toasted bread for dipping.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('egg whole',1,'protein'),
     I('egg white',0.25,'protein'),
@@ -1524,7 +1524,7 @@ const MEALS=[
 
  {id:'chia_pudding',label:'Berry chia pudding',slots:['breakfast'],
   steps:['Whisk chia, milk, protein powder, cinnamon in a jar until combined.','Refrigerate at least 4 hours (or overnight) to thicken.','Top with mixed berries before serving.'],
-  him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
+  him:{},her:{},
   ingredients:[
     I('chia seeds',2,'fat'),
     I('1% milk',1,'liquid'),
@@ -1536,7 +1536,7 @@ const MEALS=[
 
  {id:'coconut_chia_pudding',label:'Coconut berry chia pudding',slots:['breakfast'],
   steps:['Whisk chia, coconut milk, regular milk, protein powder, cinnamon in a jar until combined.','Stir in oats.','Refrigerate overnight (at least 4 hours) to thicken.','Top with mixed berries before serving.'],
-  him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
+  him:{},her:{},
   ingredients:[
     I('chia seeds',1,'fat'),
     I('coconut milk',0.33,'liquid'),
@@ -1549,7 +1549,7 @@ const MEALS=[
 
  {id:'coconut_oatmeal',label:'Coconut banana protein oats',slots:['breakfast'],
   steps:['Combine oats, coconut milk, regular milk, protein powder, cinnamon in a jar or pot.','Microwave 90s (or refrigerate overnight).','Top with sliced banana and berries.'],
-  him:{fv:'1c fruit'},her:{fv:'1c fruit'},
+  him:{},her:{},
   ingredients:[
     I('oats',0.5,'carb'),
     I('coconut milk',0.33,'liquid'),
@@ -1562,7 +1562,7 @@ const MEALS=[
 
  {id:'white_bean_scramble',label:'White bean & spinach scramble',slots:['breakfast'],
   steps:['Warm cannellini beans in a non-stick pan 1 min, mashing lightly.','Add spinach, cook 1 min until wilted.','Pour in egg whites + whole egg, scramble 2–3 min.','Crush garlic and stir in at the end. Season with black pepper. Serve with toast.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('cannellini beans cooked',0.5,'protein'),
     I('egg whole',1,'protein'),
@@ -1575,7 +1575,7 @@ const MEALS=[
 
  {id:'silken_tofu_smoothie',label:'Silken tofu berry smoothie',slots:['breakfast'],
   steps:['Add silken tofu, mixed berries, banana, protein powder, and milk to a blender.','Blend until smooth. Pour and drink.'],
-  him:{fv:'1.25c fruit'},her:{fv:'1.25c fruit'},
+  him:{},her:{},
   ingredients:[
     I('silken tofu',7,'protein'),
     I('mixed berries',0.75,'fruit',false),
@@ -1586,7 +1586,7 @@ const MEALS=[
 
  {id:'savory_congee',label:'Chicken congee',slots:['breakfast'],
   steps:['Combine rice + chicken broth in a pot, simmer 10 min until thick.','Shred chicken breast and stir in (or cook raw chicken directly in the broth first).','Add ginger and spinach, simmer 2 min.','Stir in egg whites until set.','Top with scallions and black pepper.'],
-  him:{fv:'0.5c veg'},her:{fv:'0.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('brown rice cooked',0.75,'carb'),
     I('chicken broth',1,'liquid'),
@@ -1600,7 +1600,7 @@ const MEALS=[
 
  {id:'shrimp_coconut_curry',label:'Shrimp coconut curry with jasmine rice',slots:['lunch','dinner'],
   steps:['Sauté bell pepper in non-stick skillet 2 min.','Add ginger and garlic, cook 30s.','Stir in red curry paste, then coconut milk. Simmer 3 min.','Add shrimp, cook 3 min until pink.','Stir in spinach until wilted. Squeeze lime.','Serve over jasmine rice.'],
-  him:{fv:'1.5c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('shrimp',5,'protein'),
     I('coconut milk',0.5,'liquid'),
@@ -1615,7 +1615,7 @@ const MEALS=[
 
  {id:'smoothie_bowl',label:'Berry smoothie bowl',slots:['breakfast'],
   steps:['Blend frozen mixed berries, banana, yogurt, and protein powder until thick.','Pour into bowl.','Top with granola.'],
-  him:{fv:'1.5c fruit'},her:{fv:'1.5c fruit'},
+  him:{},her:{},
   ingredients:[
     I('mixed berries',0.5,'fruit',false),
     I('banana',0.5,'fruit',false),
@@ -1626,7 +1626,7 @@ const MEALS=[
 
  {id:'turkey_sweet_potato_hash',label:'Turkey & sweet potato hash',slots:['breakfast'],
   steps:['Cube sweet potato small. Roast at 425°F 18–20 min (or pan-sauté covered 10 min).','Brown ground turkey in non-stick pan, breaking into crumbles.','Add bell pepper, cook 2 min.','Stir in sweet potato.','Crack egg into pan, cook sunny-side or scramble in. Season with black pepper.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('ground turkey 93',4,'protein'),
     I('egg whole',1,'protein'),
@@ -1638,7 +1638,7 @@ const MEALS=[
 
  {id:'apple_cinnamon_oats',label:'Apple cinnamon protein oats',slots:['breakfast'],
   steps:['Combine oats, milk, protein powder, cinnamon in a jar.','Dice apple, stir half into the oats.','Refrigerate overnight (or eat warm — microwave 90s).','Top with remaining apple before serving.'],
-  him:{fv:'1c fruit'},her:{fv:'1c fruit'},
+  him:{},her:{},
   ingredients:[
     I('oats',0.375,'carb'),
     I('1% milk',1,'liquid'),
@@ -1649,7 +1649,7 @@ const MEALS=[
 
  {id:'quinoa_bowl',label:'Grilled chicken & quinoa bowl',slots:['lunch','dinner'],
   steps:['Rinse quinoa. Simmer with 1.5x water, covered, 13–15 min. Fluff.','Season chicken with garlic powder, onion powder, black pepper. Grill or pan-sear 5–6 min per side until 165°F. Rest 3 min, slice.','Roast broccoli at 400°F 18–20 min.','Whisk avocado oil + vinegar for dressing. Assemble bowl.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',7,'protein'),
     I('quinoa cooked',1,'carb'),
@@ -1662,12 +1662,12 @@ const MEALS=[
     I('black pepper',0.5,'fixed',false)
   ]},
 
- {id:'hummus_wrap',label:'Grilled chicken & hummus wrap',slots:['lunch','dinner'],
-  steps:['Slice or shred cooked chicken.','Lay tortilla flat. Spread hummus across center.','Layer spinach, bell pepper, carrots, and chicken.','Fold sides in, roll tightly. Slice in half.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+ {id:'hummus_wrap',label:'Grilled chicken & hummus wraps',slots:['lunch','dinner'],
+  steps:['Slice or shred cooked chicken.','Lay tortillas flat. Spread hummus across center of each.','Layer spinach, bell pepper, carrots, and chicken across both tortillas.','Fold sides in, roll tightly. Slice each in half. Serves as 2 wraps.'],
+  him:{},her:{},
   ingredients:[
-    I('chicken breast',5,'protein'),
-    I('whole wheat tortilla',1,'carb'),
+    I('chicken breast',8,'protein'),
+    I('whole wheat tortilla',2,'carb'),
     I('hummus',3,'fat'),
     I('baby spinach',1,'veg'),
     I('bell pepper',0.25,'veg'),
@@ -1676,7 +1676,7 @@ const MEALS=[
 
  {id:'shrimp_bowl',label:'Shrimp & rice bowl',slots:['lunch','dinner'],
   steps:['Cook brown rice ahead. Pat shrimp dry. Season with cumin, garlic powder, black pepper.','Heat avocado oil. Cook shrimp 1–2 min per side. Remove immediately.','Stir-fry broccoli and bell pepper 3–4 min.','Assemble: rice base, veg, shrimp on top. Add avocado, salsa, lime.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('shrimp',6,'protein'),
     I('brown rice cooked',1,'carb'),
@@ -1693,7 +1693,7 @@ const MEALS=[
 
  {id:'tuna_white_bean',label:'Tuna & white bean salad bowl',slots:['lunch','dinner'],
   steps:['Drain tuna and flake. Drain and rinse beans.','Combine tuna, beans, kale, zucchini, carrots.','Whisk avocado oil + vinegar + black pepper. Pour over and toss.'],
-  him:{fv:'2c veg'},her:{fv:'2c veg'},
+  him:{},her:{},
   ingredients:[
     I('canned tuna',6,'protein'),
     I('cannellini beans cooked',0.75,'carb'),
@@ -1707,7 +1707,7 @@ const MEALS=[
 
  {id:'burrito_bowl',label:'Chicken burrito bowl',slots:['lunch','dinner'],
   steps:['Warm rice, beans, and chicken together.','Massage kale with lime juice + salt 30 sec.','Assemble: rice base, beans, chicken, kale, salsa, avocado, Greek yogurt.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',6,'protein'),
     I('black beans cooked',0.5,'carb'),
@@ -1722,7 +1722,7 @@ const MEALS=[
 
  {id:'viet_vermicelli',label:'Vietnamese chicken & vermicelli salad',slots:['lunch','dinner'],
   steps:['Soak vermicelli in hot water 5 min. Drain and rinse cold.','Make dressing: whisk fish sauce, lime juice, honey, garlic, pepper flakes.','Slice chicken. Combine noodles, spinach, carrots, bell pepper.','Top with chicken. Drizzle dressing. Toss and eat immediately.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',5,'protein'),
     I('rice vermicelli cooked',1,'carb'),
@@ -1737,7 +1737,7 @@ const MEALS=[
 
  {id:'korean_rice_bowl',label:'Korean-inspired chicken & rice bowl',slots:['lunch','dinner'],
   steps:['Make sauce: whisk soy sauce, sesame oil, gochujang, honey, rice vinegar.','Warm rice and edamame. Slice chicken.','Assemble: rice, chicken, peppers, carrots, edamame. Drizzle sauce. Top with sesame seeds.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',5,'protein'),
     I('brown rice cooked',0.75,'carb'),
@@ -1754,7 +1754,7 @@ const MEALS=[
 
  {id:'thai_peanut_noodle',label:'Thai peanut chicken noodle salad',slots:['lunch','dinner'],
   steps:['Cook udon per package directions. Drain and rinse cold.','Make PB sauce: whisk peanut butter + soy sauce + lime + honey + warm water.','Massage kale. Combine noodles, kale, carrots, chicken. Pour sauce. Toss.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',5,'protein'),
     I('udon noodles cooked',1,'carb'),
@@ -1769,7 +1769,7 @@ const MEALS=[
 
  {id:'lemongrass_salad',label:'Vietnamese lemongrass chicken salad',slots:['lunch','dinner'],
   steps:['Make dressing: whisk fish sauce, lime juice, honey, minced garlic, chopped lemongrass, chili flakes.','Slice chicken. Combine kale, zucchini, carrots. Top with chicken. Toss with dressing. Top with chopped peanuts.'],
-  him:{fv:'2c veg'},her:{fv:'2c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',10,'protein'),
     I('kale',2,'veg'),
@@ -1786,7 +1786,7 @@ const MEALS=[
 
  {id:'bibimbap',label:'Korean bibimbap-style bowl',slots:['lunch','dinner'],
   steps:['Warm rice. Sauté kale, carrots, zucchini in sesame oil 2–3 min.','Fry egg sunny-side up.','Assemble: rice center, veg and chicken around it, egg on top. Drizzle sauce. Mix before eating.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',5,'protein'),
     I('brown rice cooked',0.75,'carb'),
@@ -1801,7 +1801,7 @@ const MEALS=[
 
  {id:'red_curry',label:'Thai red curry with tofu & vegetables',slots:['lunch','dinner'],
   steps:['Press tofu: wrap in paper towels and press under a heavy object 10 min. Cut into 1-inch cubes.','Dry-sear tofu cubes in a hot non-stick pan 3–4 min per side until golden and crispy. Remove and set aside (no oil — coconut milk provides plenty of fat downstream).','Add red curry paste to the pan and stir 30 sec until fragrant.','Pour in coconut milk. Add broccoli and bell pepper. Simmer 6–8 min until veg is tender.','Add kale and return tofu to the pan. Cook 2 min until kale is wilted.','Serve over brown rice.'],
-  him:{fv:'2c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('tofu firm',7,'protein'),
     I('edamame',0.5,'protein'),
@@ -1815,7 +1815,7 @@ const MEALS=[
 
  {id:'viet_tofu_soup',label:'Vietnamese tofu & noodle soup',slots:['lunch','dinner'],
   steps:['Bring broth to a simmer in a medium pot over medium heat.','Add sliced carrots and diced zucchini. Cook 3 min until beginning to soften.','Add sliced tofu, spinach, and soy sauce. Simmer 2 min until spinach is wilted and tofu is heated through.','Add cooked rice vermicelli. Stir gently to combine.','Drizzle with sesame oil. Serve in a bowl with a squeeze of lime and fresh herbs.'],
-  him:{fv:'2c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('tofu firm',7,'protein'),
     I('egg white',0.25,'protein'),
@@ -1830,7 +1830,7 @@ const MEALS=[
 
  {id:'rxbar_apple',label:'RX Bar + apple',slots:['snack'],
   steps:['No prep needed.'],
-  him:{fv:'1 fruit'},her:{fv:'1 fruit'},
+  him:{},her:{},
   ingredients:[
     I('rxbar',1,'protein'),
     I('apple',1,'fruit',false)
@@ -1838,7 +1838,7 @@ const MEALS=[
 
  {id:'rxbar_orange',label:'RX Bar + orange',slots:['snack'],
   steps:['No prep needed.'],
-  him:{fv:'1 fruit'},her:{fv:'1 fruit'},
+  him:{},her:{},
   ingredients:[
     I('rxbar',1,'protein'),
     I('orange',1,'fruit',false)
@@ -1849,7 +1849,7 @@ const MEALS=[
   // to budget mechanically inflates P:C. Ratio drift is by design.
   noRatioCheck:true,
   steps:['Spoon Greek yogurt into a bowl. Top with diced apple and a generous sprinkle of cinnamon.'],
-  him:{fv:'1.5c fruit'},her:{fv:'1.5c fruit'},
+  him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',1,'protein'),
     I('apple',1,'fruit',false),
@@ -1860,7 +1860,7 @@ const MEALS=[
   // noRatioCheck: yogurt-dominant meal, no scalable carb source — ratio drift is design.
   noRatioCheck:true,
   steps:['Spoon Greek yogurt into a bowl. Slice banana on top. Drizzle honey.'],
-  him:{fv:'1c fruit'},her:{fv:'1c fruit'},
+  him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',0.75,'protein'),
     I('banana',1,'fruit',false),
@@ -1869,7 +1869,7 @@ const MEALS=[
 
  {id:'tuna_crackers_apple',label:'Tuna pouch + crackers + apple',slots:['snack'],
   steps:['Open tuna pouch. Eat with crackers and apple.'],
-  him:{fv:'1 fruit'},her:{fv:'1 fruit'},
+  him:{},her:{},
   ingredients:[
     I('tuna pouch',1,'protein'),
     I('triscuit',10,'carb'),
@@ -1878,7 +1878,7 @@ const MEALS=[
 
  {id:'tuna_crackers_orange',label:'Tuna pouch + crackers + orange',slots:['snack'],
   steps:['Open pouch. Eat with crackers and orange.'],
-  him:{fv:'1 fruit'},her:{fv:'1 fruit'},
+  him:{},her:{},
   ingredients:[
     I('tuna pouch',1,'protein'),
     I('triscuit',10,'carb'),
@@ -1889,7 +1889,7 @@ const MEALS=[
   // noRatioCheck: yogurt-dominant meal, only fruit + capped honey — ratio drift is design.
   noRatioCheck:true,
   steps:['Spoon yogurt into bowl. Add berries. Drizzle honey.'],
-  him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
+  him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',1,'protein'),
     I('mixed berries',0.5,'fruit',false),
@@ -1898,7 +1898,7 @@ const MEALS=[
 
  {id:'salmon_lentils',label:'Baked salmon, lentils & sautéed spinach',slots:['lunch','dinner'],
   steps:['Cook rice: rinse, 1.5x water, boil, cover, simmer 40–45 min. Fluff.','Cook lentils: rinse, simmer in 2 cups water 20–25 min. Drain. Season.','Preheat oven to 400°F. Pat salmon dry. Season with lemon, dill, pepper. Roast 12–15 min (salmon renders enough of its own fat — no oil needed).','Sauté spinach with garlic in a non-stick pan (no oil) 2–3 min, finishing with a squeeze of lemon.','Plate: rice + lentils, salmon on top, spinach alongside.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('salmon',6,'protein'),
     I('lentils cooked',0.5,'carb'),
@@ -1912,7 +1912,7 @@ const MEALS=[
 
  {id:'salmon_stir_fry_din',label:'Salmon stir-fry with brown rice & veg',slots:['lunch','dinner'],
   steps:['Make glaze: whisk soy sauce, honey, rice vinegar, garlic, ginger.','Cook rice ahead. Sear salmon 2–3 min per side. Brush with glaze. Roast at 400°F 6–8 min.','Stir-fry broccoli and bell pepper 3–4 min with sesame oil. Plate.'],
-  him:{fv:'2c veg'},her:{fv:'2c veg'},
+  him:{},her:{},
   ingredients:[
     I('salmon',6,'protein'),
     I('broccoli',1,'veg'),
@@ -1931,7 +1931,7 @@ const MEALS=[
          'Make glaze: whisk soy sauce, rice vinegar, sesame oil, honey, minced garlic, grated ginger, sesame seeds, sliced scallion.',
          'Cube salmon. Heat non-stick pan over medium-high. Sear 3–4 min, tossing. Pour in half the glaze and toss until coated.',
          'Plate: rice base, glazed salmon on top, shredded carrots and sliced cucumber alongside. Drizzle remaining glaze.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('salmon',6,'protein'),
     I('jasmine rice cooked',0.5,'carb'),
@@ -1949,7 +1949,7 @@ const MEALS=[
 
  {id:'turkey_meatballs_din',label:'Turkey meatballs, zucchini noodles & pasta',slots:['lunch','dinner'],
   steps:['Preheat oven to 400°F. Mix turkey, egg white, oat flour, Italian seasoning. Roll into balls. Bake 18–20 min.','Cook pasta. Add zucchini noodles to boiling water for last 2 min. Drain.','Heat marinara. Toss meatballs. Sauté kale. Plate.'],
-  him:{fv:'2c veg'},her:{fv:'2c veg'},
+  him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
     I('whole wheat pasta cooked',0.75,'carb'),
@@ -1964,7 +1964,7 @@ const MEALS=[
 
  {id:'halibut_farro_din',label:'Baked halibut, farro & roasted asparagus',slots:['lunch','dinner'],
   steps:['Cook farro: rinse, simmer in 2.5 cups water 25–30 min. Drain.','Preheat oven to 425°F. Toss asparagus and zucchini with avocado oil. Pat halibut dry. Season with lemon, dill.','Roast 12–15 min. Serve halibut over farro with veg.'],
-  him:{fv:'2c veg'},her:{fv:'2c veg'},
+  him:{},her:{},
   ingredients:[
     I('halibut',8,'protein'),
     I('farro cooked',1,'carb'),
@@ -1978,7 +1978,7 @@ const MEALS=[
 
  {id:'filet_din',label:'Filet mignon, roasted potatoes & asparagus',slots:['lunch','dinner'],
   steps:['Take filets out 20–30 min before cooking.','Preheat 425°F. Roast potatoes 20 min. Add asparagus + zucchini, roast 12–15 min more.','Sear filets 2–3 min per side in smoking hot cast iron. Oven 4–5 min for medium-rare.','Rest 5 min. Drizzle balsamic.'],
-  him:{fv:'2c veg'},her:{fv:'2c veg'},
+  him:{},her:{},
   ingredients:[
     I('filet mignon',7,'protein'),
     I('yukon potato',1.25,'carb'),
@@ -1990,7 +1990,7 @@ const MEALS=[
 
  {id:'roast_chicken_din',label:'Roast chicken, farro & Brussels sprouts',slots:['lunch','dinner'],
   steps:['Cook farro. Preheat 425°F. Roast Brussels sprouts + carrots with oil and herbs.','Season chicken with lemon, rosemary, thyme. Roast 20–25 min until 165°F. Rest 3 min.','Plate: farro, veg, sliced chicken.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',7,'protein'),
     I('farro cooked',0.75,'carb'),
@@ -2005,7 +2005,7 @@ const MEALS=[
 
  {id:'miso_edamame',label:'Miso soup with edamame & egg white',slots:['snack'],
   steps:['Bring water to a simmer. Lower heat — do NOT boil miso (kills probiotics).','Whisk miso into a ladle of hot water until smooth, then stir into pot.','Add silken tofu cubes and shelled edamame. Simmer 2 min.','Slowly drizzle whisked egg whites into the broth while stirring gently — forms soft ribbons.','Top with sliced scallion.'],
-  him:{fv:''},her:{fv:''},
+  him:{},her:{},
   ingredients:[
     I('water',1,'liquid'),
     I('white miso',1,'protein'),
@@ -2017,7 +2017,7 @@ const MEALS=[
 
  {id:'miso_tofu',label:'Miso soup & tofu',slots:['snack'],
   steps:['Dissolve miso in hot water. Add tofu. Top with seeds.'],
-  him:{fv:''},her:{fv:''},
+  him:{},her:{},
   ingredients:[
     I('water',1,'liquid'),
     I('white miso',1,'protein'),
@@ -2027,7 +2027,7 @@ const MEALS=[
 
  {id:'yogurt_parfait_eve',label:'Greek yogurt parfait',slots:['breakfast','snack'],
   steps:['Layer yogurt, granola, berries. Drizzle honey.'],
-  him:{fv:'0.5c fruit'},her:{fv:'0.5c fruit'},
+  him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',1,'protein'),
     I('granola strawberry',0.25,'carb'),
@@ -2051,7 +2051,7 @@ const MEALS=[
   // Excluded from INV6 distortion check.
   noRatioCheck:true,
   steps:['Arrange cooked chilled shrimp on a plate with sliced cucumber.','Sprinkle dill and a squeeze of lemon over the top. Black pepper to taste.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('shrimp',4,'protein'),
     I('cucumber',1,'veg',false),
@@ -2062,7 +2062,7 @@ const MEALS=[
 
  {id:'chickpea_cucumber_salad',label:'Cold chickpea & cucumber salad',slots:['snack'],
   steps:['Toss cooked chickpeas with diced cucumber.','Dress with lemon juice, a sprinkle of dill, and black pepper.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('chickpeas cooked',0.5,'protein'),
     I('cucumber',1,'veg',false),
@@ -2073,7 +2073,7 @@ const MEALS=[
 
  {id:'spiced_chickpea_spinach',label:'Spiced chickpea & spinach bowl',slots:['snack'],
   steps:['Warm the cooked chickpeas briefly (30 sec microwave or skillet).','Toss with baby spinach — the warmth wilts it slightly.','Season with cumin, lemon juice, and black pepper. Eat warm or chilled.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('chickpeas cooked',0.5,'protein'),
     I('baby spinach',1,'veg'),
@@ -2084,7 +2084,7 @@ const MEALS=[
 
  {id:'celery_yogurt_dip',label:'Celery & yogurt dip',slots:['snack'],
   steps:['Cut celery into sticks.','Stir garlic powder, dill, black pepper, and a squeeze of lemon into the Greek yogurt.','Dip celery in the yogurt.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('celery',2,'veg',false),
     I('greek yogurt 0%',0.75,'protein'),
@@ -2096,7 +2096,7 @@ const MEALS=[
 
  {id:'celery_tuna_salad',label:'Tuna salad celery boats',slots:['snack'],
   steps:['Cut celery into sticks for dipping or leave in 4" "boats".','Mix tuna with Greek yogurt, a squeeze of lemon, and black pepper.','Pile tuna salad onto celery boats, or dip celery sticks into it.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('celery',2,'veg',false),
     I('tuna pouch',1,'protein',false),
@@ -2107,7 +2107,7 @@ const MEALS=[
 
  {id:'celery_apple_plate',label:'Celery & apple plate',slots:['snack'],
   steps:['Cut celery into sticks and slice the apple.','Arrange on a plate.'],
-  him:{fv:'1c veg, 1.5c fruit'},her:{fv:'1c veg, 1.5c fruit'},
+  him:{},her:{},
   ingredients:[
     I('celery',2,'veg',false),
     I('apple',1,'fruit',false)
@@ -2115,7 +2115,7 @@ const MEALS=[
 
  {id:'cucumber_hummus_light',label:'Cucumber & hummus',slots:['snack'],
   steps:['Slice cucumber. Dip in hummus.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('cucumber',1.5,'veg',false),
     I('hummus',3,'fat')
@@ -2124,7 +2124,7 @@ const MEALS=[
  // ── Mid-sized snacks (200-280 kcal, for Him's 256 kcal snack budget) ──
  {id:'pb_apple_slices',label:'Apple slices with peanut butter',slots:['snack'],
   steps:['Slice apple into wedges.','Serve with peanut butter for dipping.'],
-  him:{fv:'1 fruit'},her:{fv:'1 fruit'},
+  him:{},her:{},
   ingredients:[
     I('apple',1,'fruit',false),
     I('peanut butter',2,'fat')
@@ -2132,7 +2132,7 @@ const MEALS=[
 
  {id:'pb_banana',label:'Banana with peanut butter',slots:['snack'],
   steps:['Slice banana lengthwise.','Spread peanut butter across the slices.'],
-  him:{fv:'1 fruit'},her:{fv:'1 fruit'},
+  him:{},her:{},
   ingredients:[
     I('banana',1,'fruit',false),
     I('peanut butter',2,'fat')
@@ -2149,7 +2149,7 @@ const MEALS=[
 
  {id:'white_bean_chicken_chili',label:'White Bean Chicken Chili with Poblano & Cheddar',slots:['lunch','dinner'],
   steps:['Prep: dice poblano, slice scallions, quarter lime.','Cook diced poblano and scallion whites in avocado oil 3–4 min.','Add tomatillo sauce and beans with liquid. Mash lightly.','Add broth concentrate and ½ cup water. Simmer 4–5 min.','Add pulled chicken and cream. Simmer 2–3 min. Season.','Top with cheese, scallion greens, lime.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',6,'protein'),
     I('cannellini beans cooked',0.75,'carb'),
@@ -2165,7 +2165,7 @@ const MEALS=[
 
  {id:'coconut_turkey_curry',label:'Coconut turkey curry with jasmine rice',slots:['lunch','dinner'],
   steps:['Heat avocado oil in a large skillet over medium heat. Add shallots and cook 5 min until softened.','Add ginger and garlic, cook 2 min until fragrant.','Add bell peppers and sauté 2–3 min.','Add ground turkey and cook 7–8 min until no longer pink.','Add red curry paste and coconut milk. Stir. Add zucchini and simmer 5 min until tender.','Stir in spinach until wilted. Serve over jasmine rice. Garnish with cilantro, lime wedges, red pepper flakes.'],
-  him:{fv:'2.13c veg'},her:{fv:'2.13c veg'},
+  him:{},her:{},
   ingredients:[
     I('ground turkey 93',4,'protein'),
     I('zucchini',0.88,'veg'),
@@ -2185,7 +2185,7 @@ const MEALS=[
 
  {id:'lemongrass_chicken_thigh',label:'Lemongrass chicken thighs with rice',slots:['lunch','dinner'],
   steps:['Make marinade: combine lemongrass, avocado oil, garlic, soy sauce, fish sauce, oyster sauce, dark soy sauce, and maple syrup.','Marinate chicken thighs at least 30 min (overnight is best).','Cook chicken in a hot pan or grill until charred and cooked through, about 5–6 min per side.','Quickly sauté bok choy and bean sprouts with a splash of the marinade until bright green and just tender.','Make dipping sauce: mix fish sauce, water, lime juice, garlic, and maple syrup.','Serve chicken over jasmine rice with sautéed veg and dipping sauce on the side.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken thigh',8,'protein'),
     I('bok choy',1,'veg'),
@@ -2205,7 +2205,7 @@ const MEALS=[
 
  {id:'spicy_tofu_chicken_noodles',label:'Spicy tofu & chicken noodles',slots:['lunch','dinner'],
   steps:['Make sauce: blend silken tofu, tahini, soy sauce, miso, gochugaru, and rice vinegar until smooth. Set aside.','Cook chicken mince in a hot pan until coloured. Deglaze with mirin, add soy sauce, oyster sauce, ginger, garlic. Cook a few more min.','Cook udon noodles per package.','Julienne spring onions and slice cucumber.','Plate: noodles on bottom, pour sauce over, chicken on one side, cucumber salad on the other. Top with sesame seeds.'],
-  him:{fv:'0.5c veg'},her:{fv:'0.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('ground chicken',8,'protein'),
     I('silken tofu',7,'protein'),
@@ -2226,7 +2226,7 @@ const MEALS=[
 
  {id:'chicken_noodle_soup',label:'Chicken noodle soup',slots:['lunch','dinner'],
   steps:['Dice onion, celery, and carrots. Heat avocado oil in a large pot over medium-high heat.','Sauté onion, celery, and carrots 4 min. Add garlic, cook 30 sec.','Add chicken broth. Season with salt, pepper, pinch of rosemary and thyme.','Bring to a boil. Add egg noodles, cook until just al dente (about 6–8 min).','Add shredded chicken. Taste broth and adjust seasoning. Serve.'],
-  him:{fv:'2c veg'},her:{fv:'2c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',7,'protein'),
     I('egg noodles dry',1.25,'carb'),
@@ -2246,7 +2246,7 @@ const MEALS=[
 
  {id:'turkey_lettuce_wraps',label:'Ground turkey lettuce wraps',slots:['lunch','dinner'],
   steps:['Brown ground turkey in a pan over medium-high heat, breaking into crumbles.','Add soy sauce, ginger, garlic. Cook 1 min.','Add diced bell pepper and carrots. Cook 3–4 min until tender-crisp.','Spoon into lettuce cups. Top with scallion and sesame seeds.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
     I('baby spinach',2,'veg'),
@@ -2262,7 +2262,7 @@ const MEALS=[
 
  {id:'chicken_sweet_potato_bowl',label:'Chicken breast & sweet potato bowl',slots:['lunch','dinner'],
   steps:['Preheat oven to 400°F. Cube sweet potato, toss with garlic powder and black pepper.','Roast sweet potato 20–25 min. Season chicken breast with cumin and salt.','Pan-sear chicken 5–6 min per side. Rest 3 min, slice.','Assemble: sweet potato base, chicken, spinach, salsa.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',7,'protein'),
     I('sweet potato',1.25,'carb'),
@@ -2276,7 +2276,7 @@ const MEALS=[
 
  {id:'lentil_chicken_bowl',label:'Lentil & grilled chicken bowl',slots:['lunch','dinner'],
   steps:['Cook lentils: rinse, simmer in 2 cups water 20–25 min. Drain.','Season chicken with garlic powder, cumin, salt. Pan-sear 5–6 min per side.','Slice chicken. Sauté kale with garlic 2 min.','Assemble: lentils, chicken, kale. Squeeze lemon over top.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('chicken breast',6,'protein'),
     I('lentils cooked',0.75,'carb'),
@@ -2290,7 +2290,7 @@ const MEALS=[
 
  {id:'black_bean_rice_bowl',label:'Black bean & rice bowl',slots:['lunch','dinner'],
   steps:['Warm black beans with cumin and garlic powder.','Heat brown rice. Sauté bell pepper and kale 3 min.','Assemble: rice, beans, veg. Top with salsa and lime.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('black beans cooked',1,'protein'),
     I('brown rice cooked',1,'carb'),
@@ -2304,7 +2304,7 @@ const MEALS=[
 
  {id:'chickpea_curry_bowl',label:'Chickpea & spinach curry',slots:['lunch','dinner'],
   steps:['Heat a pan over medium. Add red curry paste, stir 30 sec.','Add coconut milk, chickpeas, edamame, and spinach. Simmer 6–8 min.','Serve over brown rice.'],
-  him:{fv:'1c veg'},her:{fv:'1c veg'},
+  him:{},her:{},
   ingredients:[
     I('chickpeas cooked',0.75,'protein'),
     I('edamame',0.5,'protein'),
@@ -2316,7 +2316,7 @@ const MEALS=[
 
  {id:'mediterranean_chickpea_salad',label:'Mediterranean chickpea salad',slots:['lunch','dinner'],
   steps:['Drain and rinse chickpeas. Quarter grape tomatoes. Seed and chop cucumber. Dice bell pepper and red onion. Roughly chop parsley.','Whisk olive oil, lemon juice, oregano, salt, and pepper in a small bowl.','Combine chickpeas and veg in a larger bowl. Pour dressing over the top. Toss to coat.','Best after chilling 20 min to let flavors meld (fridge-stable 2–3 days).'],
-  him:{fv:'2.85c veg'},her:{fv:'2.85c veg'},
+  him:{},her:{},
   ingredients:[
     I('chickpeas cooked',2.1,'protein'),
     I('grape tomatoes',0.75,'veg'),
@@ -2333,7 +2333,7 @@ const MEALS=[
 
  {id:'ground_chicken_stir_fry',label:'Ground chicken & veggie stir-fry',slots:['lunch','dinner'],
   steps:['Brown ground chicken over medium-high heat.','Add broccoli, bell pepper, carrots. Stir-fry 4–5 min.','Add soy sauce, ginger, garlic. Toss.','Serve over brown rice.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('ground chicken',8,'protein'),
     I('brown rice cooked',1,'carb'),
@@ -2347,7 +2347,7 @@ const MEALS=[
 
  {id:'shrimp_quinoa_bowl',label:'Shrimp & quinoa with roasted veg',slots:['lunch','dinner'],
   steps:['Cook quinoa. Roast broccoli and zucchini at 425°F for 15 min.','Season shrimp with garlic powder and black pepper. Pan-sear 1–2 min per side.','Assemble: quinoa, roasted veg, shrimp. Squeeze lemon.'],
-  him:{fv:'1.5c veg'},her:{fv:'1.5c veg'},
+  him:{},her:{},
   ingredients:[
     I('shrimp',7,'protein'),
     I('quinoa cooked',1,'carb'),
@@ -2360,7 +2360,7 @@ const MEALS=[
 
  {id:'lentil_soup_lean',label:'Chicken & lentil vegetable soup',slots:['lunch','dinner'],
   steps:['Dice chicken. Sauté carrots, celery, garlic in broth 3–4 min.','Add chicken and cook 4–5 min until no longer pink.','Add lentils, remaining broth, Italian seasoning. Simmer 20 min.','Add kale. Cook 3 min until wilted.','Stir in egg whites — they cook in ribbons in the hot soup. Season with salt and pepper.'],
-  him:{fv:'2c veg'},her:{fv:'2c veg'},
+  him:{},her:{},
   ingredients:[
     I('lentils cooked',1.25,'protein'),
     I('chicken breast',4,'protein'),
@@ -2377,7 +2377,7 @@ const MEALS=[
 
  {id:'turkey_zucchini_boats',label:'Turkey-stuffed zucchini boats with pasta',slots:['lunch','dinner'],
   steps:['Preheat oven to 375°F. Halve zucchini lengthwise, scoop out centers.','Brown ground turkey with garlic, Italian seasoning, salt.','Stir in marinara and diced zucchini centers.','Fill boats. Bake 20 min.','Meanwhile, cook whole wheat pasta per package. Serve boats over pasta.'],
-  him:{fv:'2c veg'},her:{fv:'2c veg'},
+  him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
     I('whole wheat pasta cooked',1,'carb'),
@@ -2390,7 +2390,7 @@ const MEALS=[
 
  {id:'cannellini_kale_soup',label:'Chicken, white bean & kale soup',slots:['lunch','dinner'],
   steps:['Dice chicken. Sauté garlic, carrots, and celery in broth 3 min.','Add chicken and cook 4–5 min until no longer pink.','Add beans, broth, Italian seasoning. Simmer 10 min.','Add kale. Cook 3 min.','Stir in egg whites — they form ribbons in the hot soup. Season with salt, pepper, lemon juice.'],
-  him:{fv:'2c veg'},her:{fv:'2c veg'},
+  him:{},her:{},
   ingredients:[
     I('cannellini beans cooked',1.5,'protein'),
     I('chicken breast',4,'protein'),
@@ -4633,6 +4633,38 @@ function calcTotals(p,d){
 // are excluded. Units: "cup" counts directly; "each" converts via
 // NUTRI_DB[key].cupsEach. Anything else contributes 0.
 // Returns {veg, fruit} in cups. Intended for test/diagnostic use.
+// Sum veg/fruit cups across a list of balanced ingredients. Shared between
+// computeDailyFV (whole day) and computeFvText (single slot card display).
+// Conversion: unit:'cup' → amt as cups; unit:'each' with cupsEach → amt×cupsEach.
+// Other units contribute 0 (e.g. rxbar 'each' without cupsEach).
+function computeSlotFV(ings){
+  if(!ings || !ings.length) return {veg:0, fruit:0};
+  let veg=0, fruit=0;
+  ings.forEach(function(ing){
+    const db=NUTRI_DB[ing.dbKey]; if(!db)return;
+    let cups=0;
+    if(db.unit==='cup') cups=ing.amt;
+    else if(db.unit==='each' && typeof db.cupsEach==='number') cups=ing.amt*db.cupsEach;
+    if(ing.role==='veg') veg+=cups;
+    else if(ing.role==='fruit') fruit+=cups;
+  });
+  return {veg:veg, fruit:fruit};
+}
+// Render-time FV string for a meal card. Returns e.g. "1.5c veg" or
+// "1c veg, 1c fruit" or "" if the slot has no veg/fruit. Replaces the
+// static per-meal `fv:'...'` property (which frequently drifted from
+// actual ingredient totals). Rounds to nearest 0.25c to match the old
+// granularity. Pass BALANCED ingredients so the text reflects what's
+// actually on the card after scaling.
+function computeFvText(ings){
+  const fv = computeSlotFV(ings);
+  function r(v){ return Math.round(v*4)/4; }
+  const parts=[];
+  const vR=r(fv.veg), fR=r(fv.fruit);
+  if(vR>0) parts.push(vR+'c veg');
+  if(fR>0) parts.push(fR+'c fruit');
+  return parts.join(', ');
+}
 function computeDailyFV(p,d){
   let veg=0, fruit=0;
   SLOTS.forEach(function(s){
@@ -4645,14 +4677,8 @@ function computeDailyFV(p,d){
     if(!ingr0||!ingr0.length||ingr0[0].dbKey===undefined)return;
     let finalIngr=getBalancedSlotIngredients(p,d,s);
     if(!finalIngr) finalIngr=ingr0;
-    finalIngr.forEach(function(ing){
-      const db=NUTRI_DB[ing.dbKey]; if(!db)return;
-      let cups=0;
-      if(db.unit==='cup') cups=ing.amt;
-      else if(db.unit==='each' && typeof db.cupsEach==='number') cups=ing.amt*db.cupsEach;
-      if(ing.role==='veg') veg+=cups;
-      else if(ing.role==='fruit') fruit+=cups;
-    });
+    const fv=computeSlotFV(finalIngr);
+    veg+=fv.veg; fruit+=fv.fruit;
   });
   return {veg:Math.round(veg*100)/100, fruit:Math.round(fruit*100)/100};
 }
@@ -5382,7 +5408,15 @@ function buildMealCardHtml(s, person, day, other){
   const mPct=Math.round(pm.pro*4/mMacroKcal*100);
   const fPct2=Math.round(mFat*9/mMacroKcal*100);
   const cPct2=100-mPct-fPct2;
-  const macroLine=pm.kcal+' kcal · P '+pm.pro+'g ('+mPct+'%) · C '+mCarb+'g ('+cPct2+'%) · F '+mFat+'g ('+fPct2+'%)'+(port.fv?' · '+port.fv:'');
+  // Compute fv text from the ACTUAL balanced ingredients on this card so
+  // it reflects scaling — replaces the old static `port.fv` property
+  // which frequently drifted from real veg/fruit totals. Falls back to
+  // base recipe ingredients when no balanced data (e.g. pre-randomize).
+  const fvIngr=getBalancedSlotIngredients(person,day,s)
+             ||applyOverrides(port,person,day,s)
+             ||activeMeal.ingredients;
+  const fvText=computeFvText(fvIngr);
+  const macroLine=pm.kcal+' kcal · P '+pm.pro+'g ('+mPct+'%) · C '+mCarb+'g ('+cPct2+'%) · F '+mFat+'g ('+fPct2+'%)'+(fvText?' · '+fvText:'');
 
   const colorSteps=activeMeal._colorSteps||activeMeal.steps||[];
   const stepsHtml=colorSteps.map(function(st){return'<li>'+st+'</li>'}).join('');
@@ -10365,6 +10399,7 @@ window.MPStress=(function(){
       lines.push('| Metric | Baseline | Current | Δ |');
       lines.push('|---|---|---|---|');
       lines.push('| Primary hit rate | '+pct(baseline.primary,2)+' | '+pct(cur.primary,2)+' | '+delta(cur.primary,baseline.primary,'pp')+' |');
+      lines.push('| INV6 (P/C drift) | '+(baseline.inv6!=null?baseline.inv6:'—')+' | '+(a.invTotals.INV6||0)+' | '+(baseline.inv6!=null?delta(a.invTotals.INV6||0,baseline.inv6,''):'—')+' |');
       lines.push('| INV14 total | '+baseline.inv14+' | '+cur.inv14+' | '+delta(cur.inv14,baseline.inv14,'')+' |');
       lines.push('| Hard invariants | '+(baseline.hardFail===0?'all 0':baseline.hardFail+' fail')+' | '+(cur.hardFail===0?'all 0 ✓':cur.hardFail+' FAIL')+' | '+(cur.hardFail===baseline.hardFail?'unchanged':(cur.hardFail>baseline.hardFail?'+'+(cur.hardFail-baseline.hardFail):(cur.hardFail-baseline.hardFail).toString()))+' |');
       lines.push('| Meals closed-off | '+pct(baseline.closedPct,1)+' | '+pct(cur.closedPct,1)+' | '+delta(cur.closedPct,baseline.closedPct,'pp')+' |');
@@ -10383,11 +10418,26 @@ window.MPStress=(function(){
     lines.push('');
 
     // ── MISS BREAKDOWN ──────────────────────────────────────────
+    // Show per-category miss counts; if a baseline is loaded, append delta
+    // for each category so regressions in specific miss types are visible.
+    var baseMisses=(baseline&&baseline.missCounts)||null;
+    var allKeys={};
+    Object.keys(a.missCounts).forEach(function(k){allKeys[k]=true;});
+    if(baseMisses)Object.keys(baseMisses).forEach(function(k){allKeys[k]=true;});
     var missLines=[];
-    Object.keys(a.missCounts).forEach(function(k){
-      if(a.missCounts[k]>0)missLines.push(k+'='+a.missCounts[k]);
+    Object.keys(allKeys).sort().forEach(function(k){
+      var cv=a.missCounts[k]||0;
+      var bv=baseMisses?(baseMisses[k]||0):null;
+      if(cv===0 && (bv==null||bv===0))return;
+      if(bv!=null){
+        var d=cv-bv;
+        var sign=d>0?'+':(d<0?'':'±');
+        missLines.push(k+'='+cv+' (was '+bv+', '+sign+d+')');
+      }else{
+        missLines.push(k+'='+cv);
+      }
     });
-    lines.push('### Miss Breakdown');
+    lines.push('### Miss Breakdown'+(baseMisses?' (vs baseline)':''));
     lines.push('');
     lines.push(missLines.length ? missLines.join(', ') : 'none');
     lines.push('');
@@ -10405,15 +10455,26 @@ window.MPStress=(function(){
     lines.push('');
 
     // ── TRACKING INVARIANTS ─────────────────────────────────────
-    lines.push('### Tracking Invariants');
+    // With baseline loaded, append a Δ column for INV6/14/15/16. Without
+    // baseline, just show raw values. Tracking-only metrics — informational.
+    lines.push('### Tracking Invariants'+(baseline?' (vs baseline)':''));
     lines.push('');
-    lines.push('| INV | Metric | Value |');
-    lines.push('|---|---|---|');
-    lines.push('| INV6 | P/C-ratio | '+a.invTotals.INV6+' total ('+f(a.invTotals.INV6/a.nRuns,2)+'/run) |');
-    var inv14Val=a.inv14Breakdown.total+' total ('+f(a.inv14Breakdown.perRun,2)+'/run) · him='+a.inv14Breakdown.byPerson.him+' her='+a.inv14Breakdown.byPerson.her;
-    lines.push('| INV14 | cook-within-5d | '+inv14Val+' |');
-    lines.push('| INV15 | leftovers eaten/wk (him) | '+f(a.avgLeftoversEaten.him,1)+' |');
-    lines.push('| INV16 | leftovers eaten/wk (her) | '+f(a.avgLeftoversEaten.her,1)+' |');
+    if(baseline){
+      lines.push('| INV | Metric | Baseline | Current | Δ |');
+      lines.push('|---|---|---|---|---|');
+      lines.push('| INV6 | P/C-ratio | '+(baseline.inv6!=null?baseline.inv6:'—')+' | '+a.invTotals.INV6+' ('+f(a.invTotals.INV6/a.nRuns,2)+'/run) | '+(baseline.inv6!=null?delta(a.invTotals.INV6,baseline.inv6,''):'—')+' |');
+      lines.push('| INV14 | cook-within-5d | '+baseline.inv14+' | '+a.inv14Breakdown.total+' (him='+a.inv14Breakdown.byPerson.him+' her='+a.inv14Breakdown.byPerson.her+') | '+delta(a.inv14Breakdown.total,baseline.inv14,'')+' |');
+      lines.push('| INV15 | leftovers/wk (him) | '+(baseline.inv15Him!=null?f(baseline.inv15Him,1):'—')+' | '+f(a.avgLeftoversEaten.him,1)+' | '+(baseline.inv15Him!=null?delta(a.avgLeftoversEaten.him,baseline.inv15Him,''):'—')+' |');
+      lines.push('| INV16 | leftovers/wk (her) | '+(baseline.inv16Her!=null?f(baseline.inv16Her,1):'—')+' | '+f(a.avgLeftoversEaten.her,1)+' | '+(baseline.inv16Her!=null?delta(a.avgLeftoversEaten.her,baseline.inv16Her,''):'—')+' |');
+    }else{
+      lines.push('| INV | Metric | Value |');
+      lines.push('|---|---|---|');
+      lines.push('| INV6 | P/C-ratio | '+a.invTotals.INV6+' total ('+f(a.invTotals.INV6/a.nRuns,2)+'/run) |');
+      var inv14Val=a.inv14Breakdown.total+' total ('+f(a.inv14Breakdown.perRun,2)+'/run) · him='+a.inv14Breakdown.byPerson.him+' her='+a.inv14Breakdown.byPerson.her;
+      lines.push('| INV14 | cook-within-5d | '+inv14Val+' |');
+      lines.push('| INV15 | leftovers eaten/wk (him) | '+f(a.avgLeftoversEaten.him,1)+' |');
+      lines.push('| INV16 | leftovers eaten/wk (her) | '+f(a.avgLeftoversEaten.her,1)+' |');
+    }
     if(a.inv14Breakdown.total>0){
       var gapStr=Object.keys(a.inv14Breakdown.byGap).filter(function(g){return a.inv14Breakdown.byGap[g]>0;}).map(function(g){return 'gap'+g+'d='+a.inv14Breakdown.byGap[g];}).join(', ');
       lines.push('');
@@ -10622,7 +10683,10 @@ window.MPStress=(function(){
     var key=(mode==='standard2')?'mealPlannerStressBaseline2':'mealPlannerStressBaseline';
     var b={
       primary: agg.primaryHitRate*100,
+      inv6: agg.invTotals.INV6||0,
       inv14: agg.inv14Breakdown.total,
+      inv15Him: (agg.avgLeftoversEaten&&agg.avgLeftoversEaten.him)||0,
+      inv16Her: (agg.avgLeftoversEaten&&agg.avgLeftoversEaten.her)||0,
       hardFail: Object.keys(agg.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&agg.invTotals[k]>0;}).length,
       closedPct: (function(){
         var ta=0,tc=0;
@@ -10640,11 +10704,13 @@ window.MPStress=(function(){
         });
         return n>0?sum/n:0;
       })(),
+      missCounts: JSON.parse(JSON.stringify(agg.missCounts||{})),
+      timingAvg: agg.timing&&agg.timing.avg||0,
       mode:mode,
       savedAt: new Date().toISOString()
     };
     try{localStorage.setItem(key,JSON.stringify(b));}catch(e){}
-    console.log('[MPStress] '+mode+' baseline saved: primary='+b.primary.toFixed(2)+'% INV14='+b.inv14+' hardFail='+b.hardFail);
+    console.log('[MPStress] '+mode+' baseline saved: primary='+b.primary.toFixed(2)+'% INV6='+b.inv6+' INV14='+b.inv14+' INV15='+b.inv15Him.toFixed(1)+' INV16='+b.inv16Her.toFixed(1)+' hardFail='+b.hardFail);
     return b;
   }
   function clearBaseline(mode){
