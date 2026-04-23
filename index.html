@@ -379,16 +379,16 @@ var NUTRI_DB = {
   'creatine':              {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'scoop', brand:'Promix'},
   'egg white':             {kcal:133, pro:26.7,fat:0,  carb:0,   unit:'cup', note:'liquid carton; ¼ cup = 2 egg whites; 32oz carton = 4 cups', pkg:{size:32,unit:'oz',cups:4,type:'carton',longShelfLife:true}, minAmt:0.25, maxAmt:1},
   'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each', minAmt:1, maxAmt:6},
-  'chicken breast':        {kcal:31,  pro:5.8,fat:0.7, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
-  'chicken thigh':         {kcal:36,  pro:4.8,fat:1.8, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
+  'chicken breast':        {kcal:31,  pro:5.8,fat:0.7, carb:0,   unit:'oz', minAmt:4, maxAmt:16},
+  'chicken thigh':         {kcal:36,  pro:4.8,fat:1.8, carb:0,   unit:'oz', minAmt:4, maxAmt:16},
   'ground turkey 93':      {kcal:38,  pro:5.3,fat:1.8, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}, minAmt:3, maxAmt:12},
   'salmon':                {kcal:52,  pro:5.7,fat:3.1, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
   'halibut':               {kcal:26,  pro:5.3,fat:0.4, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
   'filet mignon':          {kcal:57,  pro:6.6,fat:3.2, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
   'shrimp':                {kcal:24,  pro:5.7,fat:0.3, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
   'canned tuna':{kcal:27.5,pro:6.5,fat:0.25,carb:0,unit:'oz',brand:'Starkist',altUnits:{can:4,g:113},pkg:{size:5,unit:'oz',drained:4}, minAmt:2, maxAmt:8},
-  'tofu firm':             {kcal:20,  pro:2.2,fat:1.1, carb:0.5, unit:'oz',pkg:{size:14,unit:'oz',drained:14,type:'container'}, minAmt:3, minAmtSolo:3, maxAmt:8},
-  'silken tofu':           {kcal:15,  pro:1.7,fat:0.7, carb:0.3, unit:'oz', brand:'Nature\'s Tofu', altUnits:{g:85},pkg:{size:14,unit:'oz',drained:14,type:'carton'}, minAmt:3, minAmtSolo:3, maxAmt:8},
+  'tofu firm':             {kcal:20,  pro:2.2,fat:1.1, carb:0.5, unit:'oz',pkg:{size:14,unit:'oz',drained:14,type:'container'}, minAmt:3, minAmtSolo:3, maxAmt:12},
+  'silken tofu':           {kcal:15,  pro:1.7,fat:0.7, carb:0.3, unit:'oz', brand:'Nature\'s Tofu', altUnits:{g:85},pkg:{size:14,unit:'oz',drained:14,type:'carton'}, minAmt:3, minAmtSolo:3, maxAmt:12},
   // Dairy & alt
   'greek yogurt 0%':       {kcal:120, pro:24, fat:0,   carb:7,   unit:'cup', brand:'Fage', altUnits:{g:227}, minAmt:0.5, maxAmt:2},
   'cashew milk (sweetened)':{kcal:130, pro:4,  fat:10,  carb:8,   unit:'cup', brand:'Elmhurst', altUnits:{floz:8,ml:240}, minAmt:0.25, maxAmt:2},
@@ -459,12 +459,12 @@ var NUTRI_DB = {
   // Fats & oils
   // NOTE: sesame oil + olive oil are dressing/sauce oils, NOT pan-sauté oils.
   // They do NOT get minAmtSolo (unlike avocado oil which is for sautéing).
-  'sesame oil':            {kcal:120, pro:0,  fat:13.5,carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1.5},
+  'sesame oil':            {kcal:120, pro:0,  fat:13.5,carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1.5, maxAmtSolo:1},
   'almond butter':         {kcal:95,  pro:3.5,fat:8.5, carb:3.5, unit:'tbsp', brand:'365', altUnits:{g:32}, minAmt:0.5, maxAmt:2},
   'peanut butter':         {kcal:90,  pro:4,  fat:7.5, carb:3.5, unit:'tbsp', brand:'Kirkland Organic', altUnits:{g:32}, minAmt:0.5, maxAmt:2},
   'avocado':               {kcal:320, pro:4,  fat:30,  carb:16,  unit:'each', minAmt:0.25, maxAmt:1},
-  'avocado oil':           {kcal:120, pro:0,  fat:14,  carb:0,   unit:'tbsp', brand:'Chosen', altUnits:{ml:15}, halfSnap:true, minAmt:0.125, minAmtSolo:0.5, maxAmt:1.5},
-  'olive oil':             {kcal:119, pro:0,  fat:13.5,carb:0,   unit:'tbsp', minAmt:0.125, maxAmt:1.5},
+  'avocado oil':           {kcal:120, pro:0,  fat:14,  carb:0,   unit:'tbsp', brand:'Chosen', altUnits:{ml:15}, halfSnap:true, minAmt:0.125, minAmtSolo:0.5, maxAmt:1.5, maxAmtSolo:1},
+  'olive oil':             {kcal:119, pro:0,  fat:13.5,carb:0,   unit:'tbsp', minAmt:0.125, maxAmt:1.5, maxAmtSolo:1},
   // Seeds & extras
   'chia seeds':            {kcal:58,  pro:2,  fat:3.7, carb:5,   unit:'tbsp', minAmt:0.25, maxAmt:2},
   'sesame seeds':          {kcal:51,  pro:1.5,fat:4.5, carb:2.1, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
@@ -528,7 +528,7 @@ var NUTRI_DB = {
   'coconut milk':{kcal:420,pro:1,fat:14,carb:2,unit:'cup',brand:'Chaokoh',minAmt:0.125,maxAmt:0.5},
   'coconut water':         {kcal:50,  pro:0,  fat:0,   carb:12,  unit:'cup', brand:'H2C', minAmt:0.25, maxAmt:2},
   'oat milk':              {kcal:100, pro:3,  fat:2,   carb:17,  unit:'cup', brand:'Elmhurst', minAmt:0.25, maxAmt:2},
-  '1% milk':               {kcal:110, pro:8,  fat:2.5, carb:13,  unit:'cup', brand:'Horizon Organic', minAmt:0.5, maxAmt:2},
+  '1% milk':               {kcal:110, pro:8,  fat:2.5, carb:13,  unit:'cup', brand:'Horizon Organic', minAmt:0.5, maxAmt:2, maxAmtSolo:1},
   // Supplements
   'green supplement':      {kcal:30,  pro:0,  fat:0,   carb:7,   unit:'scoop', brand:'NuEthix'},
   'fish oil':              {kcal:35,  pro:1,  fat:3,   carb:1,   unit:'serving', brand:'Nature Made', wholeOnly:true},
@@ -842,6 +842,13 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     if(!isSharedOrLeftover && typeof db.minAmtSolo==='number') return db.minAmtSolo;
     return (typeof db.minAmt==='number') ? db.minAmt : 0;
   }
+  // Solo-aware ceiling: when a meal is a solo cook (mts=1, not shared/leftover),
+  // use db.maxAmtSolo if defined — keeps oils/milk from scaling too aggressively
+  // on single-serving meals while leaving batch per-portion limits at db.maxAmt.
+  function _effMax(db){
+    if(!isSharedOrLeftover && typeof db.maxAmtSolo==='number') return db.maxAmtSolo;
+    return (typeof db.maxAmt==='number') ? db.maxAmt : Infinity;
+  }
   function _clampThresh(ings){
     return ings.map(function(i){
       var db=NUTRI_DB[i.dbKey];
@@ -849,7 +856,8 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
       if(db){
         var mn=_effMin(db);
         if(mn>0&&a<mn)a=mn;
-        if(typeof db.maxAmt==='number'&&a>db.maxAmt)a=db.maxAmt;
+        var mx=_effMax(db);
+        if(isFinite(mx)&&a>mx)a=mx;
       }
       return {ing:i,newAmt:a};
     });
@@ -918,11 +926,12 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     if (db && effMinScale > 0 && newAmt < effMinScale && !(isPkgItem && uniformScale < 1)) {
       newAmt = effMinScale;
     }
-    // Enforce maxAmt — per-serving ceiling for veg/oil ingredients.
+    // Enforce maxAmt (or maxAmtSolo for solo cooks) — per-serving ceiling.
     // Prevents scaling absurdly high portions when a person's budget is large.
     // 3c-per-serving veg hard cap also applies downstream in snap passes.
-    if (db && db.maxAmt && newAmt > db.maxAmt) {
-      newAmt = db.maxAmt;
+    if (db) {
+      var _mx = _effMax(db);
+      if (isFinite(_mx) && newAmt > _mx) newAmt = _mx;
     }
 
     adjustments[item.idx] = newAmt;
@@ -1231,15 +1240,16 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
 
   // Final minAmt/maxAmt sweep — catches non-scalable items (never touched by
   // the scalable loop) so INV13 holds even for fixed/condiment ingredients
-  // whose base amt is below minAmt. Uses _effMin so solo slots pick up
-  // minAmtSolo (pan-oil floor, solo aromatic quality).
+  // whose base amt is below minAmt. Uses _effMin/_effMax so solo slots pick
+  // up minAmtSolo/maxAmtSolo overrides.
   return ingredients.map(function(ing, idx) {
     var amt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
     var db = NUTRI_DB[ing.dbKey];
     if (db) {
       var mn = _effMin(db);
       if (mn > 0 && amt < mn) amt = mn;
-      if (typeof db.maxAmt === 'number' && amt > db.maxAmt) amt = db.maxAmt;
+      var mx = _effMax(db);
+      if (isFinite(mx) && amt > mx) amt = mx;
     }
     return { ing:ing, newAmt: amt };
   });
@@ -3537,24 +3547,28 @@ function getDayBalancedIngredients(p,d){
           var _fiMts = (_fiLo && !_fiLo.isLeftover) ? (_fiLo.totalServings||_fiLo.servings||1) : 1;
           var _fiMin = (_fiMts===1 && typeof fi.db.minAmtSolo==='number') ? fi.db.minAmtSolo
                      : (typeof fi.db.minAmt==='number' ? fi.db.minAmt : 0);
+          // Solo-aware max parallel to _fiMin: solo slots use maxAmtSolo when
+          // defined (oils, milk) so the trim/boost loop respects per-serving
+          // caps appropriate for single portions.
+          var _fiMax = (_fiMts===1 && typeof fi.db.maxAmtSolo==='number') ? fi.db.maxAmtSolo
+                     : (typeof fi.db.maxAmt==='number' ? fi.db.maxAmt : Infinity);
           if(_fiMin && newAmt<_fiMin) newAmt=_fiMin;
-          if(fi.db.maxAmt&&newAmt>fi.db.maxAmt)newAmt=fi.db.maxAmt;
+          if(isFinite(_fiMax) && newAmt>_fiMax) newAmt=_fiMax;
           newAmt=snapAmt(newAmt,fi.db,fi.role);
-          // Snap may round UP past maxAmt when the cap doesn't land on the
+          // Snap may round UP past the cap when it doesn't land on the
           // grid (e.g. protein powder grid=1 with maxAmt=1.5 → Math.round(1.5)=2).
-          // Re-clamp after snap: floor to the nearest grid step at-or-below maxAmt.
-          if(fi.db.maxAmt!=null && newAmt>fi.db.maxAmt){
+          // Re-clamp after snap: floor to the nearest grid step at-or-below the cap.
+          if(isFinite(_fiMax) && newAmt>_fiMax){
             var u=fi.db.unit,g=0.25;
             if(u==='oz'||u==='slice'||u==='scoop'||u==='serving')g=1;
             else if(u==='cup')g=0.25;
             else if(u==='tbsp'||fi.db.halfSnap)g=0.5;
             else if(u==='each')g=fi.db.wholeOnly?1:0.25;
-            newAmt=Math.floor(fi.db.maxAmt/g)*g;
-            // Pathological: grid step > maxAmt (e.g. cup grid 0.25 with
-            // hypothetical maxAmt 0.2). Floor returns 0; old fallback set
-            // newAmt = grid which violates maxAmt. Clamp to maxAmt — better
-            // to break grid alignment than the per-serving cap.
-            if(newAmt<g) newAmt=Math.min(g, fi.db.maxAmt);
+            newAmt=Math.floor(_fiMax/g)*g;
+            // Pathological: grid step > cap (e.g. cup grid 0.25 with cap 0.2).
+            // Floor returns 0; clamp to cap — better to break grid alignment
+            // than the per-serving cap.
+            if(newAmt<g) newAmt=Math.min(g, _fiMax);
           }
           // Effective daily kcal change = per-portion change × servings
           var diff=fi.db.kcal*(fi.amt-newAmt)*fi.mult;
@@ -4339,9 +4353,15 @@ function verifyInvariants(){
               +' amt='+bi.amt.toFixed(3)+' min='+effMinCheck
               +(isSoloSlot&&db.minAmtSolo?' (solo)':''));
           }
-          if(db.maxAmt!=null && bi.amt>db.maxAmt+0.001){
+          // Solo-aware max — solo slots use maxAmtSolo when defined (oils, milk
+          // capped tighter on single-serving meals than batch per-portion).
+          var effMaxCheck=(isSoloSlot && typeof db.maxAmtSolo==='number')
+            ? db.maxAmtSolo
+            : (db.maxAmt!=null ? db.maxAmt : null);
+          if(effMaxCheck!=null && bi.amt>effMaxCheck+0.001){
             violations.push('INV13 above-max: '+p+' '+d+'/'+s+' '+bi.dbKey
-              +' amt='+bi.amt.toFixed(3)+' max='+db.maxAmt);
+              +' amt='+bi.amt.toFixed(3)+' max='+effMaxCheck
+              +(isSoloSlot&&db.maxAmtSolo?' (solo)':''));
           }
         });
       });
@@ -7312,11 +7332,8 @@ function randomizeWeek(target, seed){
   if (bestMisses > 0) {
     rerollMissDays(randTarget);
   }
-  // Bidirectional snack-size swap: for any day off kcal target by >100,
-  // swap the snack to one whose base kcal tightens the delta (either up
-  // or down — moves closer to target). Complements rerollMissDays by
-  // accepting swaps that shrink delta even when miss count is tied.
-  rerollKcalOffSnacks(randTarget);
+  // (rerollKcalOffSnacks moved to end-of-pipeline, see below — it needs
+  // post-pipeline day totals to make correct swap decisions.)
   // INV14 resolver: swap the later cook in any same-meal-within-5d pair if
   // a valid alternative exists that doesn't worsen waste or day misses.
   rerollInv14Violations(randTarget);
@@ -7354,6 +7371,13 @@ function randomizeWeek(target, seed){
   // amounts sub-grid (honey 6.7586 tbsp etc). Runs last so the cache reaches
   // verifyInvariants with clean per-serving amounts.
   snapSoloSlotAmountsToGrid();
+  // Post-pipeline snack swap: for any day off kcal target by >100 AFTER all
+  // batch ops (unify, snap, waste, boost), swap the snack to tighten the
+  // delta. Runs here (not at step 3 anymore) because the earlier position
+  // saw pre-pipeline numbers that drifted post-pipeline. Cache-preserving:
+  // only mutates the snack slot's cache entry, never the whole day's cache
+  // (snacks are never batch members so this is safe).
+  rerollKcalOffSnacks(randTarget);
   // Runtime invariant check — alert on any data inconsistency
   var inv=verifyInvariants();
   if(inv.length)console.warn('INVARIANT VIOLATIONS ('+inv.length+'):\n'+inv.join('\n'));
@@ -7666,35 +7690,46 @@ function rerollMissDays(randTarget){
 // Complements rerollMissDays which uses miss-count reduction — this pass
 // catches cases where a better-sized snack keeps the day's miss count the
 // same but tightens the kcal delta (e.g. -130 → -80, both still misses).
+// Post-pipeline snack swap. Runs at the very END of randomizeWeek so it sees
+// the true final kcal deltas after all batch ops (unify, snap, waste, boost).
+// Cache-preserving: mutates only the snack slot's cache entry per (p,d), never
+// invalidates the whole _dayBalancedCache (which would lose pipeline mutations
+// on all other days). Snacks are never batch members, so this is safe.
 function rerollKcalOffSnacks(randTarget){
   const now = Date.now();
   const noRandomizeIds={};
   MEALS.forEach(function(m){if(m.noRandomize)noRandomizeIds[m.id]=true;});
   const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
-  function totalWaste(){
-    return _fastTripWasteForPersons(TRIP_DAYS_STATIC.sun, persons)
-         + _fastTripWasteForPersons(TRIP_DAYS_STATIC.wed, persons);
-  }
-  function dayMissCount(d){
+  function dayMissCount(p,d){
     let misses=0;
-    persons.forEach(function(p){
-      if(p!=='him'&&p!=='her')return;
-      const calT=CAL_BASE[p], proT=PRO_TARGET[p];
-      const t=calcTotals(p,d);
-      const fv=computeDailyFV(p,d);
-      const mk=t.pro*4+t.fat*9+t.carb*4;
-      const carbPct=mk>0?(t.carb*4)/mk:0;
-      const fatPct=mk>0?(t.fat*9)/mk:0;
-      if(Math.abs(t.kcal-calT)>100)misses++;
-      if(t.pro<proT)misses++;
-      if(carbPct>0.55)misses++;
-      if(fatPct>0.30)misses++;
-      if(fv.veg<3)misses++;
-      if(fv.fruit<1)misses++;
-    });
+    const calT=CAL_BASE[p], proT=PRO_TARGET[p];
+    const t=calcTotals(p,d);
+    const fv=computeDailyFV(p,d);
+    const mk=t.pro*4+t.fat*9+t.carb*4;
+    const carbPct=mk>0?(t.carb*4)/mk:0;
+    const fatPct=mk>0?(t.fat*9)/mk:0;
+    if(Math.abs(t.kcal-calT)>100)misses++;
+    if(t.pro<proT)misses++;
+    if(carbPct>0.55)misses++;
+    if(fatPct>0.30)misses++;
+    if(fv.veg<3)misses++;
+    if(fv.fruit<1)misses++;
     return misses;
   }
-  function dayKcalDelta(p,d){ return calcTotals(p,d).kcal - CAL_BASE[p]; }
+  // Rebuild just the snack slot's cache entry for a new snack id. Returns the
+  // new ingredient list (ready to drop into _dayBalancedCache[pk].snack).
+  function rebuildSnackCache(p,d){
+    const port = getPort(p,d,'snack');
+    if(!port) return null;
+    const ovrIngr = applyOverrides(port,p,d,'snack');
+    if(!ovrIngr || !ovrIngr.length) return null;
+    const slotAdj = getSlotAdjustment(p,d,'snack');
+    const hints = (typeof buildMacroHints==='function') ? buildMacroHints(p,d,'snack') : undefined;
+    const adjusted = adjustIngredients(ovrIngr, slotAdj, 'snack', hints, 1);
+    return adjusted.map(function(a){
+      return {dbKey:a.ing.dbKey, amt:a.newAmt, role:a.ing.role, scalable:a.ing.scalable, origAmt:a.ing.amt};
+    });
+  }
 
   DAYS.forEach(function(d){
     persons.forEach(function(p){
@@ -7704,11 +7739,10 @@ function rerollKcalOffSnacks(randTarget){
       const curId = SEL[key];
       if(!curId)return;
       if(mealUsesPkg(curId))return;
-      const curDelta = dayKcalDelta(p,d);
+      const curDelta = calcTotals(p,d).kcal - CAL_BASE[p];
       if(Math.abs(curDelta)<=100)return;           // day is on-target
-      const dIdx = DAYS.indexOf(d);
-      const recent = getRecentMealIds(dIdx, DAYS, 4);
-      const lastWk = getLastWeekMealIds();
+      const cached = _dayBalancedCache[pk(p,d)];
+      if(!cached) return; // day not balanced — shouldn't happen at end-of-pipeline
       // Snacks are exempt from the 5-day household-repeat rule (small pool).
       const candidates = getMealsForSlot('snack').filter(function(m){
         if(!m[p])return false;
@@ -7720,36 +7754,40 @@ function rerollKcalOffSnacks(randTarget){
       });
       if(!candidates.length)return;
 
-      const baselineWaste = totalWaste();
-      const baselineMisses = dayMissCount(d);
-      const baselineInv14 = countInv14();
+      const origSnackCache = cached.snack;
+      const baselineMisses = dayMissCount(p,d);
       let bestSwap = null;
       let bestAbsDelta = Math.abs(curDelta);
 
       candidates.forEach(function(c){
-        const origSel = SEL[key];
+        // Trial: swap SEL, rebuild snack cache entry, measure, revert.
+        // Cache for OTHER slots stays — so pipeline mutations on batch slots
+        // (lunch/dinner) and other days are preserved. Snacks are always
+        // solo so they have no batch entanglement.
         SEL[key] = c.id;
-        invalidateLeftoverCache();
-        const newDelta = dayKcalDelta(p,d);
+        const newSnackCache = rebuildSnackCache(p,d);
+        if(!newSnackCache){ SEL[key] = curId; return; }
+        cached.snack = newSnackCache;
+        const newDelta = calcTotals(p,d).kcal - CAL_BASE[p];
         const newAbsDelta = Math.abs(newDelta);
-        const newMisses = dayMissCount(d);
-        const newWaste = totalWaste();
-        const newInv14 = countInv14();
-        if(newAbsDelta < bestAbsDelta
-            && newMisses <= baselineMisses
-            && newWaste <= baselineWaste
-            && newInv14 <= baselineInv14){
+        const newMisses = dayMissCount(p,d);
+        // Waste + INV14 invariant: snack swap filters out pkg meals AND
+        // snacks are exempt from 5-day repeat. So waste + inv14 can't change.
+        if(newAbsDelta < bestAbsDelta && newMisses <= baselineMisses){
           bestAbsDelta = newAbsDelta;
           bestSwap = c.id;
         }
-        SEL[key] = origSel;
-        invalidateLeftoverCache();
+        // Revert
+        SEL[key] = curId;
+        cached.snack = origSnackCache;
       });
 
       if(bestSwap){
         SEL[key] = bestSwap;
         weekData[activeWeek].ts[key] = now;
-        invalidateLeftoverCache();
+        const newSnackCache = rebuildSnackCache(p,d);
+        if(newSnackCache) cached.snack = newSnackCache;
+        _leftoverCache = null; // snack SEL changed — variety filters may read
       }
     });
   });
@@ -9897,13 +9935,35 @@ window.MPStress=(function(){
     // Include weekData.last.sel because the variety filter reads it — runs
     // aren't reproducible otherwise if prior state populated last-week data.
     var lastSel = (weekData.last && weekData.last.sel) ? clone(weekData.last.sel) : {};
-    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),_lastSel:lastSel};
+    // Capture _dayBalancedCache and _leftoverCache. These hold the
+    // post-randomize pipeline mutations (unifyCrossPersonRatios,
+    // snapBatchTotals, postBalanceWastePass, snapBatchTotalsToGrid,
+    // boostBatchVegForDailyTarget, snapSoloSlotAmountsToGrid). Without
+    // capturing them, restore() invalidates the cache and a rebuild
+    // produces different (day-balancer-only) numbers — meaning inspectDay
+    // showed totals that didn't match what runOne measured. Bug fix.
+    var dayBal = (typeof _dayBalancedCache==='object' && _dayBalancedCache) ? clone(_dayBalancedCache) : {};
+    var leftover = (typeof _leftoverCache==='object' && _leftoverCache) ? clone(_leftoverCache) : null;
+    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),_lastSel:lastSel,_dayBalancedCache:dayBal,_leftoverCache:leftover};
   }
   function replace(g,v){Object.keys(g).forEach(function(k){delete g[k];});Object.keys(v).forEach(function(k){g[k]=v[k];});}
   function restore(s){
     replace(SEL,s.SEL);replace(SKIPPED,s.SKIPPED);replace(EAT_OUT,s.EAT_OUT);replace(MANUAL_SET,s.MANUAL_SET);replace(SHARED_SCHEDULE,s.SHARED_SCHEDULE);replace(ADJ_TARGETS,s.ADJ_TARGETS);replace(OVERRIDES,s.OVERRIDES);replace(LATE_SNACK,s.LATE_SNACK);
     if (s._lastSel && weekData.last) { weekData.last.sel = s._lastSel; }
-    invalidateLeftoverCache();
+    // Restore caches AFTER source-state restore. Don't call invalidateLeftoverCache
+    // — the snapshot already has the correct cache contents from when it was
+    // captured. If the snapshot doesn't include caches (legacy snapshots), fall
+    // back to invalidate so callers get a fresh rebuild.
+    if (s._dayBalancedCache) {
+      replace(_dayBalancedCache, s._dayBalancedCache);
+    } else {
+      if (typeof invalidateDayBalancedCache==='function') invalidateDayBalancedCache();
+    }
+    if (s._leftoverCache !== undefined) {
+      _leftoverCache = s._leftoverCache ? clone(s._leftoverCache) : null;
+    } else {
+      _leftoverCache = null;
+    }
   }
 
   // High-fat dinners used by applyVaried() to pre-lock a "rich dinner" day
