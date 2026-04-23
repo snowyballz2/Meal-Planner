@@ -22,6 +22,7 @@ Only INV6 is tracking-only (explicitly documented as such). Everything else is h
 - No exceptions or goalpost changes without the user's explicit approval. If you want to widen a tolerance, raise a threshold, downgrade an INV, or accept a regression — **ask first and wait**. Do not unilaterally decide "this is acceptable."
 - Show failing examples before proposing fixes. "This got better" without numbers is not a report.
 - When an INV fires that you don't understand, say "I don't understand this yet" — do not produce a theory that explains it away.
+- **Never dismiss audit findings or defensive guards with "this scenario can't happen."** Banned framings: "no DB entry currently triggers this", "the case is theoretical", "won't happen in practice", "trust internal code", "unreachable code path". The default Claude Code system-prompt rule "don't add error handling for scenarios that can't happen" does NOT apply in this project. Code paths that "can't fire" do fire here (precedent: INV7 drift dismissed as "stochastic" for sessions; root cause was real). If a stress test cannot exercise a code path you're trying to fix, **build a targeted reproducer** before declaring the fix neutral — a test that can't hit the path is not a validator.
 
 ## Data Layer
 
@@ -751,3 +752,56 @@ Full 100-run capture showed **459 INV6 fires, max pct 569% (`viet_noodle_bowl` 6
 - **Retry time cost** — 1.3s avg is snappy for interactive use but ~2× what we had. Could profile hot path inside retry loop if user wants to reduce.
 - **kcalLow pattern** — 16 misses (mostly Him). Structural: some meals cap out before reaching Him's slot budgets. `celery_apple_plate` can't scale (celery + apple both have `maxAmt` that tops near 107 kcal) — Phase 1 scoring allows him to pick it anyway when day has high-cal meals elsewhere. User explicit: "not concerned if day target is hit."
 - **INV6 distribution after session** — 242 fires, max ~250% (down from 569). Still tracking-only. Promotion to hard would require addressing the coconut/turkey recipe-ratio sensitivity that survived the tighter caps (top offenders now: `chicken_noodle_soup`, `shrimp_coconut_curry`, `coconut_turkey_curry`).
+
+## Session 2026-04-22 (late late) — code audit + Test 2 + 4 defensive fixes
+
+Spawned a parallel audit across 5 areas (balancer, veg/unify, Phase 1/reroll, threshold/recipe, inspect API). Filtered false alarms, verified concrete findings, then applied 4 fixes one at a time with stress test validation per fix.
+
+### What landed
+
+**Fix #1 — `window._stressRuns` populate.** `runBaseline`/`runStandard`/`runVaried`/`runSharing` now write `window._stressRuns = results` before returning, so `MPStress.inspectDay(seed, p, d)` and `inspectRun(seed)` work after a normal `runStandard(100)` call. Previously the inspect API only worked via the manual chunked-loop pattern from the handoff message; CLAUDE.md's description was misleading. Verified with a 3-run sanity that `inspectDay(12345, 'him', 'Monday')` returns real data instead of `{err:'no run or no postSnap'}`.
+
+**Fix #2 — Phase 1 incomplete-attempt guard.** Added `var incomplete = false;` at the top of each Phase 1 attempt; set to `true` if the variety+used filter dead-ends on breakfast/lunch/dinner (the snack and late_snack fallbacks always find candidates, so they're exempt). After SLOTS.forEach, `if (incomplete) continue;` skips the score check, so partial-trySel can never become `bestSel`. Without this, the outer `if (bestSel) { ...delete SEL[selKey]... }` path could commit a SEL with deleted slots if all 60 outer retries hit the same dead-end. Defensive — instrumentation confirmed the dead-end never fires across the standard-test seeds (zero rejections in 10 seeds × 60 retries × 14 person-days × 60 attempts = 5M+ attempt iterations). Bug is real in code structure but not reachable on current recipe pool. Both tests still all-hard-INV-clean after the fix.
+
+**Fix #3 — Phase 1 fat early-exit ceiling 0.30 → 0.31.** Scoring penalty fires `>0.31` but early-exit was `<=0.30`, leaving a 0.301–0.31 blind spot where attempts had no fat signal at all. Aligned the early-exit ceiling to match the penalty threshold. **Mixed result**: Test 1 (deterministic) regressed −0.64pp on the fixed-seed walks; Test 2 (randomized + state-evolving) improved +0.86pp across diverse states. Both tests show fatPct misses dropped (intent achieved). User chose to keep — Test 2's broader coverage suggests net-positive across realistic state space.
+
+**Fix #4 — snap-then-clamp grid>maxAmt fallback.** `adjustIngredients` post-balance correction at line ~3563 had `if(newAmt<g) newAmt = g;` after `Math.floor(maxAmt/g)*g`, which violated `maxAmt` if `grid > maxAmt`. No DB entry currently triggers (smallest cup-grid maxAmt is 0.5; smallest tbsp-grid is 1), but the math is wrong defensively. Changed to `if(newAmt<g) newAmt = Math.min(g, fi.db.maxAmt);` — better to break grid alignment than the per-serving cap. Mathematically verified with a synthetic test (pathological case `maxAmt:0.4 + grid:0.5`: OLD returned 0.5 violating cap; NEW returns 0.4 respecting cap. Sane case unchanged). Both tests all-hard-INV-clean.
+
+### New: Test 2 (`MPStress.runStandard2`) — true randomized counterpart
+
+Test 1 (`runStandard`) is **100 deterministic walks** through fixed seeds 12345..12444 — useful for reproducing failures, but blind to any code path the seeded PRNG doesn't reach (Fix #2's dead-end is invisible to it; Fix #4's pathological branch is invisible). Test 2 differs on TWO axes:
+
+1. **Nondeterministic**: `randomizeWeek` uses real `Math.random` (no seeded PRNG override).
+2. **State-evolving**: no snapshot/restore between runs. Each run starts from the prior run's output, simulating real-world repeated Randomize clicks. Exercises state-evolution paths the deterministic test cannot reach.
+
+**Tradeoff**: failing seeds aren't directly reproducible (Math.random state isn't captured). Drill into failures via `postSnap` + `MPStress.inspectDay` after the fact.
+
+**Implementation:**
+- `runOne(mode, seed, cfgFn, opts)` — new 4th arg with `{nondeterministic, persistState}`. Default behavior preserved (both flags false).
+- `aggregate` propagates `mode` from runs to output.
+- `formatReport` reads `agg.mode` for both the title (`runStandard` vs `runStandard2`) and the baseline localStorage key (`mealPlannerStressBaseline` vs `mealPlannerStressBaseline2`).
+- `saveBaseline` mode-aware writes; `clearBaseline(mode)` mode-aware delete.
+
+### Stress baselines (carry-forward to next session)
+
+```js
+// Test 1 (deterministic, seeds 12345..12444):
+localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({primary:98.21, inv14:2, hardFail:0, closedPct:0.0, avgVariance:94.7, mode:'standard'}));
+// Test 2 (randomized + state-evolving):
+localStorage.setItem('mealPlannerStressBaseline2', JSON.stringify({primary:98.64, inv14:3, hardFail:0, closedPct:0.0, avgVariance:94.4, mode:'standard2'}));
+```
+
+Test 1 final: 98.21% / INV14=2 / hard=0 (timing varied 1.4–2.7s avg session-over-session due to state-dependence).
+Test 2 final: 98.64% / INV14=3 / hard=0 (timing 1.3s avg).
+
+### Communication rule added
+
+**"Don't dismiss audit findings or defensive guards with 'this scenario can't happen.'"** Banned framings: "no DB entry currently triggers this", "the case is theoretical", "won't happen in practice", "trust internal code", "unreachable code path". The Claude Code system-prompt default ("don't add error handling for scenarios that can't happen") does NOT apply in this project. Code paths that "can't fire" do fire here (precedent: INV7 drift dismissed as "stochastic" for sessions; root cause was real). If a stress test cannot exercise a code path you're trying to fix, **build a targeted reproducer** before declaring the fix neutral — a test that can't hit the path is not a validator.
+
+Memory: [`feedback_no_cant_happen_dismissals.md`](~/.claude/projects/-Users-chris-Desktop-Meal-Planner/memory/feedback_no_cant_happen_dismissals.md).
+
+### Open items carry forward
+- (carried) Recipe normalization, retry time cost, kcalLow pattern, INV6 distribution from prior session.
+- **Test 1 vs Test 2 verdict divergence on Fix #3** — worth tracking. If future fixes show similar split, may indicate Test 1's seed set is pathological for some pipeline regions.
+- **Phase 1 dead-end reproducer** (parked) — Fix #2 is verified mathematically + instrumented (zero fires on standard test). If recipe pool ever shrinks, a synthetic reproducer (force `getMealsForSlot('lunch')` to return [], pre-populate SEL, observe no `delete SEL[*_lunch]` after randomize) would prove the fix's effect. Not built this session.
+- **runStandard2 timing variance** — saw runs as long as 4.8s during state-evolved measurement. Worth investigating if state evolution pushes specific code paths into pathological retry counts.

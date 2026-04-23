@@ -3567,7 +3567,11 @@ function getDayBalancedIngredients(p,d){
             else if(u==='tbsp'||fi.db.halfSnap)g=0.5;
             else if(u==='each')g=fi.db.wholeOnly?1:0.25;
             newAmt=Math.floor(fi.db.maxAmt/g)*g;
-            if(newAmt<g)newAmt=g;
+            // Pathological: grid step > maxAmt (e.g. cup grid 0.25 with
+            // hypothetical maxAmt 0.2). Floor returns 0; old fallback set
+            // newAmt = grid which violates maxAmt. Clamp to maxAmt — better
+            // to break grid alignment than the per-serving cap.
+            if(newAmt<g) newAmt=Math.min(g, fi.db.maxAmt);
           }
           // Effective daily kcal change = per-portion change × servings
           var diff=fi.db.kcal*(fi.amt-newAmt)*fi.mult;
@@ -7930,6 +7934,7 @@ function _randomizeWeekCore(randTarget){
 
         var totalFatCal = 0;
         var totalPro = 0;
+        var incomplete = false;
 
         SLOTS.forEach(function(s) {
           if (locked[sk(p,d,s)]) {
@@ -7999,7 +8004,14 @@ function _randomizeWeekCore(randTarget){
           // Lunch/dinner: if variety + used still produces empty pool, give up
           // on this slot for THIS retry. The retry loop will pick different
           // earlier meals that avoid this dead-end. Prevents INV14 hard fires.
-          if (!candidates.length) return;
+          // Mark attempt incomplete so the score check rejects it — without
+          // this, a partial trySel can win bestScore (missing-slot calDiff is
+          // huge but if every attempt hits the same dead-end, the least-bad
+          // partial commits and SEL gets a deleted slot).
+          if (!candidates.length) {
+            if (s === 'breakfast' || s === 'lunch' || s === 'dinner') incomplete = true;
+            return;
+          }
           var pick = randomPick(candidates);
           trySel[s] = pick.id;
           used.push(pick.id);
@@ -8043,10 +8055,20 @@ function _randomizeWeekCore(randTarget){
         var discouragedPenalty = discouragedCount * 3000;
         var score = calDiff + fatPenalty + discouragedPenalty;
 
+        // Reject incomplete attempts (variety+used filter dead-end on
+        // breakfast/lunch/dinner). Without this guard, the lowest-scoring
+        // partial trySel could become bestSel and commit with deleted slots.
+        if (incomplete) continue;
+
         if (score < bestScore) {
           bestScore = score;
           bestSel = trySel;
-          if (calDiff <= 100 && fatPct <= 0.30) break;
+          // Early-exit ceiling aligned with fatPenalty threshold (>0.31). Was
+          // <=0.30, which created a 0.301-0.31 blind spot: attempts in that
+          // range got neither penalty nor early-exit, so the scorer relied
+          // on calDiff alone. Aligning to <=0.31 makes the consistency
+          // explicit — penalty triggers AT the same point early-exit refuses.
+          if (calDiff <= 100 && fatPct <= 0.31) break;
         }
       }
 
@@ -9938,7 +9960,8 @@ window.MPStress=(function(){
     return counts;
   }
 
-  function runOne(mode,seed,cfgFn){
+  function runOne(mode,seed,cfgFn,opts){
+    opts = opts || {};
     var snap=snapshot();
     var rng=mkRng(seed);
     var cfg={eatOuts:0,skips:0,locks:0,shared:0};
@@ -9946,8 +9969,11 @@ window.MPStress=(function(){
     var t0=performance.now();
     // Pass the harness seed through to randomizeWeek so Math.random is
     // deterministic for this run. Add a small offset (1e6) so harness cfg
-    // seed and randomizer seed diverge.
-    try{randomizeWeek('shared', (seed|0) + 1000000);}catch(e){clearTimeout(_selSaveTimer);restore(snap);throw e;}
+    // seed and randomizer seed diverge. opts.nondeterministic skips the
+    // seeded PRNG and lets randomizeWeek use real Math.random — used by
+    // runStandard2 to exercise paths the deterministic seed walks miss.
+    var randSeed = opts.nondeterministic ? undefined : ((seed|0) + 1000000);
+    try{randomizeWeek('shared', randSeed);}catch(e){clearTimeout(_selSaveTimer);if(!opts.persistState)restore(snap);throw e;}
     clearTimeout(_selSaveTimer);
     var violations=verifyInvariants();
     var invCounts=parseInvariants(violations);
@@ -9971,7 +9997,10 @@ window.MPStress=(function(){
     // drill-down. Includes all captured globals (SEL, weekData.last.sel, etc.)
     // via the same snapshot() helper. Small cost: a few KB per run.
     var postSnap=snapshot();
-    restore(snap);
+    // opts.persistState=true keeps the post-randomize state live so the next
+    // run starts from this run's output (used by runStandard2 to simulate
+    // real-world repeated Randomize clicks and exercise state-evolution paths).
+    if(!opts.persistState) restore(snap);
     // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16) from the "real fail" list
     var nonInv6=violations.filter(function(v){
       return !v.startsWith('INV6 ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ');
@@ -10205,7 +10234,8 @@ window.MPStress=(function(){
         byGap:inv14Gaps,
         topMeals:inv14TopMeals
       },
-      timing:{avg:timings.reduce(function(a,b){return a+b;},0)/Math.max(timings.length,1),max:Math.max.apply(null,timings)}
+      timing:{avg:timings.reduce(function(a,b){return a+b;},0)/Math.max(timings.length,1),max:Math.max.apply(null,timings)},
+      mode:(runs[0]&&runs[0].mode)||'standard'
     };
   }
 
@@ -10216,6 +10246,7 @@ window.MPStress=(function(){
     var baseSeed=12345;
     for(var i=0;i<runs;i++){results.push(runOne('baseline',baseSeed+i,null));}
     cleanSave();
+    window._stressRuns=results;
     return aggregate(results);
   }
   // Standard test: fixed 100-run baseline, deterministic seeds 12345..12444.
@@ -10242,10 +10273,43 @@ window.MPStress=(function(){
       var baseSeed=12345;
       for(var i=0;i<runs;i++){results.push(runOne('standard',baseSeed+i,null));}
       cleanSave();
+      window._stressRuns=results;
       var agg=aggregate(results);
       console.log(formatReport(agg));
       return agg;
     }finally{
+      Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
+      Object.keys(userSched).forEach(function(k){SHARED_SCHEDULE[k]=userSched[k];});
+    }
+  }
+  // Test 2: true-randomized counterpart to runStandard. Differs on TWO axes:
+  // (1) nondeterministic — randomizeWeek uses real Math.random, not the
+  //     seeded PRNG. Each run walks a different combinatoric path.
+  // (2) persistState — no snapshot/restore between runs. Each run starts
+  //     from the prior run's output, simulating real-world repeated
+  //     Randomize clicks. Exercises state-evolution paths (variety filter
+  //     against accumulating recent picks, etc.) that the deterministic
+  //     seeded test cannot reach.
+  // Tradeoff: failures are NOT directly reproducible (Math.random state
+  //   isn't captured). Use postSnap (preserved per run in window._stressRuns)
+  //   + MPStress.inspectDay to drill into a failing day after-the-fact.
+  function runStandard2(runs){
+    runs=runs||100;
+    var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
+    _applyStandardSharedSchedule();
+    var initSnap=snapshot();
+    try{
+      var results=[];
+      for(var i=0;i<runs;i++){
+        results.push(runOne('standard2', i, null, {nondeterministic:true, persistState:true}));
+      }
+      cleanSave();
+      window._stressRuns=results;
+      var agg=aggregate(results);
+      console.log(formatReport(agg));
+      return agg;
+    }finally{
+      restore(initSnap);
       Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
       Object.keys(userSched).forEach(function(k){SHARED_SCHEDULE[k]=userSched[k];});
     }
@@ -10280,12 +10344,18 @@ window.MPStress=(function(){
         return n>0?sum/n:0;
       })()
     };
+    // Mode-specific baseline key so Test 1 (deterministic) and Test 2
+    // (true randomized) keep separate reference numbers. Defaults to the
+    // legacy key when mode is unknown or 'standard'.
+    var mode=a.mode||'standard';
+    var baselineKey=(mode==='standard2')?'mealPlannerStressBaseline2':'mealPlannerStressBaseline';
     var baseline=null;
-    try{var raw=localStorage.getItem('mealPlannerStressBaseline');if(raw)baseline=JSON.parse(raw);}catch(e){}
+    try{var raw=localStorage.getItem(baselineKey);if(raw)baseline=JSON.parse(raw);}catch(e){}
     var lines=[];
 
     // ── HEADER ──────────────────────────────────────────────────
-    lines.push('## MPStress.runStandard — '+a.nRuns+' runs × 14 person-days = '+a.nPersonDays+' total');
+    var fnName=(mode==='standard2')?'runStandard2':'runStandard';
+    lines.push('## MPStress.'+fnName+' — '+a.nRuns+' runs × 14 person-days = '+a.nPersonDays+' total');
     lines.push('');
 
     // ── KEY METRICS ─────────────────────────────────────────────
@@ -10456,18 +10526,22 @@ window.MPStress=(function(){
       (function(s){results.push(runOne('varied',s,function(rng){return applyVaried(rng);}));})(seed);
     }
     cleanSave();
+    window._stressRuns=results;
     return aggregate(results);
   }
   function runSharing(runsPerConfig){
     runsPerConfig=runsPerConfig||30;
     var out={};
+    var allResults=[];
     Object.keys(SHARING_CONFIGS).forEach(function(name){
       var results=[];
       for(var i=0;i<runsPerConfig;i++){
         (function(cname,s){results.push(runOne('sharing/'+cname,s,function(rng){SHARING_CONFIGS[cname]();return{shared:1,config:cname};}));})(name,90000+i);
       }
       out[name]=aggregate(results);
+      allResults.push.apply(allResults,results);
     });
+    window._stressRuns=allResults;
     return out;
   }
   function runAll(opts){
@@ -10544,6 +10618,8 @@ window.MPStress=(function(){
   // Save/clear reference baseline (persisted to localStorage) for session-
   // over-session deltas in formatReport's KEY METRICS block.
   function saveBaseline(agg){
+    var mode=(agg&&agg.mode)||'standard';
+    var key=(mode==='standard2')?'mealPlannerStressBaseline2':'mealPlannerStressBaseline';
     var b={
       primary: agg.primaryHitRate*100,
       inv14: agg.inv14Breakdown.total,
@@ -10564,17 +10640,19 @@ window.MPStress=(function(){
         });
         return n>0?sum/n:0;
       })(),
+      mode:mode,
       savedAt: new Date().toISOString()
     };
-    try{localStorage.setItem('mealPlannerStressBaseline',JSON.stringify(b));}catch(e){}
-    console.log('[MPStress] baseline saved: primary='+b.primary.toFixed(2)+'% INV14='+b.inv14+' hardFail='+b.hardFail);
+    try{localStorage.setItem(key,JSON.stringify(b));}catch(e){}
+    console.log('[MPStress] '+mode+' baseline saved: primary='+b.primary.toFixed(2)+'% INV14='+b.inv14+' hardFail='+b.hardFail);
     return b;
   }
-  function clearBaseline(){
-    try{localStorage.removeItem('mealPlannerStressBaseline');}catch(e){}
-    console.log('[MPStress] baseline cleared');
+  function clearBaseline(mode){
+    var key=(mode==='standard2')?'mealPlannerStressBaseline2':'mealPlannerStressBaseline';
+    try{localStorage.removeItem(key);}catch(e){}
+    console.log('[MPStress] '+(mode||'standard')+' baseline cleared');
   }
-  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect};
+  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect};
 })();
 
 </script>
