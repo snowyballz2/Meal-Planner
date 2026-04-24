@@ -7129,6 +7129,7 @@ function randomizeWeek(target, seed){
   let bestMisses = Infinity;
   let bestInv14 = Infinity;
   let bestSEL = null;
+  let bestCaches = null;
   for (let retry = 0; retry < maxRetries; retry++) {
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
     Object.keys(savedSel).forEach(function(k){SEL[k]=savedSel[k];});
@@ -7222,6 +7223,18 @@ function randomizeWeek(target, seed){
         });
       });
     }
+    // Stage 1a: snapshot _dayBalancedCache + _leftoverCache BEFORE countInv14
+    // invalidates them. Saves re-running the 7-stage post-balance pipeline
+    // on the winner in the post-retry block. CRITICAL: must snapshot
+    // BEFORE invalidate — countInv14 below calls invalidateLeftoverCache
+    // which wipes both caches, so a post-invalidate snapshot gets empty {}.
+    let retryCaches = null;
+    if (totalWaste === 0) {
+      retryCaches = {
+        dayBalanced: JSON.parse(JSON.stringify(_dayBalancedCache)),
+        leftover: _leftoverCache ? JSON.parse(JSON.stringify(_leftoverCache)) : null
+      };
+    }
     // Count INV14 only when waste=0 (the common final state). Avoids the N²
     // cook-pair scan on losing retries. When waste>0, inv14 stays Infinity so
     // the lexicographic tiebreaker (waste, misses, inv14) ignores it.
@@ -7238,55 +7251,53 @@ function randomizeWeek(target, seed){
       bestMisses = goalMisses;
       bestInv14 = inv14;
       bestSEL = JSON.parse(JSON.stringify(SEL));
+      bestCaches = retryCaches;
     }
     if (totalWaste === 0 && goalMisses === 0 && inv14 === 0) break;
   }
-  // Restore best state (if we exited with improvement room remaining)
-  if (bestSEL && (bestWaste > 0 || bestMisses > 0 || bestInv14 > 0)) {
+  // Restore best state. The retry-loop's countInv14 step invalidates the
+  // cache at end of every retry, so by the time we exit the loop the
+  // live cache is EMPTY (not "winning retry's state" even on early-break).
+  // If we have bestCaches, restore both SEL and cache unconditionally.
+  // If no bestCaches (lossy retry or no retries completed pipeline), fall
+  // back to SEL restore + invalidate + rebuild via 7-stage pipeline.
+  let cacheFromWinner = false;
+  if (bestSEL) {
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
     Object.keys(bestSEL).forEach(function(k){SEL[k]=bestSEL[k];});
   }
-  // SEL changed — leftover cache from last retry is stale
-  invalidateLeftoverCache();
+  if (bestCaches) {
+    for (const k in _dayBalancedCache) delete _dayBalancedCache[k];
+    Object.keys(bestCaches.dayBalanced).forEach(function(k){_dayBalancedCache[k]=bestCaches.dayBalanced[k];});
+    _leftoverCache = bestCaches.leftover ? JSON.parse(JSON.stringify(bestCaches.leftover)) : null;
+    cacheFromWinner = true;
+  } else {
+    invalidateLeftoverCache();
+  }
   // Targeted day re-rolls: fix any remaining miss-days without breaking waste.
   if (bestMisses > 0) {
     rerollMissDays(randTarget);
+    cacheFromWinner = false; // rerolls invalidate cache during candidate trials
   }
-  // (rerollKcalOffSnacks moved to end-of-pipeline, see below — it needs
-  // post-pipeline day totals to make correct swap decisions.)
-  // INV14 resolver: swap the later cook in any same-meal-within-5d pair if
-  // a valid alternative exists that doesn't worsen waste or day misses.
-  rerollInv14Violations(randTarget);
-  // Trip-level flex scaling: proportionally scale flex-ingredient usage across
-  // all trip meals to hit clean package boundaries. Calorie-aware — skips any
-  // scale that would push a day beyond ±100 kcal.
-  applyTripFlexScaling(randTarget);
-  invalidateLeftoverCache();
-  // Unify cross-person cook ratios: for each cook that feeds another person,
-  // rewrite cook + leftover per-serving amounts to share one ingredient ratio
-  // (weighted average by servings). Physically honest — one pot, one ratio.
-  unifyCrossPersonRatios();
-  // Snap batch totals: snap each cook-day ingredient's total batch to
-  // the unit grid, then split back proportionally. Re-runs day balancers
-  // for affected days with snapped amounts frozen.
-  snapBatchTotals();
-  // Post-balance waste pass: nudge final balanced amounts to hit clean
-  // package boundaries. Runs after the full pipeline so it works with
-  // real numbers, not approximations. Reverts any day where goals break.
-  postBalanceWastePass();
-  // Final cross-person re-unify: the waste pass nudges each usage
-  // independently, which can desync cook/leftover ratios. Restore them
-  // using the current (post-waste) totals so ratios are equal again.
-  unifyCrossPersonRatios(true);
-  // Final per-serving-grid snap: after waste + re-unify, batch totals
-  // may sit at sub-grid values (36.485 oz, 8.392 tbsp). Snap each batch's
-  // total to the per-serving grid so amounts are cookable/shoppable.
-  snapBatchTotalsToGrid();
-  // Last-resort veg boost for days stuck under 3c veg because their
-  // only veg-bearing slot is a frozen batch leftover. Grows the whole
-  // batch (all portions) by 0.25c at a time until the day hits 3c or
-  // every batch veg ingredient is at its 3× cap.
-  boostBatchVegForDailyTarget();
+  // INV14 resolver. Skip when bestInv14 === 0 to preserve cacheFromWinner.
+  if (bestInv14 > 0) {
+    rerollInv14Violations(randTarget);
+    cacheFromWinner = false;
+  }
+  if (!cacheFromWinner) {
+    // Full 7-stage pipeline — runs only when cache wasn't restored from
+    // winning retry, or when rerolls invalidated it.
+    applyTripFlexScaling(randTarget);
+    invalidateLeftoverCache();
+    unifyCrossPersonRatios();
+    snapBatchTotals();
+    postBalanceWastePass();
+    unifyCrossPersonRatios(true);
+    snapBatchTotalsToGrid();
+    // Last-resort veg boost for days stuck under 3c veg because their
+    // only veg-bearing slot is a frozen batch leftover.
+    boostBatchVegForDailyTarget();
+  }
   // Final solo-slot grid snap — day-balancer/flex-scaling can leave non-batch
   // amounts sub-grid (honey 6.7586 tbsp etc). Runs last so the cache reaches
   // verifyInvariants with clean per-serving amounts.
