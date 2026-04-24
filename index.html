@@ -10129,6 +10129,12 @@ window.MPStress=(function(){
     var timings=[];
     var invSamples=[];
     var leftoversEatenTotal={him:0,her:0};
+    // INV6 severity: parse `(+N%)` from each INV6 sample and bucket by
+    // drift magnitude. Lets the report show the distribution so a few
+    // extreme distortions stand out from a long tail of minor ones.
+    var inv6Severity={'<60':0,'60-80':0,'80-100':0,'100-150':0,'150-200':0,'200-300':0,'>300':0};
+    var inv6TopMeals={}; // mealId -> count
+    var inv6MaxPct=0;
     runs.forEach(function(r){
       timings.push(r.timing);
       Object.keys(r.invCounts).forEach(function(k){invTotals[k]+=r.invCounts[k];});
@@ -10138,6 +10144,25 @@ window.MPStress=(function(){
         leftoversEatenTotal.him+=r.leftoversEaten.him||0;
         leftoversEatenTotal.her+=r.leftoversEaten.her||0;
       }
+      // INV6 severity buckets — parse from invSample which contains up to 20
+      // violations per run. Representative sample, not exhaustive, but good
+      // enough to show distribution shape.
+      (r.invSample||[]).forEach(function(s){
+        if(s.indexOf('INV6 ')!==0)return;
+        var m=s.match(/\(([+-]?\d+)%\)/);
+        if(!m)return;
+        var pct=Math.abs(parseInt(m[1]));
+        if(pct>inv6MaxPct)inv6MaxPct=pct;
+        if(pct<60)inv6Severity['<60']++;
+        else if(pct<80)inv6Severity['60-80']++;
+        else if(pct<100)inv6Severity['80-100']++;
+        else if(pct<150)inv6Severity['100-150']++;
+        else if(pct<200)inv6Severity['150-200']++;
+        else if(pct<300)inv6Severity['200-300']++;
+        else inv6Severity['>300']++;
+        var mm=s.match(/INV6[^:]*:\s*(?:him|her)\s+\w+\/\w+\s+(\S+)/);
+        if(mm)inv6TopMeals[mm[1]]=(inv6TopMeals[mm[1]]||0)+1;
+      });
       r.days.forEach(function(day){
         total++;
         var f=day.fails;
@@ -10256,6 +10281,9 @@ window.MPStress=(function(){
         him:runs.length>0?leftoversEatenTotal.him/runs.length:0,
         her:runs.length>0?leftoversEatenTotal.her/runs.length:0
       },
+      inv6Severity:inv6Severity,
+      inv6MaxPct:inv6MaxPct,
+      inv6TopMeals:Object.keys(inv6TopMeals).map(function(k){return{id:k,count:inv6TopMeals[k]};}).sort(function(a,b){return b.count-a.count;}).slice(0,5),
       varietyBySlot:varietyBySlot,
       inv14Breakdown:{
         total:inv14Total,
@@ -10479,6 +10507,27 @@ window.MPStress=(function(){
       lines.push('');
       lines.push('**INV14 gap distribution:** '+gapStr);
       lines.push('**INV14 top offenders:** '+a.inv14Breakdown.topMeals.slice(0,5).map(function(m){return '`'+m.id+'`('+m.count+')';}).join(', '));
+    }
+
+    // INV6 severity — drift-magnitude distribution. Lets the user see if
+    // the total count is mostly minor (<60%) or has a meaningful tail of
+    // severe distortions (>=150%). A long heavy tail signals a recipe
+    // that's structurally mismatched to its scaling budget; a bulk at
+    // <60% is acceptable noise from per-slot adjustment.
+    if(a.invTotals.INV6>0){
+      lines.push('');
+      lines.push('**INV6 severity (drift% from base P/C ratio)**');
+      lines.push('');
+      lines.push('| Bucket | Count |');
+      lines.push('|---|---|');
+      ['<60','60-80','80-100','100-150','150-200','200-300','>300'].forEach(function(b){
+        lines.push('| '+b+'% | '+(a.inv6Severity[b]||0)+' |');
+      });
+      lines.push('');
+      lines.push('**INV6 max drift:** '+a.inv6MaxPct+'%');
+      if(a.inv6TopMeals && a.inv6TopMeals.length){
+        lines.push('**INV6 top offenders:** '+a.inv6TopMeals.map(function(m){return '`'+m.id+'`('+m.count+')';}).join(', '));
+      }
     }
     lines.push('');
 
