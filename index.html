@@ -6965,8 +6965,12 @@ function snapBatchTotals(){
 // final balanced amounts to hit a clean package boundary. Revert any day
 // where the nudge breaks a primary goal.
 function postBalanceWastePass(){
-  // Force balanced cache for all days (snapBatchTotals already did this)
-  if(!_dayBalancedCache[pk('him','Monday')])invalidateDayBalancedCache();
+  // Ensure every day's balanced cache exists before iterating trips. The
+  // lazy-build inside getDayBalancedIngredients handles any day that a
+  // prior stage didn't touch — no need for the old "if him/Monday missing,
+  // wipe everything" guard (that guard was destructive: a single missing
+  // day caused invalidateDayBalancedCache to throw away 13 already-built
+  // days' worth of unified+snapped state).
   ['him','her'].forEach(function(p){
     DAYS.forEach(function(d){ getDayBalancedIngredients(p,d); });
   });
