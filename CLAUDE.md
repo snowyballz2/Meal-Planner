@@ -877,3 +877,192 @@ Carried from prior sessions:
 - `his_shake` 239 kcal under 250 shake band floor (trivial, 11 kcal).
 - Phase 1 dead-end reproducer (parked), Test 1 vs Test 2 verdict divergence tracking, runStandard2 timing variance investigation.
 - INV6 is 2.29/run Test 1, 2.45/run Test 2 — tracking only. Promotion to hard would require tighter balancer constraints.
+
+## Session 2026-04-24 — Audit, post-balance removal, Stage 1a cache-snapshot win, unify idempotency
+
+**Big session**. 10 commits, two async audits, one tagged "BIGUPDATE" checkpoint, INV6 severity added to reports, INV17 new hard invariant, Stage 1a pipeline-duplicate-work elimination, and the first idempotency refactor informing Stage 2 design.
+
+### Headline numbers (Test 1 / runStandard, saved baseline)
+- Primary: **99.14% → 99.86%** (+0.72pp)
+- INV6: 229 → 250 (+21, severity tail narrowed; now bounded at 167% max drift vs 300%+)
+- INV14: 1 → 0
+- Hard INVs: all 0 ✓ (including new INV17)
+- Timing: 1288ms → 663ms (−48%)
+
+### Commit chain this session
+```
+cc3b439  unifyCrossPersonRatios: drop unconditional rebuild + per-ingredient idempotency
+c8490a1  Stage 1a: Skip 7-stage pipeline re-run when cache survives from winning retry
+7c3a7a0  Remove Phase 1.6 (over-budget snack swap)
+4090604  MPStress report: add INV6 severity distribution
+cb89829  (tag: BIGUPDATE-post-balance-removal)
+bb759b3  HIGH #2 fix + INV17 + audit cleanup
+29c63d3  Recipe bumps: coconut_turkey_curry + turkey_sweet_potato_hash
+afca802  Day-balancer restructure + variety filter same-day fix + harness defenses
+f507859  (prior session end)
+```
+
+### What landed
+1. **Day-balancer restructure** (`afca802`) — P0 kcal-gap priority + multi-priority-per-pass + thrash detection. Replaced if/else-if with no-break convergence. Variety filter same-day fix (closes shared lunch+dinner same-meal hole). MPStress harness gains: `runOne` auto-pushes to `_stressRuns` + double-verify canary. All hard INVs clean.
+
+2. **Recipe bumps** (`29c63d3`) — `coconut_turkey_curry` 623→724 kcal (turkey 4→8, rice 1.25→1), `turkey_sweet_potato_hash` 357→537 kcal (turkey 4→6, sweet potato 1→0.75, +1c egg white). `jasmine rice cooked` maxAmt 1.5→2.
+
+3. **HIGH #2 fix** (`bb759b3`) — `sameDayCookServings` double-count bug in `unifyCrossPersonRatios` + `snapBatchTotalsToGrid` post-pipeline re-runs. Root cause: by the time these re-runs happen, `_dayBalancedCache` already has materialized same-day leftover slot. Setting `mult=2` on cook slot while leftover slot is also present caused `dailyMacros` to count portion 3× (cook×2 + leftover×1). Silent 500-700 kcal balancer-view inflation → over-trim → kcalLow.
+
+4. **INV17 — balancer↔calcTotals kcal consistency canary** (`bb759b3`). Asserts balancer's `dailyMacros()` view matches `calcTotals()` source-of-truth for every person-day. Catches double-count/under-count bookkeeping bugs in the balancer's `sameDayCookServings` logic. Would have caught HIGH #2 immediately.
+
+5. **Audit cleanup** (`bb759b3`) — deleted dead `capVegPerServing` (87 lines), dead `MACRO_LIMITS.maxCarbPct`, dead `typeof computeLeftovers === 'function'` guards (6 sites), hoisted `computeLeftovers()` out of `applyTripFlexScaling` inner loop (~28 rebuilds/click → 1).
+
+6. **BIGUPDATE: post-balance correction removed** (`cb89829`, tagged). Post-balance was redundant with new balancer P0. A/B tested (post-balance ON vs OFF × 100 runs each) showed no primary regression; Test 2 actually gained (INV6 -54, veg misses 4→0). Removed ~120 lines.
+
+7. **INV6 severity in reports** (`4090604`) — drift-magnitude buckets (<60%, 60-80%, ..., >300%) + max drift + top offenders now visible in `formatReport` output. Lets user distinguish "230 minor drifts" from "230 fires with catastrophic tail".
+
+8. **Phase 1.6 removed** (`7c3a7a0`) — redundant with end-of-pipeline `rerollKcalOffSnacks`. Primary 99.36% → 99.86% (+0.50pp, `rerollKcalOffSnacks` picks better than 1.6's random). Timing 1151ms → 654ms (−43%).
+
+9. **Stage 1a — cache snapshot on winning retry** (`c8490a1`). Retry loop runs 7-stage pipeline on waste-zero retries; post-retry was re-running the SAME 7 stages on winning SEL. Pure duplicate work. Fix: snapshot `_dayBalancedCache` + `_leftoverCache` on retry winner, restore both, skip re-run when cache survives.
+
+10. **unifyCrossPersonRatios idempotent** (`cc3b439`) — Stage 2-aligned pattern proof. Drop unconditional rebuild, use `getDayBalancedIngredients` for lazy per-portion build, add per-ingredient fast-path (skip write if already within tolerance of target), gate `affectedDays` tracking on actual mutations. Byte-for-byte identical stress output.
+
+### Stage 1a debugging saga (3 attempts — valuable learnings)
+
+**v1 (failed, INV7=1220 across 20 seeds)**: captured `_dayBalancedCache` via `JSON.parse(JSON.stringify(...))`. Ratios drifted after restore. Hypothesis was "deep-clone loses shared-reference structure."
+
+**v2 (failed, INV7=155 across 10 seeds)**: added `unifyCrossPersonRatios(true) + snapBatchTotalsToGrid` fixup after restore to re-establish ratios. Still drift.
+
+**v3 (worked, INV7=0 across 100 seeds)**: root cause was **snapshot timing** + **early-break assumption**:
+- Snapshot happens AFTER `invalidateLeftoverCache()` (which is called by `countInv14()` for INV14 scoring). By then cache was empty → restored empty cache → subsequent reads rebuild as non-unified state.
+- FIX PART 1: move snapshot BEFORE the `invalidateLeftoverCache + countInv14` block.
+- Even then, the early-break case assumed "SEL is already the winner, cache is too" — false, because the LAST retry's `countInv14` wiped the cache right before the break.
+- FIX PART 2: always restore from `bestCaches` whenever present, regardless of early-break vs loop-completion.
+
+Diagnostic technique that found it: added `verifyInvariants()` calls at each stage boundary (A, B, C, D), checked INV7 count at each. Revealed A=0, B=28, narrowing the drift to "between A and B". Further narrowing (M1 check inside goalMisses loop, A2 immediately after A) isolated it to "between end of goalMisses block and DIAG B" — which turned out to be the `invalidateLeftoverCache()` call right there.
+
+**Key insight**: when debugging cache-state issues, sprinkle `verifyInvariants()` checkpoints + write counters to `window._diagX`. Reload + run 3-5 seeds. The fires will tell you WHERE the drift enters.
+
+### Timing paradox — why removing code made things slower
+
+After deleting post-balance correction, Test 1 timing went from 1151ms → 1899ms (+65%). Puzzled for a while. Audit agent surfaced the mechanism:
+
+**Post-balance correction was indirectly making the PIPELINE faster.** It tightened day-kcal to ±20 (via role-group scale), so the cache stored "clean" values. Downstream pipeline stages (`applyTripFlexScaling`, `rerollKcalOffSnacks`) check `|day.kcal - target| > 100` as their TRIGGER threshold. With tighter cached values, those triggers fired less often → fewer cache invalidations → fewer `getDayBalancedIngredients` rebuilds → fewer balancer runs.
+
+Without post-balance: cache exits pipeline at ±100 (P0's threshold). Downstream triggers fire more often → more invalidations → more balancer re-invocations (~500-1000/click → ~750-1000/click). +1ms per extra invocation × ~750 extra = ~+750ms observed.
+
+**Phase 1.6 removal recovered it** — that change eliminated 840 per-click snack-candidate scans inside the 60-retry Phase 1-4 hot path.
+
+**Generalized lesson**: timing isn't additive across pipeline stages. Cache invalidation frequency × balancer cost per invocation dominates. Changes that affect the cache's "cleanliness" state at pipeline-stage boundaries have cascading timing effects through the `>threshold` trigger points of downstream stages.
+
+### Stage 2 design seeds — unified convergence loop
+
+**Audit findings** (async agent run, inventoried all 12 post-retry functions):
+- 9 of 12 already have fast-paths that short-circuit when state is compliant
+- 3 need work before loop-safe: `applyTripFlexScaling` (idempotency guard), `unifyCrossPersonRatios` (was: unconditional rebuild — now fixed in `cc3b439`), `balanceDayMacros` invocations inside snap/unify (defer to single end-of-loop pass)
+- Biggest redundancy: retry loop's waste-zero branch runs the SAME 7 stages as post-retry (both `unifyCrossPersonRatios` calls, both snaps, waste pass, boost) — Stage 1a partially addressed by capturing cache on winner.
+
+**Proposed convergence loop structure** (for future session):
+```js
+function finalizePipeline() {
+  let changed = true, safety = 20, sigs = [];
+  while (changed && safety-- > 0) {
+    changed = false;
+    changed = unifyBatchRatios()  || changed;     // has fast-path (cc3b439)
+    changed = snapBatchesToGrid() || changed;     // has per-item fast-path
+    changed = fitPackagesToFlex() || changed;     // needs idempotency guard
+    changed = boostVegIfDayShort()|| changed;     // has fast-path
+    changed = swapSnackIfDayOff() || changed;     // has fast-path
+    if (thrashDetected(sigs)) break;
+  }
+  verifyInvariants();
+}
+```
+
+**Idempotency pattern validated by `cc3b439`**: each adjuster does
+1. **Lazy cache access**: `getDayBalancedIngredients(p, d)` instead of direct cache read. Returns cached or builds from SEL.
+2. **Fast-path check**: compute target state, compare to current; skip if within tolerance.
+3. **Mutation-gated flagging**: don't mark downstream work needed if nothing was actually mutated.
+
+**Candidates for similar treatment** (ranked by readiness):
+- `snapBatchTotals` — structurally similar to unify, has per-item fast-path. Gate balancer re-run on mutations.
+- `snapBatchTotalsToGrid` — same pattern.
+- `postBalanceWastePass` — per-batch fast-path exists; ensure affected-day flagging mutation-gated.
+- `boostBatchVegForDailyTarget` — already has `vegGap > 0.005` fast-path; good shape.
+- `applyTripFlexScaling` — hardest. Writes OVERRIDES + reads via `getBalancedSlotIngredients`. Needs boundary-check guard ("is tripTotal already at package boundary?") before applying scale.
+
+### Rules of thumb learned
+
+1. **Invariants are contracts, not targets**. INV7 firing caught Stage 1a v1 in 5 seconds; ship tests WOULD have masked it as "tiny seed variance". Every hard-INV fire = bug.
+
+2. **INV17 kcal canary isn't sufficient for ratio drift**. It confirms day-kcal math is consistent between balancer's view and `calcTotals`. It does NOT catch cross-person ratio drift (INV7's job). Both canaries are needed.
+
+3. **Cache snapshots have timing dependencies**. `invalidateLeftoverCache()` fires unexpectedly (inside `countInv14()`, per-candidate in rerolls, etc.). A snapshot taken AFTER a latent invalidate captures empty `{}`.
+
+4. **Early-break assumptions are dangerous**. "Loop broke early because winner was current — so state is already the winner" is TRUE for SEL, FALSE for cache if the break happens right after an invalidate.
+
+5. **Lazy cache build >> pre-rebuild**. `getDayBalancedIngredients(p, d)` returns cached or builds — the adjuster doesn't need to know which. Removes the "rebuild everything just in case" pattern.
+
+6. **Fast-path check before work, mutation-gated flagging after**. Together make a function safely callable N times with O(1) cost on passes after the first. The pattern for convergence loops.
+
+7. **"Don't dismiss can't happen"** (from prior session, reaffirmed). Stage 1a v2's "early-break preserves cache" assumption was an unexamined "can't happen" — caught by INV7.
+
+8. **Timing isn't additive**. Code removal can cause timing regressions via indirect cascade (looser cache → more trigger-fires downstream). Profile the actual hot paths, don't reason from code-size alone.
+
+9. **Byte-for-byte identical output is the gold-standard regression test**. `cc3b439` produced 100-run results identical to the pre-change baseline. Stronger than "primary hit rate within 0.1pp" because it confirms no path changed.
+
+### Stress harness notes
+- `MPStress.runStandard()` — 100 runs seeded 12345..12444. Deterministic per-seed. State-dependent across runs (user accepts).
+- `MPStress.runStandard2()` — nondeterministic (Math.random) + persistState=true. Exercises state-evolution paths.
+- `runOne` now **auto-pushes to `window._stressRuns`** with same-seed eviction (fixes the stale-inspect footgun that produced the phantom INV7=5 false alarm earlier in session).
+- `runOne` now runs **double-verify canary** — `verifyInvariants()` called twice back-to-back after randomize; throws if counts disagree. Catches future snapshot/cache consistency bugs that would silently corrupt invCounts.
+
+### Saved baselines (localStorage)
+Test 1 carry-forward:
+```js
+{primary:99.86, inv6:250, inv14:0, inv15Him:3.1, inv16Her:2.7, hardFail:0,
+ closedPct:0.0, avgVariance:94.8,
+ missCounts:{kcalLow:0, kcalHigh:0, pro:0, carbPct:1, fatPct:0, veg:1, fruit:0},
+ timingAvg:655, mode:'standard'}
+```
+Test 2 (not re-baselined after `cc3b439` — byte-for-byte identical to Test 1 change, so pre-change baseline still valid): `mealPlannerStressBaseline2`.
+
+Labeled snapshot: `mealPlannerStressBaseline_BIGUPDATE-post-balance-removal` + `2_BIGUPDATE-post-balance-removal` preserved at the `BIGUPDATE-post-balance-removal` tag.
+
+### Open items for next session (ranked)
+
+**Ready** (Stage 2-aligned, pattern proven):
+1. Apply idempotency pattern to `snapBatchTotals` + `snapBatchTotalsToGrid` (1 session each, ~30 lines). Expected: byte-for-byte identical stress, gains Stage 2 muscle.
+2. Apply idempotency pattern to `postBalanceWastePass`. More complex (batch-atomic revert) but mostly has fast-paths.
+3. Apply idempotency pattern to `applyTripFlexScaling`. Hardest — needs boundary-check guard.
+
+**Design work**:
+4. Draft unified convergence-loop skeleton (separate session). Should inventory thrash-detection strategy at loop level.
+5. Decide: after converting all 5 adjusters to idempotent, can we drop the explicit pipeline ordering entirely in favor of the loop?
+
+**Deferred** (from this session):
+- **Stage 1b** (cache-preserving rerolls): decided to skip in favor of Stage 2 since the pattern will be obsolete there. If user changes mind, see this session's Stage 1b investigation notes for Option A/B/C tradeoffs.
+
+**Carry-forward from prior sessions**:
+- Recipe normalization for remaining off-budget meals (~8 lunch/dinner + ~5 breakfast). Pattern: user provides original full recipe, we scale proportionally.
+- INV6 audit: top offenders `pb_apple_slices`(43), `pb_banana`(42), `filet_din`(34) — all structural (peanut butter fat ratios, filet is 33% fat by design). Accepted.
+- Retry timing cost (60 retries × per-retry pipeline) investigation if user wants to push timing further.
+
+### Runbook
+
+**Running standard stress** (Test 1, deterministic):
+```js
+// Copy a chunked pattern from the session — preview_eval 30s timeout
+// needs ~10-12 seeds per chunk. Setup + run + aggregate + formatReport.
+```
+
+**Inspecting a specific day's state** (after runOne):
+```js
+MPStress.inspectDay(seed, 'him', 'Monday')   // returns slot breakdown
+MPStress.inspectRun(seed)                    // restores full post-randomize state
+MPStress.exitInspect()                       // back to pre-inspect state
+```
+
+**Debugging cache-state issues** (proven technique from Stage 1a v3):
+1. Add `window._diagX = 0` counters at stage boundaries in question.
+2. At each boundary: `try { var n = verifyInvariants().filter(v => v.startsWith('INV7 ')).length; window._diagX = (window._diagX||0) + (n>0?1:0); } catch(e){}`
+3. Run 3-5 seeds, examine which boundary first shows non-zero.
+4. Narrow between those boundaries with more counters until you find the responsible line.
+
+**When the harness says "all 0 ✓" but you suspect ratio drift**: run 5-10 seeds with the code live, then call `verifyInvariants()` directly while the stress state is live (not via `inspectRun` — that restores postSnap which may have subtle differences from live state). If INV7 fires live but report says 0, that's a snapshot/restore bug (like the INV7=5 phantom from the session-start).
