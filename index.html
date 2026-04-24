@@ -6251,6 +6251,16 @@ function clearWeek(){
 // slightly bigger pot of veg. Other days eating from the same batch get
 // the extra veg too — harmless (veg is ~30 kcal/cup at most).
 function boostBatchVegForDailyTarget(){
+  // Idempotent: reads via getBalancedSlotIngredients (lazy-build via
+  // getDayBalancedIngredients when day cache missing). The top-of-loop
+  // fast-path `if(fv.veg>=3)break` exits immediately when the day's veg
+  // target is already met — so calling this twice in a row is a no-op on
+  // the second call for every day (post-first-pass state has fv.veg >= 3
+  // on boosted days, or else the inner loop hit its cap/no-picked break
+  // conditions and veg is stuck below 3 regardless of how many times we
+  // call). No affectedDays bookkeeping: this function grows a batch by
+  // 0.25c at a time (~10-30 kcal); the balancer is NOT re-run because
+  // the kcal drift is below meaningful thresholds.
   var leftovers=computeLeftovers();
   ['him','her'].forEach(function(p){
     DAYS.forEach(function(d){
