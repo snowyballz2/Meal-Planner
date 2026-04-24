@@ -6452,6 +6452,12 @@ function snapSoloSlotAmountsToGrid(){
 }
 
 function snapBatchTotalsToGrid(){
+  // Idempotent: reads via getBalancedSlotIngredients / getDayBalancedIngredients
+  // (both lazy-build when missing). The per-ingredient fast-path below
+  // (|snapped-total|<0.001) skips writes when the batch total is already
+  // on-grid — so calling this twice in a row is a no-op on the second call.
+  // affectedDays is populated only on actual writes, so the balancer re-run
+  // at the end is mutation-gated.
   var leftovers=computeLeftovers();
   var affectedDays={};
   ['him','her'].forEach(function(p){
@@ -6529,8 +6535,14 @@ function snapBatchTotalsToGrid(){
               if(snapped>maxAllowed){snapped=Math.floor(maxAllowed/grid)*grid;if(snapped<grid)snapped=grid;}
             }
           }
+          // Idempotency fast-path: if the batch total is already on-grid,
+          // skip the write. Lets this function no-op cleanly when called
+          // twice in a row or when cache already reflects snapped state.
           if(Math.abs(snapped-total)<0.001)return;
 
+          // Redistribute proportionally. affectedDays is set only here, so
+          // the balancer re-run is gated on actual mutation — a no-op pass
+          // leaves affectedDays empty and triggers zero balancer work.
           portions.forEach(function(pc){
             var share=pc.amt/total;
             var newAmt=snapped*share;
