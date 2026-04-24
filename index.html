@@ -6794,22 +6794,13 @@ function unifyCrossPersonRatios(){
 // ingredient's TOTAL batch to the unit grid (whole oz, 0.25 cup, etc.),
 // then split back proportionally across servings.
 function snapBatchTotals(){
-  // Idempotent on WRITES: the per-ingredient fast-path below
-  // (|snapped-totalBatch|<0.001) skips writes when the batch total is
-  // already on-grid — so calling this twice in a row is a no-op on the
-  // second call. affectedDays is populated only on actual writes, so the
-  // balancer re-run at the end is mutation-gated.
-  //
-  // The forEach loop below ensures all 14 day caches exist before this
-  // stage returns. Downstream `postBalanceWastePass` relies on this:
-  // its top guard `if(!_dayBalancedCache[pk('him','Monday')])invalidate`
-  // would otherwise wipe the whole cache mid-pipeline, destroying the
-  // just-computed unified+snapped state. getDayBalancedIngredients is
-  // a cache-hit short-circuit when the day is already built, so this
-  // loop is O(14) lookups on the second+ call (effectively free).
-  ['him','her'].forEach(function(p){
-    DAYS.forEach(function(d){ getDayBalancedIngredients(p,d); });
-  });
+  // Idempotent: callers don't need to pre-populate the day-balanced cache.
+  // Per portion, lazy-build via getDayBalancedIngredients (returns cached
+  // when populated, builds from SEL when missing). The per-ingredient
+  // fast-path below (|snapped-totalBatch|<0.001) skips writes when the
+  // batch total is already on-grid — so calling this twice in a row is a
+  // no-op on the second call. affectedDays is populated only on actual
+  // writes, so the balancer re-run at the end is mutation-gated.
   var leftovers=computeLeftovers();
   var affectedDays={}; // p_d -> {p, d} — days needing re-balance
 
