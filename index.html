@@ -8099,48 +8099,12 @@ function _randomizeWeekCore(randTarget){
   // PKG_FLEX_CONFIG, INV4 fires (means someone added a pkg ingredient without
   // flex config, or the recipe shouldn't be usable as a solo dinner/lunch).
 
-  // ── PHASE 1.6: Swap over-budget snacks ────────────────────────
-  // Snack budgets are small (10% of daily cal). Whole-item snacks (RXBAR,
-  // eggs+apple) can't be scaled down. If a snack's base kcal exceeds the
-  // slot budget by >50 kcal, replace with a lower-cal alternative.
-  persons.forEach(function(p){
-    if(p!=='him'&&p!=='her')return;
-    days.forEach(function(d){
-      var key=sk(p,d,'snack');
-      if(locked[key]||SKIPPED[key]||EAT_OUT[key])return;
-      var mealId=getMealId(p,d,'snack');
-      if(!mealId)return;
-      var m=getMeal(mealId);
-      if(!m||!m[p])return;
-      var baseKcal=0;
-      if(m.ingredients)m.ingredients.forEach(function(i){
-        var db=NUTRI_DB[i.dbKey];if(db)baseKcal+=db.kcal*i.amt;
-      });
-      var budget=getSlotBudget(p,d,'snack');
-      if(baseKcal<=budget+50)return;
-      // Over budget — find a snack that fits
-      var isShared=bothPersons&&SHARED_SCHEDULE[dk(d,'snack')]==='shared';
-      var candidates=getMealsForSlot('snack').filter(function(cm){
-        if(!cm[p]||cm.id===mealId)return false;
-        if(noRandomizeIds[cm.id])return false;
-        if(isShared&&(!cm.him||!cm.her))return false;
-        var ck=0;
-        if(cm.ingredients)cm.ingredients.forEach(function(i){
-          var db=NUTRI_DB[i.dbKey];if(db)ck+=db.kcal*i.amt;
-        });
-        return ck<=budget+50;
-      });
-      if(!candidates.length)return;
-      var pick=randomPick(candidates);
-      SEL[key]=pick.id;
-      weekData[activeWeek].ts[key]=now;
-      if(isShared){
-        var otherP=p==='him'?'her':'him';
-        SEL[sk(otherP,d,'snack')]=pick.id;
-        weekData[activeWeek].ts[sk(otherP,d,'snack')]=now;
-      }
-    });
-  });
+  // (Phase 1.6 removed — its "swap if base snack kcal > budget+50" logic
+  //  was redundant with the end-of-pipeline rerollKcalOffSnacks pass which
+  //  catches the same case reactively using POST-pipeline day kcal,
+  //  rather than pre-adjustment base kcal. Removing 1.6 saves a per-retry
+  //  candidate scan inside the 60-iteration Phase 1-4 loop without
+  //  changing the eventual day-kcal correctness.)
 
   // ── PHASE 1.7: Swap snacks that are the sole user of a package ──
   // If a snack is the only meal in the trip using a pkg ingredient,
