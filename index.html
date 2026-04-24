@@ -408,7 +408,7 @@ var NUTRI_DB = {
   // preserving strict kcal ratios (physical serving reality).
   'whole wheat toast':     {kcal:70,  pro:3.6,fat:1,   carb:12,  unit:'slice', wholeOnly:true, minAmt:1, minAmtSolo:1, maxAmt:3},
   'whole wheat tortilla':  {kcal:130, pro:4,  fat:3,   carb:22,  unit:'each', wholeOnly:true, minAmt:1, minAmtSolo:1, maxAmt:3},
-  'rice vermicelli cooked':       {kcal:190, pro:3.2,fat:0.4, carb:44,  unit:'cup', note:'cooked', minAmt:0.25, maxAmt:1.5},
+  'rice vermicelli cooked':       {kcal:190, pro:3.2,fat:0.4, carb:44,  unit:'cup', note:'cooked', minAmt:0.25, maxAmt:2},
   'udon noodles cooked':   {kcal:210, pro:7,  fat:1,   carb:42,  unit:'cup', note:'cooked', minAmt:0.25, maxAmt:1.5},
   'oat flour':             {kcal:520, pro:20, fat:10,  carb:88,  unit:'cup', brand:'One Degree', altUnits:{g:132}, minAmt:0.125, maxAmt:0.5},
   'sweet potato':          {kcal:114, pro:2.1,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1.25,label:'large sweet potato'}, minAmt:0.25, maxAmt:1.5},
@@ -1732,9 +1732,9 @@ const MEALS=[
   steps:['Bring broth to a simmer in a medium pot over medium heat.','Add sliced carrots and diced zucchini. Cook 3 min until beginning to soften.','Add sliced tofu, spinach, and soy sauce. Simmer 2 min until spinach is wilted and tofu is heated through.','Add cooked rice vermicelli. Stir gently to combine.','Drizzle with sesame oil. Serve in a bowl with a squeeze of lime and fresh herbs.'],
   him:{},her:{},
   ingredients:[
-    I('tofu firm',7,'protein'),
-    I('egg white',0.25,'protein'),
-    I('rice vermicelli cooked',1.25,'carb'),
+    I('tofu firm',8,'protein'),
+    I('egg white',0.5,'protein'),
+    I('rice vermicelli cooked',1.5,'carb'),
     I('baby spinach',1.5,'veg'),
     I('carrots',0.5,'veg'),
     I('zucchini',0.5,'veg'),
@@ -3150,14 +3150,9 @@ function mealUsesDiscouraged(mealOrId){
 // Build macro hints for the calorie adjuster based on person, day, slot
 function buildMacroHints(p,d,s){
   if(!SLOT_BUDGET[s])return null;
-  const dailyPro=PRO_TARGET[p]||0;
-  if(!dailyPro)return null;
-  const slotPct=SLOT_BUDGET[s]||0;
-  const slotProTarget=Math.round(dailyPro*slotPct);
+  if(!PRO_TARGET[p])return null;
   return {
-    proTarget:slotProTarget,
     slotKcalBudget:getSlotBudget(p,d,s),
-    maxCarbPct:MACRO_LIMITS.maxCarbPct,
     maxFatPct:MACRO_LIMITS.maxFatPct
   };
 }
@@ -3410,13 +3405,20 @@ function getDayBalancedIngredients(p,d){
     if(ls)actualKcal+=(ls.kcal||0);
 
     var calGap=actualKcal-target;
-    if(Math.abs(calGap)>50){
+    // Floor 100 matches the primary kcal goal tolerance (±100) and P0's
+    // threshold in balanceDayMacros. Within-goal gaps (0-100) don't need
+    // correction. This pass is the safety-net for when P0 can't close the
+    // 100+ gap iteratively (e.g. all BLD items maxed/floored).
+    if(Math.abs(calGap)>100){
       // Collect non-frozen scalable ingredients by role priority.
       // When over target, trim fat first, then carb, then protein last.
       // When under target, boost protein first, then carb, then fat last.
+      // Snack + shake excluded — snack is handled at end-of-pipeline by
+      // rerollKcalOffSnacks, shake is frozen.
       var freeByRole={fat:[],carb:[],protein:[],other:[]};
       Object.keys(slots).forEach(function(s2){
         if(frozenSlots[s2]||sameDayLeftovers[s2])return;
+        if(s2==='snack'||s2==='shake')return;
         // Cook slots with same-day leftovers have a multiplied effect:
         // trimming 100 kcal per portion reduces the daily total by 100 × servings.
         var mult=sameDayCookServings[s2]||1;
@@ -3533,6 +3535,15 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     if(_isSoloSlot(slot) && typeof db.minAmtSolo === 'number') return db.minAmtSolo;
     return (typeof db.minAmt === 'number') ? db.minAmt : 0;
   }
+  // Solo-aware per-serving ceiling for bestAdd (P0 under-case + P1/P2/P3
+  // protein-add). Oils (maxAmtSolo=1 tbsp) and milk (maxAmtSolo=1 cup) must
+  // not be boosted past their solo caps on single-portion slots, even though
+  // their batch-context maxAmt is higher. Mirrors _trimFloor.
+  function _addCeil(db, slot){
+    if(!db) return Infinity;
+    if(_isSoloSlot(slot) && typeof db.maxAmtSolo === 'number') return db.maxAmtSolo;
+    return (typeof db.maxAmt === 'number') ? db.maxAmt : Infinity;
+  }
   const proTarget=PRO_TARGET[p]||0;
   if(!proTarget)return;
 
@@ -3599,7 +3610,7 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     return {veg:veg,fruit:fruit};
   }
 
-  function bestAdd(role, trimKcalStep){
+  function bestAdd(role, trimKcalStep, slotFilter){
     // Highest pro/kcal (for protein) or lowest kcal/g of macro (for other roles).
     // Non-pkg first. `trimKcalStep` is the kcal-per-step of the trim that will
     // pair with this add (priority 1/2/3 all do a swap). When provided, we:
@@ -3614,7 +3625,14 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     // residual daily kcal; shake is frozen so it can't be picked anyway).
     // Protein powder is excluded from protein boosts — user preference: real
     // food choices only, not a supplement loophole.
-    const all=itemsByRole(role);
+    // slotFilter (optional): restrict picks to named slots (e.g.
+    //   ['breakfast','lunch','dinner']). P0 kcal-gap priority uses this to
+    //   keep snack untouched — snack is handled at end-of-pipeline via
+    //   rerollKcalOffSnacks, not here.
+    const allRaw=itemsByRole(role);
+    const all = slotFilter
+      ? allRaw.filter(function(x){return slotFilter.indexOf(x.slot) !== -1;})
+      : allRaw;
     const nonPkg=all.filter(function(x){return !x.isPkg;});
     let pool=nonPkg.length?nonPkg:all;
     if(role==='protein'){
@@ -3645,19 +3663,28 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
           if(slotKcal > slotBudget*1.5) continue;
         }
       }
-      // Cap 3: per-serving maxAmt (INV13 threshold). Prevents balancer from
-      // pushing egg white past 1c, protein powder past 1.5 scoops, etc. —
-      // caught 3 above-max fires in the threshold-pass stress run.
-      if(item.db.maxAmt != null && (item.cur + pInc) > item.db.maxAmt) continue;
+      // Cap 3: per-serving maxAmt (INV13 threshold), solo-aware via _addCeil.
+      // Prevents balancer from pushing egg white past 1c, oils past 1 tbsp
+      // on solo slots (maxAmtSolo), protein powder past 1.5 scoops, etc.
+      var _ceil = _addCeil(item.db, item.slot);
+      if(isFinite(_ceil) && (item.cur + pInc) > _ceil) continue;
       return item;
     }
     return null;
   }
 
-  function bestTrim(roles){
+  function bestTrim(roles, slotFilter){
     // Highest-kcal-contribution to trim, non-pkg first.
+    // slotFilter (optional): restrict to named slots (e.g.
+    //   ['breakfast','lunch','dinner']). P0 kcal-gap priority uses this so
+    //   snack/shake stay untouched.
     const all=[];
-    roles.forEach(function(r){itemsByRole(r).forEach(function(x){all.push(x);});});
+    roles.forEach(function(r){
+      itemsByRole(r).forEach(function(x){
+        if(slotFilter && slotFilter.indexOf(x.slot) === -1) return;
+        all.push(x);
+      });
+    });
     const nonPkg=all.filter(function(x){return !x.isPkg;});
     const pool=nonPkg.length?nonPkg:all;
     pool.sort(function(a,b){return (b.db.kcal*b.cur)-(a.db.kcal*a.cur);});
@@ -3683,11 +3710,14 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
   // (bypassing scalable:false — veg/fruit ingredients in recipes are flagged
   // not-scalable so the calorie adjuster doesn't scale them, but the
   // day-level balancer CAN scale them UP to meet the daily fv floor).
-  function boostFV(role){
+  function boostFV(role, slotFilter){
     // Cap at 3× original recipe amount (4× for leaf veg: spinach/kale/bok choy,
     // all <35 kcal/cup — extra headroom for days with frozen high-kcal batches
     // that leave little room for daily veg boost).
+    // slotFilter (optional): restrict to named slots. Used by P4 to avoid
+    // touching snack (handled at end-of-pipeline).
     const items=itemsByRole(role, true).filter(function(x){
+      if(slotFilter && slotFilter.indexOf(x.slot) === -1) return false;
       if(x.db.unit!=='cup' && !(x.db.unit==='each' && x.db.cupsEach))return false;
       var baseAmt=x.recipeAmt||x.origAmt||x.cur;
       var isLeaf=(x.dbKey==='baby spinach'||x.dbKey==='kale'||x.dbKey==='bok choy');
@@ -3711,86 +3741,157 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     return {item:item, inc:inc};
   }
 
-  let safety=40;
-  while(safety-->0){
-    const t=dailyMacros();
-    const mk=t.pro*4+t.fat*9+t.carb*4;
-    if(mk<1)break;
-    const carbPct=(t.carb*4)/mk;
-    const fatPct=(t.fat*9)/mk;
-    const proGap=proTarget-t.pro;
-    const carbOver=carbPct-0.55;
-    const fatOver=fatPct-0.30;
-    const fv=dailyFV();
-    const vegGap=3-fv.veg;    // target ≥ 3c veg
-    const fruitGap=1-fv.fruit; // target ≥ 1c fruit
+  // Carb floor (40%): when daily carb% is already below floor, P1 restricts
+  // trim candidates to fat only (doesn't trim carb further). Prevents
+  // runaway rice/pasta trims when chasing protein on a carb-short day.
+  const carbFloor = 0.40;
+  // Balancer scope: breakfast/lunch/dinner only. Snack is handled at
+  // end-of-pipeline by rerollKcalOffSnacks; shake is frozen.
+  const CAL_SLOTS = ['breakfast','lunch','dinner'];
 
-    let changed=false;
+  // Each outer iteration is one "pass" through all 5 priorities in order.
+  // Unlike the original if/else-if chain, a single pass can fire multiple
+  // priorities — each one recomputes dailyMacros() fresh before deciding
+  // whether to act. If a priority fails (no viable trim/add), it's skipped
+  // for this pass but stays eligible next pass. The loop exits when a full
+  // pass produces zero mutations, or when thrash is detected.
+  // Thrash = last 6 pass signatures form A-B-A-B-A-B (3 full back-and-forth
+  // cycles on the same pair of mutations). Safety cap 40 passes.
+  // Helper: capture the ingredient's current kcal for mutation signature
+  // so a trim-then-add-back pattern shows up as identical opposite mutations.
+  function _mutSig(slot, dbKey, delta){
+    var sign = delta > 0 ? '+' : '-';
+    return slot + ':' + dbKey + ':' + sign + Math.abs(delta).toFixed(3);
+  }
 
-    // Priority 1: protein shortfall (swap +pro, -fat first, then -carb)
-    // Threshold is 7g: days within −7 of target are an acceptable variance.
-    // Balancer effort on borderline cases often spikes fat% or kcal without
-    // closing the gap meaningfully; leave them alone.
-    // Carb floor (40%): if daily carb% is already below the 40% floor, don't
-    // let the balancer trim carb further — only fat is eligible. Prevents
-    // runaway rice/pasta trims when chasing protein on a carb-short day.
-    const carbFloor = 0.40;
-    if(proGap>7){
+  const passSignatures = [];
+  let safety = 40;
+  while(safety-- > 0){
+    const passMutations = [];
+    let changed = false;
+
+    // Shared per-pass state — refreshed after every mutation so any priority
+    // downstream reads current macros, never stale. All derived values
+    // (carbPct, fatPct, proGap, calGap0, vegGap) come from the same t/fv.
+    let t, mk, carbPct, fatPct, proGap, calGap0, fv, vegGap;
+    function refreshMacros(){
+      t = dailyMacros();
+      mk = t.pro*4 + t.fat*9 + t.carb*4;
+      carbPct = mk >= 1 ? (t.carb*4)/mk : 0;
+      fatPct  = mk >= 1 ? (t.fat*9)/mk : 0;
+      proGap = proTarget - t.pro;
+      calGap0 = CAL_BASE[p] ? (CAL_BASE[p] - t.kcal) : 0;
+      fv = dailyFV();
+      vegGap = 3 - fv.veg;
+    }
+    refreshMacros();
+
+    function applyDelta(slot, idx, newAmt){
+      const cur = slots[slot][idx].amt;
+      const delta = newAmt - cur;
+      if(Math.abs(delta) < 1e-9) return;
+      passMutations.push(_mutSig(slot, slots[slot][idx].dbKey, delta));
+      slots[slot][idx].amt = newAmt;
+      changed = true;
+      refreshMacros();  // every priority downstream sees current state
+    }
+
+    // ── Priority 0: day kcal off target by >100 ──
+    // Single-direction (non-neutral) correction. Threshold 100 matches the
+    // primary kcal goal tolerance. Per-slot adjustIngredients scales to slot
+    // kcal; skip-if-close thresholds + snap + leftover freezing can leave the
+    // day total off. P0 closes this gap via one grid-step trim/boost in BLD.
+    if(Math.abs(calGap0) > 100){
+      if(calGap0 < 0){
+        // Over target: trim one grid step. Order fat → carb → protein.
+        const trim = bestTrim(['fat'], CAL_SLOTS)
+                  || bestTrim(['carb'], CAL_SLOTS)
+                  || bestTrim(['protein'], CAL_SLOTS);
+        if(trim) applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
+      } else {
+        // Under target: boost one grid step. Order protein → carb → other → fat.
+        const order = ['protein','carb','other','fat'];
+        let added = null;
+        for(let oi=0; oi<order.length && !added; oi++){
+          added = bestAdd(order[oi], null, CAL_SLOTS);
+        }
+        if(added) applyDelta(added.slot, added.idx, added.cur + incrementFor(added.db));
+      }
+    }
+
+    // ── Priority 1: protein shortfall ──
+    // Cal-neutral swap (+pro / -fat or -carb). 7g threshold — smaller gaps
+    // are acceptable variance; balancer effort on borderline cases often
+    // spikes fat% or kcal without closing the gap meaningfully.
+    if(mk >= 1 && proGap > 7){
       const trimRoles = (carbPct <= carbFloor) ? ['fat'] : ['fat','carb'];
-      const trim=bestTrim(trimRoles);
-      if(!trim)break;
-      const trimKcalStep=trim.dec*trim.item.db.kcal;
-      const pItem=bestAdd('protein', trimKcalStep);
-      if(!pItem){break;}  // no protein item fits — don't force a bad swap
-      const pInc=incrementFor(pItem.db);
-      slots[pItem.slot][pItem.idx].amt=pItem.cur+pInc;
-      slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
-      changed=true;
-    }
-    // Priority 2: carb% over 55 (trim carb, add protein)
-    // Carb floor safety: if somehow carb% is already at/below floor, stop
-    // — shouldn't fire normally since we're here only when >55%, but guards
-    // against cumulative trimming landing below the floor in a single loop.
-    else if(carbOver>0.001){
-      if(carbPct <= carbFloor) break;
-      const trim=bestTrim(['carb']);
-      if(!trim)break;
-      slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
-      const trimKcalStep=trim.dec*trim.item.db.kcal;
-      const pItem=bestAdd('protein', trimKcalStep);
-      if(pItem){
-        const pInc=incrementFor(pItem.db);
-        slots[pItem.slot][pItem.idx].amt=pItem.cur+pInc;
+      const trim = bestTrim(trimRoles, CAL_SLOTS);
+      if(trim){
+        const trimKcalStep = trim.dec * trim.item.db.kcal;
+        const pItem = bestAdd('protein', trimKcalStep, CAL_SLOTS);
+        // Both required — don't trim without a paired protein add,
+        // otherwise we'd just be dropping kcal without raising pro.
+        if(pItem){
+          applyDelta(pItem.slot, pItem.idx, pItem.cur + incrementFor(pItem.db));
+          applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
+        }
       }
-      changed=true;
     }
-    // Priority 3: fat% over 30 (trim fat, add protein)
-    else if(fatOver>0.001){
-      const trim=bestTrim(['fat']);
-      if(!trim)break;
-      slots[trim.item.slot][trim.item.idx].amt=trim.item.cur-trim.dec;
-      const trimKcalStep=trim.dec*trim.item.db.kcal;
-      const pItem=bestAdd('protein', trimKcalStep);
-      if(pItem){
-        const pInc=incrementFor(pItem.db);
-        slots[pItem.slot][pItem.idx].amt=pItem.cur+pInc;
+
+    // ── Priority 2: carb% over 55 ──
+    // Trim carb; paired protein add is optional (trimming alone still helps
+    // carbPct come down). Dead carbFloor safety check removed — carbPct
+    // can't be ≤ carbFloor when it's > 55%.
+    if(mk >= 1 && carbPct - 0.55 > 0.001){
+      const trim = bestTrim(['carb'], CAL_SLOTS);
+      if(trim){
+        const trimKcalStep = trim.dec * trim.item.db.kcal;
+        applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
+        const pItem = bestAdd('protein', trimKcalStep, CAL_SLOTS);
+        if(pItem) applyDelta(pItem.slot, pItem.idx, pItem.cur + incrementFor(pItem.db));
       }
-      changed=true;
     }
-    // Priority 4: veg shortfall — just add a veg. No trim: veg is so low-cal
-    // (spinach 7/cup, broccoli 31/cup) that the min 0.25-cup trim of
-    // carb/fat would remove WAY more calories than the veg adds. Accept the
-    // small cal bump (usually 2-30 kcal per day).
-    else if(vegGap>0.005){
-      const boost=boostFV('veg');
-      if(!boost)break;
-      slots[boost.item.slot][boost.item.idx].amt=boost.item.cur+boost.inc;
-      changed=true;
+
+    // ── Priority 3: fat% over 30 ──
+    // Trim fat; paired protein add is optional.
+    if(mk >= 1 && fatPct - 0.30 > 0.001){
+      const trim = bestTrim(['fat'], CAL_SLOTS);
+      if(trim){
+        const trimKcalStep = trim.dec * trim.item.db.kcal;
+        applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
+        const pItem = bestAdd('protein', trimKcalStep, CAL_SLOTS);
+        if(pItem) applyDelta(pItem.slot, pItem.idx, pItem.cur + incrementFor(pItem.db));
+      }
+    }
+
+    // ── Priority 4: veg < 3c ──
+    // Pure boost — no trim. Veg is so low-cal (spinach 7/cup, broccoli 31/cup)
+    // that a min 0.25c trim would remove more kcal than the veg adds. Accept
+    // the small cal bump (usually 2-30 kcal per day).
+    if(vegGap > 0.005){
+      const boost = boostFV('veg', CAL_SLOTS);
+      if(boost) applyDelta(boost.item.slot, boost.item.idx, boost.item.cur + boost.inc);
     }
     // (No fruit boost — can't meaningfully adjust fruit without affecting
     // macros, and most days hit fruit target naturally.)
 
-    if(!changed)break;
+    if(!changed) break;
+
+    // Thrash detection: 3 full A-B-A-B-A-B cycles of identical alternating
+    // mutation signatures means we're stuck oscillating. Exit before safety
+    // exhausts so we don't burn 40 passes on a hopeless loop.
+    const sig = passMutations.slice().sort().join('|');
+    passSignatures.push(sig);
+    if(passSignatures.length >= 6){
+      const n = passSignatures.length;
+      const alternating =
+        passSignatures[n-1] !== passSignatures[n-2] &&
+        passSignatures[n-1] === passSignatures[n-3] &&
+        passSignatures[n-3] === passSignatures[n-5] &&
+        passSignatures[n-2] === passSignatures[n-4] &&
+        passSignatures[n-4] === passSignatures[n-6];
+      if(alternating) break;
+    }
   }
 }
 
@@ -5906,9 +6007,28 @@ function getLastWeekMealIds() {
 // days, crossing into the chronological previous week when needed. If either
 // him or her had meal X as an anchor cook recently, it's in the set for both.
 // Leftover entries are skipped — eating a leftover isn't a new cook.
+// Also includes the CURRENT day's already-picked slots (any earlier slot in
+// the iteration order) to prevent same-day same-meal selections — the bug
+// that caused shared lunch + shared dinner to land on the same meal,
+// creating gap=0 INV14 violations and per-portion under-budget cascades.
 function getRecentMealIds(dayIndex, days, lookback) {
   const recent = [];
   const leftovers = (typeof computeLeftovers === 'function') ? computeLeftovers() : {};
+  // Same-day already-picked slots — covers cross-slot repeats Phase 1 would
+  // otherwise create when iterating breakfast → lunch → snack → dinner.
+  const todayDay = days[dayIndex];
+  if (todayDay) {
+    SLOTS.forEach(function(s) {
+      if (s === 'late_snack' || s === 'shake') return;
+      ['him','her'].forEach(function(pp){
+        const id = getMealId(pp, todayDay, s);
+        if (!id || recent.indexOf(id) >= 0) return;
+        const lo = leftovers[sk(pp, todayDay, s)];
+        if (lo && lo.isLeftover) return;
+        recent.push(id);
+      });
+    });
+  }
   for (let b = 1; b <= lookback; b++) {
     const prevIdx = dayIndex - b;
     if (prevIdx >= 0) {
@@ -9981,6 +10101,18 @@ window.MPStress=(function(){
     try{randomizeWeek('shared', randSeed);}catch(e){clearTimeout(_selSaveTimer);if(!opts.persistState)restore(snap);throw e;}
     clearTimeout(_selSaveTimer);
     var violations=verifyInvariants();
+    // Fix C — double-verify canary. Calling verifyInvariants() back-to-back
+    // on the same state must produce identical results. If they differ, that
+    // means something between the two calls mutated state (cache rebuild,
+    // lazy initialization, side effect) — a real snapshot/restore consistency
+    // bug that would silently corrupt invCounts. Throw loudly so the harness
+    // fails fast instead of silently reporting wrong invariant counts.
+    var violations2=verifyInvariants();
+    if(violations.length!==violations2.length){
+      throw new Error('MPStress canary: verifyInvariants() inconsistent within same state. '
+        +'First call: '+violations.length+' violations, second call: '+violations2.length
+        +'. Indicates snapshot/restore or cache mutation bug. seed='+seed);
+    }
     var invCounts=parseInvariants(violations);
     var days=[];
     ['him','her'].forEach(function(p){DAYS.forEach(function(d){days.push(measureDay(p,d));});});
@@ -10018,7 +10150,20 @@ window.MPStress=(function(){
     });
     // Capture ALL INV14 violations (not just sampled) for investigation
     var inv14Violations=violations.filter(function(v){return v.startsWith('INV14 ');});
-    return{mode:mode,seed:seed,config:cfg,days:days,invCounts:invCounts,invSample:violations.slice(0,20),invSampleNonInv6:nonInv6,vegCeilings:vegCeilings,leftoversEaten:leftoversEaten,picks:picks,inv14Violations:inv14Violations,timing:timing,postSnap:postSnap};
+    var result={mode:mode,seed:seed,config:cfg,days:days,invCounts:invCounts,invSample:violations.slice(0,20),invSampleNonInv6:nonInv6,vegCeilings:vegCeilings,leftoversEaten:leftoversEaten,picks:picks,inv14Violations:inv14Violations,timing:timing,postSnap:postSnap};
+    // Fix A — auto-register in window._stressRuns so inspectRun(seed) finds
+    // THIS run, not a stale entry from a prior batch. Replaces any existing
+    // entry with the same seed so re-running a seed always picks up the
+    // latest postSnap. Solves the footgun where running runOne(seed) ad-hoc
+    // and then calling inspectRun(seed) silently restored an old batch's
+    // postSnap (the original "INV7=5 ghost" bug).
+    if(!window._stressRuns) window._stressRuns=[];
+    var dupIdx=-1;
+    for(var k=0;k<window._stressRuns.length;k++){
+      if(window._stressRuns[k].seed===seed){dupIdx=k;break;}
+    }
+    if(dupIdx>=0){window._stressRuns[dupIdx]=result;} else {window._stressRuns.push(result);}
+    return result;
   }
 
   // Inspect helpers — restore the saved post-randomize state for a specific
