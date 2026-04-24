@@ -6261,6 +6261,8 @@ function boostBatchVegForDailyTarget(){
   // call). No affectedDays bookkeeping: this function grows a batch by
   // 0.25c at a time (~10-30 kcal); the balancer is NOT re-run because
   // the kcal drift is below meaningful thresholds.
+  var changed=false; // true if any batch veg was grown — return value
+                     // for the convergence loop's steady-state check.
   var leftovers=computeLeftovers();
   ['him','her'].forEach(function(p){
     DAYS.forEach(function(d){
@@ -6379,9 +6381,11 @@ function boostBatchVegForDailyTarget(){
             if(pbal[k].dbKey===picked.dbKey){pbal[k].amt=pbal[k].amt*factor;break;}
           }
         });
+        changed=true;
       }
     });
   });
+  return changed;
 }
 
 // ── Snap batch totals to per-serving grid ─────────────────────
@@ -6606,6 +6610,9 @@ function snapBatchTotalsToGrid(){
     });
     balanceDayMacros(ad.p,ad.d,slots,frozenSlots,sameDayCookServings);
   });
+  // Return true if any portion amount was mutated — lets a convergence
+  // loop skip further iterations when the pipeline reaches steady state.
+  return Object.keys(affectedDays).length > 0;
 }
 
 // ── Unify cross-person cook ratios ─────────────────────────────
@@ -6809,6 +6816,9 @@ function unifyCrossPersonRatios(){
     });
     balanceDayMacros(ad.p,ad.d,slots,frozenSlots,sameDayCookServings);
   });
+  // Return true if any batch ratio was mutated — lets a convergence
+  // loop skip further iterations when the pipeline reaches steady state.
+  return Object.keys(affectedDays).length > 0;
 }
 
 // ── Snap batch totals ──────────────────────────────────────────
@@ -6970,6 +6980,9 @@ function snapBatchTotals(){
     });
     balanceDayMacros(ad.p,ad.d,slots,frozenSlots,sameDayCookServings);
   });
+  // Return true if any batch total was mutated — lets a convergence
+  // loop skip further iterations when the pipeline reaches steady state.
+  return Object.keys(affectedDays).length > 0;
 }
 
 // ── Post-balance waste pass ────────────────────────────────────
@@ -6984,6 +6997,9 @@ function postBalanceWastePass(){
   // the batch total is already at the package boundary — so calling
   // this twice in a row is a no-op on the second call. The revert logic
   // also only fires when an adjustment was actually applied.
+  var anyCommitted=false; // true if ≥1 batch adjustment stayed applied
+                          // (not reverted) — return value for the
+                          // convergence loop's steady-state check.
   var leftovers=computeLeftovers();
 
   ['sun','wed'].forEach(function(trip){
@@ -7150,10 +7166,13 @@ function postBalanceWastePass(){
             var daySlots=_dayBalancedCache[pk(pc.p,pc.d)];
             if(daySlots&&daySlots[pc.s])daySlots[pc.s][pc.idx].amt=pc.oldAmt;
           });
+        } else {
+          anyCommitted=true;
         }
       });
     });
   });
+  return anyCommitted;
 }
 
 // ── Balance-adjuster pipeline ──────────────────────────────────
