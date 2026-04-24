@@ -6794,9 +6794,19 @@ function unifyCrossPersonRatios(){
 // ingredient's TOTAL batch to the unit grid (whole oz, 0.25 cup, etc.),
 // then split back proportionally across servings.
 function snapBatchTotals(){
-  // Don't invalidate — the prior step (unifyCrossPersonRatios) already has
-  // the cache populated with unified ratios. Wiping it here would discard
-  // the unification and regenerate independent balances.
+  // Idempotent on WRITES: the per-ingredient fast-path below
+  // (|snapped-totalBatch|<0.001) skips writes when the batch total is
+  // already on-grid — so calling this twice in a row is a no-op on the
+  // second call. affectedDays is populated only on actual writes, so the
+  // balancer re-run at the end is mutation-gated.
+  //
+  // The forEach loop below ensures all 14 day caches exist before this
+  // stage returns. Downstream `postBalanceWastePass` relies on this:
+  // its top guard `if(!_dayBalancedCache[pk('him','Monday')])invalidate`
+  // would otherwise wipe the whole cache mid-pipeline, destroying the
+  // just-computed unified+snapped state. getDayBalancedIngredients is
+  // a cache-hit short-circuit when the day is already built, so this
+  // loop is O(14) lookups on the second+ call (effectively free).
   ['him','her'].forEach(function(p){
     DAYS.forEach(function(d){ getDayBalancedIngredients(p,d); });
   });
@@ -6815,7 +6825,10 @@ function snapBatchTotals(){
         if(lo.sharedWith)return;
 
         var mealId=getMealId(p,d,s);
-        var cookBal=_dayBalancedCache[pk(p,d)];
+        // Lazy-build day cache: getDayBalancedIngredients returns cached
+        // entry when populated, builds from SEL when missing. Lets callers
+        // skip the old unconditional-rebuild-all-14-days loop.
+        var cookBal=getDayBalancedIngredients(p,d);
         if(!cookBal||!cookBal[s])return;
 
         // Each batch member is a distinct portion (servings=1). The detector's
@@ -6825,14 +6838,13 @@ function snapBatchTotals(){
         var portions=[]; // [{p, d, s, servings:1, bal}]
         var portionList=lo.portions||[{p:p,d:d,s:s}];
         portionList.forEach(function(pt){
-          var cache=_dayBalancedCache[pk(pt.p,pt.d)];
+          var cache=getDayBalancedIngredients(pt.p,pt.d);
           if(!cache||!cache[pt.s])return;
           portions.push({p:pt.p,d:pt.d,s:pt.s,servings:1,bal:cache[pt.s]});
         });
         if(portions.length<2)return;
 
         // For each ingredient, compute total batch, snap, redistribute
-        var anySnapped=false;
         var firstBal=portions[0].bal;
         firstBal.forEach(function(ingr,idx){
           var db=NUTRI_DB[ingr.dbKey];if(!db)return;
@@ -6873,10 +6885,14 @@ function snapBatchTotals(){
               if(snapped>maxAllowedSnap){snapped=Math.floor(maxAllowedSnap/grid)*grid;if(snapped<grid)snapped=grid;}
             }
           }
+          // Idempotency fast-path: if the batch total is already on-grid,
+          // skip the write. Lets this function no-op cleanly when called
+          // twice in a row or when cache already reflects snapped state.
           if(Math.abs(snapped-totalBatch)<0.001)return;
 
-          anySnapped=true;
-          // Redistribute proportionally
+          // Redistribute proportionally. affectedDays is set only here, so
+          // the balancer re-run is gated on actual mutation — a no-op pass
+          // leaves affectedDays empty and triggers zero balancer work.
           partAmts.forEach(function(pa){
             var share=(totalBatch>0)?(pa.contrib/totalBatch):0;
             var newContrib=snapped*share;
@@ -6897,7 +6913,7 @@ function snapBatchTotals(){
                 // matches the anchor day `d`. Prevents cross-batch pollution
                 // when the same meal has multiple independent cooks.
                 if(lo2.cookDay!==d)return;
-                var cache2=_dayBalancedCache[pk(pp.p,d2)];
+                var cache2=getDayBalancedIngredients(pp.p,d2);
                 if(cache2&&cache2[s2]&&cache2[s2][idx]&&cache2[s2][idx].dbKey===ingr.dbKey){
                   cache2[s2][idx].amt=newAmt;
                   if(!affectedDays[pp.p+'_'+d2])affectedDays[pp.p+'_'+d2]={p:pp.p,d:d2};
