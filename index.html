@@ -6978,15 +6978,12 @@ function snapBatchTotals(){
 // final balanced amounts to hit a clean package boundary. Revert any day
 // where the nudge breaks a primary goal.
 function postBalanceWastePass(){
-  // Ensure every day's balanced cache exists before iterating trips. The
-  // lazy-build inside getDayBalancedIngredients handles any day that a
-  // prior stage didn't touch — no need for the old "if him/Monday missing,
-  // wipe everything" guard (that guard was destructive: a single missing
-  // day caused invalidateDayBalancedCache to throw away 13 already-built
-  // days' worth of unified+snapped state).
-  ['him','her'].forEach(function(p){
-    DAYS.forEach(function(d){ getDayBalancedIngredients(p,d); });
-  });
+  // Idempotent: reads via getBalancedSlotIngredients (lazy-build via
+  // getDayBalancedIngredients when day cache missing). The per-batch
+  // fast-path (`|newBatchTotal-b.batchTotal|<0.001`) skips writes when
+  // the batch total is already at the package boundary — so calling
+  // this twice in a row is a no-op on the second call. The revert logic
+  // also only fires when an adjustment was actually applied.
   var leftovers=computeLeftovers();
 
   ['sun','wed'].forEach(function(trip){
