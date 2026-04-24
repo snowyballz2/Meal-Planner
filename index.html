@@ -518,7 +518,7 @@ var NUTRI_DB = {
   'shallot':               {kcal:30,  pro:1,  fat:0,   carb:7,   unit:'each', cupsEach:0.25, minAmt:1, maxAmt:3},
   'cucumber':              {kcal:11,  pro:0.5,fat:0.1, carb:2.4, unit:'cup', produce:{perWhole:1.5,label:'cucumber'}, minAmt:0.25, maxAmt:1.5},
   'red curry paste':{kcal:20,pro:0,fat:0,carb:4,unit:'tbsp',brand:'Maesri',minAmt:0.25,maxAmt:1},
-  'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', minAmt:0.25, maxAmt:1.5},
+  'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', minAmt:0.25, maxAmt:2},
   'white rice cooked':     {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', note:'short-grain / sushi-style white rice, cooked', minAmt:0.25, maxAmt:1.5},
   // Packaged / grab-and-go
   'rxbar':{kcal:180,pro:12,fat:6,carb:24,unit:'each',brand:'RXBar',altUnits:{g:52},wholeOnly:true,minAmt:1,maxAmt:2},
@@ -1539,12 +1539,13 @@ const MEALS=[
   ]},
 
  {id:'turkey_sweet_potato_hash',label:'Turkey & sweet potato hash',slots:['breakfast'],
-  steps:['Cube sweet potato small. Roast at 425°F 18–20 min (or pan-sauté covered 10 min).','Brown ground turkey in non-stick pan, breaking into crumbles.','Add bell pepper, cook 2 min.','Stir in sweet potato.','Crack egg into pan, cook sunny-side or scramble in. Season with black pepper.'],
+  steps:['Cube sweet potato small. Roast at 425°F 18–20 min (or pan-sauté covered 10 min).','Brown ground turkey in non-stick pan, breaking into crumbles.','Add bell pepper, cook 2 min.','Stir in sweet potato.','Whisk egg + egg whites together, pour into pan, scramble through the hash. Season with black pepper.'],
   him:{},her:{},
   ingredients:[
-    I('ground turkey 93',4,'protein'),
+    I('ground turkey 93',6,'protein'),
     I('egg whole',1,'protein'),
-    I('sweet potato',1,'carb'),
+    I('egg white',1,'protein'),
+    I('sweet potato',0.75,'carb'),
     I('bell pepper',0.5,'veg'),
     I('baby spinach',0.5,'veg'),
     I('black pepper',0.5,'fixed',false)
@@ -2081,13 +2082,13 @@ const MEALS=[
   steps:['Heat avocado oil in a large skillet over medium heat. Add shallots and cook 5 min until softened.','Add ginger and garlic, cook 2 min until fragrant.','Push aromatics to the side. Add red curry paste to the cleared space and press against the pan. Fry 30–60 sec, stirring — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1–2 min to thicken.','Add bell peppers and sauté 2–3 min. Add ground turkey and cook 7–8 min until no longer pink.','Add zucchini and simmer 5 min until tender.','Stir in spinach until wilted. Serve over warm jasmine rice (from rice cooker). Garnish with cilantro, lime wedges, red pepper flakes.'],
   him:{},her:{},
   ingredients:[
-    I('ground turkey 93',4,'protein'),
+    I('ground turkey 93',8,'protein'),
     I('zucchini',0.88,'veg'),
     I('bell pepper',0.5,'veg'),
     I('shallot',1,'veg'),
     I('baby spinach',0.5,'veg'),
     I('coconut milk',0.25,'liquid'),
-    I('jasmine rice cooked',1.25,'carb'),
+    I('jasmine rice cooked',1,'carb'),
     I('red curry paste',1,'condiment',false),
     I('avocado oil',0.125,'fat',false),
     I('ginger',0.125,'fixed',false),
