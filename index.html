@@ -7186,9 +7186,24 @@ function postBalanceWastePass(){
 // Unify runs TWICE by design: the waste pass nudges package-bearing
 // batches toward boundaries via scaling, which can desync cross-person
 // ratios; the second unify re-normalizes them before the final grid
-// snap + veg boost. All 5 stages are idempotent (cc3b439, d90b03d,
-// 41d1206, fa6589c, 2b07f6f+d0fcd14) so the "call twice" pattern is
-// safe — second calls are no-ops when the state is already consistent.
+// snap + veg boost.
+//
+// Why NOT a convergence loop: `snapBatchTotals` uses a BATCH grid
+// (per-serving × portions), while `snapBatchTotalsToGrid` uses a
+// PER-SERVING grid. The two grids aren't simultaneously satisfiable,
+// so gridSnap intentionally has the last word. Wrapping this in a
+// `while(changed)` loop creates cross-stage conflicts — snap undoes
+// gridSnap's work on iter 2, oscillating between grids. Tested two
+// loop forms: single-unify-per-iter produced an INV13 violation in
+// 1/100 seeds (gridSnap operating on post-waste desynced state);
+// u-twice-per-iter held INV13 but still broke byte-for-byte because
+// snap/gridSnap oscillation shifts leftover distributions. The
+// adjusters' `changed` returns (386cccf) remain available for
+// future use where a true convergence scenario applies.
+//
+// All 5 stages are idempotent (cc3b439, d90b03d, 41d1206, fa6589c,
+// 2b07f6f+d0fcd14) so the "call twice" pattern is safe — second
+// calls are no-ops when the state is already consistent.
 function runBalanceAdjusters(){
   unifyCrossPersonRatios();
   snapBatchTotals();
