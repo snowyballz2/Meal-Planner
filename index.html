@@ -6466,12 +6466,16 @@ function snapSoloSlotAmountsToGrid(){
 }
 
 function snapBatchTotalsToGrid(){
-  // Idempotent: reads via getBalancedSlotIngredients / getDayBalancedIngredients
-  // (both lazy-build when missing). The per-ingredient fast-path below
-  // (|snapped-total|<0.001) skips writes when the batch total is already
-  // on-grid — so calling this twice in a row is a no-op on the second call.
-  // affectedDays is populated only on actual writes, so the balancer re-run
-  // at the end is mutation-gated.
+  // Idempotent + self-unifying: calls unifyCrossPersonRatios() first to
+  // ensure kcal-proportional ratios before reading smallestShare. Without
+  // this, post-waste desynced state makes smallestShare artificially
+  // small, the per-portion floor blows up, the maxAmt cap pushes back,
+  // and a portion ends up below db.minAmt (INV13 violation).
+  //
+  // The internal unify is a fast-path no-op when already unified (per-
+  // ingredient write-skip tolerance 0.0001). Lets this function be safe
+  // in a convergence loop regardless of prior stage ordering.
+  unifyCrossPersonRatios();
   var leftovers=computeLeftovers();
   var affectedDays={};
   ['him','her'].forEach(function(p){
@@ -6721,10 +6725,34 @@ function unifyCrossPersonRatios(){
           // maxAmt enforcement: if any portion's post-scale amount would
           // exceed db.maxAmt, scale the WHOLE batch DOWN so the largest
           // portion lands at maxAmt. Preserves INV7 ratios.
+          //
+          // INFEASIBILITY CHECK: if floor-scale-up + maxAmt-cap-down leaves
+          // the smallest portion STILL below floor, the constraints can't be
+          // jointly satisfied (kcal-proportional ratio × portions-differ-too-
+          // much-in-kcal puts floor above maxAmt/largestPortion). In that
+          // case, giving up on floor enforcement produces a STABLE fixed
+          // point (pure kcal-proportional with only maxAmt capping); keeping
+          // the unsatisfiable floor scale-up would oscillate forever in a
+          // convergence loop because s/g re-snap back to cap-feasible amounts.
           if(db.maxAmt!=null){
             var maxScaledAmt=0;
             ideals.forEach(function(v){var scaled=v*scaleFactor;if(scaled>maxScaledAmt)maxScaledAmt=scaled;});
-            if(maxScaledAmt>db.maxAmt){scaleFactor=scaleFactor*(db.maxAmt/maxScaledAmt);}
+            if(maxScaledAmt>db.maxAmt){
+              var capFactor=db.maxAmt/maxScaledAmt;
+              // Projected smallest portion after cap-down.
+              var postCapMinIdeal=Infinity;
+              ideals.forEach(function(v){var cap=v*scaleFactor*capFactor;if(cap<postCapMinIdeal)postCapMinIdeal=cap;});
+              if(floor>0&&postCapMinIdeal<floor-0.0001){
+                // Infeasible: can't meet floor AND maxAmt. Abandon floor;
+                // use pure kcal-proportional with maxAmt cap only.
+                scaleFactor=1;
+                var maxIdealAtSF1=0;
+                ideals.forEach(function(v){if(v>maxIdealAtSF1)maxIdealAtSF1=v;});
+                if(maxIdealAtSF1>db.maxAmt){scaleFactor=db.maxAmt/maxIdealAtSF1;}
+              } else {
+                scaleFactor=scaleFactor*capFactor;
+              }
+            }
           }
 
           // Idempotency fast-path: if every portion's amount is already
@@ -6735,10 +6763,22 @@ function unifyCrossPersonRatios(){
           // whole number than what's currently stored.
           if(!db.wholeOnly){
             var needsWrite=false;
+            // Relative tolerance: 0.5% of portion amount, absolute floor
+            // 0.0001. Per-ingredient snap stages (each to its own grid)
+            // nudge cross-ingredient ratios by a sub-grid fraction every
+            // iteration; a tight 0.0001 absolute tolerance would force u
+            // to re-unify forever while snap immediately re-snaps. The
+            // 0.5% relative tolerance accepts this sub-INV7 (1%) drift
+            // as "unified enough", letting the convergence loop exit in
+            // 2-3 iterations. Downstream snap/gridSnap's fast-paths
+            // (0.001 absolute) are tighter, so post-u state that u
+            // accepts also satisfies s/g. (2026-04-25 convergence loop.)
             for(var wi=0;wi<portionItems.length;wi++){
               var pew=portionItems[wi]; if(!pew.item)continue;
               var target=ideals[wi]*scaleFactor;
-              if(Math.abs(pew.item.amt-target)>0.0001){needsWrite=true;break;}
+              var _d=Math.abs(pew.item.amt-target);
+              var _tol=Math.max(0.0001, 0.005*Math.abs(pew.item.amt));
+              if(_d>_tol){needsWrite=true;break;}
             }
             if(!needsWrite)return; // already unified for this ingredient
           }
@@ -7176,41 +7216,47 @@ function postBalanceWastePass(){
 }
 
 // ── Balance-adjuster pipeline ──────────────────────────────────
-// Runs the 5 idempotent balance-adjusters in the order that reliably
-// converges to a fully-balanced, grid-snapped, package-boundary-correct
-// state. Called twice in randomizeWeek — once inside the retry loop's
-// waste-zero measurement branch (to score candidates against true final
-// state), and once in the post-retry commitment block (when the winning
-// retry's cache wasn't restorable).
+// Convergence loop over 5 balance-adjusters. Each returns `true` if it
+// mutated state, `false` on fast-path no-op. Loop exits when the
+// DOWNSTREAM stages (s/w/g/b) all report no-change — the observable
+// pipeline output has reached steady state.
 //
-// Unify runs TWICE by design: the waste pass nudges package-bearing
-// batches toward boundaries via scaling, which can desync cross-person
-// ratios; the second unify re-normalizes them before the final grid
-// snap + veg boost.
+// Why u's return is NOT tracked for loop exit: `unifyCrossPersonRatios`
+// targets kcal-proportional ratios, while s/g snap to per-ingredient
+// grids. These fixed points aren't joint — each per-ingredient snap
+// introduces sub-grid drift that u sees as "needs re-unifying". But the
+// drift has no output effect: s/g fast-path on it, boost's veg target
+// is already met, waste's pkg boundaries hold. Only u itself keeps
+// twitching, asymptotically approaching its ideal at ~1% per iter.
+// Tracking u's return would force the loop to hit its safety cap on
+// most batches (confirmed empirically: 36/62 calls during testing).
+// Tracking only downstream stages lets the loop exit cleanly as soon
+// as OUTPUT-affecting state stabilizes. u still runs every iter (its
+// writes feed s/g's correctness), but its drift is accepted.
 //
-// Why NOT a convergence loop: `snapBatchTotals` uses a BATCH grid
-// (per-serving × portions), while `snapBatchTotalsToGrid` uses a
-// PER-SERVING grid. The two grids aren't simultaneously satisfiable,
-// so gridSnap intentionally has the last word. Wrapping this in a
-// `while(changed)` loop creates cross-stage conflicts — snap undoes
-// gridSnap's work on iter 2, oscillating between grids. Tested two
-// loop forms: single-unify-per-iter produced an INV13 violation in
-// 1/100 seeds (gridSnap operating on post-waste desynced state);
-// u-twice-per-iter held INV13 but still broke byte-for-byte because
-// snap/gridSnap oscillation shifts leftover distributions. The
-// adjusters' `changed` returns (386cccf) remain available for
-// future use where a true convergence scenario applies.
+// Ordering: unify → snap → waste → gridSnap → boost.
+// `gridSnap` self-unifies internally (fast-path no-op when already
+// unified), so the interim u₂ that existed in the pre-loop explicit
+// sequence is subsumed.
 //
-// All 5 stages are idempotent (cc3b439, d90b03d, 41d1206, fa6589c,
-// 2b07f6f+d0fcd14) so the "call twice" pattern is safe — second
-// calls are no-ops when the state is already consistent.
+// Diagnostic hooks at window._rbaDiag record per-iter mutations for
+// debugging future oscillation (if any downstream stage keeps firing).
 function runBalanceAdjusters(){
-  unifyCrossPersonRatios();
-  snapBatchTotals();
-  postBalanceWastePass();
-  unifyCrossPersonRatios();
-  snapBatchTotalsToGrid();
-  boostBatchVegForDailyTarget();
+  // Diagnostic hooks: opt-in via window._rbaDiagEnabled (set to true before
+  // calling to capture per-iter mutation flags in window._rbaDiag). When
+  // off (default), no allocations or bookkeeping — zero hot-path cost.
+  var _diag = (typeof window!=='undefined' && window._rbaDiagEnabled) ? (window._rbaDiag = window._rbaDiag || []) : null;
+  var _rec = _diag ? {iters:[]} : null; if(_rec)_diag.push(_rec);
+  var safety=6, changed=true;
+  while(changed && safety-->0){
+    changed=false;
+    var u=unifyCrossPersonRatios();                    // always run — feeds s/g; not tracked for exit
+    var s=snapBatchTotals();            if(s)changed=true;
+    var w=postBalanceWastePass();       if(w)changed=true;
+    var g=snapBatchTotalsToGrid();      if(g)changed=true;
+    var b=boostBatchVegForDailyTarget();if(b)changed=true;
+    if(_rec)_rec.iters.push({u:u,s:s,w:w,g:g,b:b});
+  }
 }
 
 function randomizeWeek(target, seed){
