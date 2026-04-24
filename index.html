@@ -3135,7 +3135,7 @@ function renderDayTabs(){
 var CAL_BASE=lsGet('mealPlannerCalBase',{him:2800,her:1900});
 var PRO_TARGET=lsGet('mealPlannerProTarget',{him:180,her:120});
 // Macro ratio limits: carbs < 50% of kcal calories, fat < 30% of kcal calories
-var MACRO_LIMITS={maxCarbPct:0.55,maxFatPct:0.30};
+var MACRO_LIMITS={maxFatPct:0.30}; // carbPct threshold is hardcoded in balanceDayMacros; no live reads of MACRO_LIMITS.maxCarbPct.
 // Ingredients the randomizer should avoid unless needed for macros/waste.
 // Phase 1 scoring adds a strong penalty per meal containing any of these
 // (3000/meal dominates typical calDiff). Reroll/swap phases filter them
@@ -3171,7 +3171,7 @@ function getDayBalancedIngredients(p,d){
   if(_dayBalancedCache[key])return _dayBalancedCache[key];
   const slots={};
   const frozenSlots={};
-  const leftovers=(typeof computeLeftovers==='function')?computeLeftovers():{};
+  const leftovers=computeLeftovers();
 
   // Classify leftover slots: same-day vs different-day.
   // Same-day leftovers are NOT added to slots before the balancer — the
@@ -3525,7 +3525,7 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
   // Solo-slot map for this (p,d) so bestTrim respects minAmtSolo (pan-oil
   // floor, aromatic quality) and doesn't trim avocado oil below 0.5 in a
   // solo breakfast, etc. computeLeftovers() is cached — cheap repeat call.
-  var _lvMap = (typeof computeLeftovers==='function') ? computeLeftovers() : {};
+  var _lvMap = computeLeftovers();
   function _isSoloSlot(s){
     var lo = _lvMap[sk(p,d,s)];
     var mts = (lo && !lo.isLeftover) ? (lo.totalServings || lo.servings || 1) : 1;
@@ -4435,6 +4435,69 @@ function verifyInvariants(){
     violations.push('INV'+invNum+' leftovers-eaten: '+p+' count='+eaten);
   });
 
+  // ── Invariant 17: Balancer view ↔ calcTotals consistency ──
+  // balanceDayMacros's internal dailyMacros() computes day kcal by iterating
+  // its slots map with a sameDayCookServings[slot] multiplier — correct only
+  // when the materialized same-day-leftover slot is NOT in the slots map.
+  // Post-pipeline reruns (unifyCrossPersonRatios, snapBatchTotalsToGrid) see
+  // a materialized cache; if they also apply mult=2, the portion is counted
+  // 3× (cook×2 + materialized leftover×1) — a ~500-700 kcal inflation that
+  // silently misleads the balancer. Conversely, forgetting to set mult when
+  // the leftover slot isn't materialized undercounts by one portion.
+  // calcTotals(p,d) sums each slot's balanced amount exactly once via the
+  // day-balanced cache — no mult, no ambiguity. If the balancer's view
+  // diverges by >2 kcal, the bookkeeping is broken. Hard invariant.
+  ['him','her'].forEach(function(p){
+    DAYS.forEach(function(d){
+      if(p!=='him'&&p!=='her')return;
+      var cache=_dayBalancedCache[pk(p,d)];
+      if(!cache)return;
+      // Reconstruct what balanceDayMacros's dailyMacros() WOULD see if it
+      // ran now: iterate cache slots, apply sameDayCookServings mult based
+      // on current leftover classification, add eat-outs + late snack.
+      var sameDayCookServings={};
+      Object.keys(cache).forEach(function(s){
+        var lo=leftovers[sk(p,d,s)];
+        if(!lo||lo.isLeftover||lo.crossPerson)return;
+        if(!lo.portions)return;
+        // same-day same-person batch: cook slot feeds 1+ leftover slots same day
+        lo.portions.forEach(function(pt){
+          if(pt.p!==p)return;
+          if(pt.d!==d)return;
+          if(pt.s===s)return; // skip the cook slot itself
+          // pt is a same-day same-person leftover portion
+          // If the leftover slot is ALREADY in cache (materialized), mult=1 is correct.
+          // If NOT, then we'd need mult=(portions count). The canonical
+          // getDayBalancedIngredients builds with mult=portions-for-cook-on-this-day.
+          // Here we check the STATE AS-IS: if cache[pt.s] is populated (materialized),
+          // don't set mult. If not, set mult to reflect the missing slot.
+          if(cache[pt.s]) return; // materialized — counted separately, no mult needed
+          sameDayCookServings[s]=(sameDayCookServings[s]||1)+1;
+        });
+      });
+      var balancerKcal=0;
+      Object.keys(cache).forEach(function(s){
+        var mult=sameDayCookServings[s]||1;
+        cache[s].forEach(function(i){
+          var db=NUTRI_DB[i.dbKey]; if(!db)return;
+          balancerKcal+=db.kcal*i.amt*mult;
+        });
+      });
+      SLOTS.forEach(function(s){
+        var eo=EAT_OUT[sk(p,d,s)];
+        if(eo)balancerKcal+=(eo.kcal||0);
+      });
+      var ls=LATE_SNACK[pk(p,d)];
+      if(ls)balancerKcal+=(ls.kcal||0);
+      var truthKcal=calcTotals(p,d).kcal;
+      if(Math.abs(balancerKcal-truthKcal)>2){
+        violations.push('INV17 balancer-truth-kcal: '+p+' '+d
+          +' balancer='+Math.round(balancerKcal)+' calcTotals='+truthKcal
+          +' drift='+Math.round(balancerKcal-truthKcal));
+      }
+    });
+  });
+
   return violations;
 }
 
@@ -4733,7 +4796,7 @@ function getSlotAdjustment(p,d,s){
   // package nudge, etc.) but dinner compensates.
   if(s==='dinner'&&getAdjTargets(p,d).dinner){
     let othersKcal=getShakeKcal(p,d);
-    const leftovers=(typeof computeLeftovers==='function')?computeLeftovers():{};
+    const leftovers=computeLeftovers();
     ['breakfast','lunch','snack'].forEach(function(other){
       const okey=sk(p,d,other);
       if(SKIPPED[okey])return;
@@ -4799,7 +4862,7 @@ function buildIngrEditRow(ing, amt, person, day, s, idx){
   // stored amount stays at full precision. Non-batch slots keep the
   // existing 3-decimal display — if those go fractional it's a bug we
   // want visible, not hidden by rounding.
-  const batchLo = (typeof computeLeftovers === 'function') ? computeLeftovers()[sk(person,day,s)] : null;
+  const batchLo = computeLeftovers()[sk(person,day,s)];
   const isBatchMember = !!(batchLo && (batchLo.isLeftover || (batchLo.totalServings && batchLo.totalServings > 1)));
   if (isBatchMember && amt > 0) {
     qtyHtml = qtyHtml.replace(/(<option value="[\d.]+" selected>)(\d+\.\d{2,})(<\/option>)/, function(m, pre, num, post){
@@ -5973,8 +6036,9 @@ function _fastTripWasteForPersons(days, persons){
   return w;
 }
 
-// Calculate package waste penalty for a set of meal selections
-// selections: {slotKey: mealId} map
+// Uniform-random pick from a non-empty array. Used by Phase 1 meal selection
+// and several reroll stages. (For seeded runs, Math.random is replaced
+// temporarily by randomizeWeek so picks are deterministic.)
 function randomPick(arr){return arr[Math.floor(Math.random()*arr.length)];}
 
 
@@ -6014,7 +6078,7 @@ function getLastWeekMealIds() {
 // creating gap=0 INV14 violations and per-portion under-budget cascades.
 function getRecentMealIds(dayIndex, days, lookback) {
   const recent = [];
-  const leftovers = (typeof computeLeftovers === 'function') ? computeLeftovers() : {};
+  const leftovers = computeLeftovers();
   // Same-day already-picked slots — covers cross-slot repeats Phase 1 would
   // otherwise create when iterating breakfast → lunch → snack → dinner.
   const todayDay = days[dayIndex];
@@ -6079,7 +6143,7 @@ function isBatchLeftoverEligible(d, s, mealId) {
   // a cook anchor or a leftover. Only anchors qualify — if the prev match is
   // itself a leftover, extending to today would form a NEW cook outside the
   // original 3-day batch window.
-  const los = (typeof computeLeftovers === 'function') ? computeLeftovers() : {};
+  const los = computeLeftovers();
   for (let b = 1; b <= 2; b++) {
     const prevIdx = dIdx - b;
     if (prevIdx < 0) continue;
@@ -6429,100 +6493,6 @@ function boostBatchVegForDailyTarget(){
   });
 }
 
-// ── Enforce hard 3c/serving veg cap ────────────────────────────
-// User requirement: no per-serving veg amount may exceed 3c, regardless of
-// recipe base or pipeline scaling. For batch members, scales the whole batch
-// down so max portion = 3c (preserves INV7 ratios). For solo slots, clamps
-// per-serving directly. Runs as the final step before verifyInvariants.
-function capVegPerServing(){
-  var leftovers=computeLeftovers();
-  var CAP=3;
-  ['him','her'].forEach(function(p){
-    DAYS.forEach(function(d){
-      ['breakfast','lunch','snack','dinner'].forEach(function(s){
-        if(SKIPPED[sk(p,d,s)]||EAT_OUT[sk(p,d,s)])return;
-        var bal=getBalancedSlotIngredients(p,d,s);
-        if(!bal)return;
-        var lo=leftovers[sk(p,d,s)];
-        bal.forEach(function(i,idx){
-          if(i.role!=='veg')return;
-          var db=NUTRI_DB[i.dbKey];
-          if(!db||db.unit!=='cup')return;
-          if(i.amt<=CAP)return;
-          // Part of a multi-portion batch? Scale WHOLE batch proportionally.
-          if(lo&&lo.portions&&lo.portions.length>1){
-            // Find max per-serving amount across portions for this ingredient.
-            var maxAmt=0;
-            lo.portions.forEach(function(pt){
-              var pbal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
-              if(!pbal)return;
-              for(var k=0;k<pbal.length;k++){
-                if(pbal[k].dbKey===i.dbKey){
-                  if(pbal[k].amt>maxAmt)maxAmt=pbal[k].amt;
-                  break;
-                }
-              }
-            });
-            if(maxAmt>CAP){
-              var factor=CAP/maxAmt;
-              lo.portions.forEach(function(pt){
-                var pbal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
-                if(!pbal)return;
-                for(var k=0;k<pbal.length;k++){
-                  if(pbal[k].dbKey===i.dbKey){pbal[k].amt=pbal[k].amt*factor;break;}
-                }
-              });
-            }
-          } else if(lo&&lo.isLeftover){
-            // Cross-person or time-shifted leftover: find the cook anchor and
-            // scale the batch from there (same approach as multi-portion case).
-            var cookedBy=lo.cookedBy||p;
-            var cookDay=lo.cookDay;
-            var mealId=getMealId(p,d,s);
-            var anchorLo=null;
-            ['lunch','dinner','breakfast','snack'].forEach(function(cs){
-              if(anchorLo)return;
-              var clo=leftovers[sk(cookedBy,cookDay,cs)];
-              if(clo&&!clo.isLeftover&&clo.portions&&getMealId(cookedBy,cookDay,cs)===mealId){
-                anchorLo=clo;
-              }
-            });
-            if(anchorLo&&anchorLo.portions){
-              var maxAmt2=0;
-              anchorLo.portions.forEach(function(pt){
-                var pbal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
-                if(!pbal)return;
-                for(var k=0;k<pbal.length;k++){
-                  if(pbal[k].dbKey===i.dbKey){
-                    if(pbal[k].amt>maxAmt2)maxAmt2=pbal[k].amt;
-                    break;
-                  }
-                }
-              });
-              if(maxAmt2>CAP){
-                var factor2=CAP/maxAmt2;
-                anchorLo.portions.forEach(function(pt){
-                  var pbal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
-                  if(!pbal)return;
-                  for(var k=0;k<pbal.length;k++){
-                    if(pbal[k].dbKey===i.dbKey){pbal[k].amt=pbal[k].amt*factor2;break;}
-                  }
-                });
-              }
-            } else {
-              // No anchor found — clamp this portion directly
-              i.amt=CAP;
-            }
-          } else {
-            // Solo slot: clamp per-serving directly
-            i.amt=CAP;
-          }
-        });
-      });
-    });
-  });
-}
-
 // ── Snap batch totals to per-serving grid ─────────────────────
 // Final cleanup after waste + re-unify. Batch totals must land on the
 // per-serving grid (1 oz, 0.25c, 0.5 tbsp) — sub-grid drift like 36.485 oz
@@ -6713,7 +6683,19 @@ function snapBatchTotalsToGrid(){
             var lo3=leftovers[sk(ad.p,ad.d,s3)];
             if(lo3&&lo3.isLeftover&&!lo3.crossPerson){
               frozenSlots[s3]=true;
-              sameDayCookServings[s2]=(sameDayCookServings[s2]||1)+1;
+              // NOTE: do NOT set sameDayCookServings[s2] here. At this point
+              // _dayBalancedCache already has the materialized same-day
+              // leftover slot populated (materializeSameDayLeftovers ran at
+              // the end of the getDayBalancedIngredients call that built
+              // this cache). Setting mult=2 on the cook slot WHILE the
+              // leftover slot is also present in `slots` causes
+              // dailyMacros() to count the portion 3× (cook×2 + leftover×1
+              // = 3), which silently inflates the balancer's view of day
+              // kcal by ~500-700 kcal — the balancer then over-trims other
+              // slots, producing kcalLow primary misses. Only the
+              // canonical getDayBalancedIngredients build path (line
+              // ~3196) should populate sameDayCookServings, because at
+              // that point the leftover slot is not yet materialized.
             }
           }
         });
@@ -6879,7 +6861,19 @@ function unifyCrossPersonRatios(skipRebuild){
             var lo3=leftovers[sk(ad.p,ad.d,s3)];
             if(lo3&&lo3.isLeftover&&!lo3.crossPerson){
               frozenSlots[s3]=true;
-              sameDayCookServings[s2]=(sameDayCookServings[s2]||1)+1;
+              // NOTE: do NOT set sameDayCookServings[s2] here. At this point
+              // _dayBalancedCache already has the materialized same-day
+              // leftover slot populated (materializeSameDayLeftovers ran at
+              // the end of the getDayBalancedIngredients call that built
+              // this cache). Setting mult=2 on the cook slot WHILE the
+              // leftover slot is also present in `slots` causes
+              // dailyMacros() to count the portion 3× (cook×2 + leftover×1
+              // = 3), which silently inflates the balancer's view of day
+              // kcal by ~500-700 kcal — the balancer then over-trims other
+              // slots, producing kcalLow primary misses. Only the
+              // canonical getDayBalancedIngredients build path (line
+              // ~3196) should populate sameDayCookServings, because at
+              // that point the leftover slot is not yet materialized.
             }
           }
         });
@@ -7438,6 +7432,11 @@ function randomizeWeek(target, seed){
 // and keeps every day within ±100 kcal of target.
 function applyTripFlexScaling(randTarget){
   const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  // Leftover map is stable across this function — SEL isn't mutated, only
+  // balanced ingredient amounts. Compute once at top instead of rebuilding
+  // per flex ingredient per trip (was ~28 rebuilds per randomize click).
+  invalidateLeftoverCache();
+  const leftovers = computeLeftovers();
   ['sun','wed'].forEach(function(trip){
     const days = TRIP_DAYS_STATIC[trip] || [];
     Object.keys(PKG_FLEX_CONFIG).forEach(function(dbKey){
@@ -7446,9 +7445,8 @@ function applyTripFlexScaling(randTarget){
       if (perPkg <= 0) return;
       const cfg = PKG_FLEX_CONFIG[dbKey];
 
-      // Find all cook-day usages of this ingredient in this trip
-      invalidateLeftoverCache();
-      const leftovers = computeLeftovers();
+      // Find all cook-day usages of this ingredient in this trip — reuses
+      // the leftover map hoisted above.
       const usages = []; // {p, d, s, idx, curAmt, lMult}
       let tripTotal = 0;
       days.forEach(function(d){
@@ -10078,7 +10076,7 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0};
     violations.forEach(function(v){
       var m=v.match(/^INV(\d+)/);if(!m)return;
       var key='INV'+m[1];if(counts[key]!==undefined)counts[key]++;
@@ -10244,7 +10242,7 @@ window.MPStress=(function(){
     var kcalBins={'<-150':0,'-150..-120':0,'-120..-100':0,'+100..+120':0,'+120..+150':0,'>+150':0};
     var fatBins={'30.0-30.2':0,'30.2-30.5':0,'30.5-31.0':0,'31.0-32.0':0,'>32.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
@@ -10560,15 +10558,18 @@ window.MPStress=(function(){
     lines.push('');
 
     // ── HARD INVARIANTS ─────────────────────────────────────────
-    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13'];
+    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17'];
     var firedHard=hardKeys.filter(function(k){return a.invTotals[k]>0;});
     lines.push('### Hard Invariants');
     lines.push('');
     if(firedHard.length===0){
-      lines.push('**all 0 ✓** (INV1-5, 7-13)');
+      lines.push('**all 0 ✓** (INV1-5, 7-13, 17)');
     }else{
       lines.push('**FAIL** — '+firedHard.map(function(k){return k+'='+a.invTotals[k];}).join(', '));
     }
+    // Dedicated row for INV17 so it's always surfaced, not buried under the
+    // "all 0" collapse. Lets the user spot balancer-view drift immediately.
+    lines.push('- INV17 (balancer↔calcTotals kcal): '+a.invTotals.INV17+(a.invTotals.INV17===0?' ✓':' ⚠ FIRING'));
     lines.push('');
 
     // ── TRACKING INVARIANTS ─────────────────────────────────────
