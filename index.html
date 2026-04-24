@@ -6597,13 +6597,12 @@ function snapBatchTotalsToGrid(){
 // Veg/fruit are locked to recipe amounts so they're skipped (ratio drift on
 // veg is negligible — kcal is tiny). Day balancer re-runs on each affected
 // day with cook/leftover slots frozen; free slots absorb macro drift.
-function unifyCrossPersonRatios(skipRebuild){
-  if(!skipRebuild){
-    invalidateDayBalancedCache();
-    ['him','her'].forEach(function(p){
-      DAYS.forEach(function(d){ getDayBalancedIngredients(p,d); });
-    });
-  }
+function unifyCrossPersonRatios(){
+  // Idempotent: callers don't need to pre-rebuild the day-balanced cache.
+  // Per portion, lazy-build via getDayBalancedIngredients (returns cached
+  // when populated, builds from SEL when missing). Per-ingredient fast-path
+  // below skips writes when ratios are already within tolerance — so
+  // calling this twice in a row is a no-op on the second call.
   var leftovers=computeLeftovers();
   var affectedDays={};
 
@@ -6623,11 +6622,14 @@ function unifyCrossPersonRatios(skipRebuild){
         if(Object.keys(peopleSet).length<2)return;
 
         // Gather each portion's balance + per-portion kcal.
+        // Lazy-build day cache: getDayBalancedIngredients returns cached
+        // entry when populated, builds from SEL when missing. Lets callers
+        // skip the old unconditional-rebuild step.
         var portionInfo=[];
         lo.portions.forEach(function(pt){
-          var cache=_dayBalancedCache[pk(pt.p,pt.d)];
-          if(!cache||!cache[pt.s])return;
-          var bal=cache[pt.s];
+          var slots=getDayBalancedIngredients(pt.p,pt.d);
+          if(!slots||!slots[pt.s])return;
+          var bal=slots[pt.s];
           var kcal=0;
           bal.forEach(function(i){var db=NUTRI_DB[i.dbKey];if(db)kcal+=db.kcal*i.amt;});
           portionInfo.push({p:pt.p,d:pt.d,s:pt.s,bal:bal,kcal:kcal});
@@ -6646,6 +6648,10 @@ function unifyCrossPersonRatios(skipRebuild){
         var baseAmts={};
         if(mealDef&&mealDef.ingredients)mealDef.ingredients.forEach(function(ri){baseAmts[ri.dbKey]=ri.amt;});
 
+        // Track whether any ingredient in this batch actually changed so we
+        // can skip the balancer re-run on days whose batches were already
+        // unified (idempotent on second+ calls).
+        var batchChanged=false;
         anchorInfo.bal.forEach(function(anchorItem){
           var db=NUTRI_DB[anchorItem.dbKey];if(!db)return;
           // Resolve per-portion floor: db.minAmt for flagged items (PB, oils,
@@ -6685,19 +6691,34 @@ function unifyCrossPersonRatios(skipRebuild){
           });
           // maxAmt enforcement: if any portion's post-scale amount would
           // exceed db.maxAmt, scale the WHOLE batch DOWN so the largest
-          // portion lands at maxAmt. Preserves INV7 ratios. Safe here now
-          // that postBalanceWastePass no longer splits batches across trips
-          // (the prior bug that caused cross-portion drift).
+          // portion lands at maxAmt. Preserves INV7 ratios.
           if(db.maxAmt!=null){
             var maxScaledAmt=0;
             ideals.forEach(function(v){var scaled=v*scaleFactor;if(scaled>maxScaledAmt)maxScaledAmt=scaled;});
             if(maxScaledAmt>db.maxAmt){scaleFactor=scaleFactor*(db.maxAmt/maxScaledAmt);}
           }
 
+          // Idempotency fast-path: if every portion's amount is already
+          // within tolerance of its target, skip the write. Lets this
+          // function no-op cleanly when called twice in a row or when
+          // cache already reflects unified state. wholeOnly items skip the
+          // fast-path because Math.round can always produce a different
+          // whole number than what's currently stored.
+          if(!db.wholeOnly){
+            var needsWrite=false;
+            for(var wi=0;wi<portionItems.length;wi++){
+              var pew=portionItems[wi]; if(!pew.item)continue;
+              var target=ideals[wi]*scaleFactor;
+              if(Math.abs(pew.item.amt-target)>0.0001){needsWrite=true;break;}
+            }
+            if(!needsWrite)return; // already unified for this ingredient
+          }
+
           portionItems.forEach(function(pe,idx){
             if(!pe.item)return;
             pe.item.amt=ideals[idx]*scaleFactor;
           });
+          batchChanged=true;
           // wholeOnly override: per-portion must be whole (can't serve 0.5 of a
           // tortilla or slice of toast). Break strict kcal-proportional split
           // here — each portion rounds to its own whole number, enforcing min
@@ -6715,9 +6736,13 @@ function unifyCrossPersonRatios(skipRebuild){
           }
         });
 
-        portionInfo.forEach(function(pi){
-          affectedDays[pi.p+'_'+pi.d]={p:pi.p,d:pi.d};
-        });
+        // Only flag affected-days when we actually wrote amounts. If the batch
+        // was already unified, skip the balancer re-run for its days too.
+        if(batchChanged){
+          portionInfo.forEach(function(pi){
+            affectedDays[pi.p+'_'+pi.d]={p:pi.p,d:pi.d};
+          });
+        }
       });
     });
   });
@@ -7204,7 +7229,7 @@ function randomizeWeek(target, seed){
       unifyCrossPersonRatios();
       snapBatchTotals();
       postBalanceWastePass();
-      unifyCrossPersonRatios(true);
+      unifyCrossPersonRatios();
       snapBatchTotalsToGrid();
       boostBatchVegForDailyTarget();
       goalMisses = 0;
@@ -7292,7 +7317,7 @@ function randomizeWeek(target, seed){
     unifyCrossPersonRatios();
     snapBatchTotals();
     postBalanceWastePass();
-    unifyCrossPersonRatios(true);
+    unifyCrossPersonRatios();
     snapBatchTotalsToGrid();
     // Last-resort veg boost for days stuck under 3c veg because their
     // only veg-bearing slot is a frozen batch leftover.
