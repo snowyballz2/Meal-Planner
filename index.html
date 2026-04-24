@@ -7156,6 +7156,29 @@ function postBalanceWastePass(){
   });
 }
 
+// ── Balance-adjuster pipeline ──────────────────────────────────
+// Runs the 5 idempotent balance-adjusters in the order that reliably
+// converges to a fully-balanced, grid-snapped, package-boundary-correct
+// state. Called twice in randomizeWeek — once inside the retry loop's
+// waste-zero measurement branch (to score candidates against true final
+// state), and once in the post-retry commitment block (when the winning
+// retry's cache wasn't restorable).
+//
+// Unify runs TWICE by design: the waste pass nudges package-bearing
+// batches toward boundaries via scaling, which can desync cross-person
+// ratios; the second unify re-normalizes them before the final grid
+// snap + veg boost. All 5 stages are idempotent (cc3b439, d90b03d,
+// 41d1206, fa6589c, 2b07f6f+d0fcd14) so the "call twice" pattern is
+// safe — second calls are no-ops when the state is already consistent.
+function runBalanceAdjusters(){
+  unifyCrossPersonRatios();
+  snapBatchTotals();
+  postBalanceWastePass();
+  unifyCrossPersonRatios();
+  snapBatchTotalsToGrid();
+  boostBatchVegForDailyTarget();
+}
+
 function randomizeWeek(target, seed){
   sharedSchedOpen=false;
   const randTarget=target||person; // use passed target or current person tab
@@ -7256,12 +7279,7 @@ function randomizeWeek(target, seed){
     if (totalWaste === 0) {
       applyTripFlexScaling(randTarget);
       invalidateLeftoverCache();
-      unifyCrossPersonRatios();
-      snapBatchTotals();
-      postBalanceWastePass();
-      unifyCrossPersonRatios();
-      snapBatchTotalsToGrid();
-      boostBatchVegForDailyTarget();
+      runBalanceAdjusters();
       goalMisses = 0;
       const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
       persons.forEach(function(p){
@@ -7340,18 +7358,11 @@ function randomizeWeek(target, seed){
     cacheFromWinner = false;
   }
   if (!cacheFromWinner) {
-    // Full 7-stage pipeline — runs only when cache wasn't restored from
+    // Full balance pipeline — runs only when cache wasn't restored from
     // winning retry, or when rerolls invalidated it.
     applyTripFlexScaling(randTarget);
     invalidateLeftoverCache();
-    unifyCrossPersonRatios();
-    snapBatchTotals();
-    postBalanceWastePass();
-    unifyCrossPersonRatios();
-    snapBatchTotalsToGrid();
-    // Last-resort veg boost for days stuck under 3c veg because their
-    // only veg-bearing slot is a frozen batch leftover.
-    boostBatchVegForDailyTarget();
+    runBalanceAdjusters();
   }
   // Final solo-slot grid snap — day-balancer/flex-scaling can leave non-batch
   // amounts sub-grid (honey 6.7586 tbsp etc). Runs last so the cache reaches
