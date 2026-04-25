@@ -10946,7 +10946,267 @@ window.MPStress=(function(){
     try{localStorage.removeItem(key);}catch(e){}
     console.log('[MPStress] '+(mode||'standard')+' baseline cleared');
   }
-  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect};
+
+  // ── Vegetable baseline collector ─────────────────────────────────
+  // Captures detailed per-veg-ingredient stats across N stress runs.
+  // Designed as a comparison baseline for evaluating future changes
+  // that affect veg amounts (e.g., the relaxation experiment).
+  //
+  // For every veg portion across all runs, records:
+  //   - per-portion amount distribution (min/max/mean/p25/p50/p75)
+  //   - shared vs solo split
+  //   - count below recipe-base floor (the "small eater" cases)
+  //   - distribution of "% of recipe base" for shared smallest portions
+  //   - count at db.maxAmt (cap-binding)
+  //   - count above db.maxAmt (would be INV13 fire — should be 0)
+  //   - count below db.minAmt (would be INV13 fire — should be 0)
+  //
+  // Aggregate metrics:
+  //   - per-day total veg cups (him/her avg)
+  //   - daily veg distribution
+  //   - most-skewed shared batches (largest min/max ratio)
+  //
+  // Saves to localStorage 'mealPlannerVegBaseline' for future delta diffs.
+  // Internal: collect veg data for one seed into a shared accumulator.
+  function _collectVegOneSeed(seed, acc){
+    var snap=snapshot();
+    try{randomizeWeek('shared', seed+1000000);}catch(e){restore(snap);throw e;}
+    clearTimeout(_selSaveTimer);
+
+    function ensureIng(dbKey){
+      if(!acc.ingrStats[dbKey])acc.ingrStats[dbKey]={
+        portions:[], sharedCount:0, soloCount:0,
+        belowMinCount:0, aboveMaxCount:0, atMaxCount:0,
+        sharedBelowFloorCount:0, sharedSmallestPctOfBase:[]
+      };
+      return acc.ingrStats[dbKey];
+    }
+    var leftovers=computeLeftovers();
+    ['him','her'].forEach(function(p){
+      DAYS.forEach(function(d){
+        var fv = computeDailyFV(p,d);
+        if(p==='him')acc.dayVegHim.push(fv.veg);
+        else acc.dayVegHer.push(fv.veg);
+        ['breakfast','lunch','snack','dinner'].forEach(function(s){
+          if(SKIPPED[sk(p,d,s)]||EAT_OUT[sk(p,d,s)])return;
+          var bal=getBalancedSlotIngredients(p,d,s);if(!bal)return;
+          var slotLo=leftovers[sk(p,d,s)];
+          var isSolo=!slotLo;
+          var mealId=getMealId(p,d,s);
+          var meal=getMeal(mealId);
+          var baseAmts={};
+          if(meal&&meal.ingredients)meal.ingredients.forEach(function(ri){baseAmts[ri.dbKey]=ri.amt;});
+          bal.forEach(function(bi){
+            if(bi.role!=='veg')return;
+            var db=NUTRI_DB[bi.dbKey];if(!db)return;
+            if(bi.amt<0.001)return;
+            var rec=ensureIng(bi.dbKey);
+            rec.portions.push(bi.amt);
+            if(isSolo)rec.soloCount++; else rec.sharedCount++;
+            if(db.minAmt!=null && bi.amt < db.minAmt - 0.001)rec.belowMinCount++;
+            if(db.maxAmt!=null){
+              if(bi.amt > db.maxAmt + 0.001)rec.aboveMaxCount++;
+              else if(Math.abs(bi.amt - db.maxAmt) < 0.001)rec.atMaxCount++;
+            }
+            var recipeBase = baseAmts[bi.dbKey];
+            if(!isSolo && recipeBase && bi.amt < recipeBase - 0.001){
+              rec.sharedBelowFloorCount++;
+              var pctOfBase = bi.amt / recipeBase;
+              rec.sharedSmallestPctOfBase.push(pctOfBase);
+              if(pctOfBase < 0.75){
+                acc.infeasibleBatches.push({seed:seed, meal:mealId, ingr:bi.dbKey, p:p, d:d, s:s, amt:bi.amt, base:recipeBase, pctOfBase:pctOfBase});
+              }
+            }
+          });
+        });
+      });
+    });
+    ['him','her'].forEach(function(p){
+      DAYS.forEach(function(d){
+        ['lunch','dinner'].forEach(function(s){
+          var lo=leftovers[sk(p,d,s)];
+          if(!lo||lo.isLeftover)return;
+          if(!lo.portions||lo.portions.length<2)return;
+          var anchorBal=getBalancedSlotIngredients(p,d,s);if(!anchorBal)return;
+          var mealId=getMealId(p,d,s);
+          anchorBal.forEach(function(bi){
+            if(bi.role!=='veg')return;
+            var amts=[];
+            lo.portions.forEach(function(pt){
+              var pbal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
+              if(!pbal)return;
+              for(var k=0;k<pbal.length;k++){
+                if(pbal[k].dbKey===bi.dbKey){amts.push(pbal[k].amt);break;}
+              }
+            });
+            if(amts.length<2)return;
+            var mn=Math.min.apply(null,amts), mx=Math.max.apply(null,amts);
+            if(mx>0)acc.sharedBatchSkew.push({seed:seed, meal:mealId, ingr:bi.dbKey, ratio:mn/mx, smallest:mn, largest:mx, portions:amts.length});
+          });
+        });
+      });
+    });
+    restore(snap);
+  }
+
+  function _newVegAcc(){
+    return {ingrStats:{}, dayVegHim:[], dayVegHer:[], sharedBatchSkew:[], infeasibleBatches:[]};
+  }
+
+  // Public: chunk-friendly collector. Pass `state` to accumulate across calls.
+  // Pass `finalize:true` (or omit, with no state) to build summary + save.
+  function collectVegBaseline(opts){
+    opts = (typeof opts === 'number') ? {runs:opts} : (opts||{});
+    var runs = (opts.runs != null) ? opts.runs : 100;
+    var startSeed = opts.startSeed || 12345;
+    var state = opts.state || null;
+    var finalize = (opts.finalize !== false);
+    var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
+    _applyStandardSharedSchedule();
+    var initSnap=snapshot();
+    try{
+      var acc = state || _newVegAcc();
+      for(var i=0;i<runs;i++){
+        _collectVegOneSeed(startSeed+i, acc);
+      }
+      if(!finalize) return acc;
+
+      // Aggregate per-ingredient
+      function pct(arr,p){
+        if(!arr.length)return 0;
+        var sorted=arr.slice().sort(function(a,b){return a-b;});
+        var idx=Math.floor(sorted.length*p/100);
+        return sorted[Math.min(idx,sorted.length-1)];
+      }
+      var ingrSummary={};
+      Object.keys(acc.ingrStats).forEach(function(k){
+        var r=acc.ingrStats[k];
+        var db=NUTRI_DB[k];
+        ingrSummary[k]={
+          total: r.portions.length,
+          shared: r.sharedCount,
+          solo: r.soloCount,
+          mean: r.portions.reduce(function(a,b){return a+b;},0)/r.portions.length,
+          min: Math.min.apply(null,r.portions),
+          max: Math.max.apply(null,r.portions),
+          p25: pct(r.portions,25),
+          p50: pct(r.portions,50),
+          p75: pct(r.portions,75),
+          dbMin: db?db.minAmt:null,
+          dbMax: db?db.maxAmt:null,
+          atMaxCount: r.atMaxCount,
+          aboveMaxCount: r.aboveMaxCount,
+          belowMinCount: r.belowMinCount,
+          sharedBelowFloorCount: r.sharedBelowFloorCount,
+          sharedBelowFloorPct: r.sharedCount>0?(r.sharedBelowFloorCount/r.sharedCount*100):0,
+          smallestPctOfBaseDistribution: {
+            p25: pct(r.sharedSmallestPctOfBase,25)*100,
+            p50: pct(r.sharedSmallestPctOfBase,50)*100,
+            p75: pct(r.sharedSmallestPctOfBase,75)*100,
+            min: r.sharedSmallestPctOfBase.length?Math.min.apply(null,r.sharedSmallestPctOfBase)*100:0
+          }
+        };
+      });
+
+      var dayVegHimAvg = acc.dayVegHim.reduce(function(a,b){return a+b;},0)/acc.dayVegHim.length;
+      var dayVegHerAvg = acc.dayVegHer.reduce(function(a,b){return a+b;},0)/acc.dayVegHer.length;
+      var dayVegHimMin = Math.min.apply(null,acc.dayVegHim);
+      var dayVegHerMin = Math.min.apply(null,acc.dayVegHer);
+
+      // Most-skewed shared batches
+      acc.sharedBatchSkew.sort(function(a,b){return a.ratio-b.ratio;});
+      var topSkewed = acc.sharedBatchSkew.slice(0,15);
+
+      // Top infeasible cases (most below floor)
+      acc.infeasibleBatches.sort(function(a,b){return a.pctOfBase-b.pctOfBase;});
+      var topInfeasible = acc.infeasibleBatches.slice(0,15);
+
+      var baseline = {
+        capturedAt: new Date().toISOString(),
+        runs: (state ? state._totalRuns||runs : runs),
+        ingredients: ingrSummary,
+        daily: {
+          him: {avg:dayVegHimAvg, min:dayVegHimMin, count:acc.dayVegHim.length},
+          her: {avg:dayVegHerAvg, min:dayVegHerMin, count:acc.dayVegHer.length}
+        },
+        sharedBatches: {
+          total: acc.sharedBatchSkew.length,
+          minSkewRatio: acc.sharedBatchSkew.length?acc.sharedBatchSkew[0].ratio:0,
+          medianSkewRatio: pct(acc.sharedBatchSkew.map(function(b){return b.ratio;}),50),
+          topMostSkewed: topSkewed
+        },
+        infeasibility: {
+          totalSharedBelowFloor: acc.infeasibleBatches.length,
+          topMostBelowFloor: topInfeasible
+        }
+      };
+      try{localStorage.setItem('mealPlannerVegBaseline',JSON.stringify(baseline));}catch(e){}
+      console.log('[MPStress] Veg baseline saved. '+Object.keys(ingrSummary).length+' ingredients, '+acc.sharedBatchSkew.length+' shared-batch instances, '+acc.infeasibleBatches.length+' below-floor cases.');
+      return baseline;
+    } finally {
+      restore(initSnap);
+      Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
+      Object.keys(userSched).forEach(function(k){SHARED_SCHEDULE[k]=userSched[k];});
+    }
+  }
+
+  // Print human-readable veg baseline summary.
+  function formatVegBaseline(b){
+    if(!b)b=JSON.parse(localStorage.getItem('mealPlannerVegBaseline')||'null');
+    if(!b)return 'No veg baseline saved. Run MPStress.collectVegBaseline() first.';
+    var lines=[];
+    var f=function(v,d){d=d==null?2:d;return v.toFixed(d);};
+    lines.push('## Vegetable Baseline');
+    lines.push('Captured: '+b.capturedAt+' · '+b.runs+' runs');
+    lines.push('');
+    lines.push('### Daily Veg Totals (cups)');
+    lines.push('| Person | Avg | Min | Sample |');
+    lines.push('|---|---|---|---|');
+    lines.push('| Him | '+f(b.daily.him.avg)+' | '+f(b.daily.him.min)+' | '+b.daily.him.count+' |');
+    lines.push('| Her | '+f(b.daily.her.avg)+' | '+f(b.daily.her.min)+' | '+b.daily.her.count+' |');
+    lines.push('');
+    lines.push('### Per-Ingredient (sorted by total portions)');
+    lines.push('| Ingredient | n (shared/solo) | dbMin | dbMax | min | p50 | mean | max | atMax | <floor (shared) |');
+    lines.push('|---|---|---|---|---|---|---|---|---|---|');
+    var ings=Object.keys(b.ingredients).sort(function(a,bk){return b.ingredients[bk].total-b.ingredients[a].total;});
+    ings.forEach(function(k){
+      var ig=b.ingredients[k];
+      lines.push('| '+k+' | '+ig.total+' ('+ig.shared+'/'+ig.solo+') | '+ig.dbMin+' | '+ig.dbMax+' | '+f(ig.min,3)+' | '+f(ig.p50,3)+' | '+f(ig.mean,3)+' | '+f(ig.max,3)+' | '+ig.atMaxCount+' | '+ig.sharedBelowFloorCount+' ('+f(ig.sharedBelowFloorPct,1)+'%) |');
+    });
+    lines.push('');
+    lines.push('### Below-Floor Distribution (shared veg, % of recipe base)');
+    lines.push('| Ingredient | min | p25 | p50 | p75 |');
+    lines.push('|---|---|---|---|---|');
+    ings.forEach(function(k){
+      var ig=b.ingredients[k];
+      if(ig.sharedBelowFloorCount===0)return;
+      var d=ig.smallestPctOfBaseDistribution;
+      lines.push('| '+k+' | '+f(d.min,1)+'% | '+f(d.p25,1)+'% | '+f(d.p50,1)+'% | '+f(d.p75,1)+'% |');
+    });
+    lines.push('');
+    lines.push('### Shared-Batch Skew');
+    lines.push('Total shared-veg batch instances: '+b.sharedBatches.total);
+    lines.push('Min skew ratio (smallest/largest portion): '+f(b.sharedBatches.minSkewRatio,3));
+    lines.push('Median skew ratio: '+f(b.sharedBatches.medianSkewRatio,3));
+    lines.push('');
+    lines.push('### Top 15 Most-Skewed Shared Batches');
+    lines.push('| seed | meal | ingr | smallest | largest | ratio |');
+    lines.push('|---|---|---|---|---|---|');
+    b.sharedBatches.topMostSkewed.forEach(function(s){
+      lines.push('| '+s.seed+' | '+s.meal+' | '+s.ingr+' | '+f(s.smallest,3)+' | '+f(s.largest,3)+' | '+f(s.ratio,3)+' |');
+    });
+    lines.push('');
+    lines.push('### Top 15 Most-Below-Floor Cases');
+    lines.push('Total shared-veg portions below recipe-base floor: '+b.infeasibility.totalSharedBelowFloor);
+    lines.push('| seed | meal | ingr | p/d/s | amt | base | % |');
+    lines.push('|---|---|---|---|---|---|---|');
+    b.infeasibility.topMostBelowFloor.forEach(function(c){
+      lines.push('| '+c.seed+' | '+c.meal+' | '+c.ingr+' | '+c.p+'/'+c.d+'/'+c.s+' | '+f(c.amt,3)+' | '+f(c.base,3)+' | '+f(c.pctOfBase*100,1)+'% |');
+    });
+    return lines.join('\n');
+  }
+
+  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline};
 })();
 
 </script>
