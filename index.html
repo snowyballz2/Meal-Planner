@@ -4379,6 +4379,25 @@ function verifyInvariants(){
     });
   });
 
+  // ── Invariant 18: runBalanceAdjusters cap-hit rate (tracking-only) ──
+  // The convergence loop has a 6-iter safety cap. The known infeasible-
+  // constraint cases (kcal-skewed batches where floor + maxAmt + ratio
+  // can't all hold) hit it ~3% of calls — accepted: u twitches at its
+  // ideal but downstream stages are stable. A rate >10% per randomize
+  // signals a NEW oscillation: something in the pipeline is mutating
+  // in a way the loop can't dampen within 6 iters. To investigate, run
+  // with `window._rbaDiagEnabled = true` and inspect window._rbaDiag —
+  // each entry's `iters` array shows which stages (u/s/w/g/b) fired
+  // per iteration. The stage that keeps returning true is the one to
+  // study next.
+  if(_rbaCallCount > 0){
+    var capPct = (_rbaCapHits/_rbaCallCount)*100;
+    if(capPct > 10){
+      violations.push('INV18 rba-cap-rate: '+_rbaCapHits+'/'+_rbaCallCount
+        +' calls hit safety cap ('+capPct.toFixed(1)+'%). Convergence loop may have a new oscillation source.');
+    }
+  }
+
   return violations;
 }
 
@@ -7241,12 +7260,22 @@ function postBalanceWastePass(){
 //
 // Diagnostic hooks at window._rbaDiag record per-iter mutations for
 // debugging future oscillation (if any downstream stage keeps firing).
+// INV18 counters — track convergence-loop cap-hit rate per randomize.
+// Reset at start of randomizeWeek; checked in verifyInvariants. Tracking-
+// only — a hit-cap rate >10% signals a new oscillation source (something
+// in the pipeline is mutating in a way that doesn't converge within 6
+// iters). When that happens, run with `window._rbaDiagEnabled = true`
+// and inspect window._rbaDiag for which stages keep firing on iter N.
+var _rbaCallCount = 0;
+var _rbaCapHits = 0;
+
 function runBalanceAdjusters(){
   // Diagnostic hooks: opt-in via window._rbaDiagEnabled (set to true before
   // calling to capture per-iter mutation flags in window._rbaDiag). When
   // off (default), no allocations or bookkeeping — zero hot-path cost.
   var _diag = (typeof window!=='undefined' && window._rbaDiagEnabled) ? (window._rbaDiag = window._rbaDiag || []) : null;
   var _rec = _diag ? {iters:[]} : null; if(_rec)_diag.push(_rec);
+  _rbaCallCount++;
   var safety=6, changed=true;
   while(changed && safety-->0){
     changed=false;
@@ -7257,10 +7286,17 @@ function runBalanceAdjusters(){
     var b=boostBatchVegForDailyTarget();if(b)changed=true;
     if(_rec)_rec.iters.push({u:u,s:s,w:w,g:g,b:b});
   }
+  // Hit safety cap: still `changed` after exhausting iterations.
+  if(changed) _rbaCapHits++;
 }
 
 function randomizeWeek(target, seed){
   sharedSchedOpen=false;
+  // Reset INV18 counters for this randomize. Each runBalanceAdjusters
+  // call within this randomize increments _rbaCallCount; cap-hits also
+  // increment _rbaCapHits. verifyInvariants reads the ratio at the end.
+  _rbaCallCount = 0;
+  _rbaCapHits = 0;
   const randTarget=target||person; // use passed target or current person tab
   // Optional seed: replaces Math.random with a deterministic PRNG for the
   // duration of this call. Used by the stress harness so failing cases are
@@ -10078,7 +10114,7 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0};
     violations.forEach(function(v){
       var m=v.match(/^INV(\d+)/);if(!m)return;
       var key='INV'+m[1];if(counts[key]!==undefined)counts[key]++;
@@ -10139,9 +10175,9 @@ window.MPStress=(function(){
     // run starts from this run's output (used by runStandard2 to simulate
     // real-world repeated Randomize clicks and exercise state-evolution paths).
     if(!opts.persistState) restore(snap);
-    // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16) from the "real fail" list
+    // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16, INV18) from the "real fail" list
     var nonInv6=violations.filter(function(v){
-      return !v.startsWith('INV6 ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ');
+      return !v.startsWith('INV6 ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ') && !v.startsWith('INV18 ');
     }).slice(0,30);
     // Extract INV15/16 leftover-eaten counts per person
     var leftoversEaten={him:0,her:0};
@@ -10151,7 +10187,10 @@ window.MPStress=(function(){
     });
     // Capture ALL INV14 violations (not just sampled) for investigation
     var inv14Violations=violations.filter(function(v){return v.startsWith('INV14 ');});
-    var result={mode:mode,seed:seed,config:cfg,days:days,invCounts:invCounts,invSample:violations.slice(0,20),invSampleNonInv6:nonInv6,vegCeilings:vegCeilings,leftoversEaten:leftoversEaten,picks:picks,inv14Violations:inv14Violations,timing:timing,postSnap:postSnap};
+    // INV18: capture rba cap-hit counts for this run. Useful for aggregate
+    // metrics even when no INV18 violation fires (rate ≤10%).
+    var rbaStats={callCount:_rbaCallCount, capHits:_rbaCapHits, capRate:_rbaCallCount?(_rbaCapHits/_rbaCallCount):0};
+    var result={mode:mode,seed:seed,config:cfg,days:days,invCounts:invCounts,invSample:violations.slice(0,20),invSampleNonInv6:nonInv6,vegCeilings:vegCeilings,leftoversEaten:leftoversEaten,picks:picks,inv14Violations:inv14Violations,rbaStats:rbaStats,timing:timing,postSnap:postSnap};
     // Fix A — auto-register in window._stressRuns so inspectRun(seed) finds
     // THIS run, not a stale entry from a prior batch. Replaces any existing
     // entry with the same seed so re-running a seed always picks up the
@@ -10244,12 +10283,14 @@ window.MPStress=(function(){
     var kcalBins={'<-150':0,'-150..-120':0,'-120..-100':0,'+100..+120':0,'+120..+150':0,'>+150':0};
     var fatBins={'30.0-30.2':0,'30.2-30.5':0,'30.5-31.0':0,'31.0-32.0':0,'>32.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
     var invSamples=[];
     var leftoversEatenTotal={him:0,her:0};
+    // INV18: rba cap-hit rate stats across runs.
+    var rbaCallsTotal=0, rbaCapHitsTotal=0, rbaMaxRate=0;
     // INV6 severity: parse `(+N%)` from each INV6 sample and bucket by
     // drift magnitude. Lets the report show the distribution so a few
     // extreme distortions stand out from a long tail of minor ones.
@@ -10264,6 +10305,11 @@ window.MPStress=(function(){
       if(r.leftoversEaten){
         leftoversEatenTotal.him+=r.leftoversEaten.him||0;
         leftoversEatenTotal.her+=r.leftoversEaten.her||0;
+      }
+      if(r.rbaStats){
+        rbaCallsTotal+=r.rbaStats.callCount||0;
+        rbaCapHitsTotal+=r.rbaStats.capHits||0;
+        if(r.rbaStats.capRate>rbaMaxRate)rbaMaxRate=r.rbaStats.capRate;
       }
       // INV6 severity buckets — parse from invSample which contains up to 20
       // violations per run. Representative sample, not exhaustive, but good
@@ -10392,7 +10438,7 @@ window.MPStress=(function(){
       missCounts:missCounts,
       kcalBins:kcalBins,fatBins:fatBins,vegBins:vegBins,
       invTotals:invTotals,
-      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&invTotals[k]>0;}),
+      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&invTotals[k]>0;}),
       // INV13 is separate because thresholds are being rolled out — ingredients without min/max are implicitly exempt.
       invSamples:invSamples,
       topMeals:topMeals,
@@ -10401,6 +10447,15 @@ window.MPStress=(function(){
       avgLeftoversEaten:{
         him:runs.length>0?leftoversEatenTotal.him/runs.length:0,
         her:runs.length>0?leftoversEatenTotal.her/runs.length:0
+      },
+      // INV18: aggregate cap-hit metrics across all runBalanceAdjusters
+      // calls in this batch. avgRate is the OVERALL rate (all runs pooled);
+      // worstRunRate is the highest per-run rate observed.
+      rbaCap:{
+        totalCalls:rbaCallsTotal,
+        totalHits:rbaCapHitsTotal,
+        avgRate:rbaCallsTotal>0?(rbaCapHitsTotal/rbaCallsTotal):0,
+        worstRunRate:rbaMaxRate
       },
       inv6Severity:inv6Severity,
       inv6MaxPct:inv6MaxPct,
@@ -10505,7 +10560,7 @@ window.MPStress=(function(){
     var cur={
       primary: a.primaryHitRate*100,
       inv14: a.inv14Breakdown.total,
-      hardFail: Object.keys(a.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&a.invTotals[k]>0;}).length,
+      hardFail: Object.keys(a.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&a.invTotals[k]>0;}).length,
       closedPct: (function(){
         var ta=0,tc=0;
         ['breakfast','lunch','dinner','snack'].forEach(function(s){
@@ -10614,6 +10669,8 @@ window.MPStress=(function(){
       lines.push('| INV14 | cook-within-5d | '+baseline.inv14+' | '+a.inv14Breakdown.total+' (him='+a.inv14Breakdown.byPerson.him+' her='+a.inv14Breakdown.byPerson.her+') | '+delta(a.inv14Breakdown.total,baseline.inv14,'')+' |');
       lines.push('| INV15 | leftovers/wk (him) | '+(baseline.inv15Him!=null?f(baseline.inv15Him,1):'—')+' | '+f(a.avgLeftoversEaten.him,1)+' | '+(baseline.inv15Him!=null?delta(a.avgLeftoversEaten.him,baseline.inv15Him,''):'—')+' |');
       lines.push('| INV16 | leftovers/wk (her) | '+(baseline.inv16Her!=null?f(baseline.inv16Her,1):'—')+' | '+f(a.avgLeftoversEaten.her,1)+' | '+(baseline.inv16Her!=null?delta(a.avgLeftoversEaten.her,baseline.inv16Her,''):'—')+' |');
+      var rbaCurStr=f(a.rbaCap.avgRate*100,1)+'% avg, '+f(a.rbaCap.worstRunRate*100,1)+'% worst-run';
+      lines.push('| INV18 | rba cap-hit rate | '+(baseline.inv18AvgPct!=null?(f(baseline.inv18AvgPct,1)+'%'):'—')+' | '+rbaCurStr+' | '+(baseline.inv18AvgPct!=null?delta(a.rbaCap.avgRate*100,baseline.inv18AvgPct,'pp'):'—')+' |');
     }else{
       lines.push('| INV | Metric | Value |');
       lines.push('|---|---|---|');
@@ -10622,6 +10679,7 @@ window.MPStress=(function(){
       lines.push('| INV14 | cook-within-5d | '+inv14Val+' |');
       lines.push('| INV15 | leftovers eaten/wk (him) | '+f(a.avgLeftoversEaten.him,1)+' |');
       lines.push('| INV16 | leftovers eaten/wk (her) | '+f(a.avgLeftoversEaten.her,1)+' |');
+      lines.push('| INV18 | rba cap-hit rate | '+f(a.rbaCap.avgRate*100,1)+'% avg ('+a.rbaCap.totalHits+'/'+a.rbaCap.totalCalls+'), '+f(a.rbaCap.worstRunRate*100,1)+'% worst-run |');
     }
     if(a.inv14Breakdown.total>0){
       var gapStr=Object.keys(a.inv14Breakdown.byGap).filter(function(g){return a.inv14Breakdown.byGap[g]>0;}).map(function(g){return 'gap'+g+'d='+a.inv14Breakdown.byGap[g];}).join(', ');
@@ -10856,7 +10914,8 @@ window.MPStress=(function(){
       inv14: agg.inv14Breakdown.total,
       inv15Him: (agg.avgLeftoversEaten&&agg.avgLeftoversEaten.him)||0,
       inv16Her: (agg.avgLeftoversEaten&&agg.avgLeftoversEaten.her)||0,
-      hardFail: Object.keys(agg.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&agg.invTotals[k]>0;}).length,
+      inv18AvgPct: agg.rbaCap?(agg.rbaCap.avgRate*100):0,
+      hardFail: Object.keys(agg.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&agg.invTotals[k]>0;}).length,
       closedPct: (function(){
         var ta=0,tc=0;
         ['breakfast','lunch','dinner','snack'].forEach(function(s){

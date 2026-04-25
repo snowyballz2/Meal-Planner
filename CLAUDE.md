@@ -4,7 +4,7 @@ Single-file HTML/JS PWA (`index.html`, ~10,300 lines) for two people ("Him"/"Her
 
 ## ⚠ Invariant & Communication Rules (read first)
 
-**Invariants are contracts, not targets.** Any INV1–5 / INV7–12 violation — even one, even "rare," even "can't reproduce" — is a bug and MUST be investigated until root-caused. The following justifications are banned in this repo:
+**Invariants are contracts, not targets.** Any hard-INV violation (INV1–5, INV7–13, INV17) — even one, even "rare," even "can't reproduce" — is a bug and MUST be investigated until root-caused. The following justifications are banned in this repo:
 
 - "stochastic edge"
 - "close enough" / "within tolerance"
@@ -15,7 +15,7 @@ Single-file HTML/JS PWA (`index.html`, ~10,300 lines) for two people ("Him"/"Her
 
 If an INV fires and you can't reproduce it, that means **you haven't instrumented enough yet** — add logging, bisect seeds, trace the pipeline step-by-step. Do not close the investigation with a dismissive framing. A historical precedent this rule prevents: INV7 drift in this repo was hand-waved as "stochastic" for multiple sessions; the actual cause was `postBalanceWastePass` splitting cross-trip batches, producing different scale factors on the same batch's portions. The invariants were doing their job; the investigators were not.
 
-Only INV6 is tracking-only (explicitly documented as such). Everything else is hard.
+Tracking-only invariants (INV6, INV14, INV15, INV16, INV18) are signals, not bugs — they emit informational data but don't count toward "hard fail" totals. Everything else is hard. See the table below for current status of each.
 
 **Communication rules** (user-enforced):
 - No sugarcoating results. If a fix is "neutral" or "noise," say so — do not spin it as "structurally sound" to keep it in.
@@ -181,7 +181,7 @@ Every `randomizeWeek` call runs the full sequence on the best retry:
 7. `unifyCrossPersonRatios(true)` — second unify (skipRebuild), restores ratios that waste nudging may have desynced
 8. `snapBatchTotalsToGrid()` — **floor-aware final snap**. Snaps each batch total to per-serving grid (NEAREST). If snapping down would drop any portion below its floor, snaps UP instead. Re-runs balancer on affected days with batch slots frozen.
 9. `boostBatchVegForDailyTarget()` — last-resort booster. When a day is under 3c veg and all non-batch veg is maxed, grows the batch's veg total by +0.25c at a time and redistributes proportionally across all portions (preserves INV7 ratios).
-10. `verifyInvariants()` — runs INV1–16; INV6, INV14, INV15, INV16 are tracking-only (don't count as fails)
+10. `verifyInvariants()` — runs INV1–18; INV6, INV14, INV15, INV16, INV18 are tracking-only (don't count as fails)
 11. `renderMeals()` + `autoSaveWeek()`
 
 **Retry loop** (30 outer iterations of `_randomizeWeekCore`, then lexicographic best by waste→misses) NOW runs the full post-balance pipeline INSIDE each retry's measurement — so the goal-miss count reflects the actual final state, not pre-snap estimates. Fixed this session: previously the retry selector saw pre-snap numbers and committed to combos that drifted post-snap.
@@ -293,7 +293,7 @@ GitHub Gist API push/pull with per-slot timestamp merge (last-write-wins). Syncs
 
 ## Runtime Invariants
 
-`verifyInvariants()` runs after every `randomizeWeek`. Any violation warns to console with a specific message. **>0 violations = bug** (except INV6, which is tracking-only).
+`verifyInvariants()` runs after every `randomizeWeek`. Any violation warns to console with a specific message. **>0 violations = bug** (except tracking-only INV6/14/15/16/18).
 
 **Full detailed rules: see [INVARIANTS.md](INVARIANTS.md)** — standalone quick-reference with expanded rule text.
 
@@ -315,6 +315,8 @@ GitHub Gist API push/pull with per-slot timestamp merge (last-write-wins). Syncs
 | **INV14** | Per person, no two NEW cooks (non-leftover) of the same meal within 5 days (lunch/dinner only). Breakfast/snack exempt — pool too small | exact | **tracking-only** (promote when breakfast normalization grows pool) |
 | **INV15** | Tracking-only: count of lunch/dinner leftovers **him** eats per week (regardless of cook). MPStress aggregates as `avgLeftoversEaten.him` | — | **tracking-only** |
 | **INV16** | Tracking-only: count of lunch/dinner leftovers **her** eats per week. MPStress aggregates as `avgLeftoversEaten.her` | — | **tracking-only** |
+| **INV17** | Balancer↔calcTotals kcal canary: `balanceDayMacros.dailyMacros()` view matches `calcTotals(p,d)` per person-day. Catches `sameDayCookServings` double-count/under-count bugs in post-pipeline re-runs (silent ~500-700 kcal drift) | within 2 kcal | hard |
+| **INV18** | `runBalanceAdjusters` convergence-loop cap-hit rate: per-randomize, ≤10% of calls may hit the 6-iter safety cap. Higher rate signals a new oscillation source (something mutating in a way the loop can't dampen). Investigate via `window._rbaDiagEnabled = true` + inspect `window._rbaDiag` to find which stage keeps firing | ≤10% per run | **tracking-only** |
 
 ## CSS Architecture
 
