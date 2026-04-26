@@ -539,6 +539,30 @@ Post-retry (in `randomizeWeek` outer loop):
 - Shared-schedule config: Mon/Wed/Fri/Sun dinners + Wed lunch (applied automatically by runStandard, restored after)
 - Baseline saved to localStorage via `MPStress.saveBaseline(agg)` — shows delta against saved baseline in the Key Metrics block. Current saved: primary 98.64, INV14=1, hard=0, closed-off 0.0%, variance 94.4%.
 
+### MPStress baseline schema (persistent convention as of 2026-04-26)
+
+`saveBaseline(agg)` captures rich severity data so any future run can delta against it. The baseline payload (under `localStorage['mealPlannerStressBaseline']` for Test 1, `mealPlannerStressBaseline2` for Test 2) includes:
+
+**Summary metrics** (existing): `primary`, `inv6`, `inv14`, `inv15Him`, `inv16Her`, `inv18AvgPct`, `hardFail`, `closedPct`, `avgVariance`, `missCounts`, `timingAvg`, `mode`, `savedAt`.
+
+**Severity / detail** (added 2026-04-26):
+- `inv18WorstRunPct` — worst single-run cap-hit rate
+- `invTotals` — full per-invariant count breakdown for ALL 18 INVs. Lets future runs detect any individual invariant's count change (e.g., "INV2 went from 0→3" surfaces immediately even if it doesn't show up in the rolled-up tracking metrics).
+- `inv6Severity` — drift-bucket distribution (`<60%`, `60-80%`, `80-100%`, `100-150%`, `150-200%`, `200-300%`, `>300%`). Catches "same INV6 total, worse shape" regressions where the count holds but the heavy-tail buckets fill up.
+- `inv6MaxPct` — max drift % observed
+- `inv6TopMeals` — top 10 offenders with counts. `formatReport` shows NEW vs RESOLVED diff against baseline.
+- `inv14Breakdown` — `{total, perRun, byPerson{him,her}, byGap{0..4}, topMeals[5]}` for full INV14 detail.
+
+**`formatReport` output** (when baseline loaded):
+- Severity table renders as `| Bucket | Baseline | Current | Δ |` instead of flat counts
+- Max drift line shows `(baseline X%, ±Y pp)`
+- Top offenders surface a `_Diff vs baseline: NEW [...] RESOLVED [...]_` line
+- New section **"Per-Invariant Totals — Changed vs Baseline"** appears whenever any individual INV count differs from baseline (suppressed when fully unchanged)
+
+**Convention going forward**: every `saveBaseline()` call captures the full severity payload. Reports compare richly. Don't strip fields back to the legacy summary set unless deliberately migrating away.
+
+**Important caveat**: cumulative metrics (INV6 total, INV15/16 weekly counts) scale with `nRuns`. A 25-seed report compared to a 100-seed baseline shows a `-75` delta on INV15/16 that's purely the denominator difference, not a real change. Always run the same N (typically 100) to compare apples to apples; the baseline's `runs` field could be added if future tooling needs to normalize.
+
 ## Session 2026-04-18 — Major Structural Work
 
 ### Threshold system extensions
@@ -1200,3 +1224,148 @@ Veg baseline saved: `localStorage['mealPlannerVegBaseline']` (100 runs, 18 veg i
 - INV6 audit: tracking-only at ~2.75/run currently. Top offenders are structural.
 - Test 2 (`runStandard2`) — randomized + state-evolving stress mode. Last measured 99.36% primary in prior session; baseline localStorage key `mealPlannerStressBaseline2`. Worth re-running to confirm no regression from this session's work.
 - 60-retry timing budget — could be relaxed if user wants snappier interactive clicks.
+
+## Session 2026-04-26 — Audit pass, INV9/INV11 dead-fixes, INV19, dry/cooked shopping conversion
+
+Big consolidation session. Drilled into the recent rewrite (Stage 2 / convergence loop / recipe-side veg fix), spawned 4 parallel audit agents, validated each finding, applied fixes only to verified bugs, then continued into recipe-data quality work.
+
+### Audit findings — what was real vs false alarm
+
+**HIGH (3 of 6 real)**:
+- **H3 onIngrAmt/onIngrSwap missing invalidation** ✅ REAL. UI dropdown edits showed stale balanced numbers post-randomize. Fixed: `invalidateLeftoverCache()` before `renderMeals()` in both handlers.
+- **H5 `_totalRuns` never written** ✅ REAL but cosmetic. Multi-chunk veg baseline reported wrong run count. Fixed.
+- **H6 INV3 tolerance 0.05** ✅ REAL but cosmetic. Tightened to 0.001 (both sides read same cache; 0.05 was way too generous). Error format upgraded to 3 decimals.
+- H1 OVERRIDES retry leak ❌ NOT a bug. Phase 1's `clearOverrides` at [index.html:8250](index.html:8250) wipes per-slot every retry. Audit missed this.
+- H2 revert deletes pre-existing override ❌ Logic bug but unreachable. Triggering state (Case 3, dbKey-only override surviving Phase 1) doesn't form under current call patterns.
+- H4 INV17 over-counts on EAT_OUT leftover ❌ NOT a bug. `computeLeftovers` filters EAT_OUT/SKIPPED at [2601](index.html:2601), so `lo.portions` never contains those slots; INV17's reconstructor matches reality.
+
+**MEDIUM (8 of 13 real)**:
+- **INV9 dead-code** ✅ REAL. Both predicates always false after early return. Fixed via Option 4: extracted `cardShowsCombinedHeader(lo)` helper, both render paths AND INV9 verifier call it (single source of truth). Render-helper regression now fires INV9.
+- **INV11 dead-code** ✅ REAL (second dead invariant!). Old grouping was `gap≤2 = same group`, but firing required `gapDays<2`. Splits required `gap≥3`, guaranteeing `gapDays≥2`. Predicate could not fire. Fixed: iterate cook anchors directly via `lo.portions`, find each batch's last day, compare consecutive batches' actual gap. Restricted to lunch/dinner (matches detector's `cookSlots` + INV14 exclusion of small breakfast/snack pools). Verified: planted [Mon,Tue]+[Thu,Fri] same-meal now fires; gap=2-day arrangement correctly doesn't fire.
+- **`unifyCrossPersonRatios` wholeOnly fast-path skipped** ✅ REAL (perf). Fixed: round-equality check skips redundant balancer re-runs on tortilla/toast/eggs/celery batches when nothing changed.
+- **`frozenSlots` 3× duplication** ✅ REAL. Extracted `_buildPostPipelineFrozenSlots(p, d, slots, leftovers)` helper at [2718](index.html:2718). Three sites (unify/snap/snapToGrid) now share one implementation; load-bearing `sameDayCookServings` no-populate comment preserved in helper.
+- **`sameDayCookServings={}` dead in 3 callsites** ✅ REAL — eliminated as part of helper extract.
+- **Inline waste calc dup** ✅ REAL (your question, [retry-loop:7340](index.html:7340)). Replaced ~47 lines with `_fastTripWasteForPersons` calls.
+- **`bestCaches.dayBalanced` shared refs** ✅ REAL (sharp edge). Now deep-clones on restore in both `randomizeWeek` and `MPStress.restore`. Symmetric with `_leftoverCache` clone.
+- **`snapToGrid` `affectedDays` set unconditionally** ✅ REAL (defensive cleanup). Moved flag inside the `if(cache && cache[pc.s])` block — flag now only fires on actual mutations.
+- **INV13 zero-skip** ❌ NOT a bug after drill-in. Only fat-drop in `adjustIngredients` zeros minAmt items, and that's intentional. Skip is correct coverage.
+- **`_rbaCallCount`/`_rbaCapHits` exception safety** ❌ NOT a bug. Reset at top of every `randomizeWeek`.
+- **INV18 accumulation threshold** ❌ NOT a bug. Math: 1/11 = 9.09% < 10% threshold.
+- **snapBatchTotals fast-path skips leftover propagation** ❌ NOT a bug. Propagation block is dead-defense.
+- **`unify` `affectedDays` gap on missing portion cache** ❌ NOT a bug. `lo.portions` never has missing slots (EAT_OUT filter).
+
+### Cosmetic batch (all applied)
+- 4× `typeof X === 'function'` removed for hoisted top-level functions ([2687, 6088, 7765, 9966](index.html:2687))
+- Stale comment at [7332](index.html:7332) misattributing invalidate to `countInv14` — corrected
+- Stale comment at [10367](index.html:10367) about INV13 "rolled out" — updated to current state
+- Redundant `invalidateLeftoverCache()` after `applyTripFlexScaling` at [7397, 7480](index.html:7397) — removed (function invalidates internally)
+- `rerollKcalOffSnacks` silent "shouldn't happen" bail at [7783](index.html:7783) — replaced direct cache-read with `getDayBalancedIngredients(p,d)` lazy build
+- INV5 tolerance: 5 → 1 kcal; `computeCardMacros` now sums-then-rounds (matches INV5 reconstruction strategy, eliminates 5-kcal slack)
+
+### Invariant verification (all 18)
+Inject-and-verify across all hard INVs. Every one fires when its violation is injected:
+
+| INV | Verified by | Result |
+|---|---|---|
+| INV1 | corrupted same-person leftover amt | 1 fire ✓ |
+| INV2 | patched calcTotals +50 kcal | 14 fires ✓ |
+| INV3 | patched buildShoppingList +0.5/item | 116 fires ✓ |
+| INV4 | removed flex config for ground turkey | 2 fires ✓ |
+| INV5 | patched computeCardMacros +10 kcal | 56 fires ✓ |
+| INV7 | skewed cross-person portion 1.5× | 1 fire ✓ |
+| INV8 | wrote 0.137 to solo amt | 1 fire ✓ |
+| INV9 | simulated render-helper regression | 4 fires ✓ |
+| INV10 | added synthetic veg-less lunch meal | 1 fire ✓ |
+| INV11 | planted [Mon,Tue]+[Thu,Fri] same-meal | 1 fire ✓ (after fix) |
+| INV12 | inflated `lo.totalServings` | 1 fire ✓ |
+| INV13 | wrote `maxAmt+0.5` | 1 fire ✓ |
+| INV17 | added phantom slot to cache | 1 fire ✓ |
+
+Tracking-only invariants confirmed emitting (INV6 ~123/run, INV14 0, INV15/16 ~2.8 each, INV18 cap-rate 3.1% avg).
+
+### MPStress baseline schema enriched (persistent convention)
+
+`saveBaseline(agg)` now captures rich severity payload — see "MPStress baseline schema" section above for the full breakdown. Added fields: `inv18WorstRunPct`, `invTotals` (all 18 INVs), `inv6Severity` (drift buckets), `inv6MaxPct`, `inv6TopMeals` (top 10), `inv14Breakdown` (gaps + per-person + top offenders).
+
+`formatReport` correspondingly delta-renders:
+- Severity table now Baseline / Current / Δ columns
+- Max drift shows baseline diff in pp
+- Top offenders surface NEW vs RESOLVED meal diff
+- New conditional section "Per-Invariant Totals — Changed vs Baseline"
+
+### Recipe-data quality work (post-audit)
+
+This branched into substantial recipe data improvements once the pure-audit cleanup was done.
+
+**Carb cap bumps (consistency 1.5 → 2 cups)**: brown rice cooked, white rice cooked, quinoa cooked, sweet potato, yukon potato, farro cooked, whole wheat pasta cooked, udon noodles cooked all now max 2c. Filet/quinoa/salmon/chicken-breakfast-wrap recipes drop out of INV6 top offenders as a result.
+
+**Granola caps tightened (0.75 → 0.5 cup)**: granola strawberry/cinnamon/kind zero. Granola is 390-480 kcal/cup — 0.75 cup is too much.
+
+**Egg noodles fix**: `egg noodles dry` was mislabeled — kcal 220/cup matches USDA cooked egg noodles, not dry. Renamed to `egg noodles cooked`. minAmt 0.125 → 0.25 (consistent with other cooked grains).
+
+**Chicken broth expansion**: `chicken broth` maxAmt 2 → 3 (the existing `chicken_noodle_soup` recipe asks for 2.5c base; was being silently clamped to 2c). `cannellini_kale_soup` broth bumped 2c → 2.5c (matches chicken_noodle_soup).
+
+**PB snacks tagged `noRatioCheck:true`**: `pb_apple_slices` and `pb_banana` are structurally low-protein (1 fruit + 1 fat). Her snack budget pushes PB to its 0.5c floor; apple/banana's P:C profile then dominates and the ratio drops 65% from base. Same pattern as yogurt snacks already tagged. INV6 fires from these dropped 106 → 0.
+
+### Dry/cooked shopping conversion + INV19
+
+Critical recipe-data audit — the cooked-cup grain entries (rice, quinoa, beans, etc.) were silently sending cooked-cup amounts to the shopping list, when the user actually buys dry/uncooked product. Fixed:
+
+1. **Added `dry:{ratio, label}` field** to 13 cooked grain/bean entries (rice 0.33-0.4, quinoa 0.33, farro 0.33, pasta 0.4, vermicelli 0.5, udon 0.5, egg noodles 0.4, beans 0.33, lentils 0.4, chickpeas 0.33).
+2. **Added `dry` clause to `shopQtyWithCount`** — between `produce` and `pkg`. Converts cooked-cup × ratio = dry-cup, rounds up to 1/8 cup, pluralizes "cup/cups dry".
+3. **Deleted `lentils dried`** — orphaned dead entry (no recipe used it). Also removed from `pantry`, `SHOP_DISPLAY_NAMES`.
+4. **Deleted `chickpeas roasted`** — also orphaned. Roasted-chickpea snack is now just "roast cooked chickpeas in oven" — same DB entry. Removed from `pantry`, `SHOP_DISPLAY_NAMES`, `soakBeans`, `PKG_FLEX_CONFIG`, `postBalanceWastePass` flex list.
+
+**INV19 added (HARD)**: `cooked/dry DB consistency`.
+- Every entry whose key contains "cooked" must have either `pkg` (canned) or `dry` (conversion).
+- Every cup-unit entry whose key contains "dry/dried/uncooked" must have a "cooked" or "canned" sibling.
+- Spices/herbs (tbsp halfSnap items like `dried rosemary`) excluded by the `unit==='cup'` filter so they don't false-fire.
+- Wired into MPStress: `parseInvariants`, `aggregate.invTotals`, `hardKeys`, `formatReport` per-INV-totals, `hardFail` count.
+- Verified by injection: removing `dry` field fires `INV19 cooked-no-shopping`; adding orphan `wild rice dry` fires `INV19 dry-no-cooked`.
+
+### Cooking-step dry/cooked clarifications
+
+After dry conversion landed, audited all recipe steps for ambiguity. Cleaned up 7 recipes whose steps described cooking from dry but ingredient was tracked as cooked-cup:
+
+- `chicken_noodle_soup`: "Add ~0.5 cup dry egg noodles per serving (yields 1.25 cup cooked, what we track). Cook 6–8 min until al dente."
+- `viet_noodle_bowl`: "Soak ~0.625 cup dry rice vermicelli per serving (= 1.25 cup cooked) in hot water 5 min. Drain."
+- `viet_vermicelli`: "Soak ~0.5 cup dry rice vermicelli per serving (= 1 cup cooked)..."
+- `thai_peanut_noodle`: "Cook ~0.5 cup dry udon per serving (= 1 cup cooked)..."
+- `turkey_meatballs_din`: "Cook ~0.375 cup dry whole wheat pasta per serving (= 0.75 cup cooked)..."
+- `spicy_tofu_chicken_noodles`: "Cook ~0.5 cup dry udon per serving (= 1 cup cooked)..."
+- `turkey_zucchini_boats`: "cook ~0.5 cup dry whole wheat pasta per serving (= 1 cup cooked)..."
+
+Convention: when a recipe step specifies cooking from dry, also annotate "(= X cup cooked)" so the user understands what's being tracked for macros.
+
+User accepted "warm rice" / "warm beans" implies pre-cooked — no need for the older "(from rice cooker)" / "(from Instant Pot)" tags everywhere.
+
+### `getPrimaryProtein` fix (meal-category headers)
+
+`getPrimaryProtein(m)` was using the FIRST `role:'protein'` ingredient as the section header for the dropdown. Recipes like `cannellini_kale_soup` (beans listed before chicken) categorized as "Cannellini beans cooked" instead of "Chicken". Fixed: when has both meat and plant protein, use the first MEAT as section header. Pure-vegetarian recipes still go to "Vegetarian".
+
+Affected: `lentil_soup_lean`, `cannellini_kale_soup` — both now in "Chicken" section.
+
+### Final 100-seed baseline (saved 2026-04-26)
+
+```js
+{primary:100.00, inv6:123, inv6MaxPct:212, inv6TopMeals:[miso_tofu(10), salmon_stir_fry_din(10), filet_din(9), turkey_lettuce_wraps(8), chicken_breakfast_wrap(7)],
+ inv14:0, inv15Him:2.87, inv16Her:2.69, inv18AvgPct:3.10, inv18WorstRunPct:50,
+ hardFail:0, closedPct:0.0, avgVariance:95.5,
+ missCounts:{kcalLow:0, kcalHigh:0, pro:0, carbPct:0, fatPct:0, veg:0, fruit:0},
+ timingAvg:390, mode:'standard'}
+```
+
+Big jumps from prior baseline (99.86 / INV6=143 / INV6 max 166 / timing 395):
+- **Primary 99.86 → 100%** (first time at 100% on full 100-seed standard)
+- **INV6 143 → 123** (-20, mostly from PB snack tagging + carb cap bumps)
+- **INV6 max 166% → 212%** — one outlier worsened (one specific seed/meal combo). Worth investigating if persists.
+- **INV6 top offenders rotated**: PB snacks (was top 2) gone. Now miso_tofu, salmon_stir_fry_din, filet_din, turkey_lettuce_wraps, chicken_breakfast_wrap.
+- **Timing 395 → 390ms avg** (essentially same)
+
+### Open items for next session
+- **INV6 max drift 212%** investigation — one seed shows extreme drift. Identify which run + recipe and decide if structural or fixable.
+- **`miso_tofu`** (10 fires) — top INV6 offender now. Small recipe pool, see if recipe rebalance helps.
+- **Recipe normalization** carry-forward (~8 lunch/dinner + ~5 breakfast still off-budget — list in 2026-04-22 session).
+- **Test 2 (`runStandard2`)** — re-run to capture state-evolving baseline; should also pass cleanly.
+- **Phase 1.7 naming cleanup** — still uses decimal phase numbering. Open from prior sessions.
+- **Optional**: explore raising INV6 to hard once miso_tofu and recipe-normalization tail get addressed. Currently 1.23/run is mostly Him-budget-scaling artifacts, not bugs.

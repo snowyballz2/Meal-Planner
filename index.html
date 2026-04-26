@@ -398,32 +398,30 @@ var NUTRI_DB = {
   // Grains & starches (ALL COOKED values per cup)
   'oats':                  {kcal:300, pro:10, fat:5,   carb:54,  unit:'cup', brand:'365', altUnits:{g:80}, minAmt:0.25, maxAmt:1},
   'oats tbsp':             {kcal:19,  pro:0.6,fat:0.3, carb:3.4, unit:'tbsp', brand:'365', minAmt:1, maxAmt:8},
-  'brown rice cooked':            {kcal:216, pro:5,  fat:1.8, carb:45,  unit:'cup', note:'cooked; 1 dry cup = 2.5 cups cooked', altUnits:{g:195}, minAmt:0.25, maxAmt:1.5},
-  'quinoa cooked':                {kcal:222, pro:8,  fat:3.6, carb:39,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:185}, minAmt:0.25, maxAmt:1.5},
-  'farro cooked':                 {kcal:170, pro:7,  fat:1,   carb:37,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:170}, minAmt:0.25, maxAmt:1.5},
-  'whole wheat pasta cooked':     {kcal:174, pro:7.5,fat:0.8, carb:37,  unit:'cup', note:'cooked', altUnits:{g:137}, minAmt:0.25, maxAmt:1.5},
+  'brown rice cooked':            {kcal:216, pro:5,  fat:1.8, carb:45,  unit:'cup', note:'cooked; 1 dry cup = 2.5 cups cooked', altUnits:{g:195}, minAmt:0.25, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
+  'quinoa cooked':                {kcal:222, pro:8,  fat:3.6, carb:39,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:185}, minAmt:0.25, maxAmt:2, dry:{ratio:0.33, label:'cup dry'}},
+  'farro cooked':                 {kcal:170, pro:7,  fat:1,   carb:37,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:170}, minAmt:0.25, maxAmt:2, dry:{ratio:0.33, label:'cup dry'}},
+  'whole wheat pasta cooked':     {kcal:174, pro:7.5,fat:0.8, carb:37,  unit:'cup', note:'cooked; ~2 oz dry per cup cooked', altUnits:{g:137}, minAmt:0.25, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
   // wholeOnly: per-portion amounts must be whole numbers (no half-slices/half-tortillas).
   // minAmt:1 and minAmtSolo:1 match — even in shared batches, each person gets ≥1 whole.
   // unifyCrossPersonRatios rounds per-portion to whole for wholeOnly items instead of
   // preserving strict kcal ratios (physical serving reality).
   'whole wheat toast':     {kcal:70,  pro:3.6,fat:1,   carb:12,  unit:'slice', wholeOnly:true, minAmt:1, minAmtSolo:1, maxAmt:3},
   'whole wheat tortilla':  {kcal:130, pro:4,  fat:3,   carb:22,  unit:'each', wholeOnly:true, minAmt:1, minAmtSolo:1, maxAmt:3},
-  'rice vermicelli cooked':       {kcal:190, pro:3.2,fat:0.4, carb:44,  unit:'cup', note:'cooked', minAmt:0.25, maxAmt:2},
-  'udon noodles cooked':   {kcal:210, pro:7,  fat:1,   carb:42,  unit:'cup', note:'cooked', minAmt:0.25, maxAmt:1.5},
+  'rice vermicelli cooked':       {kcal:190, pro:3.2,fat:0.4, carb:44,  unit:'cup', note:'cooked; rice vermicelli ~doubles cooked, 1 cup cooked = ~0.5 cup dry', minAmt:0.25, maxAmt:2, dry:{ratio:0.5, label:'cup dry'}},
+  'udon noodles cooked':   {kcal:210, pro:7,  fat:1,   carb:42,  unit:'cup', note:'cooked; udon ~doubles cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.5, label:'cup dry'}},
   'oat flour':             {kcal:520, pro:20, fat:10,  carb:88,  unit:'cup', brand:'One Degree', altUnits:{g:132}, minAmt:0.125, maxAmt:0.5},
-  'sweet potato':          {kcal:114, pro:2.1,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1.25,label:'large sweet potato'}, minAmt:0.25, maxAmt:1.5},
-  'yukon potato':          {kcal:118, pro:2.5,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1,label:'medium potato'}, minAmt:0.25, maxAmt:1.5},
+  'sweet potato':          {kcal:114, pro:2.1,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1.25,label:'large sweet potato'}, minAmt:0.25, maxAmt:2},
+  'yukon potato':          {kcal:118, pro:2.5,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1,label:'medium potato'}, minAmt:0.25, maxAmt:2},
   // Beans & legumes (cooked/canned values)
   'black beans canned':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'canned, drained',minAmt:0.5,maxAmt:2,pkg:{size:15.5,unit:'oz',drained:1.75}},
-  'black beans cooked':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:2},
+  'black beans cooked':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can); 1 dry cup = 3 cups cooked',minAmt:0.5,maxAmt:2,dry:{ratio:0.33, label:'cup dry'}},
   'cannellini beans canned':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',brand:'Goya',altUnits:{g:244},minAmt:0.5,maxAmt:2,pkg:{size:15.5,unit:'oz',drained:1.75}},
-  'cannellini beans cooked':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:2},
-  'lentils cooked':               {kcal:230, pro:18, fat:0.8, carb:40,  unit:'cup', note:'cooked', altUnits:{g:198}, minAmt:0.5, maxAmt:2},
-  'lentils dried':{kcal:230,pro:18,fat:0.8,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked',minAmt:0.5,maxAmt:2},
-  'chickpeas cooked':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can)',minAmt:0.5,maxAmt:2},
+  'cannellini beans cooked':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can); 1 dry cup = 3 cups cooked',minAmt:0.5,maxAmt:2,dry:{ratio:0.33, label:'cup dry'}},
+  'lentils cooked':               {kcal:230, pro:18, fat:0.8, carb:40,  unit:'cup', note:'cooked; 1 dry cup = ~2.5 cups cooked', altUnits:{g:198}, minAmt:0.5, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
+  'chickpeas cooked':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can); 1 dry cup = 3 cups cooked. Roasted-chickpea snack: roast cooked chickpeas in oven.',minAmt:0.5,maxAmt:2,dry:{ratio:0.33, label:'cup dry'}},
   'edamame':               {kcal:188, pro:18, fat:8,   carb:14,  unit:'cup', minAmt:0.5, maxAmt:2},
   'hummus':                {kcal:25,  pro:1.2,fat:1.4, carb:2,   unit:'tbsp', minAmt:1, maxAmt:6},
-  'chickpeas roasted':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',brand:'Giant',altUnits:{g:260},minAmt:0.5,maxAmt:2,pkg:{size:15.5,unit:'oz',drained:1.75}},
   // Vegetables — minAmt / maxAmt per serving (3c absolute cap also enforced in snap passes)
   // Veg maxAmts: per-serving caps. Kcal-proportional unify in shared batches
   // gives Him 1.5-1.7× Her's portion — caps bind on Him, batch scales DOWN,
@@ -443,8 +441,8 @@ var NUTRI_DB = {
   'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.25, maxAmt:2.0},
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.25, maxAmt:2.0},
   'celery':                {kcal:6,   pro:0.3,fat:0.1, carb:1.2, unit:'each', cupsEach:0.5, wholeOnly:true, minAmt:1, minAmtSolo:2, maxAmt:3},
-  'egg noodles dry':       {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', minAmt:0.125, maxAmt:1.5},
-  'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:2,pkg:{size:32,unit:'oz',cups:4,type:'carton'}},
+  'egg noodles cooked':    {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', note:'cooked; macros match USDA cooked egg noodles (~221 kcal/cup); ~1 cup dry yields ~2.5 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
+  'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:3,pkg:{size:32,unit:'oz',cups:4,type:'carton'}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75, minAmt:0.5, minAmtSolo:1, maxAmt:2},
   'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each', cupsEach:0.125, wholeWhenSolo:true, minAmt:1, minAmtSolo:2, maxAmt:4},
   'bok choy':              {kcal:9,   pro:1,  fat:0.1, carb:1.5, unit:'cup', produce:{perWhole:2,label:'head bok choy'}, minAmt:0.25, maxAmt:2.5},
@@ -474,7 +472,7 @@ var NUTRI_DB = {
   // per-portion min impossible otherwise (see korean_rice_bowl shared dinner case).
   'honey tbsp':            {kcal:64,  pro:0.1,fat:0,   carb:17,  unit:'tbsp', halfSnap:true, minAmt:0.25, minAmtSolo:0.5, maxAmt:1},
   'maple syrup':           {kcal:52,  pro:0,  fat:0,   carb:13,  unit:'tbsp', minAmt:0.25, minAmtSolo:0.5, maxAmt:1},
-  'granola strawberry':    {kcal:450, pro:12, fat:39,  carb:27,  unit:'cup', brand:'Carbonaut Strawberry Vanilla', altUnits:{g:90}, minAmt:0.25, maxAmt:0.75},
+  'granola strawberry':    {kcal:450, pro:12, fat:39,  carb:27,  unit:'cup', brand:'Carbonaut Strawberry Vanilla', altUnits:{g:90}, minAmt:0.25, maxAmt:0.5},
   'baking powder':         {kcal:6,   pro:0,  fat:0,   carb:3,   unit:'tbsp', halfSnap:true},
   // Sauces & seasonings
   'soy sauce':             {kcal:9,   pro:0.9,fat:0,   carb:1,   unit:'tbsp', minAmt:0.5, maxAmt:3},
@@ -518,8 +516,8 @@ var NUTRI_DB = {
   'shallot':               {kcal:30,  pro:1,  fat:0,   carb:7,   unit:'each', cupsEach:0.25, minAmt:1, maxAmt:3},
   'cucumber':              {kcal:11,  pro:0.5,fat:0.1, carb:2.4, unit:'cup', produce:{perWhole:1.5,label:'cucumber'}, minAmt:0.25, maxAmt:2.0},
   'red curry paste':{kcal:20,pro:0,fat:0,carb:4,unit:'tbsp',brand:'Maesri',minAmt:0.25,maxAmt:1},
-  'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', minAmt:0.25, maxAmt:2},
-  'white rice cooked':     {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', note:'short-grain / sushi-style white rice, cooked', minAmt:0.25, maxAmt:1.5},
+  'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.33, label:'cup dry'}},
+  'white rice cooked':     {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', note:'short-grain / sushi-style white rice, cooked; 1 dry cup = ~3 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.33, label:'cup dry'}},
   // Packaged / grab-and-go
   'rxbar':{kcal:180,pro:12,fat:6,carb:24,unit:'each',brand:'RXBar',altUnits:{g:52},wholeOnly:true,minAmt:1,maxAmt:2},
   'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz',type:'pouch'},wholeOnly:true,minAmt:1,maxAmt:1},
@@ -535,8 +533,8 @@ var NUTRI_DB = {
   // Pancake mix
   'kodiak pancakes':       {kcal:440, pro:30, fat:5,   carb:74,  unit:'cup', brand:'Kodiak', altUnits:{g:126}, minAmt:0.5, maxAmt:1},
   // Granola variants
-  'granola cinnamon':      {kcal:480, pro:12, fat:42,  carb:30,  unit:'cup', brand:'Carbonaut Cinnamon Apple', altUnits:{g:90}, minAmt:0.25, maxAmt:0.75},
-  'granola kind zero':     {kcal:390, pro:15, fat:30,  carb:30,  unit:'cup', brand:'Kind Zero Apple Cinnamon', altUnits:{g:90}, minAmt:0.25, maxAmt:0.75},
+  'granola cinnamon':      {kcal:480, pro:12, fat:42,  carb:30,  unit:'cup', brand:'Carbonaut Cinnamon Apple', altUnits:{g:90}, minAmt:0.25, maxAmt:0.5},
+  'granola kind zero':     {kcal:390, pro:15, fat:30,  carb:30,  unit:'cup', brand:'Kind Zero Apple Cinnamon', altUnits:{g:90}, minAmt:0.25, maxAmt:0.5},
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -792,16 +790,22 @@ function getPrimaryProtein(m, titleCase) {
   // Check if lunch/dinner meal has any meat/seafood — if not, it's vegetarian
   // Don't apply to breakfast/snack (egg/yogurt meals aren't "vegetarian" category)
   const isLunchDinner = m.slots && (m.slots.indexOf('lunch')>=0 || m.slots.indexOf('dinner')>=0);
+  let primaryIngr = proIngr[0];
   if (isLunchDinner) {
     const meatKeys = {'chicken breast':1,'chicken thigh':1,'ground turkey 93':1,'ground chicken':1,
       'salmon':1,'halibut':1,'filet mignon':1,'shrimp':1,'canned tuna':1,'tuna pouch':1};
-    const hasMeat = port.ingredients.some(function(i){return meatKeys[i.dbKey];});
-    if (!hasMeat) {
+    const meatIngr = proIngr.filter(function(i){return meatKeys[i.dbKey];});
+    if (!meatIngr.length) {
       return titleCase ? 'Vegetarian' : 'vegetarian';
     }
+    // When meat AND plant-protein both present, use the first MEAT as section
+    // header (regardless of recipe ingredient order). Recipes like
+    // cannellini_kale_soup list beans before chicken; without this preference
+    // the section would render as "Cannellini beans cooked" instead of "Chicken".
+    primaryIngr = meatIngr[0];
   }
 
-  const key = proIngr[0].dbKey;
+  const key = primaryIngr.dbKey;
   const map = {
     'egg white':'egg','egg whole':'egg','hard boiled egg':'egg',
     'ground turkey 93':'turkey','ground chicken':'chicken','chicken thigh':'chicken','chicken breast':'chicken',
@@ -1329,7 +1333,7 @@ const MEALS=[
   ]},
 
  {id:'viet_noodle_bowl',label:'Vietnamese egg & noodle bowl',slots:['breakfast'],
-  steps:['Soft-boil eggs: simmer 6–7 min, ice bath, peel.','Soak vermicelli in hot water 5 min. Drain.','Wilt spinach + carrots in a non-stick pan 1–2 min.','Assemble: noodles, veg, halved eggs. Drizzle soy, vinegar.'],
+  steps:['Soft-boil eggs: simmer 6–7 min, ice bath, peel.','Soak ~0.625 cup dry rice vermicelli per serving (= 1.25 cup cooked) in hot water 5 min. Drain.','Wilt spinach + carrots in a non-stick pan 1–2 min.','Assemble: noodles, veg, halved eggs. Drizzle soy, vinegar.'],
   him:{},her:{},
   ingredients:[
     I('egg whole',2,'protein',false),
@@ -1636,7 +1640,7 @@ const MEALS=[
   ]},
 
  {id:'viet_vermicelli',label:'Vietnamese chicken & vermicelli salad',slots:['lunch','dinner'],
-  steps:['Soak vermicelli in hot water 5 min. Drain and rinse cold.','Make dressing: whisk fish sauce, lime juice, honey, garlic, pepper flakes.','Slice chicken. Combine noodles, spinach, carrots, bell pepper.','Top with chicken and crushed peanuts. Drizzle dressing. Toss and eat immediately.'],
+  steps:['Soak ~0.5 cup dry rice vermicelli per serving (= 1 cup cooked) in hot water 5 min. Drain and rinse cold.','Make dressing: whisk fish sauce, lime juice, honey, garlic, pepper flakes.','Slice chicken. Combine noodles, spinach, carrots, bell pepper.','Top with chicken and crushed peanuts. Drizzle dressing. Toss and eat immediately.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',8,'protein'),
@@ -1669,7 +1673,7 @@ const MEALS=[
   ]},
 
  {id:'thai_peanut_noodle',label:'Thai peanut chicken noodle salad',slots:['lunch','dinner'],
-  steps:['Cook udon per package directions. Drain and rinse cold.','Make PB sauce: whisk peanut butter + soy sauce + lime + honey + warm water.','Massage kale. Combine noodles, kale, carrots, chicken. Pour sauce. Toss.'],
+  steps:['Cook ~0.5 cup dry udon per serving (= 1 cup cooked) per package directions. Drain and rinse cold.','Make PB sauce: whisk peanut butter + soy sauce + lime + honey + warm water.','Massage kale. Combine noodles, kale, carrots, chicken. Pour sauce. Toss.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',5,'protein'),
@@ -1863,7 +1867,7 @@ const MEALS=[
   ]},
 
  {id:'turkey_meatballs_din',label:'Turkey meatballs, zucchini noodles & pasta',slots:['lunch','dinner'],
-  steps:['Preheat oven to 400°F. Mix turkey, egg white, oat flour, Italian seasoning. Roll into balls. Bake 18–20 min.','Cook pasta. Add zucchini noodles to boiling water for last 2 min. Drain.','Heat marinara. Toss meatballs. Sauté kale. Plate.'],
+  steps:['Preheat oven to 400°F. Mix turkey, egg white, oat flour, Italian seasoning. Roll into balls. Bake 18–20 min.','Cook ~0.375 cup dry whole wheat pasta per serving (= 0.75 cup cooked). Add zucchini noodles to boiling water for last 2 min. Drain.','Heat marinara. Toss meatballs. Sauté kale. Plate.'],
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
@@ -2038,6 +2042,11 @@ const MEALS=[
 
  // ── Mid-sized snacks (200-280 kcal, for Him's 256 kcal snack budget) ──
  {id:'pb_apple_slices',label:'Apple slices with peanut butter',slots:['snack'],
+  // noRatioCheck: structurally low-protein recipe (1 apple + scalable PB).
+  // Her snack budget trims PB to minAmt floor; apple's P:C profile then
+  // dominates and the P/C ratio drops 65% from base. Acknowledged design
+  // limitation — INV6 skip prevents the noise. Same pattern as yogurt_snack.
+  noRatioCheck:true,
   steps:['Slice apple into wedges.','Serve with peanut butter for dipping.'],
   him:{},her:{},
   ingredients:[
@@ -2046,6 +2055,9 @@ const MEALS=[
   ]},
 
  {id:'pb_banana',label:'Banana with peanut butter',slots:['snack'],
+  // noRatioCheck: same as pb_apple_slices — banana is fixed wholeOnly,
+  // PB is the only scalable. Her budget pushes PB to floor, P/C drops 58%.
+  noRatioCheck:true,
   steps:['Slice banana lengthwise.','Spread peanut butter across the slices.'],
   him:{},her:{},
   ingredients:[
@@ -2119,7 +2131,7 @@ const MEALS=[
   ]},
 
  {id:'spicy_tofu_chicken_noodles',label:'Spicy tofu & chicken noodles',slots:['lunch','dinner'],
-  steps:['Make sauce: blend silken tofu, tahini, soy sauce, miso, gochugaru, and rice vinegar until smooth. Set aside.','Cook chicken mince in a hot pan until coloured. Deglaze with mirin, add soy sauce, oyster sauce, ginger, garlic. Cook a few more min.','Cook udon noodles per package.','Julienne spring onions and slice cucumber.','Plate: noodles on bottom, pour sauce over, chicken on one side, cucumber salad on the other. Top with sesame seeds.'],
+  steps:['Make sauce: blend silken tofu, tahini, soy sauce, miso, gochugaru, and rice vinegar until smooth. Set aside.','Cook chicken mince in a hot pan until coloured. Deglaze with mirin, add soy sauce, oyster sauce, ginger, garlic. Cook a few more min.','Cook ~0.5 cup dry udon per serving (= 1 cup cooked) per package.','Julienne spring onions and slice cucumber.','Plate: noodles on bottom, pour sauce over, chicken on one side, cucumber salad on the other. Top with sesame seeds.'],
   him:{},her:{},
   ingredients:[
     I('ground chicken',6,'protein'),
@@ -2140,11 +2152,11 @@ const MEALS=[
   ]},
 
  {id:'chicken_noodle_soup',label:'Chicken noodle soup',slots:['lunch','dinner'],
-  steps:['Dice onion, celery, and carrots. Heat avocado oil in a large pot over medium-high heat.','Sauté onion, celery, and carrots 4 min. Add garlic, cook 30 sec.','Add chicken broth. Season with salt, pepper, pinch of rosemary and thyme.','Bring to a boil. Add egg noodles, cook until just al dente (about 6–8 min).','Add shredded chicken. Taste broth and adjust seasoning. Serve.'],
+  steps:['Dice onion, celery, and carrots. Heat avocado oil in a large pot over medium-high heat.','Sauté onion, celery, and carrots 4 min. Add garlic, cook 30 sec.','Add chicken broth. Season with salt, pepper, pinch of rosemary and thyme.','Bring to a boil. Add ~0.5 cup dry egg noodles per serving (yields 1.25 cup cooked, what we track). Cook 6–8 min until al dente.','Add shredded chicken. Taste broth and adjust seasoning. Serve.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',7,'protein'),
-    I('egg noodles dry',1.25,'carb'),
+    I('egg noodles cooked',1.25,'carb'),
     I('chicken broth',2.5,'liquid'),
     I('carrots',0.75,'veg'),
     I('celery',2,'veg'),
@@ -2294,7 +2306,7 @@ const MEALS=[
   ]},
 
  {id:'turkey_zucchini_boats',label:'Turkey-stuffed zucchini boats with pasta',slots:['lunch','dinner'],
-  steps:['Preheat oven to 375°F. Halve zucchini lengthwise, scoop out centers.','Brown ground turkey with garlic, Italian seasoning, salt.','Stir in marinara and diced zucchini centers.','Fill boats. Bake 20 min.','Meanwhile, cook whole wheat pasta per package. Serve boats over pasta.'],
+  steps:['Preheat oven to 375°F. Halve zucchini lengthwise, scoop out centers.','Brown ground turkey with garlic, Italian seasoning, salt.','Stir in marinara and diced zucchini centers.','Fill boats. Bake 20 min.','Meanwhile, cook ~0.5 cup dry whole wheat pasta per serving (= 1 cup cooked) per package. Serve boats over pasta.'],
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
@@ -2316,7 +2328,7 @@ const MEALS=[
     I('kale',1.5,'veg'),
     I('carrots',0.5,'veg'),
     I('celery',1,'veg'),
-    I('chicken broth',2,'liquid'),
+    I('chicken broth',2.5,'liquid'),
     I('garlic',2,'fixed',false),
     I('lemon',0.5,'condiment',false),
     I('italian seasoning',0.5,'fixed',false),
@@ -2684,7 +2696,7 @@ function computeLeftovers(){
   _leftoverCache=result;
   return result;
 }
-function invalidateLeftoverCache(){_leftoverCache=null;if(typeof invalidateDayBalancedCache==='function')invalidateDayBalancedCache();}
+function invalidateLeftoverCache(){_leftoverCache=null;invalidateDayBalancedCache();}
 
 // Collect every household-level anchor cook (both persons, lunch+dinner only,
 // leftovers excluded). Single source of truth for the three INV14 consumers:
@@ -2704,6 +2716,48 @@ function _collectHouseholdCooks(los){
     });
   });
   return cooks;
+}
+
+// Build frozenSlots for post-pipeline balancer re-runs (unify/snap/snapToGrid).
+// Cook slots, time-shifted leftover slots, shake slot, and same-day-leftover
+// slots of any cook are frozen so the balancer adjusts only free slots
+// (snacks, singletons) to absorb kcal drift from the snap/unify/waste pass.
+//
+// LOAD-BEARING: this helper does NOT compute sameDayCookServings. At the
+// post-pipeline stage, `_dayBalancedCache` already has the materialized
+// same-day leftover slot populated (via materializeSameDayLeftovers at the
+// end of the getDayBalancedIngredients call that built this cache). Setting
+// mult=2 on the cook slot WHILE the leftover slot is also present in `slots`
+// causes dailyMacros() to count the portion 3× (cook×2 + leftover×1 = 3),
+// which silently inflates the balancer's view of day kcal by ~500-700 kcal
+// — the balancer then over-trims other slots, producing kcalLow primary
+// misses. Only the canonical getDayBalancedIngredients build path (line
+// ~3196) should populate sameDayCookServings, because at that point the
+// leftover slot is not yet materialized. Callers should rely on
+// balanceDayMacros's default `sameDayCookServings={}` (line ~3405).
+function _buildPostPipelineFrozenSlots(p, d, slots, leftovers){
+  var frozenSlots = {};
+  Object.keys(slots).forEach(function(s2){
+    var lo2 = leftovers[sk(p, d, s2)];
+    if(s2 === 'shake'){frozenSlots[s2] = true; return;}
+    if(lo2 && lo2.isLeftover){frozenSlots[s2] = true; return;}
+    if(lo2 && !lo2.isLeftover && (lo2.crossPersonCook || lo2.shared || (lo2.servings && lo2.servings > 1))){
+      frozenSlots[s2] = true;
+      // Freeze same-day same-meal leftover slots too (their amts mirror the
+      // cook's). See LOAD-BEARING note above re: sameDayCookServings.
+      var mealId2 = getMealId(p, d, s2);
+      ['breakfast','lunch','dinner','snack'].forEach(function(s3){
+        if(s3 === s2) return;
+        if(getMealId(p, d, s3) === mealId2){
+          var lo3 = leftovers[sk(p, d, s3)];
+          if(lo3 && lo3.isLeftover && !lo3.crossPerson){
+            frozenSlots[s3] = true;
+          }
+        }
+      });
+    }
+  });
+  return frozenSlots;
 }
 
 // Lightweight INV14 counter — mirrors verifyInvariants INV14 logic. Used by
@@ -2777,7 +2831,7 @@ var SHOP_CAT_MAP={
   sauces:['soy sauce','fish sauce','gochujang','rice vinegar','balsamic vinegar','red wine vinegar','oyster sauce','dark soy sauce','mirin','red curry paste','marinara','salsa','tomatillo sauce','tahini','broth concentrate','white miso'],
   oils:['avocado oil','sesame oil','olive oil'],
   supplements:['protein powder','creatine'],
-  pantry:['chicken broth','egg noodles dry','oat flour','chia seeds','granola','granola strawberry','granola cinnamon','granola kind zero','rxbar','triscuit','udon noodles','whole wheat pasta cooked','baking powder','honey tbsp','maple syrup','peanut butter','almond butter','cashew milk (sweetened)','sugar','coconut milk','black beans canned','black beans cooked','cannellini beans canned','cannellini beans cooked','lentils cooked','lentils dried','chickpeas roasted','chickpeas cooked'],
+  pantry:['chicken broth','egg noodles cooked','oat flour','chia seeds','granola','granola strawberry','granola cinnamon','granola kind zero','rxbar','triscuit','udon noodles','whole wheat pasta cooked','baking powder','honey tbsp','maple syrup','peanut butter','almond butter','cashew milk (sweetened)','sugar','coconut milk','black beans canned','black beans cooked','cannellini beans canned','cannellini beans cooked','lentils cooked','chickpeas cooked'],
   dairy:['greek yogurt 0%','mozzarella','feta','butter','cheddar jack'],
   frozen:['mixed berries','edamame','acai'],
   meat:['chicken breast','chicken thigh','ground turkey 93','ground chicken','filet mignon','shrimp'],
@@ -2804,7 +2858,7 @@ var SHOP_DISPLAY_NAMES={
   'cashew milk (sweetened)':'Cashew milk','honey tbsp':'Honey',
   'brown rice cooked':'Brown rice','jasmine rice cooked':'Jasmine rice',
   'whole wheat pasta cooked':'Whole wheat pasta','rice vermicelli cooked':'Rice vermicelli',
-  'egg noodles dry':'Egg noodles','udon noodles':'Udon noodles',
+  'egg noodles cooked':'Egg noodles','udon noodles':'Udon noodles',
   'lentils cooked':'Lentils','black beans cooked':'Black beans','white beans cooked':'White beans',
   'chickpeas cooked':'Chickpeas','quinoa cooked':'Quinoa','farro cooked':'Farro',
   'baby spinach':'Baby spinach','tofu firm':'Firm tofu','silken tofu':'Silken tofu',
@@ -2821,8 +2875,8 @@ var SHOP_DISPLAY_NAMES={
   'chili flake':'Chili flakes','red pepper flake':'Red pepper flakes',
   'black beans canned':'Black beans, canned','black beans cooked':'Black beans, cooked',
   'cannellini beans canned':'Cannellini beans, canned','cannellini beans cooked':'Cannellini beans, cooked',
-  'lentils cooked':'Lentils, cooked','lentils dried':'Lentils, dried',
-  'chickpeas roasted':'Chickpeas','chickpeas cooked':'Chickpeas, cooked'
+  'lentils cooked':'Lentils, cooked',
+  'chickpeas cooked':'Chickpeas, cooked'
 };
 function shopQtyWithCount(dbKey,qtyObj){
   const base=fmtQty(qtyObj);
@@ -2835,6 +2889,21 @@ function shopQtyWithCount(dbKey,qtyObj){
     let count=Math.ceil(qtyObj.num/db.produce.perWhole);
     if(count<=0)count=1;
     return count+' '+db.produce.label+(count>1&&!db.produce.label.match(/bunch|bag/)?'s':'');
+  }
+
+  // Dry-equivalent conversion for cooked grains/beans/legumes. Recipe
+  // measurements are in cooked-cup (what's eaten); shopping needs the dry
+  // amount you actually buy. db.dry.ratio = cooked-cup → dry-cup multiplier
+  // (e.g., 0.4 means 1 cup cooked rice = 0.4 cup dry). Round up to 1/8 cup
+  // for clean shopping quantities.
+  if(db.dry && qtyObj.unit==='cup'){
+    let dryAmt=qtyObj.num*db.dry.ratio;
+    let rounded=Math.ceil(dryAmt*8)/8;
+    if(rounded<=0)rounded=0.125;
+    let label=db.dry.label||'cup dry';
+    // Pluralize "cup" → "cups" when amount > 1 (only for the default label)
+    if(label==='cup dry' && rounded>1)label='cups dry';
+    return rounded+' '+label;
   }
 
   // Package conversion (cans, cartons, pouches) — skip for bulk items
@@ -3885,13 +3954,13 @@ function verifyInvariants(){
         if(!exp)return;
         const shopHis=(item.hisSum?item.hisSum.num:0);
         const shopHer=(item.herSum?item.herSum.num:0);
-        if(Math.abs(shopHis-exp.him)>0.05){
+        if(Math.abs(shopHis-exp.him)>0.001){
           violations.push('INV3 shop-vs-balanced: '+trip+' '+item.dbKey
-            +' him shop='+shopHis.toFixed(2)+' balanced='+exp.him.toFixed(2));
+            +' him shop='+shopHis.toFixed(3)+' balanced='+exp.him.toFixed(3));
         }
-        if(Math.abs(shopHer-exp.her)>0.05){
+        if(Math.abs(shopHer-exp.her)>0.001){
           violations.push('INV3 shop-vs-balanced: '+trip+' '+item.dbKey
-            +' her shop='+shopHer.toFixed(2)+' balanced='+exp.her.toFixed(2));
+            +' her shop='+shopHer.toFixed(3)+' balanced='+exp.her.toFixed(3));
         }
       });
     });
@@ -3951,7 +4020,7 @@ function verifyInvariants(){
         let balKcal=0;
         bal.forEach(function(i){const db=NUTRI_DB[i.dbKey];if(db)balKcal+=db.kcal*i.amt;});
         balKcal=Math.round(balKcal);
-        if(Math.abs(card.pm.kcal-balKcal)>5){
+        if(Math.abs(card.pm.kcal-balKcal)>1){
           violations.push('INV5 card-vs-balanced: '+p+' '+d+'/'+s2
             +' card='+card.pm.kcal+' balanced='+balKcal);
         }
@@ -4146,37 +4215,58 @@ function verifyInvariants(){
   // until 2 full gap days have passed (last_day + 3 earliest). Catches
   // randomizer regressions where a meal stacks too close to its own
   // leftover tail.
-  var mealDays={};
+  //
+  // Lunch/dinner only — these are the slots the leftover detector anchors
+  // on (cookSlots in computeLeftovers). Breakfast/snack are exempt for the
+  // same reason as INV14: small pools (~10-20 meals) can't always honor a
+  // 2-day gap, so flagging would be noise. Same exclusion mirrors the
+  // detector's batch semantics — breakfast/snack same-meal-on-different-
+  // days never become "batches" in the detector's view.
+  //
+  // Uses the leftover detector's batch grouping directly (lo.portions on
+  // each anchor). The previous gap-rolling-window approach unified all
+  // consecutive same-meal days into one group, which made the firing
+  // condition `gapDays<2` impossible to reach (splits required gap>=3,
+  // which guaranteed gapDays>=2). Now: iterate cook anchors only, find
+  // each batch's last day from its portions list, and compare against
+  // the next anchor's day.
+  var mealAnchors={};
   ['him','her'].forEach(function(p){
     DAYS.forEach(function(d,di){
-      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+      ['lunch','dinner'].forEach(function(s){
         if(SKIPPED[sk(p,d,s)]||EAT_OUT[sk(p,d,s)])return;
+        var lo=leftovers[sk(p,d,s)];
+        if(lo&&lo.isLeftover)return; // process anchors only (skip leftovers)
         var mealId=getMealId(p,d,s);
         if(!mealId)return;
         var m=getMeal(mealId);
-        if(m&&m.noLeftover)return; // noLeftover meals are exempt (freshly made)
-        if(!mealDays[mealId])mealDays[mealId]=new Set();
-        mealDays[mealId].add(di);
+        if(m&&m.noLeftover)return; // noLeftover meals exempt (freshly made)
+        // Last day of this batch = max portion dayIdx (or this day if solo)
+        var lastDayIdx=di;
+        if(lo&&lo.portions){
+          lo.portions.forEach(function(pt){
+            var ptIdx=DAYS.indexOf(pt.d);
+            if(ptIdx>lastDayIdx)lastDayIdx=ptIdx;
+          });
+        }
+        if(!mealAnchors[mealId])mealAnchors[mealId]=[];
+        mealAnchors[mealId].push({dayIdx:di, lastDayIdx:lastDayIdx});
       });
     });
   });
-  Object.keys(mealDays).forEach(function(mealId){
-    var sorted=Array.from(mealDays[mealId]).sort(function(a,b){return a-b;});
-    if(sorted.length<2)return;
-    // Group into batches: consecutive occurrences within 2-day span = same batch
-    var groups=[[sorted[0]]];
-    for(var i=1;i<sorted.length;i++){
-      var gap=sorted[i]-sorted[i-1];
-      if(gap<=2)groups[groups.length-1].push(sorted[i]);
-      else groups.push([sorted[i]]);
-    }
-    for(var j=1;j<groups.length;j++){
-      var prevLast=groups[j-1][groups[j-1].length-1];
-      var currFirst=groups[j][0];
-      var gapDays=currFirst-prevLast-1;
+  Object.keys(mealAnchors).forEach(function(mealId){
+    var anchors=mealAnchors[mealId].sort(function(a,b){return a.dayIdx-b.dayIdx;});
+    if(anchors.length<2)return;
+    for(var j=1;j<anchors.length;j++){
+      var prev=anchors[j-1], curr=anchors[j];
+      // Same-day duplicates collapse to one batch (e.g., shared cook listed
+      // under both persons but with the other-person side already filtered
+      // as isLeftover above). Skip identical anchor days.
+      if(curr.dayIdx===prev.dayIdx)continue;
+      var gapDays=curr.dayIdx-prev.lastDayIdx-1;
       if(gapDays<2){
         violations.push('INV11 gap-too-small: '+mealId
-          +' prev_last='+DAYS[prevLast]+' curr_first='+DAYS[currFirst]
+          +' prev_last='+DAYS[prev.lastDayIdx]+' curr_first='+DAYS[curr.dayIdx]
           +' gap_days='+gapDays);
       }
     }
@@ -4211,10 +4301,10 @@ function verifyInvariants(){
   // ── Invariant 9: Shared meals never show combined on Him/Her tabs ──
   // The Shared tab owns the batch/combined view for shared same-day meals.
   // Him and Her tabs must render per-serving only — no "Combined
-  // ingredients (serves N)" header. Mirrors the render-time predicates:
-  //   showCombinedOnThisTab = isBigCookHere && !isSameDayShared
-  //   and the crossPersonCook render block is guarded with !isSameDayShared
-  // So for every shared-flag slot, both branches must be false.
+  // ingredients (serves N)" header on a same-day-shared slot. Calls the
+  // SAME helper that buildMealCardHtml uses for its render decision —
+  // single source of truth. If a future edit drops the !isSameDayShared
+  // guard from cardShowsCombinedHeader, INV9 fires immediately.
   ['him','her'].forEach(function(p){
     DAYS.forEach(function(d){
       ['breakfast','lunch','snack','dinner'].forEach(function(s){
@@ -4222,12 +4312,11 @@ function verifyInvariants(){
         if(!lo)return;
         var isSameDayShared=!!(lo.shared||lo.sameDayShared);
         if(!isSameDayShared)return;
-        var isBigCookHere=!lo.isLeftover&&((lo.servings>1)||lo.crossPersonCook);
-        var showCombined=isBigCookHere&&!isSameDayShared;
-        var showCombinedViaXP=lo.crossPersonCook&&!isSameDayShared;
-        if(showCombined||showCombinedViaXP){
+        if(cardShowsCombinedHeader(lo)){
           violations.push('INV9 combined-on-shared: '+p+' '+d+'/'+s
-            +' shared='+isSameDayShared+' big='+isBigCookHere+' xp='+!!lo.crossPersonCook);
+            +' shared='+isSameDayShared
+            +' big='+(!lo.isLeftover&&((lo.servings>1)||lo.crossPersonCook))
+            +' xp='+!!lo.crossPersonCook);
         }
       });
     });
@@ -4397,6 +4486,40 @@ function verifyInvariants(){
         +' calls hit safety cap ('+capPct.toFixed(1)+'%). Convergence loop may have a new oscillation source.');
     }
   }
+
+  // ── Invariant 19: cooked/dry DB consistency ──
+  // Every entry whose key contains "cooked" must declare either `pkg`
+  // (canned/pre-prepared, e.g. canned beans) or `dry` (cup-cooked → cup-dry
+  // conversion, e.g. rice/quinoa/dry-cooked beans) so the shopping list
+  // can show meaningful units. A cooked-cup count on the shopping list is
+  // useless — the user buys dry product or cans, not cooked cups.
+  //
+  // Symmetrically, every entry whose key contains "dry"/"dried"/"uncooked"
+  // AND uses `cup` unit must have a corresponding "cooked" or "canned"
+  // sibling. Restricted to cup-unit so dried spices/herbs (tbsp halfSnap
+  // items like `dried rosemary`/`dried thyme`/`dried oregano`) — which are
+  // shopped/stored/used in dried form by definition — don't false-fire.
+  // Catches grain/legume orphans like the deleted `lentils dried`.
+  Object.keys(NUTRI_DB).forEach(function(k){
+    var db = NUTRI_DB[k];
+    if(/\bcooked\b/.test(k)){
+      var hasPkg = !!(db.pkg && (db.pkg.drained || db.pkg.cups));
+      var hasDry = !!db.dry;
+      if(!hasPkg && !hasDry){
+        violations.push('INV19 cooked-no-shopping: '+k
+          +' (cooked entry needs `pkg` or `dry` so shopping shows real units)');
+      }
+    }
+    if(/\b(dry|dried|uncooked)\b/.test(k) && db.unit==='cup'){
+      var base = k.replace(/\b(dry|dried|uncooked)\b/g, '').replace(/\s+/g, ' ').trim();
+      var cookedSibling = base + ' cooked';
+      var cannedSibling = base + ' canned';
+      if(!NUTRI_DB[cookedSibling] && !NUTRI_DB[cannedSibling]){
+        violations.push('INV19 dry-no-cooked: '+k
+          +' (no `'+cookedSibling+'` or `'+cannedSibling+'` sibling for the eaten form)');
+      }
+    }
+  });
 
   return violations;
 }
@@ -5002,7 +5125,7 @@ function buildPrepBanner(day){
     'salmon':1,'halibut':1,'filet mignon':1,'shrimp':1,'tofu firm':1,'silken tofu':1};
 
   // Bean dbKeys that need overnight soaking (NOT lentils)
-  const soakBeans={'black beans canned':'black beans','black beans cooked':'black beans','cannellini beans canned':'cannellini beans','cannellini beans cooked':'cannellini beans','chickpeas roasted':'chickpeas','chickpeas cooked':'chickpeas'};
+  const soakBeans={'black beans canned':'black beans','black beans cooked':'black beans','cannellini beans canned':'cannellini beans','cannellini beans cooked':'cannellini beans','chickpeas cooked':'chickpeas'};
 
   // Veggie prep keywords
   const vegPrepRe=/\b(dice|chop|cut|slice|mince|julienne)\b/i;
@@ -5209,11 +5332,16 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
       adjResult.forEach(function(a){
         const db = NUTRI_DB[a.ing.dbKey];
         if(!db)return;
-        pm.kcal+=Math.round(db.kcal*a.newAmt);
-        pm.pro+=Math.round(db.pro*a.newAmt);
-        pm.fat+=Math.round(db.fat*a.newAmt);
-        pm.carb+=Math.round(db.carb*a.newAmt);
+        // Sum raw, round once at end — keeps INV5 reconstruction matching
+        // computeCardMacros without the ~5 kcal slack from per-ingredient
+        // rounding (10 ingredients × ±0.5 = up to ±5 kcal).
+        pm.kcal+=db.kcal*a.newAmt;
+        pm.pro+=db.pro*a.newAmt;
+        pm.fat+=db.fat*a.newAmt;
+        pm.carb+=db.carb*a.newAmt;
       });
+      pm.kcal=Math.round(pm.kcal); pm.pro=Math.round(pm.pro);
+      pm.fat=Math.round(pm.fat);   pm.carb=Math.round(pm.carb);
       ingrHtml = adjResult.map(function(a, idx) {
         return buildIngrEditRow(a.ing, a.newAmt*cookServings, person, day, s, idx);
       }).join('');
@@ -5250,9 +5378,12 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
       pm = {kcal:0,pro:0,fat:0,carb:0};
       balanced0.forEach(function(i){
         const db=NUTRI_DB[i.dbKey]; if(!db)return;
-        pm.kcal+=Math.round(db.kcal*i.amt);pm.pro+=Math.round(db.pro*i.amt);
-        pm.fat+=Math.round(db.fat*i.amt);pm.carb+=Math.round(db.carb*i.amt);
+        // Sum raw, round once at end (see same-pattern note above).
+        pm.kcal+=db.kcal*i.amt; pm.pro+=db.pro*i.amt;
+        pm.fat+=db.fat*i.amt;   pm.carb+=db.carb*i.amt;
       });
+      pm.kcal=Math.round(pm.kcal); pm.pro=Math.round(pm.pro);
+      pm.fat=Math.round(pm.fat);   pm.carb=Math.round(pm.carb);
       ingrHtml = balanced0.map(function(i, idx) {
         var origIng = adjIngr0[idx]||{dbKey:i.dbKey,amt:i.origAmt||i.amt,role:i.role,scalable:i.scalable};
         return buildIngrEditRow(origIng, i.amt*cookServings, person, day, s, idx);
@@ -5263,6 +5394,24 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
     }
   }
   return {pm:pm, adjBanner:adjBanner, ingrHtml:ingrHtml};
+}
+
+// Whether the Him/Her tab card should display the "🥗 Combined ingredients
+// (serves N)" header. The Shared tab always owns combined display for
+// same-day-shared cooks, so this returns false for any slot flagged as
+// `lo.shared || lo.sameDayShared`.
+//
+// SINGLE SOURCE OF TRUTH: both render paths in `buildMealCardHtml`
+// (default and the `crossPersonCook` rebuild block) consult this helper.
+// INV9 also calls it to verify the data conditions never let the render
+// produce a Combined header on a same-day-shared slot. If a future edit
+// drops the !isSameDayShared guard from this helper, INV9 fires and the
+// regression is caught at the data layer.
+function cardShowsCombinedHeader(lo){
+  if(!lo) return false;
+  const isSameDayShared = !!(lo.shared || lo.sameDayShared);
+  if(isSameDayShared) return false;
+  return !lo.isLeftover && ((lo.servings>1) || lo.crossPersonCook);
 }
 
 function buildMealCardHtml(s, person, day, other){
@@ -5307,7 +5456,7 @@ function buildMealCardHtml(s, person, day, other){
   // SHARED_SCHEDULE which isn't always populated by the randomizer.
   const isSameDayShared = !!(loInfo && (loInfo.shared || loInfo.sameDayShared));
   const isBigCookHere = !!(loInfo && !loInfo.isLeftover && (loInfo.servings > 1 || loInfo.crossPersonCook));
-  const showCombinedOnThisTab = isBigCookHere && !isSameDayShared;
+  const showCombinedOnThisTab = cardShowsCombinedHeader(loInfo);
   // cookServings = portion multiplier applied to ingredient amounts.
   //   - Shared slot: 1 (show per-portion; Shared tab combines)
   //   - Non-shared Big Cook (solo leftovers or cross-person cook): total batch size
@@ -5365,7 +5514,7 @@ function buildMealCardHtml(s, person, day, other){
   // portions differ. Rebuild with the real amounts.
   // Skip for same-day shared batches — the Shared tab owns the combined
   // view; individual tabs render per-serving.
-  if(loInfo&&loInfo.crossPersonCook&&!isSameDayShared){
+  if(loInfo&&loInfo.crossPersonCook&&cardShowsCombinedHeader(loInfo)){
     var cookBal=getBalancedSlotIngredients(person,day,s);
     // Iterate loInfo.portions for the full combined batch. Each portion
     // contributes its own per-serving balance × 1; totalServings = portions
@@ -5826,12 +5975,12 @@ function onIngrAmt(p,d,s,idx,val){
   if(isNaN(amt)||amt<0)return;
   setOverride(p,d,s,idx,'amt',amt);
   MANUAL_SET[sk(p,d,s)]=true;
-  renderMeals();autoSaveWeek();
+  invalidateLeftoverCache();renderMeals();autoSaveWeek();
 }
 function onIngrSwap(p,d,s,idx,newKey){
   setOverride(p,d,s,idx,'dbKey',newKey);
   MANUAL_SET[sk(p,d,s)]=true;
-  renderMeals();autoSaveWeek();
+  invalidateLeftoverCache();renderMeals();autoSaveWeek();
 }
 function onIngrReset(p,d,s){
   clearOverrides(p,d,s);
@@ -5861,7 +6010,6 @@ const PKG_FLEX_CONFIG = {
   'black beans cooked':       {maxUp:0.75, maxDown:0.25, kcalCap:180},
   'cannellini beans canned':  {maxUp:0.75, maxDown:0.25, kcalCap:180},
   'cannellini beans cooked':  {maxUp:0.75, maxDown:0.25, kcalCap:180},
-  'chickpeas roasted':        {maxUp:0.75, maxDown:0.25, kcalCap:180},
   'chickpeas cooked':         {maxUp:0.75, maxDown:0.25, kcalCap:180},
   'chicken broth':            {maxUp:1.0,  maxDown:0.5,  kcalCap:100}, // 15 kcal/cup, very low cal impact
   'tofu firm':                {maxUp:1.0,  maxDown:0,    kcalCap:300},
@@ -6035,7 +6183,7 @@ function getRecentMealIds(dayIndex, days, lookback) {
 // and no-leftover meals always represent fresh cooks.
 function isBatchLeftoverEligible(d, s, mealId) {
   if (s !== 'lunch' && s !== 'dinner') return false;
-  const meal = (typeof getMeal === 'function') ? getMeal(mealId) : null;
+  const meal = getMeal(mealId);
   if (meal && meal.noLeftover) return false;
   const dIdx = DAYS.indexOf(d);
   if (dIdx < 0) return false;
@@ -6577,15 +6725,17 @@ function snapBatchTotalsToGrid(){
           // twice in a row or when cache already reflects snapped state.
           if(Math.abs(snapped-total)<0.001)return;
 
-          // Redistribute proportionally. affectedDays is set only here, so
-          // the balancer re-run is gated on actual mutation — a no-op pass
-          // leaves affectedDays empty and triggers zero balancer work.
+          // Redistribute proportionally. affectedDays is set only when the
+          // cache write actually lands — a no-op pass (or a missing cache
+          // entry) leaves the day unflagged and triggers zero balancer work.
           portions.forEach(function(pc){
             var share=pc.amt/total;
             var newAmt=snapped*share;
             var cache=_dayBalancedCache[pk(pc.p,pc.d)];
-            if(cache&&cache[pc.s])cache[pc.s][pc.idx].amt=newAmt;
-            affectedDays[pc.p+'_'+pc.d]={p:pc.p,d:pc.d};
+            if(cache&&cache[pc.s]){
+              cache[pc.s][pc.idx].amt=newAmt;
+              affectedDays[pc.p+'_'+pc.d]={p:pc.p,d:pc.d};
+            }
           });
         });
       });
@@ -6598,40 +6748,7 @@ function snapBatchTotalsToGrid(){
     var ad=affectedDays[key];
     var slots=_dayBalancedCache[pk(ad.p,ad.d)];
     if(!slots)return;
-    var frozenSlots={};
-    var sameDayCookServings={};
-    Object.keys(slots).forEach(function(s2){
-      var lo2=leftovers[sk(ad.p,ad.d,s2)];
-      if(s2==='shake'){frozenSlots[s2]=true;return;}
-      if(lo2&&lo2.isLeftover){frozenSlots[s2]=true;return;}
-      if(lo2&&!lo2.isLeftover&&(lo2.crossPersonCook||lo2.shared||(lo2.servings&&lo2.servings>1))){
-        frozenSlots[s2]=true;
-        var mealId2=getMealId(ad.p,ad.d,s2);
-        ['breakfast','lunch','dinner','snack'].forEach(function(s3){
-          if(s3===s2)return;
-          if(getMealId(ad.p,ad.d,s3)===mealId2){
-            var lo3=leftovers[sk(ad.p,ad.d,s3)];
-            if(lo3&&lo3.isLeftover&&!lo3.crossPerson){
-              frozenSlots[s3]=true;
-              // NOTE: do NOT set sameDayCookServings[s2] here. At this point
-              // _dayBalancedCache already has the materialized same-day
-              // leftover slot populated (materializeSameDayLeftovers ran at
-              // the end of the getDayBalancedIngredients call that built
-              // this cache). Setting mult=2 on the cook slot WHILE the
-              // leftover slot is also present in `slots` causes
-              // dailyMacros() to count the portion 3× (cook×2 + leftover×1
-              // = 3), which silently inflates the balancer's view of day
-              // kcal by ~500-700 kcal — the balancer then over-trims other
-              // slots, producing kcalLow primary misses. Only the
-              // canonical getDayBalancedIngredients build path (line
-              // ~3196) should populate sameDayCookServings, because at
-              // that point the leftover slot is not yet materialized.
-            }
-          }
-        });
-      }
-    });
-    balanceDayMacros(ad.p,ad.d,slots,frozenSlots,sameDayCookServings);
+    balanceDayMacros(ad.p,ad.d,slots,_buildPostPipelineFrozenSlots(ad.p,ad.d,slots,leftovers));
   });
   // Return true if any portion amount was mutated — lets a convergence
   // loop skip further iterations when the pipeline reaches steady state.
@@ -6774,54 +6891,51 @@ function unifyCrossPersonRatios(){
             }
           }
 
-          // Idempotency fast-path: if every portion's amount is already
-          // within tolerance of its target, skip the write. Lets this
-          // function no-op cleanly when called twice in a row or when
-          // cache already reflects unified state. wholeOnly items skip the
-          // fast-path because Math.round can always produce a different
-          // whole number than what's currently stored.
-          if(!db.wholeOnly){
-            var needsWrite=false;
-            // Relative tolerance: 0.5% of portion amount, absolute floor
-            // 0.0001. Per-ingredient snap stages (each to its own grid)
-            // nudge cross-ingredient ratios by a sub-grid fraction every
-            // iteration; a tight 0.0001 absolute tolerance would force u
-            // to re-unify forever while snap immediately re-snaps. The
-            // 0.5% relative tolerance accepts this sub-INV7 (1%) drift
-            // as "unified enough", letting the convergence loop exit in
-            // 2-3 iterations. Downstream snap/gridSnap's fast-paths
-            // (0.001 absolute) are tighter, so post-u state that u
-            // accepts also satisfies s/g. (2026-04-25 convergence loop.)
-            for(var wi=0;wi<portionItems.length;wi++){
-              var pew=portionItems[wi]; if(!pew.item)continue;
-              var target=ideals[wi]*scaleFactor;
-              var _d=Math.abs(pew.item.amt-target);
+          // Compute final per-portion amounts. wholeOnly items round per-
+          // portion (can't serve ½ tortilla; INV7 exempts wholeOnly because
+          // rounding breaks the kcal-proportional ratio anyway). Fractional
+          // items use the kcal-proportional ideal × batch scale factor.
+          var finalAmts = portionItems.map(function(pe, fi){
+            if(!pe.item) return 0;
+            var v = ideals[fi]*scaleFactor;
+            if(db.wholeOnly){
+              v = Math.round(v);
+              if(floor>0 && v<floor) v = Math.ceil(floor);
+              if(db.maxAmt!=null && v>db.maxAmt) v = Math.floor(db.maxAmt);
+              if(v<1) v = 1;
+            }
+            return v;
+          });
+
+          // Idempotency fast-path: skip the write (and the day-flag) if every
+          // portion is already at its target. wholeOnly uses exact equality
+          // (rounded result is stable). Fractional uses 0.5% relative
+          // tolerance — per-ingredient snap stages nudge cross-ingredient
+          // ratios by a sub-grid fraction each iter; a tight 0.0001 absolute
+          // tolerance would force u to re-unify forever while snap re-snaps.
+          // The 0.5% relative tolerance accepts this sub-INV7 (1%) drift as
+          // "unified enough", letting the convergence loop exit in 2-3 iters.
+          // Downstream snap/gridSnap's fast-paths (0.001 absolute) are
+          // tighter, so post-u state that u accepts also satisfies s/g.
+          // (2026-04-25 convergence loop; wholeOnly fast-path added 2026-04-26.)
+          var needsWrite=false;
+          for(var wi=0;wi<portionItems.length;wi++){
+            var pew=portionItems[wi]; if(!pew.item)continue;
+            if(db.wholeOnly){
+              if(pew.item.amt !== finalAmts[wi]){needsWrite=true;break;}
+            }else{
+              var _d=Math.abs(pew.item.amt-finalAmts[wi]);
               var _tol=Math.max(0.0001, 0.005*Math.abs(pew.item.amt));
               if(_d>_tol){needsWrite=true;break;}
             }
-            if(!needsWrite)return; // already unified for this ingredient
           }
+          if(!needsWrite)return;
 
           portionItems.forEach(function(pe,idx){
             if(!pe.item)return;
-            pe.item.amt=ideals[idx]*scaleFactor;
+            pe.item.amt=finalAmts[idx];
           });
           batchChanged=true;
-          // wholeOnly override: per-portion must be whole (can't serve 0.5 of a
-          // tortilla or slice of toast). Break strict kcal-proportional split
-          // here — each portion rounds to its own whole number, enforcing min
-          // and max. INV7 exempts wholeOnly items (different grid from
-          // fractional ingredients; ratios can't survive rounding anyway).
-          if(db.wholeOnly){
-            portionItems.forEach(function(pe){
-              if(!pe.item)return;
-              var w=Math.round(pe.item.amt);
-              if(floor>0 && w<floor) w=Math.ceil(floor);
-              if(db.maxAmt!=null && w>db.maxAmt) w=Math.floor(db.maxAmt);
-              if(w<1) w=1;
-              pe.item.amt=w;
-            });
-          }
         });
 
         // Only flag affected-days when we actually wrote amounts. If the batch
@@ -6840,40 +6954,7 @@ function unifyCrossPersonRatios(){
     var ad=affectedDays[key];
     var slots=_dayBalancedCache[pk(ad.p,ad.d)];
     if(!slots)return;
-    var frozenSlots={};
-    var sameDayCookServings={};
-    Object.keys(slots).forEach(function(s2){
-      var lo2=leftovers[sk(ad.p,ad.d,s2)];
-      if(s2==='shake'){frozenSlots[s2]=true;return;}
-      if(lo2&&lo2.isLeftover){frozenSlots[s2]=true;return;}
-      if(lo2&&!lo2.isLeftover&&(lo2.crossPersonCook||lo2.shared||lo2.servings>1)){
-        frozenSlots[s2]=true;
-        var mealId2=getMealId(ad.p,ad.d,s2);
-        ['breakfast','lunch','dinner','snack'].forEach(function(s3){
-          if(s3===s2)return;
-          if(getMealId(ad.p,ad.d,s3)===mealId2){
-            var lo3=leftovers[sk(ad.p,ad.d,s3)];
-            if(lo3&&lo3.isLeftover&&!lo3.crossPerson){
-              frozenSlots[s3]=true;
-              // NOTE: do NOT set sameDayCookServings[s2] here. At this point
-              // _dayBalancedCache already has the materialized same-day
-              // leftover slot populated (materializeSameDayLeftovers ran at
-              // the end of the getDayBalancedIngredients call that built
-              // this cache). Setting mult=2 on the cook slot WHILE the
-              // leftover slot is also present in `slots` causes
-              // dailyMacros() to count the portion 3× (cook×2 + leftover×1
-              // = 3), which silently inflates the balancer's view of day
-              // kcal by ~500-700 kcal — the balancer then over-trims other
-              // slots, producing kcalLow primary misses. Only the
-              // canonical getDayBalancedIngredients build path (line
-              // ~3196) should populate sameDayCookServings, because at
-              // that point the leftover slot is not yet materialized.
-            }
-          }
-        });
-      }
-    });
-    balanceDayMacros(ad.p,ad.d,slots,frozenSlots,sameDayCookServings);
+    balanceDayMacros(ad.p,ad.d,slots,_buildPostPipelineFrozenSlots(ad.p,ad.d,slots,leftovers));
   });
   // Return true if any batch ratio was mutated — lets a convergence
   // loop skip further iterations when the pipeline reaches steady state.
@@ -7014,30 +7095,7 @@ function snapBatchTotals(){
     var ad=affectedDays[key];
     var slots=_dayBalancedCache[pk(ad.p,ad.d)];
     if(!slots)return;
-    // Freeze cook and leftover slots (they have snapped amounts)
-    var frozenSlots={};
-    var sameDayCookServings={};
-    Object.keys(slots).forEach(function(s2){
-      var lo2=leftovers[sk(ad.p,ad.d,s2)];
-      if(s2==='shake'){frozenSlots[s2]=true;return;}
-      if(lo2&&lo2.isLeftover){frozenSlots[s2]=true;return;}
-      if(lo2&&!lo2.isLeftover&&(lo2.servings>1||lo2.crossPersonCook||lo2.shared)){
-        // Cook slot — freeze it (snapped), but track servings for dailyMacros
-        frozenSlots[s2]=true;
-        // Check for same-day leftovers of this cook slot
-        var mealId2=getMealId(ad.p,ad.d,s2);
-        ['breakfast','lunch','dinner','snack'].forEach(function(s3){
-          if(s3===s2)return;
-          if(getMealId(ad.p,ad.d,s3)===mealId2){
-            var lo3=leftovers[sk(ad.p,ad.d,s3)];
-            if(lo3&&lo3.isLeftover&&!lo3.crossPerson){
-              frozenSlots[s3]=true;
-            }
-          }
-        });
-      }
-    });
-    balanceDayMacros(ad.p,ad.d,slots,frozenSlots,sameDayCookServings);
+    balanceDayMacros(ad.p,ad.d,slots,_buildPostPipelineFrozenSlots(ad.p,ad.d,slots,leftovers));
   });
   // Return true if any batch total was mutated — lets a convergence
   // loop skip further iterations when the pipeline reaches steady state.
@@ -7135,7 +7193,7 @@ function postBalanceWastePass(){
       var target=direction==='up'?upDelta:downDelta;
 
       var maxFlexPct=0.25;
-      if(['black beans canned','cannellini beans canned','black beans cooked','cannellini beans cooked','chickpeas roasted','chickpeas cooked'].indexOf(dbKey)>=0)maxFlexPct=0.75;
+      if(['black beans canned','cannellini beans canned','black beans cooked','cannellini beans cooked','chickpeas cooked'].indexOf(dbKey)>=0)maxFlexPct=0.75;
       if(dbKey==='marinara')maxFlexPct=1.0;
       if(dbKey==='chicken broth')maxFlexPct=direction==='up'?1.0:0.50;
       if(dbKey==='silken tofu')maxFlexPct=1.0;
@@ -7333,56 +7391,13 @@ function randomizeWeek(target, seed){
     _randomizeWeekCore(randTarget);
 
     invalidateLeftoverCache();
-    // Fast approximate waste count for retry selection (avoids running the
-    // full day-balancer + shopping pipeline). Uses the same estimate Phase 3
-    // uses internally, so scoring is consistent with the optimizer's signal.
-    let totalWaste = 0;
-    ['sun','wed'].forEach(function(trip){
-      const days = TRIP_DAYS_STATIC[trip] || [];
-      // Inline analysis: per-slot scale factor × base amount
-      const totals = {};
-      days.forEach(function(d){
-        ['him','her'].forEach(function(p){
-          if (randTarget !== 'shared' && p !== randTarget) return;
-          SLOTS.forEach(function(s){
-            if (s === 'late_snack') return;
-            const key = sk(p,d,s);
-            if (SKIPPED[key] || EAT_OUT[key]) return;
-            const mealId = getMealId(p,d,s); if (!mealId) return;
-            const lo = (_leftoverCache || computeLeftovers())[key];
-            if (lo && lo.isLeftover) return;
-            const lMult = (lo && !lo.isLeftover && lo.servings > 1) ? lo.servings : 1;
-            const m = getMeal(mealId); if (!m || !m.ingredients) return;
-            let scale = 1;
-            if (s !== 'shake' && SLOT_BUDGET[s] && (p === 'him' || p === 'her')) {
-              let bk = 0;
-              m.ingredients.forEach(function(i){ const db=NUTRI_DB[i.dbKey]; if(db) bk += db.kcal*(i.amt||0); });
-              if (bk > 0) { scale = getSlotBudget(p,d,s) / bk; }
-            }
-            m.ingredients.forEach(function(ing){
-              const db = NUTRI_DB[ing.dbKey];
-              if (!db || !db.pkg || db.pkg.longShelfLife) return;
-              const eff = (ing.scalable === false) ? (ing.amt||0) : (ing.amt||0) * scale;
-              totals[ing.dbKey] = (totals[ing.dbKey]||0) + eff * lMult;
-            });
-          });
-        });
-      });
-      Object.keys(totals).forEach(function(k){
-        const db = NUTRI_DB[k]; if (!db || !db.pkg) return;
-        const unit = db.unit;
-        const perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
-        if (perPkg <= 0) return;
-        const pkgs = Math.ceil(totals[k] / perPkg);
-        const waste = pkgs * perPkg - totals[k];
-        if (waste > 0.01) {
-          // Flex-fixable waste doesn't count — applyTripFlexScaling nudges
-          // per-serving amounts within configured range + carb/fat backfill.
-          if (canFlexFitToPkg(k, totals[k], perPkg)) return;
-          totalWaste++;
-        }
-      });
-    });
+    // Fast approximate trip waste for retry selection — flex-aware count of
+    // packages whose waste can't be flex-fitted. Single source of truth via
+    // `_fastTripWasteForPersons`; reroll stages use the same helper so
+    // scoring is consistent across pipeline stages.
+    const _wasteCalcPersons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+    let totalWaste = _fastTripWasteForPersons(TRIP_DAYS_STATIC.sun, _wasteCalcPersons)
+                   + _fastTripWasteForPersons(TRIP_DAYS_STATIC.wed, _wasteCalcPersons);
     // Only compute goal misses (expensive — full day-balancer) for retries
     // that already achieved zero waste. Waste is the dominant criterion anyway.
     //
@@ -7393,8 +7408,9 @@ function randomizeWeek(target, seed){
     // by the retry loop exiting on first zero-miss (line below).
     let goalMisses = Infinity;
     if (totalWaste === 0) {
+      // applyTripFlexScaling invalidates internally after each setOverride/
+      // revert; no extra invalidate needed before runBalanceAdjusters.
       applyTripFlexScaling(randTarget);
-      invalidateLeftoverCache();
       runBalanceAdjusters();
       goalMisses = 0;
       const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
@@ -7412,11 +7428,11 @@ function randomizeWeek(target, seed){
         });
       });
     }
-    // Stage 1a: snapshot _dayBalancedCache + _leftoverCache BEFORE countInv14
-    // invalidates them. Saves re-running the 7-stage post-balance pipeline
-    // on the winner in the post-retry block. CRITICAL: must snapshot
-    // BEFORE invalidate — countInv14 below calls invalidateLeftoverCache
-    // which wipes both caches, so a post-invalidate snapshot gets empty {}.
+    // Stage 1a: snapshot _dayBalancedCache + _leftoverCache here so the
+    // post-retry block can skip the 7-stage post-balance pipeline rerun on
+    // the winner. CRITICAL: this must run BEFORE the explicit
+    // invalidateLeftoverCache() at the next `if (totalWaste === 0)` block —
+    // that call wipes both caches, so a post-invalidate snapshot gets {}.
     let retryCaches = null;
     if (totalWaste === 0) {
       retryCaches = {
@@ -7457,7 +7473,11 @@ function randomizeWeek(target, seed){
   }
   if (bestCaches) {
     for (const k in _dayBalancedCache) delete _dayBalancedCache[k];
-    Object.keys(bestCaches.dayBalanced).forEach(function(k){_dayBalancedCache[k]=bestCaches.dayBalanced[k];});
+    // Deep-clone each entry on restore so subsequent in-place mutations
+    // (snapSoloSlotAmountsToGrid, rerollKcalOffSnacks, etc.) don't write
+    // back into bestCaches's stored objects. Symmetric with _leftoverCache
+    // re-clone below.
+    Object.keys(bestCaches.dayBalanced).forEach(function(k){_dayBalancedCache[k]=JSON.parse(JSON.stringify(bestCaches.dayBalanced[k]));});
     _leftoverCache = bestCaches.leftover ? JSON.parse(JSON.stringify(bestCaches.leftover)) : null;
     cacheFromWinner = true;
   } else {
@@ -7475,9 +7495,9 @@ function randomizeWeek(target, seed){
   }
   if (!cacheFromWinner) {
     // Full balance pipeline — runs only when cache wasn't restored from
-    // winning retry, or when rerolls invalidated it.
+    // winning retry, or when rerolls invalidated it. applyTripFlexScaling
+    // invalidates internally; no extra invalidate needed.
     applyTripFlexScaling(randTarget);
-    invalidateLeftoverCache();
     runBalanceAdjusters();
   }
   // Final solo-slot grid snap — day-balancer/flex-scaling can leave non-batch
@@ -7841,7 +7861,7 @@ function rerollKcalOffSnacks(randTarget){
     const ovrIngr = applyOverrides(port,p,d,'snack');
     if(!ovrIngr || !ovrIngr.length) return null;
     const slotAdj = getSlotAdjustment(p,d,'snack');
-    const hints = (typeof buildMacroHints==='function') ? buildMacroHints(p,d,'snack') : undefined;
+    const hints = buildMacroHints(p,d,'snack');
     const adjusted = adjustIngredients(ovrIngr, slotAdj, 'snack', hints, 1);
     return adjusted.map(function(a){
       return {dbKey:a.ing.dbKey, amt:a.newAmt, role:a.ing.role, scalable:a.ing.scalable, origAmt:a.ing.amt};
@@ -7858,8 +7878,12 @@ function rerollKcalOffSnacks(randTarget){
       if(mealUsesPkg(curId))return;
       const curDelta = calcTotals(p,d).kcal - CAL_BASE[p];
       if(Math.abs(curDelta)<=100)return;           // day is on-target
-      const cached = _dayBalancedCache[pk(p,d)];
-      if(!cached) return; // day not balanced — shouldn't happen at end-of-pipeline
+      // Lazy-build via getDayBalancedIngredients so we don't silently bail
+      // when the cache happens to be empty (the prior `if(!cached)return`
+      // hid such cases). Returns the live cache entry — mutations to
+      // cached.snack land in _dayBalancedCache directly.
+      const cached = getDayBalancedIngredients(p,d);
+      if(!cached.snack) return; // snack slot not built (e.g., empty meal)
       // Snacks are exempt from the 5-day household-repeat rule (small pool).
       const candidates = getMealsForSlot('snack').filter(function(m){
         if(!m[p])return false;
@@ -10036,9 +10060,13 @@ window.MPStress=(function(){
     // captured. If the snapshot doesn't include caches (legacy snapshots), fall
     // back to invalidate so callers get a fresh rebuild.
     if (s._dayBalancedCache) {
-      replace(_dayBalancedCache, s._dayBalancedCache);
+      // Deep-clone entries on restore so subsequent live mutations don't
+      // leak back into the stored snapshot. Symmetric with _leftoverCache
+      // clone below.
+      Object.keys(_dayBalancedCache).forEach(function(k){delete _dayBalancedCache[k];});
+      Object.keys(s._dayBalancedCache).forEach(function(k){_dayBalancedCache[k]=JSON.parse(JSON.stringify(s._dayBalancedCache[k]));});
     } else {
-      if (typeof invalidateDayBalancedCache==='function') invalidateDayBalancedCache();
+      invalidateDayBalancedCache();
     }
     if (s._leftoverCache !== undefined) {
       _leftoverCache = s._leftoverCache ? clone(s._leftoverCache) : null;
@@ -10114,7 +10142,7 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0};
     violations.forEach(function(v){
       var m=v.match(/^INV(\d+)/);if(!m)return;
       var key='INV'+m[1];if(counts[key]!==undefined)counts[key]++;
@@ -10283,7 +10311,7 @@ window.MPStress=(function(){
     var kcalBins={'<-150':0,'-150..-120':0,'-120..-100':0,'+100..+120':0,'+120..+150':0,'>+150':0};
     var fatBins={'30.0-30.2':0,'30.2-30.5':0,'30.5-31.0':0,'31.0-32.0':0,'>32.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
@@ -10438,8 +10466,8 @@ window.MPStress=(function(){
       missCounts:missCounts,
       kcalBins:kcalBins,fatBins:fatBins,vegBins:vegBins,
       invTotals:invTotals,
-      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&invTotals[k]>0;}),
-      // INV13 is separate because thresholds are being rolled out — ingredients without min/max are implicitly exempt.
+      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&invTotals[k]>0;}), // INV19 IS hard — counts toward "any fail"
+      // INV13 fires per-ingredient that has db.minAmt/maxAmt defined; ingredients without those are exempt by construction.
       invSamples:invSamples,
       topMeals:topMeals,
       vegCeilings:vegCeilingAll,
@@ -10560,7 +10588,7 @@ window.MPStress=(function(){
     var cur={
       primary: a.primaryHitRate*100,
       inv14: a.inv14Breakdown.total,
-      hardFail: Object.keys(a.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&a.invTotals[k]>0;}).length,
+      hardFail: Object.keys(a.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&a.invTotals[k]>0;}).length, // INV19 hard, counted
       closedPct: (function(){
         var ta=0,tc=0;
         ['breakfast','lunch','dinner','snack'].forEach(function(s){
@@ -10643,7 +10671,7 @@ window.MPStress=(function(){
     lines.push('');
 
     // ── HARD INVARIANTS ─────────────────────────────────────────
-    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17'];
+    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19'];
     var firedHard=hardKeys.filter(function(k){return a.invTotals[k]>0;});
     lines.push('### Hard Invariants');
     lines.push('');
@@ -10695,20 +10723,74 @@ window.MPStress=(function(){
     // <60% is acceptable noise from per-slot adjustment.
     if(a.invTotals.INV6>0){
       lines.push('');
-      lines.push('**INV6 severity (drift% from base P/C ratio)**');
+      lines.push('**INV6 severity (drift% from base P/C ratio)'+(baseline&&baseline.inv6Severity?' — vs baseline':'')+'**');
       lines.push('');
-      lines.push('| Bucket | Count |');
-      lines.push('|---|---|');
-      ['<60','60-80','80-100','100-150','150-200','200-300','>300'].forEach(function(b){
-        lines.push('| '+b+'% | '+(a.inv6Severity[b]||0)+' |');
-      });
+      // Show baseline columns when severity data available.
+      var baseSev = baseline && baseline.inv6Severity ? baseline.inv6Severity : null;
+      if(baseSev){
+        lines.push('| Bucket | Baseline | Current | Δ |');
+        lines.push('|---|---|---|---|');
+        ['<60','60-80','80-100','100-150','150-200','200-300','>300'].forEach(function(b){
+          var bv=baseSev[b]||0, cv=a.inv6Severity[b]||0;
+          lines.push('| '+b+'% | '+bv+' | '+cv+' | '+delta(cv,bv,'')+' |');
+        });
+      }else{
+        lines.push('| Bucket | Count |');
+        lines.push('|---|---|');
+        ['<60','60-80','80-100','100-150','150-200','200-300','>300'].forEach(function(b){
+          lines.push('| '+b+'% | '+(a.inv6Severity[b]||0)+' |');
+        });
+      }
       lines.push('');
-      lines.push('**INV6 max drift:** '+a.inv6MaxPct+'%');
+      var maxLine='**INV6 max drift:** '+a.inv6MaxPct+'%';
+      if(baseline&&baseline.inv6MaxPct!=null){
+        maxLine+=' (baseline '+baseline.inv6MaxPct+'%, '+delta(a.inv6MaxPct,baseline.inv6MaxPct,'pp')+')';
+      }
+      lines.push(maxLine);
       if(a.inv6TopMeals && a.inv6TopMeals.length){
-        lines.push('**INV6 top offenders:** '+a.inv6TopMeals.map(function(m){return '`'+m.id+'`('+m.count+')';}).join(', '));
+        var topLine='**INV6 top offenders:** '+a.inv6TopMeals.map(function(m){return '`'+m.id+'`('+m.count+')';}).join(', ');
+        // If baseline has top offenders, show which meals are NEW vs persisted.
+        if(baseline && baseline.inv6TopMeals && baseline.inv6TopMeals.length){
+          var baseSet={}; baseline.inv6TopMeals.forEach(function(m){baseSet[m.id]=m.count;});
+          var curSet={}; a.inv6TopMeals.forEach(function(m){curSet[m.id]=m.count;});
+          var newOffenders=a.inv6TopMeals.filter(function(m){return !baseSet[m.id];}).map(function(m){return m.id;});
+          var resolvedOffenders=baseline.inv6TopMeals.filter(function(m){return !curSet[m.id];}).map(function(m){return m.id;});
+          if(newOffenders.length || resolvedOffenders.length){
+            topLine+='\n_Diff vs baseline:'
+              +(newOffenders.length?' NEW ['+newOffenders.join(', ')+']':'')
+              +(resolvedOffenders.length?' RESOLVED ['+resolvedOffenders.join(', ')+']':'')+'_';
+          }
+        }
+        lines.push(topLine);
       }
     }
     lines.push('');
+
+    // ── PER-INVARIANT TOTALS (vs baseline) ──────────────────────
+    // When baseline has full invTotals, surface a compact per-INV grid so
+    // any individual invariant's count change is visible — not just the
+    // rolled-up tracking metrics. Hard INVs should always be 0; tracking
+    // INVs (6,14,15,16,18) get their own delta rows.
+    if(baseline && baseline.invTotals){
+      var changedInvs=[];
+      ['INV1','INV2','INV3','INV4','INV5','INV6','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV14','INV15','INV16','INV17','INV18','INV19'].forEach(function(k){
+        var bv=baseline.invTotals[k]||0;
+        var cv=a.invTotals[k]||0;
+        if(bv!==cv){
+          changedInvs.push({inv:k, baseline:bv, current:cv, d:cv-bv});
+        }
+      });
+      if(changedInvs.length){
+        lines.push('### Per-Invariant Totals — Changed vs Baseline');
+        lines.push('');
+        lines.push('| INV | Baseline | Current | Δ |');
+        lines.push('|---|---|---|---|');
+        changedInvs.forEach(function(c){
+          lines.push('| '+c.inv+' | '+c.baseline+' | '+c.current+' | '+(c.d>0?'+'+c.d:c.d.toString())+' |');
+        });
+        lines.push('');
+      }
+    }
 
     // ── PER-SLOT MEAL USAGE ─────────────────────────────────────
     lines.push('### Per-slot Meal Usage');
@@ -10915,7 +10997,10 @@ window.MPStress=(function(){
       inv15Him: (agg.avgLeftoversEaten&&agg.avgLeftoversEaten.him)||0,
       inv16Her: (agg.avgLeftoversEaten&&agg.avgLeftoversEaten.her)||0,
       inv18AvgPct: agg.rbaCap?(agg.rbaCap.avgRate*100):0,
-      hardFail: Object.keys(agg.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&agg.invTotals[k]>0;}).length,
+      // Worst single-run cap-hit rate, for monitoring stragglers (one
+      // outlier can hide under a healthy avg). Surfaced alongside avgPct.
+      inv18WorstRunPct: agg.rbaCap?(agg.rbaCap.worstRunRate*100):0,
+      hardFail: Object.keys(agg.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&agg.invTotals[k]>0;}).length, // INV19 hard, counted
       closedPct: (function(){
         var ta=0,tc=0;
         ['breakfast','lunch','dinner','snack'].forEach(function(s){
@@ -10934,11 +11019,33 @@ window.MPStress=(function(){
       })(),
       missCounts: JSON.parse(JSON.stringify(agg.missCounts||{})),
       timingAvg: agg.timing&&agg.timing.avg||0,
+      // Full per-invariant counts. Lets future runs delta against EVERY
+      // invariant individually, not just the rolled-up tracking metrics.
+      // Hard INVs should stay at 0, so this primarily benefits tracking
+      // INVs and surfaces if a previously-clean hard INV starts firing.
+      invTotals: JSON.parse(JSON.stringify(agg.invTotals||{})),
+      // INV6 severity — drift-bucket distribution + max + top offenders.
+      // Captures the SHAPE of the P/C ratio drift, not just the count.
+      // Lets future runs detect "same total, different shape" regressions
+      // (e.g., shifting from <60% bucket to 100-150% bucket).
+      inv6Severity: JSON.parse(JSON.stringify(agg.inv6Severity||{})),
+      inv6MaxPct: agg.inv6MaxPct||0,
+      inv6TopMeals: JSON.parse(JSON.stringify(agg.inv6TopMeals||[])).slice(0,10),
+      // INV14 detail — gap distribution + per-person + top offenders.
+      // Lets future runs see "INV14=2" and know if it's the same recipe
+      // pair recurring or new ones cropping up.
+      inv14Breakdown: agg.inv14Breakdown ? {
+        total: agg.inv14Breakdown.total,
+        perRun: agg.inv14Breakdown.perRun,
+        byPerson: JSON.parse(JSON.stringify(agg.inv14Breakdown.byPerson||{})),
+        byGap: JSON.parse(JSON.stringify(agg.inv14Breakdown.byGap||{})),
+        topMeals: JSON.parse(JSON.stringify(agg.inv14Breakdown.topMeals||[])).slice(0,5)
+      } : null,
       mode:mode,
       savedAt: new Date().toISOString()
     };
     try{localStorage.setItem(key,JSON.stringify(b));}catch(e){}
-    console.log('[MPStress] '+mode+' baseline saved: primary='+b.primary.toFixed(2)+'% INV6='+b.inv6+' INV14='+b.inv14+' INV15='+b.inv15Him.toFixed(1)+' INV16='+b.inv16Her.toFixed(1)+' hardFail='+b.hardFail);
+    console.log('[MPStress] '+mode+' baseline saved: primary='+b.primary.toFixed(2)+'% INV6='+b.inv6+' (max '+b.inv6MaxPct+'%) INV14='+b.inv14+' INV15='+b.inv15Him.toFixed(1)+' INV16='+b.inv16Her.toFixed(1)+' hardFail='+b.hardFail);
     return b;
   }
   function clearBaseline(mode){
@@ -10972,6 +11079,7 @@ window.MPStress=(function(){
     var snap=snapshot();
     try{randomizeWeek('shared', seed+1000000);}catch(e){restore(snap);throw e;}
     clearTimeout(_selSaveTimer);
+    acc._totalRuns=(acc._totalRuns||0)+1;
 
     function ensureIng(dbKey){
       if(!acc.ingrStats[dbKey])acc.ingrStats[dbKey]={
@@ -11062,7 +11170,7 @@ window.MPStress=(function(){
   }
 
   function _newVegAcc(){
-    return {ingrStats:{}, dayVegHim:[], dayVegHer:[], sharedBatchSkew:[], infeasibleBatches:[], perMealStats:{}};
+    return {ingrStats:{}, dayVegHim:[], dayVegHer:[], sharedBatchSkew:[], infeasibleBatches:[], perMealStats:{}, _totalRuns:0};
   }
 
   // Public: chunk-friendly collector. Pass `state` to accumulate across calls.
