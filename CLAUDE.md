@@ -1448,3 +1448,101 @@ Each test uncovers different things. Test 2's INV14=2 fires from `salmon_lentils
 - **Recipe normalization** carry-forward (~8 lunch/dinner + ~5 breakfast still off-budget — list in 2026-04-22 session).
 - **Phase 1.7 naming cleanup** — still uses decimal phase numbering. Open from prior sessions.
 - **Optional**: explore raising INV6 to hard once miso_tofu and recipe-normalization tail get addressed. Currently ~1.15-1.23/run is mostly Him-budget-scaling artifacts, not bugs.
+
+## Session 2026-04-26 (late late) — Sync v4, Set-as-randomize-lock, Force Push, sync-protection toggle
+
+Sync overhaul + clarified Set semantics in 4 commits.
+
+### Commit chain
+```
+d453332  Set is the lock: MANUAL_SET always blocks meal/category swaps in Randomize
+70e20a0  Repurpose lock toggle: sync-protection instead of randomize-protection
+282e795  (intermediate) Lock-against-randomize toggle + Force Push sync option
+b104b2c  Sync v3→v4: ADJ_TARGETS sync + per-key timestamps for true LWW
+```
+
+### What's new
+
+**1. Sync payload version 3 → 4 ([b104b2c](commits/b104b2c))**
+
+`getSyncPayload` now returns `version:4` with new fields. `mergeSyncData` reads `remote.version || 3` and treats v3 entries as `ts=0` so any v4 local entries with real timestamps win automatically (clean migration — no schema break).
+
+| Field | Before (v3) | After (v4) |
+|---|---|---|
+| `ADJ_TARGETS` | not synced, not even persisted | **synced** + per-pk(p,d) timestamps via `ADJ_TARGETS_TS` |
+| `customMeals[id]` | one-way add (edits ignored) | per-meal `_ts`, true LWW — **edits propagate** |
+| `customIngredients[k]` | one-way add | per-key `_ts`, true LWW |
+| `EAT_OUT_DB[i]` | one-way add (edits to existing entries lost) | per-entry `_ts`, true LWW + `addToEatOutDB` updates in place |
+| `weekData[w].lateSnack` | one-way add | new `lateSnackTs` map, diff-stamped at `saveWeeks` |
+| `weekData[w].sharedSchedule` | one-way add (un-shares didn't propagate) | new `sharedScheduleTs` map, diff-stamped, **un-shares now propagate** |
+
+User-facing impact: every meaningful edit now propagates correctly between phones. Recipe edits, custom ingredient macro changes, eat-out macro updates, un-shares, late-snack changes, and ADJ_TARGETS toggles all flow both directions instead of getting lost.
+
+**2. Force Push sync button ([282e795](commits/282e795))**
+
+New ⬆ Force Push button on the Sync panel. Confirms first ("overwrites remote with your local state, ignores anything newer"), then on confirm:
+- Bumps every per-key timestamp (sel, lateSnack, sharedSchedule, ADJ_TARGETS, customMeals._ts, customIngredients._ts, EAT_OUT_DB._ts) to `Date.now()`
+- PATCHes the Gist directly without pull/merge first
+- Other phone's next Pull sees this version as newest everywhere → adopts it
+
+Use case: "I want both phones on this exact state, ignore the other phone's edits."
+
+**3. `Set` is the randomize-lock — always-on, no toggle ([d453332](commits/d453332))**
+
+Reverted intermediate randomize-lock toggle from `282e795`. User clarified: "Set IS the lock" — adding a separate toggle was redundant. Made `MANUAL_SET[k]` unconditionally block meal-ID changes by Randomize.
+
+**Locked**: meal ID, category swaps (skip/eat-out/leftover/shared/specific meal). Wired into:
+- Phase 1's `locked` map (Strategy A and C inherit automatically)
+- Phase 1.7 snack swap (own slot + other-person side of shared)
+- Phase 4 mirror sharing (early at 8326 + final at 8819)
+- rerollMissDays + rerollKcalOffSnacks
+- rerollInv14Violations already locked unconditionally (existed pre-change)
+
+**NOT locked**: per-ingredient amounts. Post-pipeline scaling (day balancer, adjuster, snap, unify, waste, boost) still operates on Set slots — they keep their meal ID but their ingredient quantities adjust to fit the kcal budget.
+
+Verified by injection: `apple_cinnamon_oats` Set on `him_Monday_breakfast` → after Randomize, meal ID preserved AND scaled from 391 kcal recipe base to 579 kcal (Him budget).
+
+**Important behavior change**: prior to `d453332`, Set was decorative — Randomize would happily overwrite Set slots. Now Set is sticky — Randomize fills in around Set picks instead of through them. To free a slot for Randomize again: use `onIngrReset` (the slot's reset button), or any action that calls `delete MANUAL_SET[k]`. `changeMeal` itself re-sets the flag, so picking a different meal via dropdown keeps the slot Set.
+
+**4. Sync-protection toggle ([70e20a0](commits/70e20a0))**
+
+The `LOCK_MANUAL_SLOTS` toggle was originally repurposed sync protection. Lives in the new "🔒 Sync Protection" panel on the Sync tab. Per-device pref, NOT synced.
+
+When ON: `mergeSyncData` skips slots where local `weekData[w].manualSet[k]=true`, regardless of remote timestamp. Local Set slots are immune to incoming sync overwrites. The other phone's Force Push still works (explicit override path).
+
+When OFF (default): standard last-write-wins per-slot.
+
+User-facing scenario it solves:
+- Phone A randomizes (T=200, all slots fresh ts)
+- Phone B picks a fancy Friday dinner manually (T=300, MANUAL_SET=true)
+- Phone A randomizes AGAIN later (T=400)
+- Phone B Pulls: with toggle ON, Phone B's Friday dinner survives; with OFF, Phone A's T=400 ts overwrites everything
+
+### Two distinct lock concepts now exist
+
+| Concept | Trigger | Default | Affects |
+|---|---|---|---|
+| **Set = randomize-lock** | `MANUAL_SET[k]=true` | always-on | Phase 1, 1.7, 3, 4, rerolls |
+| **Sync protection toggle** | `LOCK_MANUAL_SLOTS=true` (Sync tab toggle) | OFF | `mergeSyncData` only |
+
+They're orthogonal — Set always blocks Randomize from changing the meal; sync protection optionally blocks incoming sync overwrites.
+
+### Verification
+
+100-seed stress runs (Test 1) post-d453332 with no Set slots: primary 100%, all hard INVs 0 (incl. INV19), avg ~390ms. Same as pre-change. The locking doesn't activate when there are no MANUAL_SET slots, so stress harness numbers are unchanged.
+
+Sync v4 migration verified by injection:
+- v3 remote (no `_ts`) → treated as ts=0, local v4 entries with real timestamps win ✓
+- v4 remote with newer `_ts` → wins over older local v4 ✓
+- ADJ_TARGETS persists with timestamps to localStorage ✓
+- lateSnack + sharedSchedule diff-stamped at saveWeeks ✓
+- Sync lock ON + MANUAL_SET → remote with newer ts is REJECTED ✓
+- Sync lock OFF + MANUAL_SET → remote with newer ts WINS (default LWW) ✓
+
+### Open items still ahead
+
+- **Test 2 INV14=2 fires** (carry-forward from earlier in session) — `salmon_lentils` and `coconut_turkey_curry` at gap=3 only emerge when prior-week SEL is randomized. Use `MPStress.inspectRun(seed)` to drill in.
+- **INV6 max drift 212% in Test 1** — `miso_tofu` recipe-rebalance candidate.
+- **Recipe normalization** ongoing — ~8 lunch/dinner + ~5 breakfast still off-budget per 2026-04-22 list.
+- **Phase 1.7 naming cleanup**.
+- **Possibly**: re-test Test 2/3 with the post-d453332 code to confirm no regression on those baselines (the 25-seed sanity passes; full 100-seed not re-run).
