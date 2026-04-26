@@ -1362,10 +1362,42 @@ Big jumps from prior baseline (99.86 / INV6=143 / INV6 max 166 / timing 395):
 - **INV6 top offenders rotated**: PB snacks (was top 2) gone. Now miso_tofu, salmon_stir_fry_din, filet_din, turkey_lettuce_wraps, chicken_breakfast_wrap.
 - **Timing 395 → 390ms avg** (essentially same)
 
+### Test 2 baseline (saved 2026-04-26)
+
+```js
+{primary:100.00, inv6:108, inv6MaxPct:158,
+ inv6TopMeals:[salmon_stir_fry_din(15), turkey_sweet_potato_hash(10), spicy_tofu_chicken_noodles(9), turkey_egg_scramble(8), chicken_breakfast_wrap(7)],
+ inv14:0, inv15Him:2.77, inv16Her:2.71, inv18AvgPct:2.10, inv18WorstRunPct:50,
+ hardFail:0, closedPct:0.0, avgVariance:95.4,
+ missCounts:{kcalLow:0, kcalHigh:0, pro:0, carbPct:0, fatPct:0, veg:0, fruit:0},
+ timingAvg:332, mode:'standard2'}
+```
+
+For seeding a fresh-page session before running Test 2, paste:
+
+```js
+localStorage.setItem('mealPlannerStressBaseline2', JSON.stringify({primary:100, inv6:108, inv6MaxPct:158, inv14:0, inv15Him:2.77, inv16Her:2.71, inv18AvgPct:2.10, inv18WorstRunPct:50, hardFail:0, closedPct:0, avgVariance:95.4, missCounts:{kcalLow:0,kcalHigh:0,pro:0,carbPct:0,fatPct:0,veg:0,fruit:0}, timingAvg:332, mode:'standard2'}));
+```
+
+(Severity buckets, full `invTotals`, and `inv14Breakdown` are also saved by `saveBaseline` but omitted from this seed string for brevity — re-saving from the next 100-run agg restores them.)
+
+### Test 1 vs Test 2 — comparative state (2026-04-26)
+
+| Metric | Test 1 (deterministic) | Test 2 (state-evolving) |
+|---|---|---|
+| Primary hit rate | 100.00% | 100.00% |
+| INV6 total | 123 | **108** (-15) |
+| INV6 max drift | **212%** | 158% (-54pp) |
+| INV6 top offender | `miso_tofu`(10) | `salmon_stir_fry_din`(15) |
+| INV15 him | 2.87 | 2.77 |
+| INV16 her | 2.69 | 2.71 |
+| INV18 avg | 3.10% | 2.10% |
+| Timing avg | 390ms | 332ms |
+
+Notable: Test 1's 212% drift outlier doesn't appear in any of Test 2's 100 runs. That outlier is specific to Test 1's seed range (12345..12444) — a deterministic edge case rather than a general issue. Test 2 also doesn't have `miso_tofu` in its top offenders. State-evolving runs naturally diversify Phase 1 picks across runs, avoiding the worst-case ratio configurations Test 1's seeds happen to hit. Test 2 is faster (warmer caches between runs) and has a tighter INV6 distribution overall.
+
 ### Open items for next session
-- **INV6 max drift 212%** investigation — one seed shows extreme drift. Identify which run + recipe and decide if structural or fixable.
-- **`miso_tofu`** (10 fires) — top INV6 offender now. Small recipe pool, see if recipe rebalance helps.
+- **INV6 max drift 212% in Test 1** — `miso_tofu` (10 fires, deterministic seed range) and one specific seed pushing 212%. Use `MPStress.inspectDay(seed, p, d)` to drill into which run + day caused the outlier. Decide if structural or fixable.
 - **Recipe normalization** carry-forward (~8 lunch/dinner + ~5 breakfast still off-budget — list in 2026-04-22 session).
-- **Test 2 (`runStandard2`)** — re-run to capture state-evolving baseline; should also pass cleanly.
 - **Phase 1.7 naming cleanup** — still uses decimal phase numbering. Open from prior sessions.
-- **Optional**: explore raising INV6 to hard once miso_tofu and recipe-normalization tail get addressed. Currently 1.23/run is mostly Him-budget-scaling artifacts, not bugs.
+- **Optional**: explore raising INV6 to hard once miso_tofu and recipe-normalization tail get addressed. Currently 1.23/run (Test 1) and 1.08/run (Test 2) is mostly Him-budget-scaling artifacts, not bugs.
