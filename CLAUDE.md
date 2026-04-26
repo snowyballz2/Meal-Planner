@@ -1068,3 +1068,135 @@ MPStress.exitInspect()                       // back to pre-inspect state
 4. Narrow between those boundaries with more counters until you find the responsible line.
 
 **When the harness says "all 0 ✓" but you suspect ratio drift**: run 5-10 seeds with the code live, then call `verifyInvariants()` directly while the stress state is live (not via `inspectRun` — that restores postSnap which may have subtle differences from live state). If INV7 fires live but report says 0, that's a snapshot/restore bug (like the INV7=5 phantom from the session-start).
+
+## Session 2026-04-25 — Convergence loop, INV17/18, veg cap raise + recipe rebalance
+
+**Headline**: 15 commits. Built a working convergence loop for the post-balance pipeline. Added INV18 (cap-hit rate canary). Tested + rejected a system-side relaxation approach in favor of a clean recipe-side fix that cut shared-veg below-floor cases by **88%** with no code complexity.
+
+### Commit chain
+```
+dcedfbc  veg caps + recipe rebalance: drop below-floor cases 246 → 30
+0c5c5cb  marinara: maxAmt 2.0 + standardize all recipe bases to 1c
+067e6eb  NUTRI_DB: zucchini maxAmt 1.5 → 2.0
+07d12a2  MPStress.collectVegBaseline: detailed veg snapshot for change-comparison
+d173f0b  INV18: convergence-loop cap-hit rate (tracking-only)
+e58909a  runBalanceAdjusters: convergence loop (Form A) — self-stabilizing pipeline
+9f17ac7  runBalanceAdjusters: document why NOT a convergence loop (later superseded)
+386cccf  5 adjusters now return `changed` boolean (prep for convergence loop)
+9b754dd  Extract runBalanceAdjusters() helper from two duplicate call sites
+d0fcd14  postBalanceWastePass: drop pre-build loop, now fully idempotent
+fa6589c  boostBatchVegForDailyTarget: document idempotency (already had it)
+41d1206  snapBatchTotalsToGrid: document idempotency (already had the structure)
+c63e194  snapBatchTotals: drop pre-build loop, now fully idempotent
+2b07f6f  postBalanceWastePass: remove destructive cache-existence guard
+d90b03d  snapBatchTotals: lazy cache reads + per-ingredient idempotency fast-path
+```
+
+### Stage 2 work landed (all 5 adjusters now idempotent)
+- `unifyCrossPersonRatios` (cc3b439, prior session)
+- `snapBatchTotals` (d90b03d → 2b07f6f → c63e194: lazy reads, removed downstream-destructive guard, dropped pre-build)
+- `snapBatchTotalsToGrid` (41d1206: doc-only — already idempotent)
+- `boostBatchVegForDailyTarget` (fa6589c: doc-only)
+- `postBalanceWastePass` (d0fcd14: pre-build dropped after 2b07f6f removed its dependent guard)
+- `applyTripFlexScaling` — still TODO (hardest, tracks OVERRIDES separately)
+
+### Convergence loop (`runBalanceAdjusters`)
+Pipeline-stage helper extracted (9b754dd). All 5 adjusters return `changed` boolean (386cccf). First convergence-loop attempt (9f17ac7) showed it doesn't fit cleanly — adjusters are idempotent pairwise but NOT commutative across stages (snap and gridSnap have different fixed points; u's kcal-prop ideal vs s/g's grid-snapped state oscillate sub-tolerance forever). Documented and reverted.
+
+User pushed back ("stop giving up"). Made it work in `e58909a` via three structural fixes:
+1. **gridSnap self-unifies internally** (calls `unifyCrossPersonRatios()` first) — defends against post-waste desynced state that would push portions below `db.minAmt` (INV13). Self-unify is fast-path no-op when already unified.
+2. **u infeasibility check** — when `floor + maxAmt + ratio` constraints are jointly unsatisfiable (kcal-skewed batches like `red_curry` zucchini with kcals 910/595/910), abandon floor enforcement and use pure kcal-proportional with maxAmt cap. Without this, u writes `[1.5, 0.913, 1.5]` (sum 3.912) while s/g snap to `[1.437, 0.875, 1.437]` (sum 3.75) forever — the classic "u and s/g have different fixed points" oscillation.
+3. **Downstream-only loop exit** — track only s/w/g/b's `changed` for loop exit, ignore u's. u's drift toward kcal-prop ideal is asymptotic at ~1% per iter and never stabilizes; downstream stages fast-path on it. Without this, the loop hits its 6-iter safety cap on most batches (60/62 calls during testing). With it, ≤3% of calls hit cap.
+4. **u's fast-path tolerance widened** to `max(0.0001, 0.005 × portion_amt)` (0.5% relative) — sub-1% drift is within INV7 tolerance and indistinguishable from snap noise.
+
+100-seed: primary 99.93%, hard INVs 0, INV18 7-10/100 (cap rate 2.30%), timing 704ms (slightly faster than the explicit-sequence 708ms baseline).
+
+### INV18 — convergence-loop cap-hit rate (`d173f0b`)
+Tracking-only invariant. Counts `runBalanceAdjusters` calls that exhaust the 6-iter safety cap. Fires when >10% of calls per randomize hit cap. Wired through verifyInvariants, MPStress aggregation (rbaCap.{totalCalls, totalHits, avgRate, worstRunRate}), formatReport (Tracking Invariants table), and saveBaseline.
+
+### INV17 — also added to invariants table (was already in code, doc oversight)
+
+### Path 3 "skip-and-accept" relaxation: tested, rejected
+**The hypothesis**: cross-person dinner sharing has a fixed kcal-share skew (her/him ≈ 0.66). Veg recipes whose base equals db.maxAmt produce shared batches where Her gets 30-50% of recipe (because Him hits cap and Her must scale proportionally). What if u, s, g, INV13 all relaxed bounds by ±25% for shared veg only?
+
+**Implementation**: u tries strict feasibility first; if infeasible AND it's veg, tries relaxed bounds with pre-validation (ensure post-relaxation amounts stay above db.minAmt). s/g/INV13 detect relaxed regime via "max portion > strict cap" and apply 1.25× cap.
+
+**Results**: ✅ 88% reduction in below-floor cases. ✅ Hard INVs all clean. ✅ Primary 100%. ❌ INV18 spiked from 10 → 79 (cap-hit rate 30%). The relaxation creates a NEW oscillation: u writes relaxed values, s/g snap them, next iter sees state reverted toward strict-feasible, u tries strict, infeasible, tries relaxed again. Sticky-relaxed fast-path attempt only marginally helped (INV18 79 → 77).
+
+**Decision**: rejected. Output quality fine but loop work tripled. Too much complexity for the gain.
+
+### Recipe-side fix (`dcedfbc`) — what we landed instead
+Same 88% reduction, no system code changes:
+- Raised cap on leafy veg (baby spinach, kale, bok choy) from 2.0 → **2.5c** maxAmt
+- Raised cap on standard veg (broccoli, bell pepper, asparagus, brussels, cucumber, bean sprouts, grape tomatoes, carrots) from 1.5 → **2.0c** to match zucchini
+- Dropped 4 recipes' veg base from 2c → 1.5c so kcal-prop scaling has room before binding cap:
+  - turkey_lettuce_wraps baby spinach
+  - turkey_zucchini_boats zucchini
+  - tuna_white_bean kale
+  - lemongrass_salad kale
+
+**Veg below-floor cases: 246 → 30 (−88%)** with INV18 cleaner (10 → 8) and primary unchanged (99.93%).
+
+Two recipes (tuna_white_bean, lemongrass_salad kale) now have **ZERO below-floor cases** — Her gets full recipe in every shared instance.
+
+### MPStress.collectVegBaseline (`07d12a2`)
+New tool. Captures detailed per-veg-ingredient stats across N stress runs. Per-ingredient: count, distribution percentiles, at-cap fires, below-min/above-max counts, shared-below-floor count + % distribution. Per-meal: same stats grouped by (meal, ingredient). Per-shared-batch: skew (smallest/largest portion ratio), top most-skewed. Saves to `localStorage['mealPlannerVegBaseline']`. Chunk-friendly via `{state, finalize:false}` opts so 100-seed runs fit in preview_eval's 30s timeout (4 chunks of 25 seeds).
+
+API: `MPStress.collectVegBaseline({runs, startSeed, state, finalize})` and `MPStress.formatVegBaseline()` for markdown summary.
+
+### Marinara cleanup (`0c5c5cb`)
+- Added `maxAmt:2.0` to NUTRI_DB.marinara (was uncapped)
+- Standardized all 3 recipes using marinara to 1.0c base (was mixed 0.5/0.75/1.0)
+- shakshuka: marinara role veg → condiment (correctness — marinara is sauce, not veg)
+- Larger marinara portions gave recipes more headroom to hit budgets without forcing turkey/pasta to their max — primary 99.93→100%, INV6 −27, timing −78ms.
+
+### Final state (carry forward)
+- **Primary hit rate**: 99.93% (1 fatPct miss in 100 seeds, structural)
+- **Hard INVs (1-5, 7-13, 17)**: all 0
+- **INV6**: ~275 (tracking-only)
+- **INV14**: 0
+- **INV18**: 8/100 runs (cap rate 2.48% avg)
+- **Leftovers**: him 2.60, her 2.60
+- **Timing**: 602ms avg
+- **Below-floor veg cases**: 30 (across 100 stress runs)
+
+### Saved baselines (carry-forward to next session)
+```js
+// Test 1 (deterministic, seeds 12345..12444):
+localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({
+  primary:99.93, inv6:275, inv14:0, inv15Him:2.60, inv16Her:2.60,
+  hardFail:0, closedPct:0.0, avgVariance:94.8,
+  inv18AvgPct:2.48,
+  missCounts:{kcalLow:0, kcalHigh:0, pro:0, carbPct:1, fatPct:0, veg:0, fruit:0},
+  timingAvg:602, mode:'standard'
+}));
+```
+
+Veg baseline saved: `localStorage['mealPlannerVegBaseline']` (100 runs, 18 veg ingredients, ~2000 shared-batch instances, 30 below-floor cases).
+
+### Open items for next session
+
+**Veg work**:
+- turkey_zucchini_boats remains the hardest case (Her at 0.91c worst case = 61% of new 1.5c base). Could push to 1.25c base for full elimination but starts to look sparse for "stuffed boats."
+- Other recipes that might benefit from base lowering: `mediterranean_chickpea_salad` cucumber 1.25c (83% of new 2.0c cap) — minor risk.
+- `roast_chicken_din` brussels still at 1.5c base = 75% of new 2.0c cap. Some below-floor still possible (worst observed 1.25c = 83% of recipe).
+
+**Stage 2 polish**:
+- `applyTripFlexScaling` is the last non-idempotent adjuster. Hardest because it tracks OVERRIDES separately and uses `getBalancedSlotIngredients` (with implicit lazy-build).
+
+**Diagnostic tools**:
+- `MPStress.collectVegBaseline` could be extended to track other ingredient categories (protein, fat) for similar analysis.
+- The "infeasibility detected → SF=1 fallback" branch in unify could log which batches hit it for further recipe audits.
+
+**Session 2026-04-25 closing rules-of-thumb**:
+- **Recipe-side fixes beat system-side complexity**. The convergence loop's relaxation approach gave 88% reduction in below-floor; the recipe rebalance gave the SAME 88% with zero code changes. When system constraints conflict with recipe data, often the recipe data is wrong, not the system.
+- **Pre-validation > post-detection**. Path 3 broke INV13 (below-min) because relaxed values + snap drift produced amounts below db.minAmt. The "skip-and-accept" version (validate before writing) was clean for INVs but introduced loop oscillation. The recipe-side fix has neither problem.
+- **Convergence loop's downstream-only exit is the load-bearing piece**. Tracking u's `changed` for exit triples loop iterations because u asymptotically chases its kcal-prop ideal at 1%/iter forever. Tracking only s/w/g/b's `changed` lets the loop exit as soon as observable state stabilizes.
+- **The 2-pass explicit sequence in current code (`u → s → w → u → g → b`)** wasn't arbitrary — the second `u` between waste and gridSnap is load-bearing because waste can desync ratios. The convergence loop subsumes this by making gridSnap self-unify internally.
+
+### Carry-forward from prior sessions
+(Items that didn't get touched this session — still relevant.)
+- Recipe normalization: ~8 lunch/dinner + ~5 breakfast still off-budget per the 2026-04-22 list.
+- INV6 audit: tracking-only at ~2.75/run currently. Top offenders are structural.
+- Test 2 (`runStandard2`) — randomized + state-evolving stress mode. Last measured 99.36% primary in prior session; baseline localStorage key `mealPlannerStressBaseline2`. Worth re-running to confirm no regression from this session's work.
+- 60-retry timing budget — could be relaxed if user wants snappier interactive clicks.
