@@ -10544,7 +10544,7 @@ window.MPStress=(function(){
       Object.keys(userSched).forEach(function(k){SHARED_SCHEDULE[k]=userSched[k];});
     }
   }
-  // Test 2: true-randomized counterpart to runStandard. Differs on TWO axes:
+  // Test 2: true-randomized counterpart to runStandard. Differs on THREE axes:
   // (1) nondeterministic — randomizeWeek uses real Math.random, not the
   //     seeded PRNG. Each run walks a different combinatoric path.
   // (2) persistState — no snapshot/restore between runs. Each run starts
@@ -10552,9 +10552,30 @@ window.MPStress=(function(){
   //     Randomize clicks. Exercises state-evolution paths (variety filter
   //     against accumulating recent picks, etc.) that the deterministic
   //     seeded test cannot reach.
+  // (3) random prior-week SEL pre-population — before each run, weekData.last.sel
+  //     gets ~40% randomly populated. The variety filter reads
+  //     weekData[_prevWeekKey()].sel; varying that prior-week state per run
+  //     exercises filter code paths that natural state-evolution alone
+  //     doesn't reach (since persistState's drift converges into similar
+  //     prior-week states across many runs).
   // Tradeoff: failures are NOT directly reproducible (Math.random state
   //   isn't captured). Use postSnap (preserved per run in window._stressRuns)
   //   + MPStress.inspectDay to drill into a failing day after-the-fact.
+  function _randomizePriorWeekSel(){
+    if(!weekData.last) return;
+    if(!weekData.last.sel) weekData.last.sel = {};
+    Object.keys(weekData.last.sel).forEach(function(k){delete weekData.last.sel[k];});
+    ['him','her'].forEach(function(p){
+      DAYS.forEach(function(d){
+        ['breakfast','lunch','dinner','snack'].forEach(function(s){
+          if(Math.random() > 0.4) return; // ~40% slot population
+          var meals = MEALS.filter(function(m){return m.slots && m.slots.indexOf(s)>=0 && m[p];});
+          if(!meals.length) return;
+          weekData.last.sel[sk(p,d,s)] = meals[Math.floor(Math.random()*meals.length)].id;
+        });
+      });
+    });
+  }
   function runStandard2(runs){
     runs=runs||100;
     var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
@@ -10563,7 +10584,42 @@ window.MPStress=(function(){
     try{
       var results=[];
       for(var i=0;i<runs;i++){
+        _randomizePriorWeekSel(); // varies variety-filter input per run
         results.push(runOne('standard2', i, null, {nondeterministic:true, persistState:true}));
+      }
+      cleanSave();
+      window._stressRuns=results;
+      var agg=aggregate(results);
+      console.log(formatReport(agg));
+      return agg;
+    }finally{
+      restore(initSnap);
+      Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
+      Object.keys(userSched).forEach(function(k){SHARED_SCHEDULE[k]=userSched[k];});
+    }
+  }
+  // Test 3: maximally-random variant. Combines true-random Math.random with
+  // applyVaried per-run config (random eat-outs, skips, manual locks on
+  // high-fat dinners, random shared-slot additions). Exercises code paths
+  // that neither Test 1 nor Test 2 hit well: skip kcal redistribution,
+  // eat-out kcal absorption, manual-lock interaction with randomizer
+  // constraints, sharing-config space.
+  //
+  // applyVaried mutates SEL/MANUAL_SET/SHARED_SCHEDULE directly. Called
+  // INSIDE cfgFn so the mutations land between runOne's snapshot and
+  // its restore — they revert at end of each runOne. Math.random as the
+  // rng = truly-random varied config (vs runVaried which uses the seeded
+  // harness rng for reproducibility). No persistState — each run resets,
+  // so applyVaried's random configs accumulate cleanly without drift.
+  function runStandard3(runs){
+    runs=runs||100;
+    var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
+    _applyStandardSharedSchedule();
+    var initSnap=snapshot();
+    try{
+      var results=[];
+      for(var i=0;i<runs;i++){
+        results.push(runOne('standard3', i, function(){return applyVaried(Math.random);}, {nondeterministic:true}));
       }
       cleanSave();
       window._stressRuns=results;
@@ -10610,13 +10666,13 @@ window.MPStress=(function(){
     // (true randomized) keep separate reference numbers. Defaults to the
     // legacy key when mode is unknown or 'standard'.
     var mode=a.mode||'standard';
-    var baselineKey=(mode==='standard2')?'mealPlannerStressBaseline2':'mealPlannerStressBaseline';
+    var baselineKey=(mode==='standard2')?'mealPlannerStressBaseline2':(mode==='standard3')?'mealPlannerStressBaseline3':'mealPlannerStressBaseline';
     var baseline=null;
     try{var raw=localStorage.getItem(baselineKey);if(raw)baseline=JSON.parse(raw);}catch(e){}
     var lines=[];
 
     // ── HEADER ──────────────────────────────────────────────────
-    var fnName=(mode==='standard2')?'runStandard2':'runStandard';
+    var fnName=(mode==='standard2')?'runStandard2':(mode==='standard3')?'runStandard3':'runStandard';
     lines.push('## MPStress.'+fnName+' — '+a.nRuns+' runs × 14 person-days = '+a.nPersonDays+' total');
     lines.push('');
 
@@ -10989,7 +11045,7 @@ window.MPStress=(function(){
   // over-session deltas in formatReport's KEY METRICS block.
   function saveBaseline(agg){
     var mode=(agg&&agg.mode)||'standard';
-    var key=(mode==='standard2')?'mealPlannerStressBaseline2':'mealPlannerStressBaseline';
+    var key=(mode==='standard2')?'mealPlannerStressBaseline2':(mode==='standard3')?'mealPlannerStressBaseline3':'mealPlannerStressBaseline';
     var b={
       primary: agg.primaryHitRate*100,
       inv6: agg.invTotals.INV6||0,
@@ -11049,7 +11105,7 @@ window.MPStress=(function(){
     return b;
   }
   function clearBaseline(mode){
-    var key=(mode==='standard2')?'mealPlannerStressBaseline2':'mealPlannerStressBaseline';
+    var key=(mode==='standard2')?'mealPlannerStressBaseline2':(mode==='standard3')?'mealPlannerStressBaseline3':'mealPlannerStressBaseline';
     try{localStorage.removeItem(key);}catch(e){}
     console.log('[MPStress] '+(mode||'standard')+' baseline cleared');
   }
@@ -11344,7 +11400,7 @@ window.MPStress=(function(){
     return lines.join('\n');
   }
 
-  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline};
+  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runStandard3:runStandard3,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline};
 })();
 
 </script>

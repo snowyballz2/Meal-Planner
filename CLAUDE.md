@@ -1396,8 +1396,55 @@ localStorage.setItem('mealPlannerStressBaseline2', JSON.stringify({primary:100, 
 
 Notable: Test 1's 212% drift outlier doesn't appear in any of Test 2's 100 runs. That outlier is specific to Test 1's seed range (12345..12444) — a deterministic edge case rather than a general issue. Test 2 also doesn't have `miso_tofu` in its top offenders. State-evolving runs naturally diversify Phase 1 picks across runs, avoiding the worst-case ratio configurations Test 1's seeds happen to hit. Test 2 is faster (warmer caches between runs) and has a tighter INV6 distribution overall.
 
+### Test 2 update + Test 3 added (2026-04-26 late)
+
+Asked "is Test 2 truly random / how to make it more random". Audit confirmed Test 2's `Math.random` is the browser's true RNG (not a seeded PRNG) — but only ONE source of variation. Five distinct sources exist; Test 2 randomized only #1. Implemented two more axes:
+
+**Test 2 update (Option C)** — random prior-week SEL pre-population. Before each run, ~40% of `weekData.last.sel` slots get random meals (`_randomizePriorWeekSel` in MPStress). Variety filter reads from `weekData[_prevWeekKey()].sel`, so this exercises filter code paths the natural state-evolution doesn't reach. Effect on stress:
+- Primary 100% → 99.93% (1 pro miss appeared)
+- INV14 0 → **2** (`salmon_lentils` + `coconut_turkey_curry` at gap=3, both household-level)
+- INV15 him: 2.77 → 3.4, INV16 her: 2.71 → 3.5 (more leftover-eating)
+- INV6 max drift 158% → 176%
+- All hard INVs still 0 ✓
+
+**Test 3 (new, Option A)** — `runStandard3`. Truly-random Math.random + per-run `applyVaried(Math.random)` cfg (random eat-outs/skips/manual-locks/sharing). NO persistState — each run independent (so `applyVaried` mutations don't pile up across runs; cfgFn runs after runOne's snapshot, gets reverted on restore). Exercises code paths neither Test 1 nor Test 2 reach: skip kcal redistribution, eat-out kcal absorption, manual-lock interaction, sharing-config space. First run:
+- Primary 100%, all hard INVs 0 ✓ (including INV19)
+- INV6 115 (vs Test 1's 123, Test 2's 123 post-update) — varied state actually has the *least* INV6 noise
+- INV14 0
+- INV6 max drift 191%
+- Top offenders: `miso_tofu`(12), `chicken_breakfast_wrap`(11), `turkey_egg_scramble`(11), `spicy_tofu_chicken_noodles`(10), `filet_din`(10) — different distribution from Test 1/2
+
+**Wiring** — `formatReport`, `saveBaseline`, `clearBaseline` updated to handle `mode==='standard3'` → `mealPlannerStressBaseline3` localStorage key. `runStandard3` exported from MPStress alongside the existing tests.
+
+### Test 2 / Test 3 baselines saved (2026-04-26 late)
+
+```js
+// Test 2 (updated with random prior-week pre-population):
+localStorage.setItem('mealPlannerStressBaseline2', JSON.stringify({primary:99.93, inv6:123, inv6MaxPct:176, inv14:2, inv15Him:3.4, inv16Her:3.5, inv18AvgPct:2.8, inv18WorstRunPct:100, hardFail:0, closedPct:0, avgVariance:95.8, missCounts:{kcalLow:0,kcalHigh:0,pro:1,carbPct:0,fatPct:0,veg:0,fruit:0}, timingAvg:374, mode:'standard2'}));
+
+// Test 3 (new):
+localStorage.setItem('mealPlannerStressBaseline3', JSON.stringify({primary:100, inv6:115, inv6MaxPct:191, inv14:0, inv15Him:2.9, inv16Her:2.9, inv18AvgPct:1.5, inv18WorstRunPct:100, hardFail:0, closedPct:0, avgVariance:95.4, missCounts:{kcalLow:0,kcalHigh:0,pro:0,carbPct:0,fatPct:0,veg:0,fruit:0}, timingAvg:365, mode:'standard3'}));
+```
+
+### All three tests — comparative state (2026-04-26 late)
+
+| Metric | Test 1 (deterministic) | Test 2 (state-evolving + random prior) | Test 3 (varied configs) |
+|---|---|---|---|
+| Primary hit rate | 100.00% | 99.93% | 100.00% |
+| INV6 total | 123 | 123 | **115** |
+| INV6 max drift | **212%** | 176% | 191% |
+| INV14 | 0 | **2** ⚠ | 0 |
+| INV15 him | 2.87 | 3.4 | 2.9 |
+| INV16 her | 2.69 | 3.5 | 2.9 |
+| INV18 avg | 3.10% | 2.80% | **1.50%** |
+| Timing avg | 390ms | 374ms | 365ms |
+| Top offender | `miso_tofu`(10) | `salmon_stir_fry_din`(14) | `miso_tofu`(12) |
+
+Each test uncovers different things. Test 2's INV14=2 fires from `salmon_lentils` and `coconut_turkey_curry` at gap=3 are the most actionable — the random-prior-week-state forces the variety filter into a regime where INV14 violations slip through. Test 1's 212% drift outlier remains the worst-case INV6 magnitude.
+
 ### Open items for next session
-- **INV6 max drift 212% in Test 1** — `miso_tofu` (10 fires, deterministic seed range) and one specific seed pushing 212%. Use `MPStress.inspectDay(seed, p, d)` to drill into which run + day caused the outlier. Decide if structural or fixable.
+- **Test 2 INV14=2 fires** — `salmon_lentils` and `coconut_turkey_curry` slipping past the variety filter when prior-week SEL is randomized. Investigate the filter's lookback logic under state pressure. Use `MPStress.inspectRun(seed)` on each.
+- **INV6 max drift 212% in Test 1** — `miso_tofu` is back at top offender across Test 1 and Test 3. Recipe-rebalance candidate.
 - **Recipe normalization** carry-forward (~8 lunch/dinner + ~5 breakfast still off-budget — list in 2026-04-22 session).
 - **Phase 1.7 naming cleanup** — still uses decimal phase numbering. Open from prior sessions.
-- **Optional**: explore raising INV6 to hard once miso_tofu and recipe-normalization tail get addressed. Currently 1.23/run (Test 1) and 1.08/run (Test 2) is mostly Him-budget-scaling artifacts, not bugs.
+- **Optional**: explore raising INV6 to hard once miso_tofu and recipe-normalization tail get addressed. Currently ~1.15-1.23/run is mostly Him-budget-scaling artifacts, not bugs.
