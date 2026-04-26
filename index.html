@@ -432,23 +432,23 @@ var NUTRI_DB = {
   // Non-aromatic veg: minAmt 0.25 (respects recipe bases that intend "a sprinkle"
   // like 0.25c bell pepper in hummus_wrap). Solo cooks use same 0.25 floor
   // (no minAmtSolo override needed — _effMin falls back to minAmt).
-  'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:5,label:'bag spinach (5oz)'}, minAmt:0.25, maxAmt:2},
-  'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:3,label:'bunch kale'}, minAmt:0.25, maxAmt:2},
-  'broccoli':              {kcal:31,  pro:2.6,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'head broccoli'}, minAmt:0.25, maxAmt:1.5},
-  'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, maxAmt:1.5},
-  'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.25, maxAmt:1.5},
-  'grape tomatoes':        {kcal:27,  pro:1.3,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'pint grape tomatoes'}, minAmt:0.25, maxAmt:1.5},
+  'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:5,label:'bag spinach (5oz)'}, minAmt:0.25, maxAmt:2.5},
+  'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:3,label:'bunch kale'}, minAmt:0.25, maxAmt:2.5},
+  'broccoli':              {kcal:31,  pro:2.6,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'head broccoli'}, minAmt:0.25, maxAmt:2.0},
+  'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, maxAmt:2.0},
+  'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.25, maxAmt:2.0},
+  'grape tomatoes':        {kcal:27,  pro:1.3,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'pint grape tomatoes'}, minAmt:0.25, maxAmt:2.0},
   'red onion':             {kcal:64,  pro:1.8,fat:0.2, carb:15,  unit:'cup', produce:{perWhole:1,label:'medium red onion'}, minAmt:0.1, minAmtSolo:0.2, maxAmt:0.5},
   'zucchini':              {kcal:20,  pro:1.5,fat:0.2, carb:3.5, unit:'cup', produce:{perWhole:1.5,label:'medium zucchini'}, minAmt:0.25, maxAmt:2.0},
-  'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.25, maxAmt:1.5},
-  'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.25, maxAmt:1.5},
+  'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.25, maxAmt:2.0},
+  'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.25, maxAmt:2.0},
   'celery':                {kcal:6,   pro:0.3,fat:0.1, carb:1.2, unit:'each', cupsEach:0.5, wholeOnly:true, minAmt:1, minAmtSolo:2, maxAmt:3},
   'egg noodles dry':       {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', minAmt:0.125, maxAmt:1.5},
   'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:2,pkg:{size:32,unit:'oz',cups:4,type:'carton'}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75, minAmt:0.5, minAmtSolo:1, maxAmt:2},
   'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each', cupsEach:0.125, wholeWhenSolo:true, minAmt:1, minAmtSolo:2, maxAmt:4},
-  'bok choy':              {kcal:9,   pro:1,  fat:0.1, carb:1.5, unit:'cup', produce:{perWhole:2,label:'head bok choy'}, minAmt:0.25, maxAmt:2},
-  'bean sprouts':          {kcal:31,  pro:3,  fat:0.2, carb:6,   unit:'cup', minAmt:0.25, maxAmt:1.5},
+  'bok choy':              {kcal:9,   pro:1,  fat:0.1, carb:1.5, unit:'cup', produce:{perWhole:2,label:'head bok choy'}, minAmt:0.25, maxAmt:2.5},
+  'bean sprouts':          {kcal:31,  pro:3,  fat:0.2, carb:6,   unit:'cup', minAmt:0.25, maxAmt:2.0},
   // Fruits
   'banana':                {kcal:105, pro:1.3,fat:0.4, carb:27,  unit:'each', cupsEach:1, minAmt:0.5, maxAmt:1},
   'apple':                 {kcal:95,  pro:0.5,fat:0.3, carb:25,  unit:'each', cupsEach:1.5, minAmt:0.5, maxAmt:1},
@@ -516,7 +516,7 @@ var NUTRI_DB = {
   'gochugaru':             {kcal:10,  pro:0.3,fat:0.1, carb:2,   unit:'tbsp', minAmt:0.25, maxAmt:1},
   'sugar':                 {kcal:48,  pro:0,  fat:0,   carb:12,  unit:'tbsp', minAmt:0.25, minAmtSolo:0.5, maxAmt:1},
   'shallot':               {kcal:30,  pro:1,  fat:0,   carb:7,   unit:'each', cupsEach:0.25, minAmt:1, maxAmt:3},
-  'cucumber':              {kcal:11,  pro:0.5,fat:0.1, carb:2.4, unit:'cup', produce:{perWhole:1.5,label:'cucumber'}, minAmt:0.25, maxAmt:1.5},
+  'cucumber':              {kcal:11,  pro:0.5,fat:0.1, carb:2.4, unit:'cup', produce:{perWhole:1.5,label:'cucumber'}, minAmt:0.25, maxAmt:2.0},
   'red curry paste':{kcal:20,pro:0,fat:0,carb:4,unit:'tbsp',brand:'Maesri',minAmt:0.25,maxAmt:1},
   'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', minAmt:0.25, maxAmt:2},
   'white rice cooked':     {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', note:'short-grain / sushi-style white rice, cooked', minAmt:0.25, maxAmt:1.5},
@@ -1612,7 +1612,7 @@ const MEALS=[
   ingredients:[
     I('canned tuna',6,'protein'),
     I('cannellini beans cooked',0.75,'carb'),
-    I('kale',2,'veg'),
+    I('kale',1.5,'veg'),
     I('zucchini',0.5,'veg'),
     I('carrots',0.5,'veg'),
     I('avocado oil',1,'fat'),
@@ -1688,7 +1688,7 @@ const MEALS=[
   him:{},her:{},
   ingredients:[
     I('chicken breast',10,'protein'),
-    I('kale',2,'veg'),
+    I('kale',1.5,'veg'),
     I('zucchini',0.5,'veg'),
     I('carrots',0.5,'veg'),
     I('peanuts',2,'fat'),
@@ -2164,7 +2164,7 @@ const MEALS=[
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
-    I('baby spinach',2,'veg'),
+    I('baby spinach',1.5,'veg'),
     I('bell pepper',0.5,'veg'),
     I('carrots',0.5,'veg'),
     I('brown rice cooked',0.75,'carb'),
@@ -2299,7 +2299,7 @@ const MEALS=[
   ingredients:[
     I('ground turkey 93',8,'protein'),
     I('whole wheat pasta cooked',1,'carb'),
-    I('zucchini',2,'veg'),
+    I('zucchini',1.5,'veg'),
     I('marinara',1,'condiment'),
     I('garlic',2,'fixed',false),
     I('italian seasoning',0.5,'fixed',false),
@@ -11008,6 +11008,18 @@ window.MPStress=(function(){
               if(bi.amt > db.maxAmt + 0.001)rec.aboveMaxCount++;
               else if(Math.abs(bi.amt - db.maxAmt) < 0.001)rec.atMaxCount++;
             }
+            // Per-meal aggregation: track each (meal, ingredient) combo
+            // separately so we can see what amounts a SINGLE recipe lands at,
+            // not just the union across all recipes.
+            var mealKey = mealId + '/' + bi.dbKey;
+            if(!acc.perMealStats) acc.perMealStats = {};
+            if(!acc.perMealStats[mealKey]) acc.perMealStats[mealKey] = {
+              meal: mealId, ingr: bi.dbKey, portions: [], shared: 0, solo: 0, recipeBase: baseAmts[bi.dbKey] || 0
+            };
+            var pmStats = acc.perMealStats[mealKey];
+            pmStats.portions.push(bi.amt);
+            if(isSolo) pmStats.solo++; else pmStats.shared++;
+
             var recipeBase = baseAmts[bi.dbKey];
             if(!isSolo && recipeBase && bi.amt < recipeBase - 0.001){
               rec.sharedBelowFloorCount++;
@@ -11050,7 +11062,7 @@ window.MPStress=(function(){
   }
 
   function _newVegAcc(){
-    return {ingrStats:{}, dayVegHim:[], dayVegHer:[], sharedBatchSkew:[], infeasibleBatches:[]};
+    return {ingrStats:{}, dayVegHim:[], dayVegHer:[], sharedBatchSkew:[], infeasibleBatches:[], perMealStats:{}};
   }
 
   // Public: chunk-friendly collector. Pass `state` to accumulate across calls.
@@ -11138,7 +11150,25 @@ window.MPStress=(function(){
         infeasibility: {
           totalSharedBelowFloor: acc.infeasibleBatches.length,
           topMostBelowFloor: topInfeasible
-        }
+        },
+        perMeal: (function(){
+          var pm = {};
+          if(!acc.perMealStats) return pm;
+          Object.keys(acc.perMealStats).forEach(function(k){
+            var s = acc.perMealStats[k];
+            var sortedAmts = s.portions.slice().sort(function(a,b){return a-b;});
+            pm[k] = {
+              meal: s.meal, ingr: s.ingr, recipeBase: s.recipeBase,
+              total: s.portions.length, shared: s.shared, solo: s.solo,
+              min: sortedAmts[0],
+              p50: sortedAmts[Math.floor(sortedAmts.length/2)],
+              max: sortedAmts[sortedAmts.length-1],
+              mean: s.portions.reduce(function(a,b){return a+b;},0)/s.portions.length,
+              dbMax: NUTRI_DB[s.ingr] ? NUTRI_DB[s.ingr].maxAmt : null
+            };
+          });
+          return pm;
+        })()
       };
       try{localStorage.setItem('mealPlannerVegBaseline',JSON.stringify(baseline));}catch(e){}
       console.log('[MPStress] Veg baseline saved. '+Object.keys(ingrSummary).length+' ingredients, '+acc.sharedBatchSkew.length+' shared-batch instances, '+acc.infeasibleBatches.length+' below-floor cases.');
