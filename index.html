@@ -2381,18 +2381,16 @@ var EAT_OUT={}; // key: 'person_day_slot', value: {name,restaurant,kcal,pro,fat,
 var LATE_SNACK={}; // key: 'person_day', value: {name,kcal,pro,fat,carb}
 var ADJ_TARGETS={}; // key: 'person_day', value: per-slot bools for which meals absorb redistributed calories
 var ADJ_TARGETS_TS={}; // key: 'person_day', value: timestamp ms — for sync last-write-wins
-// User preference: when true, slots with MANUAL_SET[k]=true are locked
-// against being overwritten by Randomize. Off by default (preserves prior
-// behavior). Per-device pref — not synced (one phone may want stricter
-// locking than the other). Toggle exposed in the Sync panel.
+// User preference: when true, the "Set" pill (MANUAL_SET[k]=true on a slot,
+// or any locally-edited customMeal/customIngredient/eat-out/etc.) blocks
+// incoming sync from overwriting that slot — even if remote has a newer
+// timestamp. Off by default. Per-device pref (not synced). Lets a user pin
+// "this is my version, sync should not change this" without using Force
+// Push. Set semantics: every user-touched slot already has MANUAL_SET=true,
+// so this just makes "Set" mean "lock against incoming sync overwrites".
+// Sync-merge logic in mergeSyncData honors this flag.
 var LOCK_MANUAL_SLOTS=lsGet('mealPlannerLockManualSlots', false);
 function setLockManualSlots(v){LOCK_MANUAL_SLOTS=!!v;lsSet('mealPlannerLockManualSlots',LOCK_MANUAL_SLOTS);}
-function isLockedForRandomize(k){
-  // Single source of truth for "this slot is off-limits to Randomize".
-  // EAT_OUT is always locked (already enforced by Phase 1). MANUAL_SET is
-  // locked only when LOCK_MANUAL_SLOTS is on.
-  return !!EAT_OUT[k] || (LOCK_MANUAL_SLOTS && !!MANUAL_SET[k]);
-}
 function _defaultAdjTargets(){const o={};ADJ_SLOTS.forEach(function(s){o[s]=true;});return o;}
 function getAdjTargets(p,d){return ADJ_TARGETS[pk(p,d)]||_defaultAdjTargets();}
 function toggleAdjTarget(p,d,slot){
@@ -7766,7 +7764,7 @@ function rerollMissDays(randTarget){
       ['breakfast','lunch','snack','dinner'].forEach(function(s){
         persons.forEach(function(p){
           const key = sk(p,d,s);
-          if (isLockedForRandomize(key) || SKIPPED[key]) return; // EAT_OUT + (LOCK_MANUAL_SLOTS && MANUAL_SET)
+          if (EAT_OUT[key] || SKIPPED[key]) return;
           const currentId = SEL[key];
           if (currentId && mealUsesPkg(currentId)) return; // never remove pkg meals
           const isShared = SHARED_SCHEDULE[dk(d,s)] === 'shared';
@@ -7898,7 +7896,7 @@ function rerollKcalOffSnacks(randTarget){
     persons.forEach(function(p){
       if(p!=='him'&&p!=='her')return;
       const key = sk(p,d,'snack');
-      if(SKIPPED[key]||isLockedForRandomize(key))return; // EAT_OUT + (LOCK_MANUAL_SLOTS && MANUAL_SET)
+      if(SKIPPED[key]||EAT_OUT[key])return;
       const curId = SEL[key];
       if(!curId)return;
       if(mealUsesPkg(curId))return;
@@ -8092,14 +8090,11 @@ function _randomizeWeekCore(randTarget){
   const now = Date.now();
 
   // ── PRE-PHASE: Lock eat-out slots (manual overrides), clear old skips ──
-  // Also lock MANUAL_SET slots when LOCK_MANUAL_SLOTS user pref is on. The
-  // Phase 1 commit at 8287 reads this `locked` map to decide which slots to
-  // keep vs which to overwrite with random picks.
   persons.forEach(function(p){
     days.forEach(function(d){
       SLOTS.forEach(function(s){
         const k=sk(p,d,s);
-        if(isLockedForRandomize(k)){locked[k]=true;}
+        if(EAT_OUT[k]){locked[k]=true;}
       });
     });
   });
@@ -8321,10 +8316,6 @@ function _randomizeWeekCore(randTarget){
       days.forEach(function(d) {
         ['breakfast','lunch','dinner'].forEach(function(s) {
           if (SHARED_SCHEDULE[dk(d,s)] === 'shared') {
-            // Skip if her's slot is locked (eat-out OR LOCK_MANUAL_SLOTS+MANUAL_SET).
-            // Her's manually-set slot keeps its choice; the shared schedule
-            // intent is honored only on slots that weren't user-pinned.
-            if (isLockedForRandomize(sk('her',d,s))) return;
             var himId = getMealId('him', d, s);
             if (himId) {
               SEL[sk('her',d,s)] = himId;
@@ -8401,13 +8392,8 @@ function _randomizeWeekCore(randTarget){
         weekData[activeWeek].ts[ss.key]=now;
         if(isShared){
           var otherP=ss.p==='him'?'her':'him';
-          var otherKey=sk(otherP,ss.d,'snack');
-          // Don't override the other person's manually-set snack when the
-          // lock pref is on (shared schedule defers to user's explicit pick).
-          if(!isLockedForRandomize(otherKey)){
-            SEL[otherKey]=pick.id;
-            weekData[activeWeek].ts[otherKey]=now;
-          }
+          SEL[sk(otherP,ss.d,'snack')]=pick.id;
+          weekData[activeWeek].ts[sk(otherP,ss.d,'snack')]=now;
         }
       });
     });
@@ -8825,8 +8811,6 @@ function _randomizeWeekCore(randTarget){
       var herId = getMealId('her', d, s);
       if (SHARED_SCHEDULE[dk(d,s)] === 'shared') {
         if (himId && himId !== herId) {
-          // Don't override her's manually-set slot when the lock pref is on.
-          if (isLockedForRandomize(sk('her',d,s))) return;
           SEL[sk('her',d,s)] = himId;
           weekData[activeWeek].ts[sk('her',d,s)] = now;
           invalidateLeftoverCache();
@@ -9363,6 +9347,13 @@ function mergeSyncData(remote){
       Object.keys(allKeys).forEach(function(k){
         const localTime=localTs[k]||0;
         const remoteTime=remoteTs[k]||0;
+        // Sync lock: when LOCK_MANUAL_SLOTS is on, skip remote overwrite if
+        // local has MANUAL_SET[k]=true (the "Set" pill). Local user picked
+        // this slot intentionally — sync shouldn't change it without an
+        // explicit Force Push from the other phone. Note: only protects from
+        // INCOMING overwrites; the local SEL still pushes outward normally
+        // (the other phone will see this slot's timestamp and apply LWW).
+        if(LOCK_MANUAL_SLOTS && weekData[w].manualSet && weekData[w].manualSet[k]) return;
         if(remoteTime>localTime){
           localSel[k]=remoteSel[k];
           localTs[k]=remoteTime;
@@ -9647,12 +9638,17 @@ function renderSyncView(){
       +'</form>';
   }
   html+='<div id="syncStatusMsg" class="sync-status">'+syncStatus+'</div></div>';
-  // Randomize lock toggle (per-device pref, not synced)
-  html+='<div class="sync-panel" style="margin-top:12px"><div class="sync-title">🔒 Randomize Behavior</div>'
+  // Sync-overwrite lock toggle (per-device pref, not synced).
+  // When on, slots with MANUAL_SET=true (the purple "Set" pill — set whenever
+  // you manually picked the meal, toggled shared/skip/eat-out, or edited an
+  // ingredient) are protected from being overwritten by INCOMING sync data,
+  // even if the other phone has a newer timestamp. Force Push from the other
+  // phone still works (you'll see the prompt).
+  html+='<div class="sync-panel" style="margin-top:12px"><div class="sync-title">🔒 Sync Protection</div>'
     +'<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 0">'
     +'<input type="checkbox" id="lockManualSlotsCB" '+(LOCK_MANUAL_SLOTS?'checked':'')+' onchange="setLockManualSlots(this.checked)" style="width:20px;height:20px;cursor:pointer">'
-    +'<div style="flex:1"><div style="font-weight:600;color:var(--text)">Lock manual slots</div>'
-    +'<div style="font-size:11px;color:var(--gray);margin-top:2px">When on, slots you\'ve manually picked (Set pill) are protected from being overwritten when you click Randomize. Off by default.</div></div></label>'
+    +'<div style="flex:1"><div style="font-weight:600;color:var(--text)">Protect manual picks from sync overwrites</div>'
+    +'<div style="font-size:11px;color:var(--gray);margin-top:2px">When on, slots you\'ve manually picked (Set pill) won\'t be overwritten by incoming sync data, even if the other phone has a newer timestamp. The other phone\'s Force Push still works. Off by default.</div></div></label>'
     +'</div>';
   html+='</div>';
   el.innerHTML=html;
