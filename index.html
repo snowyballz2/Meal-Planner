@@ -2380,14 +2380,25 @@ var SKIPPED={}; // key: 'person_day_slot', true if skipped — calories shift to
 var EAT_OUT={}; // key: 'person_day_slot', value: {name,restaurant,kcal,pro,fat,carb}
 var LATE_SNACK={}; // key: 'person_day', value: {name,kcal,pro,fat,carb}
 var ADJ_TARGETS={}; // key: 'person_day', value: per-slot bools for which meals absorb redistributed calories
+var ADJ_TARGETS_TS={}; // key: 'person_day', value: timestamp ms — for sync last-write-wins
 function _defaultAdjTargets(){const o={};ADJ_SLOTS.forEach(function(s){o[s]=true;});return o;}
 function getAdjTargets(p,d){return ADJ_TARGETS[pk(p,d)]||_defaultAdjTargets();}
 function toggleAdjTarget(p,d,slot){
   const k=pk(p,d);
   if(!ADJ_TARGETS[k])ADJ_TARGETS[k]=_defaultAdjTargets();
   ADJ_TARGETS[k][slot]=!ADJ_TARGETS[k][slot];
+  ADJ_TARGETS_TS[k]=Date.now();
+  saveAdjTargets();
   renderMeals();
 }
+function loadAdjTargets(){
+  var data=lsGet('mealPlannerAdjTargets',null);
+  if(data&&typeof data==='object'){
+    if(data.targets){ADJ_TARGETS=data.targets;ADJ_TARGETS_TS=data.ts||{};}
+    else{ADJ_TARGETS=data;ADJ_TARGETS_TS={};} // legacy: no ts
+  }
+}
+function saveAdjTargets(){lsSet('mealPlannerAdjTargets',{targets:ADJ_TARGETS,ts:ADJ_TARGETS_TS});}
 var SHARED_SCHEDULE = {}; // key: 'day_slot', value: 'shared'|'skip-him'|'skip-her'|'skip-both' or absent (normal)
 var sharedSchedOpen = false; // collapsible panel state
 function initSharedSchedule(){
@@ -2524,9 +2535,12 @@ var EAT_OUT_DB=[]; // saved eat-out meals for reuse
 function loadEatOutDB(){EAT_OUT_DB=lsGet('eatOutDB',[]);}
 function saveEatOutDB(){lsSet('eatOutDB',EAT_OUT_DB);}
 function addToEatOutDB(entry){
-  // Avoid duplicates by name+restaurant
-  const exists=EAT_OUT_DB.some(function(e){return e.name===entry.name&&e.restaurant===entry.restaurant;});
-  if(!exists){EAT_OUT_DB.push(entry);saveEatOutDB();}
+  entry._ts=Date.now();
+  // Update existing match (name+restaurant) with newer macros, else add
+  const existing=EAT_OUT_DB.find(function(e){return e.name===entry.name&&e.restaurant===entry.restaurant;});
+  if(existing){Object.assign(existing,entry);}
+  else{EAT_OUT_DB.push(entry);}
+  saveEatOutDB();
 }
 let topTab='meals',person='him',day='Monday',shopTrip='sun',shopPerson='both';
 
@@ -9157,15 +9171,41 @@ function loadWeeks(){
     const ss=lsGet('mealPlannerSharedSchedule',null);if(ss)weekData[activeWeek].sharedSchedule=ss;
   }
 }
+// Stamp per-key timestamps for any keys that changed since the last persist.
+// Used by saveWeeks for lateSnack + sharedSchedule (which lacked timestamps in
+// v3 and so had one-way merge — edits couldn't propagate). Compares the prior
+// stored snapshot in weekData[w] against the current global, stamps any
+// added/changed/removed key with `now`. For deletions we still stamp so the
+// remote knows "this key was deleted at time X" (reconciled in mergeSyncData).
+function _stampDiffTs(prior, curr, tsMap, now){
+  var allKeys={};
+  Object.keys(prior||{}).forEach(function(k){allKeys[k]=true;});
+  Object.keys(curr||{}).forEach(function(k){allKeys[k]=true;});
+  Object.keys(allKeys).forEach(function(k){
+    var p=prior?prior[k]:undefined, c=curr?curr[k]:undefined;
+    var changed=(p===undefined&&c!==undefined) || (c===undefined&&p!==undefined)
+              || (typeof p==='object' ? JSON.stringify(p)!==JSON.stringify(c) : p!==c);
+    if(changed) tsMap[k]=now;
+  });
+}
 function saveWeeks(){
+  var now=Date.now();
+  var w=weekData[activeWeek];
+  // Diff-stamp lateSnack and sharedSchedule BEFORE we overwrite the prior
+  // snapshot. Each per-key timestamp records WHEN that key last changed,
+  // enabling per-key last-write-wins merge across phones.
+  if(!w.lateSnackTs) w.lateSnackTs={};
+  if(!w.sharedScheduleTs) w.sharedScheduleTs={};
+  _stampDiffTs(w.lateSnack, LATE_SNACK, w.lateSnackTs, now);
+  _stampDiffTs(w.sharedSchedule, SHARED_SCHEDULE, w.sharedScheduleTs, now);
   // Bundle per-week state into weekData
-  weekData[activeWeek].sel=JSON.parse(JSON.stringify(SEL));
-  weekData[activeWeek].skipped=JSON.parse(JSON.stringify(SKIPPED));
-  weekData[activeWeek].eatOut=JSON.parse(JSON.stringify(EAT_OUT));
-  weekData[activeWeek].overrides=JSON.parse(JSON.stringify(OVERRIDES));
-  weekData[activeWeek].lateSnack=JSON.parse(JSON.stringify(LATE_SNACK));
-  weekData[activeWeek].manualSet=JSON.parse(JSON.stringify(MANUAL_SET));
-  weekData[activeWeek].sharedSchedule=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
+  w.sel=JSON.parse(JSON.stringify(SEL));
+  w.skipped=JSON.parse(JSON.stringify(SKIPPED));
+  w.eatOut=JSON.parse(JSON.stringify(EAT_OUT));
+  w.overrides=JSON.parse(JSON.stringify(OVERRIDES));
+  w.lateSnack=JSON.parse(JSON.stringify(LATE_SNACK));
+  w.manualSet=JSON.parse(JSON.stringify(MANUAL_SET));
+  w.sharedSchedule=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
   weekData['last'].monday=lastMonday();
   weekData['this'].monday=todayMonday();
   weekData['next'].monday=nextMonday();
@@ -9221,9 +9261,31 @@ function saveSyncToken(token){syncToken=token;lsSetRaw('mealPlannerSyncToken',to
 function setSyncStatus(msg,type){const c=type==='err'?'#DC2626':type==='ok'?'#059669':'var(--gray)';syncStatus='<span style="color:'+c+'">'+msg+'</span>';const el=document.getElementById('syncStatusMsg');if(el)el.innerHTML=syncStatus;}
 function gistHeaders(){return {'Content-Type':'application/json','Authorization':'token '+syncToken};}
 function getSyncPayload(){
-  return {weekData:weekData,customMeals:customMeals,customIngredients:customIngredients,eatOutDB:EAT_OUT_DB,calBase:CAL_BASE,proTarget:PRO_TARGET,version:3};
+  // version:4 (2026-04-26) — added ADJ_TARGETS, per-key timestamps on
+  // customMeals/customIngredients/EAT_OUT_DB entries (via `_ts`), per-week
+  // `lateSnackTs` and `sharedScheduleTs` maps for last-write-wins merge.
+  // v3 payloads still merge cleanly (treated as ts=0 — local v4 entries with
+  // real timestamps win). See mergeSyncData for migration handling.
+  return {
+    weekData:weekData,
+    customMeals:customMeals,
+    customIngredients:customIngredients,
+    eatOutDB:EAT_OUT_DB,
+    calBase:CAL_BASE,
+    proTarget:PRO_TARGET,
+    adjTargets:ADJ_TARGETS,
+    adjTargetsTs:ADJ_TARGETS_TS,
+    version:4
+  };
 }
 function mergeSyncData(remote){
+  // v3 → v4 migration: pre-v4 payloads have no per-entry timestamps. Treat
+  // their entries as ts=0 so any local v4 entries with real timestamps win
+  // automatically. New entries from v3 still merge in (ts=0 vs ts=undefined
+  // locally is "remote has data, local doesn't" → take remote).
+  var remoteV = remote.version || 3;
+  var remoteIsLegacy = remoteV < 4;
+
   // Week data: merge by MONDAY DATE, not by position name.
   // Build a map of remote weeks keyed by monday date.
   if(remote.weekData){
@@ -9284,19 +9346,44 @@ function mergeSyncData(remote){
           if(remoteState.manualSet[k]!==undefined) weekData[w].manualSet[k]=remoteState.manualSet[k]; else delete weekData[w].manualSet[k];
         }
       });
-      // Late snack uses person_day key, merge separately
-      Object.keys(remoteState.lateSnack).forEach(function(k){
-        if(!weekData[w].lateSnack[k]) weekData[w].lateSnack[k]=remoteState.lateSnack[k];
+      // Late snack: per-key last-write-wins via remoteWeek.lateSnackTs (v4+).
+      // v3 remote has no ts → treated as ts=0 so any local v4 timestamps win.
+      const remoteLsTs=remoteWeek.lateSnackTs||{};
+      if(!weekData[w].lateSnackTs)weekData[w].lateSnackTs={};
+      var lsKeys={};
+      Object.keys(remoteState.lateSnack).forEach(function(k){lsKeys[k]=true;});
+      Object.keys(weekData[w].lateSnack).forEach(function(k){lsKeys[k]=true;});
+      Object.keys(lsKeys).forEach(function(k){
+        var lt=weekData[w].lateSnackTs[k]||0;
+        var rt=remoteIsLegacy?0:(remoteLsTs[k]||0);
+        if(rt>lt){
+          if(remoteState.lateSnack[k]!==undefined) weekData[w].lateSnack[k]=remoteState.lateSnack[k];
+          else delete weekData[w].lateSnack[k];
+          weekData[w].lateSnackTs[k]=rt;
+        }
       });
 
       weekData[w].sel=localSel;
       weekData[w].ts=localTs;
       // Do NOT overwrite local monday — local rollover is authoritative
-      // Merge shared schedule: take remote entries that local doesn't have
+
+      // Shared schedule: per-key LWW via remoteWeek.sharedScheduleTs (v4+).
+      // Lets un-shares propagate (was one-way add in v3).
       const remSched=remoteWeek.sharedSchedule||{};
+      const remSchedTs=remoteWeek.sharedScheduleTs||{};
       if(!weekData[w].sharedSchedule)weekData[w].sharedSchedule={};
-      Object.keys(remSched).forEach(function(k){
-        if(!weekData[w].sharedSchedule[k])weekData[w].sharedSchedule[k]=remSched[k];
+      if(!weekData[w].sharedScheduleTs)weekData[w].sharedScheduleTs={};
+      var ssKeys={};
+      Object.keys(remSched).forEach(function(k){ssKeys[k]=true;});
+      Object.keys(weekData[w].sharedSchedule).forEach(function(k){ssKeys[k]=true;});
+      Object.keys(ssKeys).forEach(function(k){
+        var lt=weekData[w].sharedScheduleTs[k]||0;
+        var rt=remoteIsLegacy?0:(remSchedTs[k]||0);
+        if(rt>lt){
+          if(remSched[k]!==undefined) weekData[w].sharedSchedule[k]=remSched[k];
+          else delete weekData[w].sharedSchedule[k];
+          weekData[w].sharedScheduleTs[k]=rt;
+        }
       });
     });
   }
@@ -9305,29 +9392,62 @@ function mergeSyncData(remote){
   if(remote.calBase){CAL_BASE=remote.calBase;lsSet('mealPlannerCalBase',CAL_BASE);}
   if(remote.proTarget){PRO_TARGET=remote.proTarget;lsSet('mealPlannerProTarget',PRO_TARGET);}
 
-  // Custom meals: merge by ID, don't overwrite existing
+  // Custom meals: per-meal last-write-wins via entry._ts (v4+). Remote with
+  // newer ts overwrites local; v3 remote has no _ts so treated as ts=0
+  // (local v4 entries always win). Adds new meals from either side.
   if(remote.customMeals){
     Object.keys(remote.customMeals).forEach(function(k){
-      if(!customMeals[k])customMeals[k]=remote.customMeals[k];
+      var rEntry=remote.customMeals[k];
+      var lEntry=customMeals[k];
+      var rt=remoteIsLegacy?0:(rEntry&&rEntry._ts||0);
+      var lt=lEntry&&lEntry._ts||0;
+      if(!lEntry || rt>lt){customMeals[k]=rEntry;}
     });
   }
-  
-  // Custom ingredients: merge by key, don't overwrite existing
+
+  // Custom ingredients: per-key last-write-wins via entry._ts (v4+).
   if(remote.customIngredients){
     Object.keys(remote.customIngredients).forEach(function(k){
-      if(!customIngredients[k]){
-        customIngredients[k]=remote.customIngredients[k];
-        NUTRI_DB[k]=remote.customIngredients[k];
+      var rEntry=remote.customIngredients[k];
+      var lEntry=customIngredients[k];
+      var rt=remoteIsLegacy?0:(rEntry&&rEntry._ts||0);
+      var lt=lEntry&&lEntry._ts||0;
+      if(!lEntry || rt>lt){
+        customIngredients[k]=rEntry;
+        NUTRI_DB[k]=rEntry;
       }
     });
   }
-  
-  // Eat-out DB: merge by name+restaurant, don't duplicate
+
+  // Eat-out DB: per-entry last-write-wins via entry._ts (v4+). Identity is
+  // name+restaurant. Remote newer ts overwrites local entry's macros.
   if(remote.eatOutDB){
-    remote.eatOutDB.forEach(function(entry){
-      const exists=EAT_OUT_DB.some(function(e){return e.name===entry.name&&e.restaurant===entry.restaurant;});
-      if(!exists)EAT_OUT_DB.push(entry);
+    remote.eatOutDB.forEach(function(rEntry){
+      var idx=EAT_OUT_DB.findIndex(function(e){return e.name===rEntry.name&&e.restaurant===rEntry.restaurant;});
+      var rt=remoteIsLegacy?0:(rEntry._ts||0);
+      if(idx<0){EAT_OUT_DB.push(rEntry);return;}
+      var lEntry=EAT_OUT_DB[idx];
+      var lt=lEntry._ts||0;
+      if(rt>lt){EAT_OUT_DB[idx]=rEntry;}
     });
+  }
+
+  // ADJ_TARGETS: per-pk(p,d) last-write-wins. New in v4. v3 remote omits
+  // entirely → no merge needed (preserves local).
+  if(remote.adjTargets){
+    var rAdj=remote.adjTargets, rAdjTs=remote.adjTargetsTs||{};
+    var adjKeys={};
+    Object.keys(rAdj).forEach(function(k){adjKeys[k]=true;});
+    Object.keys(ADJ_TARGETS).forEach(function(k){adjKeys[k]=true;});
+    Object.keys(adjKeys).forEach(function(k){
+      var lt=ADJ_TARGETS_TS[k]||0;
+      var rt=remoteIsLegacy?0:(rAdjTs[k]||0);
+      if(rt>lt){
+        if(rAdj[k]!==undefined) ADJ_TARGETS[k]=rAdj[k]; else delete ADJ_TARGETS[k];
+        ADJ_TARGETS_TS[k]=rt;
+      }
+    });
+    saveAdjTargets();
   }
   
   // Shared schedule now per-week in weekData — merged with other bundled state above
@@ -9712,6 +9832,7 @@ function addNewDbIngredient(){
     if(pkgType)entry.pkg.type=pkgType;
   }
 
+  entry._ts=Date.now();
   NUTRI_DB[name]=entry;
   customIngredients[name]=entry;
   saveCustomIngredients();
@@ -9732,7 +9853,7 @@ function addNewDbIngredient(){
   document.getElementById('rf_new_pkgUnit').value='';
   document.getElementById('rf_new_pkgType').value='';
 }
-function saveRecipe(){const meal=buildCustomMeal();if(!meal)return;customMeals[meal.id]=meal;saveCustomMeals();injectCustomMeals();closeRecipeForm();renderRecipesView();}
+function saveRecipe(){const meal=buildCustomMeal();if(!meal)return;meal._ts=Date.now();customMeals[meal.id]=meal;saveCustomMeals();injectCustomMeals();closeRecipeForm();renderRecipesView();}
 function closeRecipeForm(){editingRecipeId=null;selectedSlots=[];selectedRecipePersons='both';renderRecipesView();}
 var RECIPE_SLOTS=[
   {label:'Shake',slots:['shake']},
@@ -9833,6 +9954,7 @@ function saveEditChanges(){
       target.ingredients[idx].amt=change.amt;
     }
   });
+  target._ts=Date.now();
   saveCustomMeals();injectCustomMeals();
   _editMode=false;_editChanges={};
   renderRecipesView();
@@ -10006,7 +10128,7 @@ window.addEventListener('beforeunload',function(){
 });
 
 loadSyncId();loadCustomIngredients();loadWeeks();renderWeekBar();
-loadCustomMeals();loadEatOutDB();
+loadCustomMeals();loadEatOutDB();loadAdjTargets();
 MEALS.forEach(function(m){expandMealIngredients(m);});
 MEALS.forEach(function(m){buildColorizedSteps(m);});
 renderDayTabs();setTopTab(topTab);renderMeals();
