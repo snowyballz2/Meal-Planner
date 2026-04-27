@@ -430,8 +430,8 @@ var NUTRI_DB = {
   // Non-aromatic veg: minAmt 0.25 (respects recipe bases that intend "a sprinkle"
   // like 0.25c bell pepper in hummus_wrap). Solo cooks use same 0.25 floor
   // (no minAmtSolo override needed — _effMin falls back to minAmt).
-  'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:5,label:'bag spinach (5oz)'}, minAmt:0.25, maxAmt:2.5},
-  'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:3,label:'bunch kale'}, minAmt:0.25, maxAmt:2.5},
+  'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, maxAmt:2.5},
+  'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, maxAmt:2.5},
   'broccoli':              {kcal:31,  pro:2.6,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'head broccoli'}, minAmt:0.25, maxAmt:2.0},
   'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, maxAmt:2.0},
   'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.25, maxAmt:2.0},
@@ -2834,6 +2834,54 @@ function countInv14(){
           && Math.abs(cooks[j].dayIdx - cooks[i].dayIdx) < 5) total++;
     }
   }
+  return total;
+}
+
+// Lightweight INV11 counter — mirrors verifyInvariants INV11 logic. Used by
+// swap stages (Phase 3 Strategy A, etc.) to reject swaps that would create
+// a new gap-too-small violation between consecutive batches of the same
+// meal. Logic: collect every cook anchor's (dayIdx, lastDayIdx) including
+// any leftover portions in its batch. For each meal with ≥2 anchors, sort
+// by dayIdx; for each consecutive pair, fire if `currAnchor.dayIdx -
+// prevAnchor.lastDayIdx - 1 < 2`. Lunch/dinner only, noLeftover meals
+// excluded. Reads current SEL + leftover map; caller must invalidate
+// cache after SEL mutation.
+function countInv11(){
+  var leftovers = computeLeftovers();
+  var mealAnchors = {};
+  ['him','her'].forEach(function(p){
+    DAYS.forEach(function(d, di){
+      ['lunch','dinner'].forEach(function(s){
+        if (SKIPPED[sk(p,d,s)] || EAT_OUT[sk(p,d,s)]) return;
+        var lo = leftovers[sk(p,d,s)];
+        if (lo && lo.isLeftover) return;
+        var mealId = getMealId(p,d,s);
+        if (!mealId) return;
+        var m = getMeal(mealId);
+        if (m && m.noLeftover) return;
+        var lastDayIdx = di;
+        if (lo && lo.portions) {
+          lo.portions.forEach(function(pt){
+            var ptIdx = DAYS.indexOf(pt.d);
+            if (ptIdx > lastDayIdx) lastDayIdx = ptIdx;
+          });
+        }
+        if (!mealAnchors[mealId]) mealAnchors[mealId] = [];
+        mealAnchors[mealId].push({dayIdx:di, lastDayIdx:lastDayIdx});
+      });
+    });
+  });
+  var total = 0;
+  Object.keys(mealAnchors).forEach(function(mealId){
+    var anchors = mealAnchors[mealId].sort(function(a,b){return a.dayIdx - b.dayIdx;});
+    if (anchors.length < 2) return;
+    for (var j = 1; j < anchors.length; j++) {
+      var prev = anchors[j-1], curr = anchors[j];
+      if (curr.dayIdx === prev.dayIdx) continue;
+      var gapDays = curr.dayIdx - prev.lastDayIdx - 1;
+      if (gapDays < 2) total++;
+    }
+  });
   return total;
 }
 
@@ -6382,35 +6430,40 @@ const PKG_FLEX_CONFIG = {
 // whole-count conversion still happens via `shopQtyWithCount`). Currently all
 // 14 produce items get flex coverage.
 const PRODUCE_FLEX_CONFIG = {
-  // Standard veg — generous flex, low kcal/cup
-  'broccoli':       {maxUp:0.5,  maxDown:0.25, kcalCap:200},
-  'bell pepper':    {maxUp:0.5,  maxDown:0.25, kcalCap:200},
-  'zucchini':       {maxUp:0.5,  maxDown:0.25, kcalCap:200},
-  'asparagus':      {maxUp:0.5,  maxDown:0.25, kcalCap:200},
-  'grape tomatoes': {maxUp:0.5,  maxDown:0.25, kcalCap:200},
-  'cucumber':       {maxUp:0.5,  maxDown:0.25, kcalCap:200},
-  'bok choy':       {maxUp:0.5,  maxDown:0.25, kcalCap:200},
-  // Leafy bagged (perWhole 5 = 5oz bag) — wide flex, very low kcal/cup
+  // Standard veg — match PKG_FLEX_CONFIG's beans/tuna/ground-meat ranges
+  // (0.75/0.25). Earlier 0.5/0.25 was too tight to reach next perWhole on
+  // typical trip totals (most flex calls fell short of boundary).
+  'broccoli':       {maxUp:0.75, maxDown:0.25, kcalCap:200},
+  'bell pepper':    {maxUp:0.75, maxDown:0.25, kcalCap:200},
+  'zucchini':       {maxUp:0.75, maxDown:0.25, kcalCap:200},
+  'asparagus':      {maxUp:0.75, maxDown:0.25, kcalCap:200},
+  'grape tomatoes': {maxUp:0.75, maxDown:0.25, kcalCap:200},
+  'cucumber':       {maxUp:0.75, maxDown:0.25, kcalCap:200},
+  'bok choy':       {maxUp:0.75, maxDown:0.25, kcalCap:200},
+  // Leafy bagged (perWhole 5/3 for spinach/kale): wider flex, very low kcal/cup
   'baby spinach':   {maxUp:1.0,  maxDown:0.5,  kcalCap:200},
   'kale':           {maxUp:1.0,  maxDown:0.5,  kcalCap:200},
-  // Higher kcal/cup — tighter caps
-  'carrots':        {maxUp:0.4,  maxDown:0.25, kcalCap:150},
-  'sweet potato':   {maxUp:0.4,  maxDown:0.2,  kcalCap:300},
-  'yukon potato':   {maxUp:0.4,  maxDown:0.2,  kcalCap:300},
-  // Aromatic with strict per-portion cap (max 0.5c)
+  // Higher kcal/cup — slightly tighter than standard veg
+  'carrots':        {maxUp:0.5,  maxDown:0.25, kcalCap:150},
+  'sweet potato':   {maxUp:0.5,  maxDown:0.25, kcalCap:300},
+  'yukon potato':   {maxUp:0.5,  maxDown:0.25, kcalCap:300},
+  // Aromatic with strict per-portion cap (db.maxAmt 0.5c) — wider scale
+  // ranges are moot because the maxAmt cap kicks in first.
   'red onion':      {maxUp:0.25, maxDown:0.25, kcalCap:100}
 };
 
 // Returns true if `amount` for ingredient `dbKey` can be flex-nudged to
-// hit a package-boundary multiple. Used by the retry-loop waste check to
-// avoid pessimistically counting flex-fixable waste as "bad waste".
-function canFlexFitToPkg(dbKey, amount, perPkg) {
-  const cfg = PKG_FLEX_CONFIG[dbKey];
-  if (!cfg || amount <= 0 || perPkg <= 0) return false;
+// hit a perUnit-boundary multiple within its flex range. Used by the
+// retry-loop waste check to avoid pessimistically counting flex-fixable
+// waste as "bad waste". Handles both pkg (perPkg = drained/cups) and
+// produce (perUnit = perWhole) — caller passes whichever is appropriate.
+function canFlexFitToBoundary(dbKey, amount, perUnit) {
+  const cfg = PKG_FLEX_CONFIG[dbKey] || PRODUCE_FLEX_CONFIG[dbKey];
+  if (!cfg || amount <= 0 || perUnit <= 0) return false;
   const minReach = amount * (1 - (cfg.maxDown||0));
   const maxReach = amount * (1 + (cfg.maxUp||0));
-  const floorMult = Math.floor(amount / perPkg) * perPkg;
-  const ceilMult = Math.ceil(amount / perPkg) * perPkg;
+  const floorMult = Math.floor(amount / perUnit) * perUnit;
+  const ceilMult = Math.ceil(amount / perUnit) * perUnit;
   // Either boundary reachable counts as flex-fixable.
   if (floorMult > 0 && floorMult >= minReach - 0.0001) return true;
   if (ceilMult <= maxReach + 0.0001) return true;
@@ -6418,13 +6471,15 @@ function canFlexFitToPkg(dbKey, amount, perPkg) {
 }
 
 // Cold-path trip-waste estimator shared by `rerollMissDays` and
-// `rerollInv14Violations`. The retry loop has its own inline copy because it's
-// the hot path (30 retries/click) and avoiding the function-call boundary +
-// closure allocation matters there. Both cold callers iterate over (Mon-Wed,
-// Thu-Sun) trips separately, summing flex-aware waste counts. Returns the
-// number of pkg ingredients with non-flex-resolvable waste in `days`.
+// `rerollInv14Violations`. The retry loop also calls this. Iterates over
+// (Mon-Wed, Thu-Sun) trips separately, summing flex-aware waste counts.
+// Returns the number of (pkg + produce) ingredients with non-flex-resolvable
+// waste in `days`. Produce waste added 2026-04-27 to mirror PKG's full
+// integration — Phase 1 retry-tie-breaker, rerolls, and Phase 3 swap stages
+// all use this metric.
 function _fastTripWasteForPersons(days, persons){
-  const totals={};
+  const pkgTotals={};
+  const produceTotals={};
   days.forEach(function(d){
     persons.forEach(function(p){
       if(p!=='him'&&p!=='her')return;
@@ -6445,21 +6500,39 @@ function _fastTripWasteForPersons(days, persons){
         }
         m.ingredients.forEach(function(ing){
           const db=NUTRI_DB[ing.dbKey];
-          if(!db||!db.pkg||db.pkg.longShelfLife)return;
+          if(!db)return;
           const eff=(ing.scalable===false)?(ing.amt||0):(ing.amt||0)*scale;
-          totals[ing.dbKey]=(totals[ing.dbKey]||0)+eff*lMult;
+          if(db.pkg && !db.pkg.longShelfLife){
+            pkgTotals[ing.dbKey]=(pkgTotals[ing.dbKey]||0)+eff*lMult;
+          }
+          if(db.produce){
+            produceTotals[ing.dbKey]=(produceTotals[ing.dbKey]||0)+eff*lMult;
+          }
         });
       });
     });
   });
   let w=0;
-  Object.keys(totals).forEach(function(k){
+  Object.keys(pkgTotals).forEach(function(k){
     const db=NUTRI_DB[k]; if(!db||!db.pkg) return;
     const perPkg=(db.pkg.drained&&(db.unit==='cup'||db.unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
     if(perPkg<=0) return;
-    const waste=Math.ceil(totals[k]/perPkg)*perPkg - totals[k];
+    const waste=Math.ceil(pkgTotals[k]/perPkg)*perPkg - pkgTotals[k];
     if(waste>0.01){
-      if(canFlexFitToPkg(k, totals[k], perPkg)) return;
+      if(canFlexFitToBoundary(k, pkgTotals[k], perPkg)) return;
+      w++;
+    }
+  });
+  Object.keys(produceTotals).forEach(function(k){
+    const db=NUTRI_DB[k]; if(!db||!db.produce) return;
+    const perWhole=db.produce.perWhole;
+    if(perWhole<=0) return;
+    const waste=Math.ceil(produceTotals[k]/perWhole)*perWhole - produceTotals[k];
+    // Threshold matches the shopping-list waste warning: only count "real"
+    // waste of >50% of one whole produce. Smaller fractional waste is
+    // unavoidable noise on every produce item.
+    if(waste>perWhole*0.5){
+      if(canFlexFitToBoundary(k, produceTotals[k], perWhole)) return;
       w++;
     }
   });
@@ -7551,6 +7624,14 @@ function snapBatchTotals(){
 // check each trip for pkg waste. For each ingredient with waste, nudge the
 // final balanced amounts to hit a clean package boundary. Revert any day
 // where the nudge breaks a primary goal.
+//
+// PKG-ONLY (not produce): unifying with produce was tried 2026-04-27 but
+// produce items with perWhole NOT on 0.5 grid (sweet potato 1.25, bell
+// pepper 1.25, carrots 0.75) conflict with the batch-grid math (grid×N
+// portions = 0.5 for 2-portion batches), causing INV18 oscillation at 81%
+// cap-hit rate. PKG perPkg values are all on 0.5 grid by design (1.5c,
+// 4.0c, 1.75oz drained, etc.) so they don't have this conflict. Produce
+// flex stays at the one-shot `applyTripProduceScaling` pre-loop pass.
 function postBalanceWastePass(){
   // Idempotent: reads via getBalancedSlotIngredients (lazy-build via
   // getDayBalancedIngredients when day cache missing). The per-batch
@@ -7593,10 +7674,18 @@ function postBalanceWastePass(){
 
           bal.forEach(function(bi,idx){
             var db=NUTRI_DB[bi.dbKey];
-            if(!db||!db.pkg||db.pkg.longShelfLife)return;
+            if(!db)return;
+            // Determine perUnit: pkg drained/cups OR produce perWhole.
             var unit=db.unit;
-            var perPkg=(db.pkg.drained&&(unit==='cup'||unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
-            if(perPkg<=0)return;
+            var perUnit=0;
+            if(db.pkg && !db.pkg.longShelfLife){
+              perUnit=(db.pkg.drained&&(unit==='cup'||unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
+            } else if(db.produce){
+              perUnit=db.produce.perWhole;
+            }
+            if(perUnit<=0)return;
+            // Skip ingredients with no flex config (can't be reshaped anyway).
+            if(!PKG_FLEX_CONFIG[bi.dbKey] && !PRODUCE_FLEX_CONFIG[bi.dbKey])return;
 
             // Collect EVERY portion's contribution — including leftovers
             // on the other trip. They all eat from the same cook-day pkg.
@@ -7615,7 +7704,7 @@ function postBalanceWastePass(){
             });
             if(portionContribs.length===0||batchTotal<0.001)return;
 
-            if(!pkgInfo[bi.dbKey])pkgInfo[bi.dbKey]={total:0,perPkg:perPkg,unit:unit,batches:[]};
+            if(!pkgInfo[bi.dbKey])pkgInfo[bi.dbKey]={total:0,perPkg:perUnit,unit:unit,batches:[]};
             pkgInfo[bi.dbKey].total+=batchTotal;
             pkgInfo[bi.dbKey].batches.push({portions:portionContribs,batchTotal:batchTotal});
           });
@@ -7635,11 +7724,11 @@ function postBalanceWastePass(){
       var direction=(upDelta<=downDelta)?'up':'down';
       var target=direction==='up'?upDelta:downDelta;
 
-      var maxFlexPct=0.25;
-      if(['black beans canned','cannellini beans canned','black beans cooked','cannellini beans cooked','chickpeas cooked'].indexOf(dbKey)>=0)maxFlexPct=0.75;
-      if(dbKey==='marinara')maxFlexPct=1.0;
-      if(dbKey==='chicken broth')maxFlexPct=direction==='up'?1.0:0.50;
-      if(dbKey==='silken tofu')maxFlexPct=1.0;
+      // Read flex caps from PKG_FLEX_CONFIG or PRODUCE_FLEX_CONFIG, picking
+      // by direction. Falls back to legacy 0.25 default for pkg items not
+      // in the config (none currently, but defensive).
+      var cfg=PKG_FLEX_CONFIG[dbKey]||PRODUCE_FLEX_CONFIG[dbKey];
+      var maxFlexPct=cfg ? (direction==='up'?(cfg.maxUp||0):(cfg.maxDown||0)) : 0.25;
 
       var grid=0.25;
       if(info.unit==='oz')grid=1;
@@ -7648,20 +7737,20 @@ function postBalanceWastePass(){
       // For each batch, compute its share of the delta and apply uniformly
       // to every portion. Scaling by one factor preserves unified ratios
       // (cross-person batches) AND keeps equal portions equal (same-person
-      // leftovers). Grid snap at the BATCH TOTAL level, then redistribute
-      // by each portion's original share of the batch.
+      // leftovers). Snap batch total to the per-ingredient grid (0.25 for
+      // cup, 1 for oz). Per-portion amounts within multi-portion batches are
+      // NOT constrained to the grid — INV8 only checks batch totals + solo
+      // per-serving. This lets perWhole values like 1.25 (sweet potato) land
+      // exactly on grid (1.25 IS on 0.25 grid) without the old batchGrid×N
+      // forcing a 0.5-grid snap that would round 1.25 → 1.5 off perWhole.
       var batchAdjustments=[];
       info.batches.forEach(function(b){
         var batchShare=(info.total>0)?(b.batchTotal/info.total)*target:0;
         var maxFlex=b.batchTotal*maxFlexPct;
         if(batchShare>maxFlex)batchShare=maxFlex;
         var newBatchTotal=direction==='up'?b.batchTotal+batchShare:b.batchTotal-batchShare;
-        // Batch-level grid so per-portion amounts land on per-serving grid
-        // when the batch has uniform portions (e.g. same-person 2× 1c snaps
-        // 2c total to 0.25-grid ×2 → 0.5-grid batch total).
-        var batchGrid=grid*b.portions.length;
-        newBatchTotal=Math.round(newBatchTotal/batchGrid)*batchGrid;
-        if(newBatchTotal<batchGrid)newBatchTotal=batchGrid;
+        newBatchTotal=Math.round(newBatchTotal/grid)*grid;
+        if(newBatchTotal<grid)newBatchTotal=grid;
         if(db.minAmt){
           var minBatch=db.minAmt*b.portions.length;
           if(newBatchTotal<minBatch)newBatchTotal=minBatch;
@@ -7676,8 +7765,8 @@ function postBalanceWastePass(){
           if(largestShare>0){
             var maxAllowedBatch=db.maxAmt/largestShare;
             if(newBatchTotal>maxAllowedBatch){
-              newBatchTotal=Math.floor(maxAllowedBatch/batchGrid)*batchGrid;
-              if(newBatchTotal<batchGrid)newBatchTotal=batchGrid;
+              newBatchTotal=Math.floor(maxAllowedBatch/grid)*grid;
+              if(newBatchTotal<grid)newBatchTotal=grid;
             }
           }
         }
@@ -7853,8 +7942,9 @@ function randomizeWeek(target, seed){
     if (totalWaste === 0) {
       // applyTripFlexScaling invalidates internally after each setOverride/
       // revert; no extra invalidate needed before runBalanceAdjusters.
+      // applyTripFlexScaling now handles BOTH pkg AND produce in one pass
+      // (unified 2026-04-27).
       applyTripFlexScaling(randTarget);
-      applyTripProduceScaling(randTarget);
       runBalanceAdjusters();
       goalMisses = 0;
       const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
@@ -7942,7 +8032,6 @@ function randomizeWeek(target, seed){
     // winning retry, or when rerolls invalidated it. applyTripFlexScaling
     // invalidates internally; no extra invalidate needed.
     applyTripFlexScaling(randTarget);
-    applyTripProduceScaling(randTarget);
     runBalanceAdjusters();
   }
   // Final solo-slot grid snap — day-balancer/flex-scaling can leave non-batch
@@ -7965,27 +8054,41 @@ function randomizeWeek(target, seed){
   }
 }
 
-// Trip-level package-fitting scale for flex ingredients. Proportionally scales
-// ALL meals in a trip that use a flex ingredient (marinara, beans, coconut) to
-// hit the nearest clean package boundary. Respects per-ingredient flex ranges
-// and keeps every day within ±100 kcal of target.
+// Trip-level boundary-fitting scale for flex ingredients (BOTH pkg AND produce).
+// Proportionally scales ALL meals in a trip that use a flex ingredient to hit
+// the nearest clean perUnit boundary (perPkg for cans/containers, perWhole for
+// whole produce). Respects per-ingredient flex ranges. Direction: closer-wins
+// (picks whichever boundary is fewer cups away from the current trip total).
+//
+// Unified pkg+produce 2026-04-27: the only differences between pkg and produce
+// items are (1) where perUnit comes from in the DB and (2) which flex config
+// they live in. The scaling math is identical.
 function applyTripFlexScaling(randTarget){
   const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
   // Leftover map is stable across this function — SEL isn't mutated, only
-  // balanced ingredient amounts. Compute once at top instead of rebuilding
-  // per flex ingredient per trip (was ~28 rebuilds per randomize click).
+  // balanced ingredient amounts. Compute once at top.
   invalidateLeftoverCache();
   const leftovers = computeLeftovers();
+  // Build the unified set of dbKeys to process (pkg + produce flex configs).
+  const allFlexKeys = {};
+  Object.keys(PKG_FLEX_CONFIG).forEach(function(k){allFlexKeys[k]=true;});
+  Object.keys(PRODUCE_FLEX_CONFIG).forEach(function(k){allFlexKeys[k]=true;});
   ['cook1','cook2'].forEach(function(trip){
     const days = TRIP_DAYS_STATIC[trip] || [];
-    Object.keys(PKG_FLEX_CONFIG).forEach(function(dbKey){
-      const db = NUTRI_DB[dbKey]; if (!db || !db.pkg) return;
-      const perPkg = (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
-      if (perPkg <= 0) return;
-      const cfg = PKG_FLEX_CONFIG[dbKey];
+    Object.keys(allFlexKeys).forEach(function(dbKey){
+      const db = NUTRI_DB[dbKey]; if (!db) return;
+      // Determine perUnit: pkg drained/cups, else produce perWhole.
+      let perUnit = 0;
+      if (db.pkg && !db.pkg.longShelfLife) {
+        perUnit = (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
+      } else if (db.produce) {
+        perUnit = db.produce.perWhole;
+      }
+      if (perUnit <= 0) return;
+      const cfg = PKG_FLEX_CONFIG[dbKey] || PRODUCE_FLEX_CONFIG[dbKey];
+      if (!cfg) return;
 
-      // Find all cook-day usages of this ingredient in this trip — reuses
-      // the leftover map hoisted above.
+      // Find all cook-day usages of this ingredient in this trip.
       const usages = []; // {p, d, s, idx, curAmt, lMult}
       let tripTotal = 0;
       days.forEach(function(d){
@@ -8017,21 +8120,26 @@ function applyTripFlexScaling(randTarget){
       });
       if (usages.length === 0 || tripTotal <= 0) return;
 
-      // Compute best target: nearest package multiple reachable within flex bounds
-      const pkgsCeil = Math.ceil(tripTotal / perPkg);
-      const pkgsFloor = Math.floor(tripTotal / perPkg);
-      const targetUp = pkgsCeil * perPkg;
-      const targetDown = pkgsFloor * perPkg;
+      // Compute best target: closer-wins boundary (picks the perUnit multiple
+      // that requires the smallest scale change). Falls back to the other side
+      // if the closer side exceeds the flex range.
+      const unitsCeil = Math.ceil(tripTotal / perUnit);
+      const unitsFloor = Math.floor(tripTotal / perUnit);
+      const targetUp = unitsCeil * perUnit;
+      const targetDown = unitsFloor * perUnit;
+      const upDelta = targetUp - tripTotal;
+      const downDelta = tripTotal - targetDown;
       const scaleUp = tripTotal > 0 ? targetUp / tripTotal : 1;
       const scaleDown = tripTotal > 0 ? targetDown / tripTotal : 1;
+      const upInRange = upDelta > 0.01 && (scaleUp - 1) <= cfg.maxUp;
+      const downInRange = downDelta > 0.01 && targetDown > 0 && cfg.maxDown > 0 && (1 - scaleDown) <= cfg.maxDown;
       let chosenScale = null;
-      // Prefer scaling UP to nearest pkg (buy an extra can, cook more)
-      if (targetUp > tripTotal + 0.01 && (scaleUp - 1) <= cfg.maxUp) {
-        chosenScale = scaleUp;
-      }
-      // Else try scaling DOWN to fewer packages (only if allowed)
-      else if (targetDown > 0 && targetDown < tripTotal - 0.01 && cfg.maxDown > 0 && (1 - scaleDown) <= cfg.maxDown) {
-        chosenScale = scaleDown;
+      if (upDelta <= downDelta) {
+        if (upInRange) chosenScale = scaleUp;
+        else if (downInRange) chosenScale = scaleDown;
+      } else {
+        if (downInRange) chosenScale = scaleDown;
+        else if (upInRange) chosenScale = scaleUp;
       }
       if (chosenScale === null || Math.abs(chosenScale - 1) < 0.001) return;
 
@@ -8088,156 +8196,23 @@ function applyTripFlexScaling(randTarget){
         var ovs = getOverrides(u.p, u.d, u.s);
         var existing = ovs ? ovs.find(function(o){return o.idx === u.idx;}) : null;
         var prevAmt = existing && existing.amt !== undefined ? existing.amt : null;
-        // Apply scaled amount — cap at db.maxAmt so flex scaling can't push
-        // per-serving past the threshold (INV13 gap otherwise).
+        // Apply scaled amount — clamp to per-portion [minAmt..maxAmt] so flex
+        // scaling can't push per-serving past the threshold (INV13 gap otherwise).
+        // Floor uses minAmtSolo when this slot is solo (1-portion batch).
         var newAmt = u.curAmt * chosenScale;
         if (typeof db.maxAmt === 'number' && newAmt > db.maxAmt) newAmt = db.maxAmt;
-        setOverride(u.p, u.d, u.s, u.idx, 'amt', newAmt);
-        invalidateLeftoverCache();
-        // Check if this day still hits all goals (day-balancer re-runs via calcTotals)
-        if (!checkDayGoals(u.p, u.d)) {
-          // Revert just this usage — day can't absorb it
-          if (prevAmt !== null) {
-            setOverride(u.p, u.d, u.s, u.idx, 'amt', prevAmt);
-          } else {
-            var ovrList = getOverrides(u.p, u.d, u.s);
-            if (ovrList) {
-              var filtered = ovrList.filter(function(o){return o.idx !== u.idx;});
-              if (filtered.length) OVERRIDES[sk(u.p,u.d,u.s)] = filtered;
-              else delete OVERRIDES[sk(u.p,u.d,u.s)];
-            }
-          }
-          invalidateLeftoverCache();
-        }
-      });
-    });
-  });
-}
-
-// Trip-level WHOLE-PRODUCE-fitting scale. Mirror of `applyTripFlexScaling`
-// but keyed on `db.produce.perWhole` (units bought as wholes — peppers,
-// broccoli heads, zucchini, etc.) instead of `db.pkg`. Scales meal amounts
-// proportionally across all trip usages of a produce item to land trip totals
-// on whole-produce-count boundaries, eliminating fractional-unit waste.
-//
-// Per-usage application + per-day goal sanity check matches the pkg pass:
-// each meal's scale attempt is reverted if it breaks any daily goal. Per-portion
-// amounts cap at db.maxAmt to keep INV13 clean.
-function applyTripProduceScaling(randTarget){
-  const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
-  invalidateLeftoverCache();
-  const leftovers = computeLeftovers();
-  ['cook1','cook2'].forEach(function(trip){
-    const days = TRIP_DAYS_STATIC[trip] || [];
-    Object.keys(PRODUCE_FLEX_CONFIG).forEach(function(dbKey){
-      const db = NUTRI_DB[dbKey]; if (!db || !db.produce) return;
-      const perWhole = db.produce.perWhole;
-      if (perWhole <= 0) return;
-      const cfg = PRODUCE_FLEX_CONFIG[dbKey];
-
-      const usages = []; // {p, d, s, idx, curAmt, lMult}
-      let tripTotal = 0;
-      days.forEach(function(d){
-        persons.forEach(function(p){
-          SLOTS.forEach(function(s){
-            if (s==='late_snack'||s==='shake') return;
-            const key = sk(p,d,s);
-            if (SKIPPED[key]||EAT_OUT[key]) return;
-            const lo = leftovers[key];
-            if (lo && lo.isLeftover) return;
-            const lMult = (lo && !lo.isLeftover && lo.servings > 1) ? lo.servings : 1;
-            const mealId = getMealId(p,d,s); if (!mealId) return;
-            const meal = MEALS.find(m=>m.id===mealId); if (!meal || !meal[p]) return;
-            const ovrIngr = applyOverrides(meal[p], p, d, s);
-            const balanced = getBalancedSlotIngredients(p,d,s);
-            ovrIngr.forEach(function(ing, idx){
-              if (ing.dbKey !== dbKey) return;
-              let curAmt = ing.amt;
-              if (balanced) {
-                const bi = balanced.find(function(b){return b.dbKey === dbKey;});
-                if (bi) curAmt = bi.amt;
-              }
-              usages.push({p:p, d:d, s:s, idx:idx, curAmt:curAmt, lMult:lMult});
-              tripTotal += curAmt * lMult;
-            });
-          });
-        });
-      });
-      if (usages.length === 0 || tripTotal <= 0) return;
-
-      const wholesCeil = Math.ceil(tripTotal / perWhole);
-      const wholesFloor = Math.floor(tripTotal / perWhole);
-      const targetUp = wholesCeil * perWhole;
-      const targetDown = wholesFloor * perWhole;
-      const scaleUp = tripTotal > 0 ? targetUp / tripTotal : 1;
-      const scaleDown = tripTotal > 0 ? targetDown / tripTotal : 1;
-      let chosenScale = null;
-      if (targetUp > tripTotal + 0.01 && (scaleUp - 1) <= cfg.maxUp) {
-        chosenScale = scaleUp;
-      } else if (targetDown > 0 && targetDown < tripTotal - 0.01 && cfg.maxDown > 0 && (1 - scaleDown) <= cfg.maxDown) {
-        chosenScale = scaleDown;
-      }
-      if (chosenScale === null || Math.abs(chosenScale - 1) < 0.001) return;
-
-      // Trim-capacity check (mirror of pkg pass) — make sure each affected day
-      // has enough scalable carb/fat to absorb the added kcal back to budget.
-      const dayDeltaKcal = {};
-      usages.forEach(function(u){
-        const perServAddKcal = (chosenScale - 1) * u.curAmt * db.kcal;
-        const dayKey = u.p + '_' + u.d;
-        dayDeltaKcal[dayKey] = (dayDeltaKcal[dayKey] || 0) + perServAddKcal;
-      });
-      let hasTrimCapacity = true;
-      Object.keys(dayDeltaKcal).forEach(function(k){
-        const p = k.split('_')[0], d = k.split('_')[1];
-        const addKcal = dayDeltaKcal[k];
-        if (addKcal <= 0) return;
-        if (cfg.kcalCap && addKcal > cfg.kcalCap) {hasTrimCapacity = false; return;}
-        let trimable = 0;
-        SLOTS.forEach(function(s){
-          if (s === 'late_snack' || s === 'shake') return;
-          if (SKIPPED[sk(p,d,s)] || EAT_OUT[sk(p,d,s)]) return;
-          const bal = getBalancedSlotIngredients(p,d,s);
-          if (!bal) return;
-          bal.forEach(function(i){
-            if (i.scalable === false) return;
-            if (i.role !== 'carb' && i.role !== 'fat') return;
-            const idb = NUTRI_DB[i.dbKey];
-            if (!idb) return;
-            const minAmt = (i.role === 'fat') ? 0.25 : (i.origAmt || i.amt) * 0.5;
-            const trimAmt = Math.max(0, i.amt - minAmt);
-            trimable += trimAmt * idb.kcal;
-          });
-        });
-        if (trimable < addKcal * 0.75) hasTrimCapacity = false;
-      });
-      if (!hasTrimCapacity) return;
-
-      function checkDayGoals(p, d){
-        var t = calcTotals(p, d);
-        var fv = computeDailyFV(p, d);
-        var mk = t.pro*4 + t.fat*9 + t.carb*4;
-        return (Math.abs(t.kcal - CAL_BASE[p]) <= 100) && (t.pro >= (PRO_TARGET[p]||0))
-            && (mk === 0 || (t.carb*4)/mk <= 0.55) && (mk === 0 || (t.fat*9)/mk <= 0.30)
-            && (fv.veg >= 3) && (fv.fruit >= 1);
-      }
-      usages.forEach(function(u){
-        var ovs = getOverrides(u.p, u.d, u.s);
-        var existing = ovs ? ovs.find(function(o){return o.idx === u.idx;}) : null;
-        var prevAmt = existing && existing.amt !== undefined ? existing.amt : null;
-        var newAmt = u.curAmt * chosenScale;
-        if (typeof db.maxAmt === 'number' && newAmt > db.maxAmt) newAmt = db.maxAmt;
-        // Floor at db.minAmt (or minAmtSolo for solo cooks) to keep INV13 clean.
         var loIsSolo = (function(){
           var lo = leftovers[sk(u.p, u.d, u.s)];
           return !(lo && !lo.isLeftover && lo.servings > 1);
         })();
         var floor = (loIsSolo && typeof db.minAmtSolo === 'number') ? db.minAmtSolo
-                   : (typeof db.minAmt === 'number' ? db.minAmt : 0);
+                  : (typeof db.minAmt === 'number' ? db.minAmt : 0);
         if (newAmt < floor) newAmt = floor;
         setOverride(u.p, u.d, u.s, u.idx, 'amt', newAmt);
         invalidateLeftoverCache();
+        // Check if this day still hits all goals (day-balancer re-runs via calcTotals)
         if (!checkDayGoals(u.p, u.d)) {
+          // Revert just this usage — day can't absorb it
           if (prevAmt !== null) {
             setOverride(u.p, u.d, u.s, u.idx, 'amt', prevAmt);
           } else {
@@ -9167,9 +9142,15 @@ function _randomizeWeekCore(randTarget){
         // Baseline TOTAL trip waste across ALL packages (before swap)
         var baselineTripWaste = 0;
         _analyzeTripPackages(trip.days).forEach(function(px){ baselineTripWaste += (px.waste || 0); });
-        // Baseline INV14 count — reject swaps that would raise it
+        // Baseline INV14 + INV11 counts — reject swaps that would raise either.
+        // INV11 added 2026-04-27: Strategy A previously checked only INV14, but
+        // a swap that displaces a same-meal-batch's leftover (e.g., adding
+        // ground_chicken to Wed when Fri+Sun were already a batch) can shrink
+        // the Sun-batch out of Fri's window without raising INV14, while
+        // creating a gap-too-small INV11 between the two resulting batches.
         invalidateLeftoverCache();
         var baselineInv14 = countInv14();
+        var baselineInv11 = countInv11();
 
         // Try each candidate, pick the one that best reduces TOTAL trip waste
         // (not just waste for this one package — a swap that fixes tofu but
@@ -9207,6 +9188,7 @@ function _randomizeWeekCore(randTarget){
             var postSwapTripWaste = 0;
             _analyzeTripPackages(trip.days).forEach(function(px){ postSwapTripWaste += (px.waste || 0); });
             var postSwapInv14 = countInv14();
+            var postSwapInv11 = countInv11();
 
             // Revert
             SEL[sk(sc.p, sc.d, sc.s)] = origSel;
@@ -9214,6 +9196,7 @@ function _randomizeWeekCore(randTarget){
             invalidateLeftoverCache();
 
             if (postSwapInv14 > baselineInv14) return; // reject swaps that create INV14
+            if (postSwapInv11 > baselineInv11) return; // reject swaps that create INV11 (gap < 2 between same-meal batches)
             if (postSwapTripWaste < bestTotalTripWaste) {
               bestTotalTripWaste = postSwapTripWaste;
               bestSwap = {sc:sc, rep:rep};
