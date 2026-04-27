@@ -436,7 +436,7 @@ var NUTRI_DB = {
   'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, maxAmt:2.0},
   'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.25, maxAmt:2.0},
   'grape tomatoes':        {kcal:27,  pro:1.3,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'pint grape tomatoes'}, minAmt:0.25, maxAmt:2.0},
-  'red onion':             {kcal:64,  pro:1.8,fat:0.2, carb:15,  unit:'cup', produce:{perWhole:1,label:'medium red onion'}, minAmt:0.1, minAmtSolo:0.2, maxAmt:0.5},
+  'red onion':             {kcal:64,  pro:1.8,fat:0.2, carb:15,  unit:'cup', produce:{perWhole:1,label:'medium red onion'}, minAmt:0.1, minAmtSolo:0.25, maxAmt:0.5},
   'zucchini':              {kcal:20,  pro:1.5,fat:0.2, carb:3.5, unit:'cup', produce:{perWhole:1.5,label:'medium zucchini'}, minAmt:0.25, maxAmt:2.0},
   'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.25, maxAmt:2.0},
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.25, maxAmt:2.0},
@@ -552,14 +552,31 @@ function I(dbKey, amt, role, scalable) {
 
 // Shared fraction formatter
 function fmtFrac(n) {
+  // Order = priority on equidistant ties. We list thirds first, eighths
+  // next, quarters last; combined with <= comparator below, later entries
+  // replace earlier ones on equal distance. Result: quarter-grid wins over
+  // eighth-grid wins over thirds when two snap values tie. Tolerance 0.05
+  // chosen so 0.71→¾ still snaps (dist 0.04) but 0.55 doesn't (dist 0.05).
+  // Fallthrough is 2-decimal — never display "0.71384" type sloppy numbers.
   const snaps = [
-    [0.25,'¼'],[0.33,'⅓'],[0.5,'½'],[0.67,'⅔'],[0.75,'¾'],
-    [1,'1'],[1.25,'1¼'],[1.33,'1⅓'],[1.5,'1½'],[1.67,'1⅔'],[1.75,'1¾'],
+    [1/3,'⅓'],[2/3,'⅔'],
+    [1+1/3,'1⅓'],[1+2/3,'1⅔'],
+    [1/8,'⅛'],[3/8,'⅜'],[5/8,'⅝'],[7/8,'⅞'],
+    [1+1/8,'1⅛'],[1+3/8,'1⅜'],[1+5/8,'1⅝'],[1+7/8,'1⅞'],
+    [0,'0'],[1/4,'¼'],[1/2,'½'],[3/4,'¾'],
+    [1,'1'],[1.25,'1¼'],[1.5,'1½'],[1.75,'1¾'],
     [2,'2'],[2.25,'2¼'],[2.5,'2½'],[2.75,'2¾'],[3,'3'],[3.5,'3½'],
     [4,'4'],[5,'5'],[6,'6'],[7,'7'],[8,'8'],[9,'9'],[10,'10']
   ];
-  for(let i=0;i<snaps.length;i++){if(Math.abs(n-snaps[i][0])<0.06)return snaps[i][1];}
-  return String(Math.round(n*4)/4);
+  let best=0, bestDist=Math.abs(n - snaps[0][0]);
+  for(let i=1;i<snaps.length;i++){
+    const d=Math.abs(n - snaps[i][0]);
+    if(d<=bestDist){best=i; bestDist=d;}
+  }
+  // 0.0601 (not exactly 0.06) absorbs IEEE 754 imprecision: e.g.,
+  // 0.81 - 0.75 = 0.06000000000000005 in float, which would fail strict 0.06.
+  if(bestDist<=0.0601) return snaps[best][1];
+  return String(Math.round(n*100)/100);
 }
 
 // Build displayText from dbKey + amount + unit
@@ -925,7 +942,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     // Enforce minAmt — but only when scaling UP or for non-package items
     // When scaling down, packaged items (tofu, beans) can go below minAmt
     // since the package system handles waste separately
-    const isPkgItem = db && db.pkg && db.pkg.type !== 'bulk';
+    const isPkgItem = db && db.pkg;
     const effMinScale = db ? _effMin(db) : 0;
     if (db && effMinScale > 0 && newAmt < effMinScale && !(isPkgItem && uniformScale < 1)) {
       newAmt = effMinScale;
@@ -1221,7 +1238,7 @@ const MEALS=[
   ingredients:[
     I('protein powder',1,'protein',false),
     I('creatine',1,'fixed',false),
-    I('acai',0.33,'fruit',false),
+    I('acai',1/3,'fruit',false),
     I('banana',0.5,'fruit',false),
     I('peanut butter',0,'fat'),
     I('oats tbsp',1,'carb'),
@@ -2095,7 +2112,7 @@ const MEALS=[
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
-    I('zucchini',0.88,'veg'),
+    I('zucchini',1,'veg'),
     I('bell pepper',0.5,'veg'),
     I('shallot',1,'veg'),
     I('baby spinach',0.5,'veg'),
@@ -2368,10 +2385,15 @@ const ADJ_SLOTS=['breakfast','lunch','snack','dinner'];
 const SLOT_LABEL={shake:'Shake',breakfast:'Breakfast',lunch:'Lunch',snack:'Snack',dinner:'Dinner',late_snack:'Late Night Snack'};
 // Calorie budget: percentage of (target - shake) for each slot
 const SLOT_BUDGET={breakfast:0.20,lunch:0.35,dinner:0.35,snack:0.10};
-const TRIP_DAYS_STATIC={sun:['Monday','Tuesday','Wednesday'],wed:['Thursday','Friday','Saturday','Sunday'],custom:[]};
+// Cook 1 = Mon-Wed shopping trip (3 days), Cook 2 = Thu-Sun shopping trip (4 days).
+// Keys are intentionally `cook1`/`cook2` (not `sun`/`wed`) because the legacy
+// `sun`/`wed` names were named after the SHOPPING DAY not the trip's day range
+// — `sun` trip didn't include Sunday, `wed` trip ran Thu through Sun. Confusing.
+const TRIP_DAYS_STATIC={cook1:['Monday','Tuesday','Wednesday'],cook2:['Thursday','Friday','Saturday','Sunday'],custom:[]};
 var CUSTOM_SHOP_SEL={}; // key: 'person_day_slot', true if selected for custom shop
-var CUSTOM_RECIPE_SEL={}; // key: 'mealId_person', true if selected for custom shop by recipe
-var csGridOpen=false, csRecipesOpen=false;
+var CUSTOM_RECIPE_SEL={}; // key: 'mealId_person', true if selected for custom shop by base recipe (raw amounts)
+var CUSTOM_PLAN_SEL={};   // key: 'mealId', true if selected from THIS WEEK's plan (balanced amounts; full-batch aware)
+var csGridOpen=false, csRecipesOpen=false, csPlanMealsOpen=false;
 
 var SEL={},CHECKS={},openCards={};
 var OVERRIDES={}; // key: 'person_day_slot', value: [{idx, dbKey, amt},...] - per-ingredient overrides
@@ -2566,7 +2588,7 @@ function addToEatOutDB(entry){
   else{EAT_OUT_DB.push(entry);}
   saveEatOutDB();
 }
-let topTab='meals',person='him',day='Monday',shopTrip='sun',shopPerson='both';
+let topTab='meals',person='him',day='Monday',shopTrip='cook1',shopPerson='both';
 
 // Get overrides for a specific meal slot
 function getOverrides(p,d,s){return OVERRIDES[sk(p,d,s)]||null;}
@@ -2857,10 +2879,12 @@ function addQty(existing,num,unit){
 }
 function fmtQty(q){
   if(!q)return'—';
-  let n=Math.round(q.num*4)/4;
-  if(n<=0)n=0.25;
-  const s=fmtFrac(n);
-  return q.unit?s+' '+q.unit:s;
+  // Pass actual value through to fmtFrac. fmtFrac snaps grid-aligned values
+  // to fraction symbols and falls through to 2-decimal display for off-grid
+  // (per-portion-of-batch in him/her views, waste fractions in waste labels).
+  // No pre-rounding here — the pipeline already snaps amounts that should be
+  // grid-aligned, and pre-rounding hides the rare cases that aren't.
+  return q.unit?fmtFrac(q.num)+' '+q.unit:fmtFrac(q.num);
 }
 
 // ── Shopping list builder ────────────────────────────────────
@@ -2894,7 +2918,7 @@ var SHOP_DISPLAY_NAMES={
   'egg whole':'Egg, whole','egg white':'Egg, white',
   'greek yogurt 0%':'Greek yogurt, 0%','ground turkey 93':'Ground turkey, 93% lean',
   'cashew milk (sweetened)':'Cashew milk','honey tbsp':'Honey',
-  'brown rice cooked':'Brown rice','jasmine rice cooked':'Jasmine rice',
+  'brown rice cooked':'Brown rice','jasmine rice cooked':'Jasmine rice','white rice cooked':'White rice',
   'whole wheat pasta cooked':'Whole wheat pasta','rice vermicelli cooked':'Rice vermicelli',
   'egg noodles cooked':'Egg noodles','udon noodles':'Udon noodles',
   'lentils cooked':'Lentils','black beans cooked':'Black beans','white beans cooked':'White beans',
@@ -2944,8 +2968,8 @@ function shopQtyWithCount(dbKey,qtyObj){
     return rounded+' '+label;
   }
 
-  // Package conversion (cans, cartons, pouches) — skip for bulk items
-  if(db.pkg&&db.pkg.type!=='bulk'){
+  // Package conversion (cans, cartons, pouches, containers, jars).
+  if(db.pkg){
     const pkg=db.pkg;
     const label=pkg.type||'can';
     if(pkg.drained&&qtyObj.unit==='cup'){
@@ -2988,44 +3012,110 @@ function buildShoppingList(trip,who){
   const persons=who==='both'?['him','her']:who==='him'?['him']:['her'];
   const items={};
 
-  // Simple approach: add each slot's final amounts directly.
-  // No leftover multiplier logic — leftover days are pinned to cook-day
-  // amounts, so adding each day individually gives the correct total.
-  // Every consumer reads from the same source: getBalancedSlotIngredients.
-  persons.forEach(function(p){
-    days.forEach(function(d){
-      SLOTS.forEach(function(s){
-        if(s==='late_snack')return;
-        if(trip==='custom'&&!CUSTOM_SHOP_SEL[sk(p,d,s)])return;
-        if(SKIPPED[sk(p,d,s)])return;
-        if(EAT_OUT[sk(p,d,s)])return;
+  if(trip==='custom'){
+    // Custom trip: user explicitly picks slots via the day-grid. Iterate the
+    // selected slots one-by-one — slot-based attribution matches what the
+    // user picked. (CUSTOM_PLAN_SEL and CUSTOM_RECIPE_SEL pickers handled
+    // separately below.)
+    persons.forEach(function(p){
+      days.forEach(function(d){
+        SLOTS.forEach(function(s){
+          if(s==='late_snack')return;
+          if(!CUSTOM_SHOP_SEL[sk(p,d,s)])return;
+          if(SKIPPED[sk(p,d,s)])return;
+          if(EAT_OUT[sk(p,d,s)])return;
+          const id=getMealId(p,d,s);if(!id)return;
+          const m=getMeal(id);if(!m||!m[p])return;
+          const port=m[p];
+          if(!port.ingredients||!port.ingredients.length||port.ingredients[0].dbKey===undefined)return;
+          const balanced=getBalancedSlotIngredients(p,d,s);
+          if(balanced){
+            balanced.forEach(function(i){addShopIngredient(items,i.dbKey,i.amt,p);});
+          } else {
+            const ingr=applyOverrides(port,p,d,s);
+            ingr.forEach(function(i){addShopIngredient(items,i.dbKey,i.amt,p);});
+          }
+        });
+      });
+    });
+  } else {
+    // Cook-anchor architecture for cook1/cook2 trips. Each batch is shopped
+    // ONCE in the trip its cook day falls in. Leftover slots (in any trip)
+    // contribute nothing to shopping — they were already shopped when the
+    // cook anchor was added to its trip. Trip totals are automatically
+    // grid-clean: each batch contributes its full snapped total to one
+    // trip; cross-trip leftovers don't split a batch's amount across trips.
+    //
+    // Person attribution: a batch's full total goes into the COOK ANCHOR's
+    // person bucket (`hisSum` if Him is the anchor, `herSum` if Her). The
+    // cook is the one shopping for the batch; the other person's portion
+    // is implicitly included in the cook's bucket. For solo cooks, anchor
+    // person = eater person, no difference.
+    const leftovers = computeLeftovers();
+    const tripDaySet = {};
+    days.forEach(function(d){tripDaySet[d]=true;});
 
-        const id=getMealId(p,d,s);
-        if(!id)return;
-        const m=getMeal(id);
-        if(!m||!m[p])return;
-        const port=m[p];
-        if(!port.ingredients||!port.ingredients.length||port.ingredients[0].dbKey===undefined)return;
+    persons.forEach(function(p){
+      DAYS.forEach(function(d){
+        SLOTS.forEach(function(s){
+          if(s==='late_snack')return;
+          const k=sk(p,d,s);
+          if(SKIPPED[k]||EAT_OUT[k])return;
+          const id=getMealId(p,d,s);if(!id)return;
+          const m=getMeal(id);if(!m||!m[p])return;
+          const port=m[p];
+          if(!port.ingredients||!port.ingredients.length||port.ingredients[0].dbKey===undefined)return;
 
-        // All slots (including shake): read final balanced amounts.
-        // One source of truth — no special cases.
-        const balanced=getBalancedSlotIngredients(p,d,s);
-        if(balanced){
-          balanced.forEach(function(i){
-            addShopIngredient(items,i.dbKey,i.amt,p);
-          });
-        } else {
-          // Fallback: raw amounts
-          const ingr=applyOverrides(port,p,d,s);
-          ingr.forEach(function(i){
-            addShopIngredient(items,i.dbKey,i.amt,p);
-          });
+          const lo = leftovers[k];
+          // Skip leftover slots — already shopped via their cook anchor.
+          if(lo && lo.isLeftover) return;
+          // Cook day must be in this trip. (For batches whose cook is in
+          // the OTHER trip, this excludes them from this trip's shopping.)
+          if(!tripDaySet[d]) return;
+
+          if(lo && lo.portions && lo.portions.length > 1){
+            // Multi-portion batch (shared, leftover chain, or both).
+            // Sum balanced amounts across ALL portions of the batch and
+            // attribute the total to the cook anchor's person bucket.
+            lo.portions.forEach(function(pt){
+              const bal = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
+              if(bal){
+                bal.forEach(function(i){addShopIngredient(items, i.dbKey, i.amt, p);});
+              } else {
+                const m2 = getMeal(getMealId(pt.p, pt.d, pt.s));
+                if(m2 && m2[pt.p]){
+                  const ingr = applyOverrides(m2[pt.p], pt.p, pt.d, pt.s);
+                  ingr.forEach(function(i){addShopIngredient(items, i.dbKey, i.amt, p);});
+                }
+              }
+            });
+          } else {
+            // Solo cook (no leftover entry, or single-portion).
+            const balanced = getBalancedSlotIngredients(p, d, s);
+            if(balanced){
+              balanced.forEach(function(i){addShopIngredient(items, i.dbKey, i.amt, p);});
+            } else {
+              const ingr = applyOverrides(port, p, d, s);
+              ingr.forEach(function(i){addShopIngredient(items, i.dbKey, i.amt, p);});
+            }
+          }
+        });
+        // Late snack: per-day, only on regular cook1/cook2 trips when DB-keyed
+        // ingredients have been added via the + button. Manual-macro late
+        // snacks aren't shopped (user buys those ad-hoc).
+        if(tripDaySet[d]){
+          const ls = LATE_SNACK[pk(p,d)];
+          if(ls && ls.ingredients && ls.ingredients.length){
+            ls.ingredients.forEach(function(ing){addShopIngredient(items, ing.dbKey, ing.amt, p);});
+          }
         }
       });
     });
-  });
+  }
 
-  // Custom mode: also add recipe-selected meals (not tied to any day)
+  // Custom mode — Base Recipes picker. Adds raw recipe ingredients (not
+  // tied to any plan slot, so no balanced/applyOverrides). Useful when the
+  // user wants to make a meal that isn't in the current week's plan.
   if(trip==='custom'){
     Object.keys(CUSTOM_RECIPE_SEL).forEach(function(rk){
       if(!CUSTOM_RECIPE_SEL[rk])return;
@@ -3039,6 +3129,41 @@ function buildShoppingList(trip,who){
       if(!port.ingredients||!port.ingredients.length||!port.ingredients[0].dbKey)return;
       port.ingredients.forEach(function(ing){
         addShopIngredient(items,ing.dbKey,ing.amt,p);
+      });
+    });
+  }
+
+  // Custom mode — This Week's Plan picker. Iterates active SEL for the
+  // selected mealIds, reads post-pipeline balanced amounts, sums across
+  // every matching (p,d,s). Naturally captures the full batch for cooks
+  // (since each portion's per-serving amount sums to the batch total),
+  // skips SKIPPED/EAT_OUT, and dedupes against CUSTOM_SHOP_SEL so the
+  // same slot isn't counted twice when the user picks it both ways.
+  if(trip==='custom'){
+    Object.keys(CUSTOM_PLAN_SEL).forEach(function(mealId){
+      if(!CUSTOM_PLAN_SEL[mealId])return;
+      persons.forEach(function(p){
+        DAYS.forEach(function(d){
+          SLOTS.forEach(function(s){
+            if(s==='late_snack')return;
+            const k=sk(p,d,s);
+            if(SKIPPED[k]||EAT_OUT[k])return;
+            if(getMealId(p,d,s)!==mealId)return;
+            if(CUSTOM_SHOP_SEL[k])return; // dedupe vs day-grid pass
+            const balanced=getBalancedSlotIngredients(p,d,s);
+            if(balanced){
+              balanced.forEach(function(i){
+                addShopIngredient(items,i.dbKey,i.amt,p);
+              });
+            } else {
+              const m=getMeal(mealId);if(!m||!m[p])return;
+              const ingr=applyOverrides(m[p],p,d,s);
+              ingr.forEach(function(i){
+                addShopIngredient(items,i.dbKey,i.amt,p);
+              });
+            }
+          });
+        });
       });
     });
   }
@@ -3076,8 +3201,8 @@ function buildShoppingList(trip,who){
         if(perPkg>0&&totalNum>0){
           // Calculate waste: how much of the last package isn't used.
           // Skip only for longShelfLife items (egg white carton) — those
-          // legitimately carry between trips. Bulk (ground meat) is still
-          // inconvenient to freeze partial bags, so we flag those too.
+          // legitimately carry between trips. Every other pkg type
+          // (can/jar/carton/pouch/container) is flagged.
           if(!db.pkg.longShelfLife){
             const pkgsNeeded=Math.ceil(totalNum/perPkg);
             const totalFromPkgs=pkgsNeeded*perPkg;
@@ -3574,7 +3699,7 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
         if(!ignoreScalableFalse && i.scalable===false)return;
         if(role&&i.role!==role)return;
         const db=NUTRI_DB[i.dbKey]; if(!db)return;
-        const isPkg=!!(db.pkg&&db.pkg.type!=='bulk'&&!db.pkg.longShelfLife);
+        const isPkg=!!(db.pkg&&!db.pkg.longShelfLife);
         out.push({slot:s,idx:idx,db:db,cur:i.amt,isPkg:isPkg,role:i.role,origAmt:i.origAmt,recipeAmt:i.recipeAmt,dbKey:i.dbKey});
       });
     });
@@ -3959,14 +4084,23 @@ function verifyInvariants(){
   });
 
   // ── Invariant 3: Shopping ↔ balanced cache agreement ──
-  // Sum each slot's final amounts (same logic as buildShoppingList) and
-  // compare with what the shopping list actually reports.
-  ['sun','wed'].forEach(function(trip){
+  // Mirrors buildShoppingList's cook-anchor architecture for cook1/cook2:
+  // each batch contributes its full snapped total to the trip its cook day
+  // falls in. Leftover slots don't add (already shopped via cook anchor).
+  // Person attribution: full batch goes to the cook anchor's person bucket
+  // (cook is the one who shops; other person's portion implicitly included).
+  // Bidirectional: forward catches shopping over/under-counting; reverse
+  // catches expected ingredients that addShopIngredient silently dropped
+  // (stale dbKeys, future skip rules, balanced-cache leakage).
+  const _inv3Leftovers = computeLeftovers();
+  ['cook1','cook2'].forEach(function(trip){
     const tripDays=TRIP_DAYS_STATIC[trip]||[];
+    const tripDaySet={};
+    tripDays.forEach(function(d){tripDaySet[d]=true;});
     const shopList=buildShoppingList(trip,'both');
     const expected={}; // dbKey -> {him:0, her:0}
     ['him','her'].forEach(function(p){
-      tripDays.forEach(function(d){
+      DAYS.forEach(function(d){
         SLOTS.forEach(function(s2){
           if(s2==='late_snack')return;
           const key2=sk(p,d,s2);
@@ -3975,17 +4109,49 @@ function verifyInvariants(){
           const m2=getMeal(mealId);if(!m2||!m2[p])return;
           const port2=m2[p];
           if(!port2.ingredients||!port2.ingredients.length||port2.ingredients[0].dbKey===undefined)return;
-          // All slots (including shake): one source of truth
-          const bal=getBalancedSlotIngredients(p,d,s2);
-          if(bal){
-            bal.forEach(function(i){
+
+          const lo2 = _inv3Leftovers[key2];
+          if(lo2 && lo2.isLeftover) return; // shopped via cook anchor
+          if(!tripDaySet[d]) return;        // batch belongs to other trip
+
+          if(lo2 && lo2.portions && lo2.portions.length > 1){
+            // Multi-portion batch: sum across all portions, attribute to cook anchor's person.
+            lo2.portions.forEach(function(pt){
+              const bal = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
+              const m3 = getMeal(getMealId(pt.p, pt.d, pt.s));
+              const src = bal || (m3 && m3[pt.p] ? applyOverrides(m3[pt.p], pt.p, pt.d, pt.s) : null);
+              if(src){
+                src.forEach(function(i){
+                  if(!expected[i.dbKey])expected[i.dbKey]={him:0,her:0};
+                  expected[i.dbKey][p]+=i.amt;
+                });
+              }
+            });
+          } else {
+            // Solo cook
+            const bal=getBalancedSlotIngredients(p,d,s2);
+            const src=bal||applyOverrides(port2,p,d,s2);
+            if(src){
+              src.forEach(function(i){
+                if(!expected[i.dbKey])expected[i.dbKey]={him:0,her:0};
+                expected[i.dbKey][p]+=i.amt;
+              });
+            }
+          }
+        });
+        // Late-snack ingredients (per-day, only on trip days).
+        if(tripDaySet[d]){
+          const ls2=LATE_SNACK[pk(p,d)];
+          if(ls2&&ls2.ingredients&&ls2.ingredients.length){
+            ls2.ingredients.forEach(function(i){
               if(!expected[i.dbKey])expected[i.dbKey]={him:0,her:0};
               expected[i.dbKey][p]+=i.amt;
             });
           }
-        });
+        }
       });
     });
+    // Forward: every shopList item must match expected.
     Object.keys(shopList).forEach(function(cat){
       shopList[cat].forEach(function(item){
         const exp=expected[item.dbKey];
@@ -4001,6 +4167,24 @@ function verifyInvariants(){
             +' her shop='+shopHer.toFixed(3)+' balanced='+exp.her.toFixed(3));
         }
       });
+    });
+    // Reverse: every expected dbKey (with non-zero amount) must appear in
+    // shopList, unless explicitly allowlisted as "not shopped". Today
+    // addShopIngredient drops 'water' (always available at home). Any
+    // future skip rule MUST add itself to this allowlist or it'll fire.
+    const SHOP_EXPECTED_ALLOWLIST=['water'];
+    const shopDbKeys={};
+    Object.keys(shopList).forEach(function(cat){
+      shopList[cat].forEach(function(item){shopDbKeys[item.dbKey]=true;});
+    });
+    Object.keys(expected).forEach(function(dbKey){
+      if(SHOP_EXPECTED_ALLOWLIST.indexOf(dbKey)>=0)return;
+      if(shopDbKeys[dbKey])return;
+      const exp=expected[dbKey];
+      if(exp.him>0.001||exp.her>0.001){
+        violations.push('INV3 expected-not-in-shop: '+trip+' '+dbKey
+          +' him='+exp.him.toFixed(3)+' her='+exp.her.toFixed(3));
+      }
     });
   });
 
@@ -4029,7 +4213,7 @@ function verifyInvariants(){
         if(!mealObj||!mealObj.ingredients)return;
         var nonFlex=mealObj.ingredients.filter(function(ing){
           var db=NUTRI_DB[ing.dbKey];
-          if(!db||!db.pkg||db.pkg.longShelfLife||db.pkg.type==='bulk')return false;
+          if(!db||!db.pkg||db.pkg.longShelfLife)return false;
           return !PKG_FLEX_CONFIG[ing.dbKey];
         });
         if(nonFlex.length>0){
@@ -4178,11 +4362,13 @@ function verifyInvariants(){
   // Batch leftover per-serving is exempt — it's intentionally fractional
   // (kcal-proportional split) and displays as 1-decimal rounded text.
   function isClean(v){
-    // Accepts 2-decimal values OR eighth-fractions (0.125, 0.375, 0.625, 0.875).
-    // INV8's purpose is DISPLAY quality — not hiding weird 7.701-style numbers.
-    // Clean eighths are cookable and display as familiar fractions (⅛, ⅜, etc.).
+    // Accepts 2-decimal values OR eighth-fractions (0.125, 0.375, 0.625, 0.875)
+    // OR thirds (1/3, 2/3, 1+1/3, etc.). INV8's purpose is DISPLAY quality —
+    // not hiding weird 7.701-style numbers. Clean fractions are cookable and
+    // display as familiar symbols (⅛, ⅜, ⅓, ⅔, etc.) via fmtFrac.
     if (Math.abs(v - Math.round(v*100)/100) < 0.001) return true;  // 2-decimal
     if (Math.abs(v - Math.round(v*8)/8) < 0.001) return true;      // 1/8 grid
+    if (Math.abs(v*3 - Math.round(v*3)) < 0.003) return true;      // thirds grid
     return false;
   }
   ['him','her'].forEach(function(p){
@@ -4198,7 +4384,7 @@ function verifyInvariants(){
           // pkg items align to package boundaries (4c carton, 14oz tofu)
           // rather than per-serving grid — their cleanliness is handled by
           // the waste pass, not INV8.
-          return !!(db&&db.pkg&&!db.pkg.longShelfLife&&db.pkg.type!=='bulk');
+          return !!(db&&db.pkg&&!db.pkg.longShelfLife);
         }
         if(lo&&lo.portions&&lo.portions.length>1){
           bal.forEach(function(bi){
@@ -5649,16 +5835,39 @@ function buildLateSnackHtml(person, day){
   const lsKey=pk(person,day);
   const ls=LATE_SNACK[lsKey];
   if(ls){
+    const hasIngr=!!(ls.ingredients&&ls.ingredients.length);
+    let ingrHtml='';
+    if(hasIngr){
+      ingrHtml='<div style="padding:6px 0">';
+      ls.ingredients.forEach(function(ing,idx){
+        const db=NUTRI_DB[ing.dbKey];
+        const unit=db?db.unit:'';
+        ingrHtml+='<div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px">'
+          +'<span style="flex:1;color:var(--text)">'+ing.dbKey+'</span>'
+          +'<input type="number" step="0.25" min="0" value="'+ing.amt+'" style="width:60px;padding:4px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px" onchange="setLateSnackIngredientAmt(\''+person+'\',\''+day+'\','+idx+',this.value)">'
+          +'<span style="color:var(--gray);font-size:11px;min-width:32px">'+unit+'</span>'
+          +'<button style="border:none;background:none;color:var(--gray);cursor:pointer;font-size:14px;padding:0 4px" onclick="removeLateSnackIngredient(\''+person+'\',\''+day+'\','+idx+')">✕</button>'
+          +'</div>';
+      });
+      ingrHtml+='</div>';
+    }
+    const macroDisabled=hasIngr?' disabled style="opacity:0.6"':'';
+    const macroNote=hasIngr?'<div style="font-size:10px;color:var(--gray);padding:2px 0">Macros derived from ingredients</div>':'';
     return '<div class="mc slot-late_snack">'
       +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">Late Night Snack</div>'
-      +'<div class="mc-checks"><button class="skip-cb" style="border:none;background:none;cursor:pointer" onclick="removeLateSnack(\''+person+'\',\''+day+'\')">✕</button></div></div></div>'
+      +'<div class="mc-checks">'
+      +'<button class="skip-cb" style="border:none;background:var(--shop);color:#000;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;cursor:pointer;margin-right:6px" onclick="addLateSnackIngredient(\''+person+'\',\''+day+'\')">+ ingr</button>'
+      +'<button class="skip-cb" style="border:none;background:none;cursor:pointer" onclick="removeLateSnack(\''+person+'\',\''+day+'\')">✕</button>'
+      +'</div></div></div>'
       +'<div class="eo-form">'
       +'<div class="eo-row"><input id="ls_'+lsKey+'_name" class="eo-input eo-name" placeholder="Snack name" value="'+(ls.name||'')+'" onchange="setLateSnackField(\''+person+'\',\''+day+'\',\'name\',this.value)"></div>'
+      +ingrHtml
+      +macroNote
       +'<div class="eo-macros-row">'
-      +'<div class="eo-field"><label>Kcal</label><input id="ls_'+lsKey+'_kcal" type="number" min="0" value="'+(ls.kcal!=null?ls.kcal:'')+'" oninput="lsFieldChanged(\''+person+'\',\''+day+'\',\'kcal\',this.value)" onblur="lsFieldBlur(\''+person+'\',\''+day+'\')"></div>'
-      +'<div class="eo-field"><label>Protein</label><input id="ls_'+lsKey+'_pro" type="number" min="0" value="'+(ls.pro!=null?ls.pro:'')+'" oninput="lsFieldChanged(\''+person+'\',\''+day+'\',\'pro\',this.value)" onblur="lsFieldBlur(\''+person+'\',\''+day+'\')"></div>'
-      +'<div class="eo-field"><label>Fat</label><input id="ls_'+lsKey+'_fat" type="number" min="0" value="'+(ls.fat!=null?ls.fat:'')+'" oninput="lsFieldChanged(\''+person+'\',\''+day+'\',\'fat\',this.value)" onblur="lsFieldBlur(\''+person+'\',\''+day+'\')"></div>'
-      +'<div class="eo-field"><label>Carbs</label><input id="ls_'+lsKey+'_carb" type="number" min="0" value="'+(ls.carb!=null?ls.carb:'')+'" oninput="lsFieldChanged(\''+person+'\',\''+day+'\',\'carb\',this.value)" onblur="lsFieldBlur(\''+person+'\',\''+day+'\')"></div></div>'
+      +'<div class="eo-field"><label>Kcal</label><input id="ls_'+lsKey+'_kcal" type="number" min="0" value="'+(ls.kcal!=null?ls.kcal:'')+'"'+macroDisabled+' oninput="lsFieldChanged(\''+person+'\',\''+day+'\',\'kcal\',this.value)" onblur="lsFieldBlur(\''+person+'\',\''+day+'\')"></div>'
+      +'<div class="eo-field"><label>Protein</label><input id="ls_'+lsKey+'_pro" type="number" min="0" value="'+(ls.pro!=null?ls.pro:'')+'"'+macroDisabled+' oninput="lsFieldChanged(\''+person+'\',\''+day+'\',\'pro\',this.value)" onblur="lsFieldBlur(\''+person+'\',\''+day+'\')"></div>'
+      +'<div class="eo-field"><label>Fat</label><input id="ls_'+lsKey+'_fat" type="number" min="0" value="'+(ls.fat!=null?ls.fat:'')+'"'+macroDisabled+' oninput="lsFieldChanged(\''+person+'\',\''+day+'\',\'fat\',this.value)" onblur="lsFieldBlur(\''+person+'\',\''+day+'\')"></div>'
+      +'<div class="eo-field"><label>Carbs</label><input id="ls_'+lsKey+'_carb" type="number" min="0" value="'+(ls.carb!=null?ls.carb:'')+'"'+macroDisabled+' oninput="lsFieldChanged(\''+person+'\',\''+day+'\',\'carb\',this.value)" onblur="lsFieldBlur(\''+person+'\',\''+day+'\')"></div></div>'
       +'</div></div>';
   }
   return '<div style="padding:8px 12px"><button class="rf-add-ingr-btn" onclick="addLateSnack(\''+person+'\',\''+day+'\')">+ Add Late Night Snack</button></div>';
@@ -5870,6 +6079,87 @@ function setLateSnackField(p,d,field,val){
   const k=pk(p,d);if(!LATE_SNACK[k])return;
   if(field==='name')LATE_SNACK[k][field]=val;
   else{const n=Math.max(0,parseInt(val)||0);LATE_SNACK[k][field]=n;}
+}
+// Late-snack ingredient mode. When LATE_SNACK[k].ingredients is non-empty,
+// macros (kcal/pro/fat/carb) are derived from them and shopping picks them
+// up. Manual-mode (no ingredients) keeps existing behavior — user types
+// macros directly and nothing is shopped. Late snack does NOT participate
+// in the day balancer or any auto-adjust cycle (the cache builder + balancer
+// already skip 'late_snack'), so adding ingredients here can never disturb
+// other slots in the day.
+function recomputeLateSnackMacros(p,d){
+  const k=pk(p,d);
+  const ls=LATE_SNACK[k]; if(!ls) return;
+  if(!ls.ingredients||!ls.ingredients.length) return;
+  let kcal=0, pro=0, fat=0, carb=0;
+  ls.ingredients.forEach(function(ing){
+    const db=NUTRI_DB[ing.dbKey]; if(!db) return;
+    kcal+=db.kcal*ing.amt;
+    pro+=(db.pro||0)*ing.amt;
+    fat+=(db.fat||0)*ing.amt;
+    carb+=(db.carb||0)*ing.amt;
+  });
+  ls.kcal=Math.round(kcal);
+  ls.pro=Math.round(pro);
+  ls.fat=Math.round(fat);
+  ls.carb=Math.round(carb);
+}
+function addLateSnackIngredient(p,d){
+  const overlay=document.getElementById('calPopupOverlay');
+  if(!overlay)return;
+  const keys=Object.keys(NUTRI_DB).sort();
+  let optsHtml='<option value="">— Select ingredient —</option>';
+  keys.forEach(function(k){
+    const db=NUTRI_DB[k];
+    optsHtml+='<option value="'+k+'">'+k+' ('+db.kcal+' kcal/'+db.unit+')</option>';
+  });
+  overlay.innerHTML='<div class="cal-popup-overlay" onclick="if(event.target===this){document.getElementById(\'calPopupOverlay\').style.display=\'none\';}">'
+    +'<div style="background:var(--bg-card);border-radius:14px;padding:20px;width:85%;max-width:340px;box-shadow:0 10px 40px rgba(0,0,0,.5)">'
+    +'<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:10px">Add Late Snack Ingredient</div>'
+    +'<select id="lsIngrSelect" style="width:100%;padding:8px;font-size:16px;background:var(--bg);color:var(--text);border:1.5px solid var(--border);border-radius:8px;margin-bottom:10px">'+optsHtml+'</select>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button style="flex:1;padding:10px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--gray);font-size:13px;font-weight:600;cursor:pointer" onclick="document.getElementById(\'calPopupOverlay\').style.display=\'none\'">Cancel</button>'
+    +'<button style="flex:1;padding:10px;border:none;border-radius:8px;background:var(--shop);color:#000;font-size:13px;font-weight:700;cursor:pointer" onclick="confirmLateSnackIngredient(\''+p+'\',\''+d+'\')">Add</button>'
+    +'</div></div></div>';
+  overlay.style.display='';
+}
+function confirmLateSnackIngredient(p,d){
+  const sel=document.getElementById('lsIngrSelect');
+  if(!sel||!sel.value)return;
+  const dbKey=sel.value;
+  const db=NUTRI_DB[dbKey]; if(!db) return;
+  const k=pk(p,d);
+  if(!LATE_SNACK[k])LATE_SNACK[k]={name:'',kcal:null,pro:null,fat:null,carb:null};
+  if(!LATE_SNACK[k].ingredients)LATE_SNACK[k].ingredients=[];
+  const defaultAmt=db.unit==='cup'?0.5:db.unit==='tbsp'?1:db.unit==='oz'?4:1;
+  LATE_SNACK[k].ingredients.push({dbKey:dbKey, amt:defaultAmt});
+  recomputeLateSnackMacros(p,d);
+  document.getElementById('calPopupOverlay').style.display='none';
+  renderMeals();
+  autoSaveWeek();
+}
+function removeLateSnackIngredient(p,d,idx){
+  const k=pk(p,d);
+  const ls=LATE_SNACK[k]; if(!ls||!ls.ingredients) return;
+  ls.ingredients.splice(idx,1);
+  if(ls.ingredients.length===0){
+    delete ls.ingredients;
+    // Macros stay at last-computed values; user can edit manually now.
+  } else {
+    recomputeLateSnackMacros(p,d);
+  }
+  renderMeals();
+  autoSaveWeek();
+}
+function setLateSnackIngredientAmt(p,d,idx,val){
+  const amt=parseFloat(val);
+  if(isNaN(amt)||amt<0)return;
+  const k=pk(p,d);
+  const ls=LATE_SNACK[k]; if(!ls||!ls.ingredients||!ls.ingredients[idx]) return;
+  ls.ingredients[idx].amt=amt;
+  recomputeLateSnackMacros(p,d);
+  renderMeals();
+  autoSaveWeek();
 }
 function toggleEatOut(p,d,s){const k=sk(p,d,s);if(EAT_OUT[k]){delete EAT_OUT[k];delete MANUAL_SET[k];}else{EAT_OUT[k]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};delete SKIPPED[k];MANUAL_SET[k]=true;}invalidateLeftoverCache();renderMeals();}
 function setEatOutField(p,d,s,field,val){
@@ -6610,10 +6900,21 @@ function boostBatchVegForDailyTarget(){
 // pkg items are exempt (per INV8 rules — their cleanliness is governed by
 // pkg boundaries, not per-serving grid).
 function snapSoloSlotAmountsToGrid(){
-  // Snapping strategy: native grid first (oz→whole, cup→0.25, tbsp→0.5, etc)
-  // if delta is small (< 10 kcal). Otherwise fall back to 2-decimal rounding
-  // which still satisfies INV8 (accepts ≤2 decimals OR 1/8) without introducing
-  // large kcal drift. `wholeOnly` items always snap to whole regardless.
+  // Solo slots target the unit's NATIVE grid (oz→whole, cup→0.25,
+  // tbsp/halfSnap→0.5, each-eggs/wholeOnly→whole, other each→0.25).
+  // Falls back to 2-decimal rounding only when native-grid would shift
+  // kcal by >10 (rare). `wholeOnly` items always snap to whole.
+  //
+  // 2026-04-26 fix: previously this function bailed if bi.amt was already
+  // ≤2 decimals OR on 1/8 grid (INV8-clean). That was the right rule for
+  // batches (where per-portion fractions are kcal-prop splits), but this
+  // function ONLY runs on solo slots (filter below) — where inputs should
+  // always be on the unit's native grid. The "≤2 decimals" bail let bad
+  // recipe data slip through (e.g., a recipe with 0.88 cup zucchini stayed
+  // at 0.88 instead of snapping to 1.0). Now we always check native grid;
+  // we only preserve the value if it's already on grid OR exactly at the
+  // ingredient's threshold floor (minAmt/minAmtSolo, which can legitimately
+  // sit on 1/8 grid for halfSnap items like cinnamon at 0.125 tbsp).
   var leftovers = computeLeftovers();
   ['him','her'].forEach(function(p){
     DAYS.forEach(function(d){
@@ -6630,13 +6931,18 @@ function snapSoloSlotAmountsToGrid(){
         bal.forEach(function(bi){
           var db = NUTRI_DB[bi.dbKey];
           if (!db) return;
-          if (db.pkg && !db.pkg.longShelfLife && db.pkg.type !== 'bulk') return;
+          if (db.pkg && !db.pkg.longShelfLife) return;
           if (bi.amt < 0.001) return;
-          // Already INV8-clean? skip
-          var twoDec = Math.round(bi.amt * 100) / 100;
-          if (Math.abs(bi.amt - twoDec) < 0.001) return;
-          var eighth = Math.round(bi.amt * 8) / 8;
-          if (Math.abs(bi.amt - eighth) < 0.001) return;
+          // Preserve threshold-floor values: halfSnap items at minAmt:0.125
+          // (cinnamon, salt, etc.) and minAmtSolo overrides shouldn't be
+          // bumped UP to the next native grid step.
+          if (typeof db.minAmt === 'number' && Math.abs(bi.amt - db.minAmt) < 0.001) return;
+          if (typeof db.minAmtSolo === 'number' && Math.abs(bi.amt - db.minAmtSolo) < 0.001) return;
+          // Preserve thirds-grid values (1/3, 2/3, 1+1/3, 1+2/3, ...).
+          // 1/3 cup is a standard kitchen measure — recipes that use it
+          // (e.g. acai shake) should round-trip through snap unchanged.
+          // Tolerance 0.001 handles JS float precision of `1/3` literal.
+          if (Math.abs(bi.amt * 3 - Math.round(bi.amt * 3)) < 0.003) return;
           // Try native grid first
           var unit = db.unit || '';
           var grid = 0.25;
@@ -6658,7 +6964,7 @@ function snapSoloSlotAmountsToGrid(){
             snapped = gridSnapped;
           } else {
             // Large delta → fall back to 2-decimal (INV8 passes, minimal kcal shift)
-            snapped = twoDec;
+            snapped = Math.round(bi.amt * 100) / 100;
             if (typeof db.minAmt === 'number' && snapped < db.minAmt) snapped = db.minAmt;
             if (typeof db.maxAmt === 'number' && snapped > db.maxAmt) snapped = db.maxAmt;
           }
@@ -6694,7 +7000,7 @@ function snapBatchTotalsToGrid(){
         if(!bal)return;
         bal.forEach(function(bi,idx){
           var db=NUTRI_DB[bi.dbKey];if(!db)return;
-          if(db.pkg&&!db.pkg.longShelfLife&&db.pkg.type!=='bulk')return;
+          if(db.pkg&&!db.pkg.longShelfLife)return;
 
           var portions=[];
           var total=0;
@@ -6756,6 +7062,21 @@ function snapBatchTotalsToGrid(){
             if(largestShare>0){
               var maxAllowed=perServingCap/largestShare;
               if(snapped>maxAllowed){snapped=Math.floor(maxAllowed/grid)*grid;if(snapped<grid)snapped=grid;}
+            }
+          }
+          // Thirds-grid acceptance: if the current total is already on 1/3
+          // grid (e.g., batch of N×(1/3 cup acai) = N/3), prefer keeping it
+          // there over forcing a 1/4-grid round. Only override when the
+          // floor-aware path above had to push snapped further from the
+          // current total than the thirds path would.
+          var totalOnThirds=Math.abs(total*3-Math.round(total*3))<0.003;
+          if(totalOnThirds){
+            var thirdsSnap=Math.round(total*3)/3;
+            // Respect the floor (snapped already accounts for it). Only swap
+            // back to thirds if it doesn't violate the floor we just enforced.
+            if(thirdsSnap>=Math.max(grid,(db.minAmt||0)*portions.length)
+               && (db.maxAmt==null || thirdsSnap<=perServingCap*portions.length)){
+              snapped=thirdsSnap;
             }
           }
           // Idempotency fast-path: if the batch total is already on-grid,
@@ -7052,7 +7373,7 @@ function snapBatchTotals(){
           // Skip packaged ingredients — their total is measured by opening
           // whole packages (e.g. 3 cans = 5.25 cups). The per-serving amount
           // is just total ÷ servings, nobody measures it directly.
-          if(db.pkg&&!db.pkg.longShelfLife&&db.pkg.type!=='bulk')return;
+          if(db.pkg&&!db.pkg.longShelfLife)return;
           var unit=db.unit||'';
           var grid=0.25;
           if(unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving')grid=1;
@@ -7084,6 +7405,17 @@ function snapBatchTotals(){
             if(largestContribShare>0){
               var maxAllowedSnap=perServingCap2/largestContribShare;
               if(snapped>maxAllowedSnap){snapped=Math.floor(maxAllowedSnap/grid)*grid;if(snapped<grid)snapped=grid;}
+            }
+          }
+          // Thirds-grid acceptance: if the batch total is already on 1/3
+          // grid (e.g. 2 portions of 1/3 cup acai = 2/3), preserve it
+          // rather than forcing 1/4-grid round.
+          var totalOnThirdsB=Math.abs(totalBatch*3-Math.round(totalBatch*3))<0.003;
+          if(totalOnThirdsB){
+            var thirdsB=Math.round(totalBatch*3)/3;
+            if(thirdsB>=grid && (db.minAmt==null || thirdsB>=db.minAmt)
+               && (db.maxAmt==null || thirdsB<=perServingCap2*partAmts.length)){
+              snapped=thirdsB;
             }
           }
           // Idempotency fast-path: if the batch total is already on-grid,
@@ -7157,7 +7489,7 @@ function postBalanceWastePass(){
                           // convergence loop's steady-state check.
   var leftovers=computeLeftovers();
 
-  ['sun','wed'].forEach(function(trip){
+  ['cook1','cook2'].forEach(function(trip){
     var tripDays=TRIP_DAYS_STATIC[trip]||[];
     var inTrip={};
     tripDays.forEach(function(d){inTrip[d]=true;});
@@ -7188,7 +7520,6 @@ function postBalanceWastePass(){
           bal.forEach(function(bi,idx){
             var db=NUTRI_DB[bi.dbKey];
             if(!db||!db.pkg||db.pkg.longShelfLife)return;
-            if(db.pkg.type==='bulk')return;
             var unit=db.unit;
             var perPkg=(db.pkg.drained&&(unit==='cup'||unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
             if(perPkg<=0)return;
@@ -7434,8 +7765,8 @@ function randomizeWeek(target, seed){
     // `_fastTripWasteForPersons`; reroll stages use the same helper so
     // scoring is consistent across pipeline stages.
     const _wasteCalcPersons = randTarget === 'shared' ? ['him','her'] : [randTarget];
-    let totalWaste = _fastTripWasteForPersons(TRIP_DAYS_STATIC.sun, _wasteCalcPersons)
-                   + _fastTripWasteForPersons(TRIP_DAYS_STATIC.wed, _wasteCalcPersons);
+    let totalWaste = _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook1, _wasteCalcPersons)
+                   + _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook2, _wasteCalcPersons);
     // Only compute goal misses (expensive — full day-balancer) for retries
     // that already achieved zero waste. Waste is the dominant criterion anyway.
     //
@@ -7569,7 +7900,7 @@ function applyTripFlexScaling(randTarget){
   // per flex ingredient per trip (was ~28 rebuilds per randomize click).
   invalidateLeftoverCache();
   const leftovers = computeLeftovers();
-  ['sun','wed'].forEach(function(trip){
+  ['cook1','cook2'].forEach(function(trip){
     const days = TRIP_DAYS_STATIC[trip] || [];
     Object.keys(PKG_FLEX_CONFIG).forEach(function(dbKey){
       const db = NUTRI_DB[dbKey]; if (!db || !db.pkg) return;
@@ -7715,8 +8046,8 @@ function rerollMissDays(randTarget){
   MEALS.forEach(function(m){if(m.noRandomize)noRandomizeIds[m.id]=true;});
   const rerollPersons = randTarget === 'shared' ? ['him','her'] : [randTarget];
   function totalWaste(){
-    return _fastTripWasteForPersons(TRIP_DAYS_STATIC.sun, rerollPersons)
-         + _fastTripWasteForPersons(TRIP_DAYS_STATIC.wed, rerollPersons);
+    return _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook1, rerollPersons)
+         + _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook2, rerollPersons);
   }
   function dayAllOk(d, persons){
     let ok = true;
@@ -7979,8 +8310,8 @@ function rerollInv14Violations(randTarget){
   const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
 
   function totalWaste(){
-    return _fastTripWasteForPersons(TRIP_DAYS_STATIC.sun, persons)
-         + _fastTripWasteForPersons(TRIP_DAYS_STATIC.wed, persons);
+    return _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook1, persons)
+         + _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook2, persons);
   }
   function dayMissCount(d){
     let misses=0;
@@ -8371,7 +8702,7 @@ function _randomizeWeekCore(randTarget){
   // ── PHASE 1.7: Swap snacks that are the sole user of a package ──
   // If a snack is the only meal in the trip using a pkg ingredient,
   // it opens a whole package just for one snack. Replace with non-pkg.
-  ['sun','wed'].forEach(function(tripKey){
+  ['cook1','cook2'].forEach(function(tripKey){
     var tripDays=TRIP_DAYS_STATIC[tripKey]||[];
     // Build pkg usage map: dbKey -> {snackSlots:[], otherSlots:[]}
     var pkgUsage={};
@@ -8384,7 +8715,7 @@ function _randomizeWeekCore(randTarget){
           var m=getMeal(mid);if(!m||!m.ingredients)return;
           m.ingredients.forEach(function(i){
             var db=NUTRI_DB[i.dbKey];
-            if(!db||!db.pkg||db.pkg.longShelfLife||db.pkg.type==='bulk')return;
+            if(!db||!db.pkg||db.pkg.longShelfLife)return;
             if(!pkgUsage[i.dbKey])pkgUsage[i.dbKey]={snackSlots:[],otherSlots:[]};
             if(s==='snack')pkgUsage[i.dbKey].snackSlots.push({p:p,d:d,key:key,mealId:mid});
             else pkgUsage[i.dbKey].otherSlots.push({p:p,d:d,s:s});
@@ -8431,8 +8762,8 @@ function _randomizeWeekCore(randTarget){
   var leftovers = computeLeftovers();
 
   var trips = [
-    { key: 'sun', days: TRIP_DAYS_STATIC.sun },
-    { key: 'wed', days: TRIP_DAYS_STATIC.wed }
+    { key: 'cook1', days: TRIP_DAYS_STATIC.cook1 },
+    { key: 'cook2', days: TRIP_DAYS_STATIC.cook2 }
   ];
 
   // Helper: get perPkg amount for a packaged ingredient
@@ -8916,7 +9247,7 @@ function customShopSelectAll(){
   });});});
   renderShop();
 }
-function customShopClearAll(){CUSTOM_SHOP_SEL={};CUSTOM_RECIPE_SEL={};renderShop();}
+function customShopClearAll(){CUSTOM_SHOP_SEL={};CUSTOM_RECIPE_SEL={};CUSTOM_PLAN_SEL={};renderShop();}
 function toggleCustomRecipe(mealId,p){
   const k=mealId+'_'+p;
   CUSTOM_RECIPE_SEL[k]=!CUSTOM_RECIPE_SEL[k];
@@ -8924,6 +9255,18 @@ function toggleCustomRecipe(mealId,p){
   renderShop();
 }
 function clearCustomRecipes(){CUSTOM_RECIPE_SEL={};renderShop();}
+// CUSTOM_PLAN_SEL: select from this week's actual plan. Reads balanced
+// (post-pipeline) amounts via getBalancedSlotIngredients, summed across
+// every (p,d,s) where the meal appears. For batch cooks, this naturally
+// captures the full cook quantity (cook anchor + leftovers split kcal-
+// proportionally across all portions sums to the batch total). Dedupes
+// against CUSTOM_SHOP_SEL so the same (p,d,s) isn't double-counted.
+function togglePlanMeal(mealId){
+  CUSTOM_PLAN_SEL[mealId]=!CUSTOM_PLAN_SEL[mealId];
+  if(!CUSTOM_PLAN_SEL[mealId])delete CUSTOM_PLAN_SEL[mealId];
+  renderShop();
+}
+function clearPlanMeals(){CUSTOM_PLAN_SEL={};renderShop();}
 function toggleCustomRecipeBoth(mealId){
   const hk=mealId+'_him',rk=mealId+'_her';
   const bothOn=!!CUSTOM_RECIPE_SEL[hk]&&!!CUSTOM_RECIPE_SEL[rk];
@@ -8968,13 +9311,20 @@ function renderShop(){
   });
   const weekLabel=activeWeek==='this'?'This week':'Next week';
   let html='<div class="shop-trip-tabs">'
-    +'<div class="shop-trip-tab'+(shopTrip==='sun'?' on':'')+'" onclick="setShopTrip(\'sun\')">📋 Mon–Wed<br><span style="font-size:11px;font-weight:400">'+weekLabel+'</span></div>'
-    +'<div class="shop-trip-tab'+(shopTrip==='wed'?' on':'')+'" onclick="setShopTrip(\'wed\')">📋 Thu–Sun<br><span style="font-size:11px;font-weight:400">'+weekLabel+'</span></div>'
+    +'<div class="shop-trip-tab'+(shopTrip==='cook1'?' on':'')+'" onclick="setShopTrip(\'cook1\')">📋 Mon–Wed<br><span style="font-size:11px;font-weight:400">'+weekLabel+'</span></div>'
+    +'<div class="shop-trip-tab'+(shopTrip==='cook2'?' on':'')+'" onclick="setShopTrip(\'cook2\')">📋 Thu–Sun<br><span style="font-size:11px;font-weight:400">'+weekLabel+'</span></div>'
     +'<div class="shop-trip-tab'+(shopTrip==='custom'?' on':'')+'" onclick="setShopTrip(\'custom\')">🛒 Shop Now<br><span style="font-size:11px;font-weight:400">Pick meals</span></div></div>'
     +'<div class="shop-person-row">'
     +'<div class="shop-person-btn him'+(shopPerson==='him'?' on':'')+'" onclick="setShopPerson(\'him\')">Him only</div>'
     +'<div class="shop-person-btn her'+(shopPerson==='her'?' on':'')+'" onclick="setShopPerson(\'her\')">Her only</div>'
     +'<div class="shop-person-btn both'+(shopPerson==='both'?' on':'')+'" onclick="setShopPerson(\'both\')">Both</div></div>';
+  // Per-portion notice for him/her views: shared/batch meals split kcal-
+  // proportionally per person, so a single-person view shows fractional
+  // amounts that don't reflect the actual cook quantity. The Both view is
+  // what to shop from for batch cooks.
+  if(shopPerson==='him'||shopPerson==='her'){
+    html+='<div style="padding:6px 14px;font-size:11px;color:var(--gray);font-style:italic">Per-portion amounts. For batch cooks, the actual cook quantity is the Both view total.</div>';
+  }
 
   // Custom meal selector
   if(shopTrip==='custom'){
@@ -9094,6 +9444,69 @@ function renderShop(){
       html+='<div class="cs-actions" style="margin-top:6px"><button class="cs-action-btn" onclick="clearCustomRecipes()">Clear recipes</button><span class="cs-count">'+recipeCount+' recipe'+(recipeCount>1?'s':'')+' added</span></div>';
     }
     } // end csRecipesOpen
+
+    // Collapsible "this week's plan" picker — uses balanced amounts.
+    const planCount=Object.keys(CUSTOM_PLAN_SEL).filter(function(k){return CUSTOM_PLAN_SEL[k];}).length;
+    const planIcon=csPlanMealsOpen?'▾':'▸';
+    const planExtra=planCount>0?' <span class="cs-hdr-count">('+planCount+')</span>':'';
+    const planClearBtn=planCount>0?'<button class="cs-hdr-clear" onclick="event.stopPropagation();clearPlanMeals()">Clear</button>':'';
+    html+='<div class="cs-section-hdr" onclick="csPlanMealsOpen=!csPlanMealsOpen;renderShop()"><span>'+planIcon+' Add from this week\'s plan'+planExtra+'</span>'+planClearBtn+'</div>';
+    if(csPlanMealsOpen){
+      html+='<div class="cs-recipe-list">';
+      // Build de-dup map: mealId -> {meal, instances, slotsByPerson}
+      const planMeals={};
+      persons.forEach(function(p){
+        DAYS.forEach(function(d){
+          SLOTS.forEach(function(s){
+            if(s==='late_snack')return;
+            const k=sk(p,d,s);
+            if(SKIPPED[k]||EAT_OUT[k])return;
+            const mid=getMealId(p,d,s);
+            if(!mid)return;
+            if(!planMeals[mid])planMeals[mid]={count:0,slots:[]};
+            planMeals[mid].count++;
+            planMeals[mid].slots.push(p+' '+d.substring(0,3)+' '+s);
+          });
+        });
+      });
+      const mealIds=Object.keys(planMeals);
+      if(!mealIds.length){
+        html+='<div style="padding:10px;color:var(--gray);font-size:12px">No meals planned for this week.</div>';
+      } else {
+        // Group by primary slot like the base-recipes picker.
+        const planSlotGroups={shake:[],breakfast:[],lunch:[],snack:[],dinner:[]};
+        mealIds.forEach(function(mid){
+          const m=getMeal(mid); if(!m) return;
+          let assigned=false;
+          ['shake','breakfast','lunch','snack','dinner'].forEach(function(sl){
+            if(assigned)return;
+            if((m.slots||[]).indexOf(sl)>=0){planSlotGroups[sl].push(m); assigned=true;}
+          });
+          if(!assigned)planSlotGroups.lunch.push(m);
+        });
+        ['shake','breakfast','lunch','snack','dinner'].forEach(function(sl){
+          const meals=planSlotGroups[sl];
+          if(!meals.length)return;
+          html+='<div class="cs-recipe-group"><div class="cs-recipe-group-hdr">'+SLOT_LABEL[sl]+'</div>';
+          meals.sort(function(a,b){return a.label<b.label?-1:a.label>b.label?1:0;});
+          meals.forEach(function(m){
+            const on=!!CUSTOM_PLAN_SEL[m.id];
+            const info=planMeals[m.id];
+            const badge='<span style="color:var(--gray);font-size:10px;margin-right:6px">×'+info.count+'</span>';
+            html+='<div class="cs-recipe-row">'
+              +'<span class="cs-recipe-name">'+m.label+'</span>'
+              +badge
+              +'<div class="cs-recipe-pill'+(on?' on':'')+'" onclick="togglePlanMeal(\''+m.id+'\')">Add</div>'
+              +'</div>';
+          });
+          html+='</div>';
+        });
+      }
+      html+='</div>';
+      if(planCount>0){
+        html+='<div class="cs-actions" style="margin-top:6px"><button class="cs-action-btn" onclick="clearPlanMeals()">Clear plan meals</button><span class="cs-count">'+planCount+' plan meal'+(planCount>1?'s':'')+' added</span></div>';
+      }
+    } // end csPlanMealsOpen
     html+='</div>';
   }
 
@@ -10117,7 +10530,7 @@ function renderRecipesView(){
     +'<div class="ni-field" style="flex:1"><label>Pkg Size</label><input id="rf_new_pkgSize" type="number" min="0" step="0.5" placeholder="—"></div>'
     +'<div class="ni-field" style="flex:1"><label>Pkg Unit</label><select id="rf_new_pkgUnit"><option value="">—</option><option value="oz">oz</option><option value="cups">cups</option></select></div>'
     +'<div class="ni-field" style="flex:1"><label>Drained</label><input id="rf_new_pkgDrained" type="number" min="0" step="0.25" placeholder="—"></div>'
-    +'<div class="ni-field" style="flex:1"><label>Pkg Type</label><select id="rf_new_pkgType"><option value="">—</option><option value="can">can</option><option value="carton">carton</option><option value="jar">jar</option><option value="bulk">bulk</option></select></div>'
+    +'<div class="ni-field" style="flex:1"><label>Pkg Type</label><select id="rf_new_pkgType"><option value="">—</option><option value="can">can</option><option value="carton">carton</option><option value="jar">jar</option><option value="container">container</option><option value="pouch">pouch</option></select></div>'
     +'</div>'
     +'<button class="rf-save" style="padding:5px 14px;font-size:11px;margin-top:8px" onclick="addNewDbIngredient()">Add to Database</button>'
     +'</div>':'')
@@ -10852,6 +11265,355 @@ window.MPStress=(function(){
       Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
       Object.keys(userSched).forEach(function(k){SHARED_SCHEDULE[k]=userSched[k];});
     }
+  }
+  // Test 4 — shopping-list integrity. Each scenario takes a fully-randomized
+  // post-pipeline state and asserts a property of the shopping list. Unlike
+  // INV3 (which only checks Both view of cook1/cook2), Test 4 covers per-person
+  // views, custom modes, dedupe, late-snack ingredient flow, and per-trip
+  // grid alignment. Failures roll up by scenario name with first-N example
+  // seeds for drill-down.
+  function _t4ShopMap(shop){
+    var m={};
+    Object.keys(shop).forEach(function(c){
+      shop[c].forEach(function(it){
+        if(!m[it.dbKey])m[it.dbKey]={his:0,her:0};
+        m[it.dbKey].his+=it.hisSum?it.hisSum.num:0;
+        m[it.dbKey].her+=it.herSum?it.herSum.num:0;
+      });
+    });
+    return m;
+  }
+  function _t4ExpectedMap(persons,days){
+    // Mirrors buildShoppingList's cook-anchor architecture: each batch's
+    // full snapped total is attributed to the cook anchor's person bucket
+    // for the trip its cook day falls in. Leftover slots don't contribute
+    // (already shopped via the cook anchor).
+    var m={};
+    var leftovers = computeLeftovers();
+    var tripDaySet={};
+    days.forEach(function(d){tripDaySet[d]=true;});
+    persons.forEach(function(p){
+      DAYS.forEach(function(d){
+        SLOTS.forEach(function(s){
+          if(s==='late_snack')return;
+          var k=sk(p,d,s);
+          if(SKIPPED[k]||EAT_OUT[k])return;
+          var mealId=getMealId(p,d,s);if(!mealId)return;
+          var meal=getMeal(mealId);if(!meal||!meal[p])return;
+          var port=meal[p];
+          if(!port.ingredients||!port.ingredients.length||port.ingredients[0].dbKey===undefined)return;
+
+          var lo = leftovers[k];
+          if(lo && lo.isLeftover) return;
+          if(!tripDaySet[d]) return;
+
+          if(lo && lo.portions && lo.portions.length > 1){
+            lo.portions.forEach(function(pt){
+              var bal = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
+              var meal2 = getMeal(getMealId(pt.p, pt.d, pt.s));
+              var src = bal || (meal2 && meal2[pt.p] ? applyOverrides(meal2[pt.p], pt.p, pt.d, pt.s) : null);
+              if(src){
+                src.forEach(function(i){
+                  if(!m[i.dbKey])m[i.dbKey]={him:0,her:0};
+                  m[i.dbKey][p]+=i.amt;
+                });
+              }
+            });
+          } else {
+            var bal=getBalancedSlotIngredients(p,d,s);
+            var src=bal||applyOverrides(port,p,d,s);
+            if(src){
+              src.forEach(function(i){
+                if(!m[i.dbKey])m[i.dbKey]={him:0,her:0};
+                m[i.dbKey][p]+=i.amt;
+              });
+            }
+          }
+        });
+        if(tripDaySet[d]){
+          var ls=LATE_SNACK[pk(p,d)];
+          if(ls&&ls.ingredients&&ls.ingredients.length){
+            ls.ingredients.forEach(function(i){
+              if(!m[i.dbKey])m[i.dbKey]={him:0,her:0};
+              m[i.dbKey][p]+=i.amt;
+            });
+          }
+        }
+      });
+    });
+    return m;
+  }
+  function _t4DiffMaps(actual,expected,allowlist){
+    allowlist=allowlist||['water'];
+    var diffs=[];
+    Object.keys(actual).forEach(function(k){
+      var a=actual[k];
+      var e=expected[k]||{him:0,her:0};
+      if(Math.abs(a.his-e.him)>0.001)diffs.push(k+' his shop='+a.his.toFixed(3)+' exp='+e.him.toFixed(3));
+      if(Math.abs(a.her-e.her)>0.001)diffs.push(k+' her shop='+a.her.toFixed(3)+' exp='+e.her.toFixed(3));
+    });
+    Object.keys(expected).forEach(function(k){
+      if(allowlist.indexOf(k)>=0)return;
+      if(actual[k])return;
+      var e=expected[k];
+      if(e.him>0.001||e.her>0.001){
+        diffs.push(k+' missing from shop: exp him='+e.him.toFixed(3)+' her='+e.her.toFixed(3));
+      }
+    });
+    return diffs;
+  }
+  function _t4Scenarios(){
+    return [
+      {name:'S1: Both/cook1 forward+reverse', run:function(){
+        var shop=buildShoppingList('cook1','both');
+        var diffs=_t4DiffMaps(_t4ShopMap(shop),_t4ExpectedMap(['him','her'],TRIP_DAYS_STATIC.cook1));
+        return diffs.length?{ok:false,msg:diffs.slice(0,2).join('; ')}:{ok:true};
+      }},
+      {name:'S2: Both/cook2 forward+reverse', run:function(){
+        var shop=buildShoppingList('cook2','both');
+        var diffs=_t4DiffMaps(_t4ShopMap(shop),_t4ExpectedMap(['him','her'],TRIP_DAYS_STATIC.cook2));
+        return diffs.length?{ok:false,msg:diffs.slice(0,2).join('; ')}:{ok:true};
+      }},
+      {name:'S3: Him-only/cook1 aggregates', run:function(){
+        var shop=buildShoppingList('cook1','him');
+        var act=_t4ShopMap(shop), exp=_t4ExpectedMap(['him'],TRIP_DAYS_STATIC.cook1);
+        var diffs=[];
+        Object.keys(act).forEach(function(k){
+          var a=act[k], e=exp[k]||{him:0,her:0};
+          if(Math.abs(a.his-e.him)>0.001)diffs.push(k+' his '+a.his.toFixed(3)+'/'+e.him.toFixed(3));
+          if(a.her>0.001)diffs.push(k+' her nonzero in him-only: '+a.her.toFixed(3));
+        });
+        return diffs.length?{ok:false,msg:diffs.slice(0,2).join('; ')}:{ok:true};
+      }},
+      {name:'S4: Her-only/cook1 aggregates', run:function(){
+        var shop=buildShoppingList('cook1','her');
+        var act=_t4ShopMap(shop), exp=_t4ExpectedMap(['her'],TRIP_DAYS_STATIC.cook1);
+        var diffs=[];
+        Object.keys(act).forEach(function(k){
+          var a=act[k], e=exp[k]||{him:0,her:0};
+          if(Math.abs(a.her-e.her)>0.001)diffs.push(k+' her '+a.her.toFixed(3)+'/'+e.her.toFixed(3));
+          if(a.his>0.001)diffs.push(k+' his nonzero in her-only: '+a.his.toFixed(3));
+        });
+        return diffs.length?{ok:false,msg:diffs.slice(0,2).join('; ')}:{ok:true};
+      }},
+      {name:'S5: Both/cook1 grid-aligned', run:function(){
+        // Per R2: pipeline-snapped batch totals + solo per-portion grid means
+        // every Both-view total should sit exactly on the unit's grid.
+        // Accepts 1/4-grid (cup), 1/2-grid (tbsp), 1/8-grid, OR thirds —
+        // matches INV8's isClean rule. (Per-portion of batch in him/her
+        // views CAN be non-grid by design; this only checks Both totals.)
+        var shop=buildShoppingList('cook1','both');
+        var diffs=[];
+        Object.keys(shop).forEach(function(c){
+          shop[c].forEach(function(it){
+            var u=(it.hisSum||it.herSum||{}).unit;
+            var total=(it.hisSum?it.hisSum.num:0)+(it.herSum?it.herSum.num:0);
+            if(total<=0)return;
+            // Skip pkg ingredients — their totals are NOT grid-locked at the
+            // shopping-list level; they get rounded UP to whole packages and
+            // the gap is the waste warning.
+            var db=NUTRI_DB[it.dbKey];
+            if(db&&db.pkg)return;
+            var grid=(u==='cup'?0.25:(u==='tbsp'?0.5:1));
+            var snapped=Math.round(total/grid)*grid;
+            var on8=Math.abs(total*8-Math.round(total*8))<0.005;
+            if(Math.abs(total-snapped)>0.005 && !on8){
+              diffs.push(it.dbKey+' off-grid: '+total.toFixed(4)+' (unit='+u+', grid='+grid+')');
+            }
+          });
+        });
+        return diffs.length?{ok:false,msg:diffs.slice(0,2).join('; ')}:{ok:true};
+      }},
+      {name:'S6: Custom day-grid all = cook1+cook2 (totals)', run:function(){
+        // Custom is slot-based (per-eater attribution); cook1/cook2 are
+        // cook-anchor-based (full batch attributed to anchor's bucket).
+        // Per-person sums diverge BY DESIGN now. The TOTAL (his+her) must
+        // still match — it's the same set of ingredients summed differently.
+        CUSTOM_SHOP_SEL={};
+        ['him','her'].forEach(function(p){
+          DAYS.forEach(function(d){SLOTS.forEach(function(s){
+            if(s==='late_snack')return;
+            CUSTOM_SHOP_SEL[sk(p,d,s)]=true;
+          });});
+        });
+        var custMap=_t4ShopMap(buildShoppingList('custom','both'));
+        var c1Map=_t4ShopMap(buildShoppingList('cook1','both'));
+        var c2Map=_t4ShopMap(buildShoppingList('cook2','both'));
+        var combined={};
+        [c1Map,c2Map].forEach(function(mp){
+          Object.keys(mp).forEach(function(k){
+            if(!combined[k])combined[k]={his:0,her:0};
+            combined[k].his+=mp[k].his; combined[k].her+=mp[k].her;
+          });
+        });
+        var diffs=[];
+        Object.keys(combined).forEach(function(k){
+          var c=custMap[k]||{his:0,her:0};
+          var custTotal=c.his+c.her, combTotal=combined[k].his+combined[k].her;
+          if(Math.abs(custTotal-combTotal)>0.001){
+            diffs.push(k+' total cust='+custTotal.toFixed(3)+' cook1+cook2='+combTotal.toFixed(3));
+          }
+        });
+        Object.keys(custMap).forEach(function(k){
+          if(!combined[k]&&(custMap[k].his>0.001||custMap[k].her>0.001))diffs.push(k+' in custom but not cook1+cook2');
+        });
+        return diffs.length?{ok:false,msg:diffs.slice(0,2).join('; ')}:{ok:true};
+      }},
+      {name:'S7: CUSTOM_PLAN_SEL all = cook1+cook2 (totals)', run:function(){
+        // Same totals-only check as S6: per-person attribution differs by
+        // design between custom (slot-based) and cook1/cook2 (cook-anchor).
+        CUSTOM_PLAN_SEL={};
+        ['him','her'].forEach(function(p){
+          DAYS.forEach(function(d){SLOTS.forEach(function(s){
+            if(s==='late_snack')return;
+            var k=sk(p,d,s);
+            if(SKIPPED[k]||EAT_OUT[k])return;
+            var mid=getMealId(p,d,s);
+            if(mid)CUSTOM_PLAN_SEL[mid]=true;
+          });});
+        });
+        var custMap=_t4ShopMap(buildShoppingList('custom','both'));
+        var c1Map=_t4ShopMap(buildShoppingList('cook1','both'));
+        var c2Map=_t4ShopMap(buildShoppingList('cook2','both'));
+        var combined={};
+        [c1Map,c2Map].forEach(function(mp){
+          Object.keys(mp).forEach(function(k){
+            if(!combined[k])combined[k]={his:0,her:0};
+            combined[k].his+=mp[k].his; combined[k].her+=mp[k].her;
+          });
+        });
+        var diffs=[];
+        Object.keys(combined).forEach(function(k){
+          var c=custMap[k]||{his:0,her:0};
+          var custTotal=c.his+c.her, combTotal=combined[k].his+combined[k].her;
+          if(Math.abs(custTotal-combTotal)>0.001){
+            diffs.push(k+' total cust='+custTotal.toFixed(3)+' cook1+cook2='+combTotal.toFixed(3));
+          }
+        });
+        return diffs.length?{ok:false,msg:diffs.slice(0,2).join('; ')}:{ok:true};
+      }},
+      {name:'S8: Dedupe day-grid + plan-meal', run:function(){
+        var first=null;
+        ['him','her'].forEach(function(p){DAYS.forEach(function(d){SLOTS.forEach(function(s){
+          if(first||s==='late_snack')return;
+          var k=sk(p,d,s);
+          if(SKIPPED[k]||EAT_OUT[k])return;
+          var mid=getMealId(p,d,s);
+          if(mid)first={mid:mid,k:k};
+        });});});
+        if(!first)return{ok:true};
+        CUSTOM_PLAN_SEL={}; CUSTOM_PLAN_SEL[first.mid]=true;
+        CUSTOM_SHOP_SEL={};
+        var planMap=_t4ShopMap(buildShoppingList('custom','both'));
+        CUSTOM_SHOP_SEL[first.k]=true;
+        var bothMap=_t4ShopMap(buildShoppingList('custom','both'));
+        var diffs=[];
+        Object.keys(planMap).forEach(function(k){
+          var p=planMap[k], b=bothMap[k]||{his:0,her:0};
+          if(Math.abs(p.his-b.his)>0.001||Math.abs(p.her-b.her)>0.001){
+            diffs.push(k+' plan='+p.his.toFixed(3)+'/'+p.her.toFixed(3)+' both='+b.his.toFixed(3)+'/'+b.her.toFixed(3));
+          }
+        });
+        return diffs.length?{ok:false,msg:'dedupe failed: '+diffs.slice(0,1).join('; ')}:{ok:true};
+      }},
+      {name:'S9: Late-snack ingredient flows', run:function(){
+        // Find a (p, day-in-cook1) without an existing late_snack
+        var p='him',d='Monday',k=pk(p,d);
+        var hadLs=!!LATE_SNACK[k];
+        var savedLs=hadLs?JSON.parse(JSON.stringify(LATE_SNACK[k])):null;
+        LATE_SNACK[k]={name:'T4Test',kcal:null,pro:null,fat:null,carb:null,ingredients:[{dbKey:'rxbar',amt:1}]};
+        recomputeLateSnackMacros(p,d);
+        var shop=buildShoppingList('cook1','both');
+        var rx=null;
+        Object.values(shop).flat().forEach(function(it){if(it.dbKey==='rxbar')rx=it;});
+        // Restore late_snack
+        if(savedLs)LATE_SNACK[k]=savedLs;else delete LATE_SNACK[k];
+        if(!rx)return{ok:false,msg:'rxbar not in cook1 shop after late-snack add'};
+        return{ok:true};
+      }},
+      {name:'S10: Late-snack INV3 clean', run:function(){
+        // Verify INV3 (forward+reverse) holds with late-snack ingredients
+        var p='her',d='Tuesday',k=pk(p,d);
+        var hadLs=!!LATE_SNACK[k];
+        var savedLs=hadLs?JSON.parse(JSON.stringify(LATE_SNACK[k])):null;
+        LATE_SNACK[k]={name:'T4Test',kcal:null,pro:null,fat:null,carb:null,ingredients:[{dbKey:'banana',amt:1}]};
+        recomputeLateSnackMacros(p,d);
+        var invs=verifyInvariants();
+        if(savedLs)LATE_SNACK[k]=savedLs;else delete LATE_SNACK[k];
+        var inv3=invs.filter(function(v){return v.indexOf('INV3')===0;});
+        return inv3.length?{ok:false,msg:inv3[0]}:{ok:true};
+      }}
+    ];
+  }
+  function runStandard4(runs){
+    runs=runs||100;
+    var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
+    _applyStandardSharedSchedule();
+    var initSnap=snapshot();
+    try{
+      var stats={}, totalRuns=0, totalFails=0, scenarios=_t4Scenarios();
+      scenarios.forEach(function(sc){stats[sc.name]={pass:0,fail:0,errors:[]};});
+      var baseSeed=12345;
+      for(var i=0;i<runs;i++){
+        var seed=baseSeed+i;
+        var seedSnap=snapshot();
+        try{
+          randomizeWeek('shared',(seed|0)+1000000);
+          clearTimeout(_selSaveTimer);
+          scenarios.forEach(function(sc){
+            // Save shopping state before scenario, restore after
+            var savedShop=JSON.parse(JSON.stringify(CUSTOM_SHOP_SEL));
+            var savedRecipe=JSON.parse(JSON.stringify(CUSTOM_RECIPE_SEL));
+            var savedPlan=JSON.parse(JSON.stringify(CUSTOM_PLAN_SEL));
+            try{
+              var result=sc.run();
+              if(result.ok){stats[sc.name].pass++;}
+              else{
+                stats[sc.name].fail++; totalFails++;
+                if(stats[sc.name].errors.length<5){
+                  stats[sc.name].errors.push({seed:seed,msg:result.msg});
+                }
+              }
+            }catch(e){
+              stats[sc.name].fail++; totalFails++;
+              if(stats[sc.name].errors.length<5){
+                stats[sc.name].errors.push({seed:seed,msg:'EXCEPTION: '+e.message});
+              }
+            }finally{
+              CUSTOM_SHOP_SEL=savedShop;
+              CUSTOM_RECIPE_SEL=savedRecipe;
+              CUSTOM_PLAN_SEL=savedPlan;
+            }
+          });
+          totalRuns++;
+        }finally{
+          restore(seedSnap);
+        }
+      }
+      var report=_t4FormatReport(stats,totalRuns,totalFails,scenarios);
+      console.log(report);
+      return{stats:stats,totalRuns:totalRuns,totalFails:totalFails,report:report};
+    }finally{
+      restore(initSnap);
+      Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
+      Object.keys(userSched).forEach(function(k){SHARED_SCHEDULE[k]=userSched[k];});
+    }
+  }
+  function _t4FormatReport(stats,totalRuns,totalFails,scenarios){
+    var lines=[];
+    lines.push('## MPStress.runStandard4 — '+totalRuns+' runs × '+scenarios.length+' scenarios = '+(totalRuns*scenarios.length)+' total scenario-runs');
+    lines.push('');
+    var passed=Object.keys(stats).filter(function(k){return stats[k].fail===0;}).length;
+    lines.push('**'+(totalFails===0?'✅ ALL CLEAN':('⚠️ '+totalFails+' total failures'))+'** — '+passed+'/'+scenarios.length+' scenarios passed all seeds.');
+    lines.push('');
+    lines.push('| Scenario | Pass | Fail | First failures |');
+    lines.push('|---|---:|---:|---|');
+    scenarios.forEach(function(sc){
+      var s=stats[sc.name];
+      var errs=s.errors.length?s.errors.map(function(e){return 'seed '+e.seed+': '+e.msg;}).join(' \\| '):'—';
+      lines.push('| '+sc.name+' | '+s.pass+' | '+s.fail+' | '+(s.fail?errs:'—')+' |');
+    });
+    return lines.join('\n');
   }
   function formatReport(a){
     function pct(v,d){d=d==null?1:d;return v.toFixed(d)+'%';}
@@ -11621,7 +12383,7 @@ window.MPStress=(function(){
     return lines.join('\n');
   }
 
-  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runStandard3:runStandard3,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline};
+  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runStandard3:runStandard3,runStandard4:runStandard4,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline};
 })();
 
 </script>
