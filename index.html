@@ -3215,6 +3215,28 @@ function buildShoppingList(trip,who){
           }
         }
       }
+      // Produce waste — flag whole-produce items where the trip total falls
+      // short of a clean unit count. After applyTripProduceScaling, residual
+      // waste should be small for items in PRODUCE_FLEX_CONFIG; items not in
+      // the config (or where flex couldn't fit due to per-day goal breaks)
+      // still get the warning so the user sees the cost.
+      if(db&&db.produce){
+        const totalNum=(item.hisSum?item.hisSum.num:0)+(item.herSum?item.herSum.num:0);
+        const perWhole=db.produce.perWhole;
+        if(perWhole>0&&totalNum>0){
+          const wholesNeeded=Math.ceil(totalNum/perWhole);
+          const totalFromWholes=wholesNeeded*perWhole;
+          const wasteAmt=totalFromWholes-totalNum;
+          // Threshold 0.5 unit (50% of one whole produce wasted) — flex pass
+          // typically lands amounts within ±0.25 unit so this only fires when
+          // flex couldn't reach the boundary.
+          if(wasteAmt>perWhole*0.5){
+            const wasteInWholes=wasteAmt/perWhole;
+            const label=db.produce.label||'unit';
+            item.wasteLabel=fmtFrac(wasteInWholes)+' '+label+' unused';
+          }
+        }
+      }
     });
   });
   return grouped;
@@ -6347,6 +6369,38 @@ const PKG_FLEX_CONFIG = {
   'ground chicken':           {maxUp:0.75, maxDown:0.25, kcalCap:300}  // 35 kcal/oz, 16oz container
 };
 
+// Flex ranges for trip-level WHOLE-PRODUCE fitting. `applyTripProduceScaling`
+// uses this to nudge per-serving amounts within [1-maxDown, 1+maxUp] ratio to
+// hit a whole-produce-count boundary (e.g., 2.5c bell pepper across a trip
+// → 3.75c = 3 peppers). Mirrors PKG_FLEX_CONFIG structure.
+//
+// kcalCap is the max kcal added per day per ingredient — keeps produce flex
+// from blowing daily kcal budgets when scaling up. Most produce is low kcal/cup
+// (broccoli 31, bell pepper 30, zucchini 20, etc.) so caps are generous.
+//
+// Items with a `produce` field but absent here are NOT flex-scaled (display-only
+// whole-count conversion still happens via `shopQtyWithCount`). Currently all
+// 14 produce items get flex coverage.
+const PRODUCE_FLEX_CONFIG = {
+  // Standard veg — generous flex, low kcal/cup
+  'broccoli':       {maxUp:0.5,  maxDown:0.25, kcalCap:200},
+  'bell pepper':    {maxUp:0.5,  maxDown:0.25, kcalCap:200},
+  'zucchini':       {maxUp:0.5,  maxDown:0.25, kcalCap:200},
+  'asparagus':      {maxUp:0.5,  maxDown:0.25, kcalCap:200},
+  'grape tomatoes': {maxUp:0.5,  maxDown:0.25, kcalCap:200},
+  'cucumber':       {maxUp:0.5,  maxDown:0.25, kcalCap:200},
+  'bok choy':       {maxUp:0.5,  maxDown:0.25, kcalCap:200},
+  // Leafy bagged (perWhole 5 = 5oz bag) — wide flex, very low kcal/cup
+  'baby spinach':   {maxUp:1.0,  maxDown:0.5,  kcalCap:200},
+  'kale':           {maxUp:1.0,  maxDown:0.5,  kcalCap:200},
+  // Higher kcal/cup — tighter caps
+  'carrots':        {maxUp:0.4,  maxDown:0.25, kcalCap:150},
+  'sweet potato':   {maxUp:0.4,  maxDown:0.2,  kcalCap:300},
+  'yukon potato':   {maxUp:0.4,  maxDown:0.2,  kcalCap:300},
+  // Aromatic with strict per-portion cap (max 0.5c)
+  'red onion':      {maxUp:0.25, maxDown:0.25, kcalCap:100}
+};
+
 // Returns true if `amount` for ingredient `dbKey` can be flex-nudged to
 // hit a package-boundary multiple. Used by the retry-loop waste check to
 // avoid pessimistically counting flex-fixable waste as "bad waste".
@@ -7291,6 +7345,15 @@ function unifyCrossPersonRatios(){
           var needsWrite=false;
           for(var wi=0;wi<portionItems.length;wi++){
             var pew=portionItems[wi]; if(!pew.item)continue;
+            // Force write if floor/maxAmt would be violated. The fast-path's
+            // 0.5% relative tolerance can otherwise mask sub-tolerance drift
+            // that pushes a portion below db.minAmt — finalAmts respect
+            // floor + scaleFactor, so writing converges to the correct value.
+            // Caught 2026-04-27 late late: applyTripProduceScaling cascade
+            // produced 0.9952 cup egg on Her shared bibimbap (drift 0.0048 <
+            // tolerance 0.0050), INV13 fired on minAmt=1 floor.
+            if(floor>0 && pew.item.amt<floor-0.0001){needsWrite=true;break;}
+            if(db.maxAmt!=null && pew.item.amt>db.maxAmt+0.0001){needsWrite=true;break;}
             if(db.wholeOnly){
               if(pew.item.amt !== finalAmts[wi]){needsWrite=true;break;}
             }else{
@@ -7791,6 +7854,7 @@ function randomizeWeek(target, seed){
       // applyTripFlexScaling invalidates internally after each setOverride/
       // revert; no extra invalidate needed before runBalanceAdjusters.
       applyTripFlexScaling(randTarget);
+      applyTripProduceScaling(randTarget);
       runBalanceAdjusters();
       goalMisses = 0;
       const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
@@ -7878,6 +7942,7 @@ function randomizeWeek(target, seed){
     // winning retry, or when rerolls invalidated it. applyTripFlexScaling
     // invalidates internally; no extra invalidate needed.
     applyTripFlexScaling(randTarget);
+    applyTripProduceScaling(randTarget);
     runBalanceAdjusters();
   }
   // Final solo-slot grid snap — day-balancer/flex-scaling can leave non-batch
@@ -8032,6 +8097,147 @@ function applyTripFlexScaling(randTarget){
         // Check if this day still hits all goals (day-balancer re-runs via calcTotals)
         if (!checkDayGoals(u.p, u.d)) {
           // Revert just this usage — day can't absorb it
+          if (prevAmt !== null) {
+            setOverride(u.p, u.d, u.s, u.idx, 'amt', prevAmt);
+          } else {
+            var ovrList = getOverrides(u.p, u.d, u.s);
+            if (ovrList) {
+              var filtered = ovrList.filter(function(o){return o.idx !== u.idx;});
+              if (filtered.length) OVERRIDES[sk(u.p,u.d,u.s)] = filtered;
+              else delete OVERRIDES[sk(u.p,u.d,u.s)];
+            }
+          }
+          invalidateLeftoverCache();
+        }
+      });
+    });
+  });
+}
+
+// Trip-level WHOLE-PRODUCE-fitting scale. Mirror of `applyTripFlexScaling`
+// but keyed on `db.produce.perWhole` (units bought as wholes — peppers,
+// broccoli heads, zucchini, etc.) instead of `db.pkg`. Scales meal amounts
+// proportionally across all trip usages of a produce item to land trip totals
+// on whole-produce-count boundaries, eliminating fractional-unit waste.
+//
+// Per-usage application + per-day goal sanity check matches the pkg pass:
+// each meal's scale attempt is reverted if it breaks any daily goal. Per-portion
+// amounts cap at db.maxAmt to keep INV13 clean.
+function applyTripProduceScaling(randTarget){
+  const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  invalidateLeftoverCache();
+  const leftovers = computeLeftovers();
+  ['cook1','cook2'].forEach(function(trip){
+    const days = TRIP_DAYS_STATIC[trip] || [];
+    Object.keys(PRODUCE_FLEX_CONFIG).forEach(function(dbKey){
+      const db = NUTRI_DB[dbKey]; if (!db || !db.produce) return;
+      const perWhole = db.produce.perWhole;
+      if (perWhole <= 0) return;
+      const cfg = PRODUCE_FLEX_CONFIG[dbKey];
+
+      const usages = []; // {p, d, s, idx, curAmt, lMult}
+      let tripTotal = 0;
+      days.forEach(function(d){
+        persons.forEach(function(p){
+          SLOTS.forEach(function(s){
+            if (s==='late_snack'||s==='shake') return;
+            const key = sk(p,d,s);
+            if (SKIPPED[key]||EAT_OUT[key]) return;
+            const lo = leftovers[key];
+            if (lo && lo.isLeftover) return;
+            const lMult = (lo && !lo.isLeftover && lo.servings > 1) ? lo.servings : 1;
+            const mealId = getMealId(p,d,s); if (!mealId) return;
+            const meal = MEALS.find(m=>m.id===mealId); if (!meal || !meal[p]) return;
+            const ovrIngr = applyOverrides(meal[p], p, d, s);
+            const balanced = getBalancedSlotIngredients(p,d,s);
+            ovrIngr.forEach(function(ing, idx){
+              if (ing.dbKey !== dbKey) return;
+              let curAmt = ing.amt;
+              if (balanced) {
+                const bi = balanced.find(function(b){return b.dbKey === dbKey;});
+                if (bi) curAmt = bi.amt;
+              }
+              usages.push({p:p, d:d, s:s, idx:idx, curAmt:curAmt, lMult:lMult});
+              tripTotal += curAmt * lMult;
+            });
+          });
+        });
+      });
+      if (usages.length === 0 || tripTotal <= 0) return;
+
+      const wholesCeil = Math.ceil(tripTotal / perWhole);
+      const wholesFloor = Math.floor(tripTotal / perWhole);
+      const targetUp = wholesCeil * perWhole;
+      const targetDown = wholesFloor * perWhole;
+      const scaleUp = tripTotal > 0 ? targetUp / tripTotal : 1;
+      const scaleDown = tripTotal > 0 ? targetDown / tripTotal : 1;
+      let chosenScale = null;
+      if (targetUp > tripTotal + 0.01 && (scaleUp - 1) <= cfg.maxUp) {
+        chosenScale = scaleUp;
+      } else if (targetDown > 0 && targetDown < tripTotal - 0.01 && cfg.maxDown > 0 && (1 - scaleDown) <= cfg.maxDown) {
+        chosenScale = scaleDown;
+      }
+      if (chosenScale === null || Math.abs(chosenScale - 1) < 0.001) return;
+
+      // Trim-capacity check (mirror of pkg pass) — make sure each affected day
+      // has enough scalable carb/fat to absorb the added kcal back to budget.
+      const dayDeltaKcal = {};
+      usages.forEach(function(u){
+        const perServAddKcal = (chosenScale - 1) * u.curAmt * db.kcal;
+        const dayKey = u.p + '_' + u.d;
+        dayDeltaKcal[dayKey] = (dayDeltaKcal[dayKey] || 0) + perServAddKcal;
+      });
+      let hasTrimCapacity = true;
+      Object.keys(dayDeltaKcal).forEach(function(k){
+        const p = k.split('_')[0], d = k.split('_')[1];
+        const addKcal = dayDeltaKcal[k];
+        if (addKcal <= 0) return;
+        if (cfg.kcalCap && addKcal > cfg.kcalCap) {hasTrimCapacity = false; return;}
+        let trimable = 0;
+        SLOTS.forEach(function(s){
+          if (s === 'late_snack' || s === 'shake') return;
+          if (SKIPPED[sk(p,d,s)] || EAT_OUT[sk(p,d,s)]) return;
+          const bal = getBalancedSlotIngredients(p,d,s);
+          if (!bal) return;
+          bal.forEach(function(i){
+            if (i.scalable === false) return;
+            if (i.role !== 'carb' && i.role !== 'fat') return;
+            const idb = NUTRI_DB[i.dbKey];
+            if (!idb) return;
+            const minAmt = (i.role === 'fat') ? 0.25 : (i.origAmt || i.amt) * 0.5;
+            const trimAmt = Math.max(0, i.amt - minAmt);
+            trimable += trimAmt * idb.kcal;
+          });
+        });
+        if (trimable < addKcal * 0.75) hasTrimCapacity = false;
+      });
+      if (!hasTrimCapacity) return;
+
+      function checkDayGoals(p, d){
+        var t = calcTotals(p, d);
+        var fv = computeDailyFV(p, d);
+        var mk = t.pro*4 + t.fat*9 + t.carb*4;
+        return (Math.abs(t.kcal - CAL_BASE[p]) <= 100) && (t.pro >= (PRO_TARGET[p]||0))
+            && (mk === 0 || (t.carb*4)/mk <= 0.55) && (mk === 0 || (t.fat*9)/mk <= 0.30)
+            && (fv.veg >= 3) && (fv.fruit >= 1);
+      }
+      usages.forEach(function(u){
+        var ovs = getOverrides(u.p, u.d, u.s);
+        var existing = ovs ? ovs.find(function(o){return o.idx === u.idx;}) : null;
+        var prevAmt = existing && existing.amt !== undefined ? existing.amt : null;
+        var newAmt = u.curAmt * chosenScale;
+        if (typeof db.maxAmt === 'number' && newAmt > db.maxAmt) newAmt = db.maxAmt;
+        // Floor at db.minAmt (or minAmtSolo for solo cooks) to keep INV13 clean.
+        var loIsSolo = (function(){
+          var lo = leftovers[sk(u.p, u.d, u.s)];
+          return !(lo && !lo.isLeftover && lo.servings > 1);
+        })();
+        var floor = (loIsSolo && typeof db.minAmtSolo === 'number') ? db.minAmtSolo
+                   : (typeof db.minAmt === 'number' ? db.minAmt : 0);
+        if (newAmt < floor) newAmt = floor;
+        setOverride(u.p, u.d, u.s, u.idx, 'amt', newAmt);
+        invalidateLeftoverCache();
+        if (!checkDayGoals(u.p, u.d)) {
           if (prevAmt !== null) {
             setOverride(u.p, u.d, u.s, u.idx, 'amt', prevAmt);
           } else {

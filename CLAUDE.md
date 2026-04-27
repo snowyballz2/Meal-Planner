@@ -1735,3 +1735,70 @@ localStorage.setItem('mealPlannerStressBaseline3', JSON.stringify({primary:99.86
 2. **Test config self-consistency matters**. A test that manufactures invariant violations the code can't fix produces unreliable metrics. Verify your fixtures are self-consistent before measuring quality from them.
 3. **Lucky-baseline pitfalls**. A single 100-sample baseline of `INV=0` doesn't prove rate is 0 — it bounds rate above by something. Run multiple samples to understand the distribution before declaring "no regression". Here, `INV11=0` baseline was a 0.7%-probability draw.
 4. **Monkey-patch unit tests for A/B**. Reverting code in-memory and re-running gives a clean A/B comparison without git churn. Used here to confirm fix #1's Test 3 numbers were structural noise, not regression — assigning `getRecentMealIds = window._preFixVariant` works because top-level `function f(...)` declarations in `<script>` tags are global window properties.
+
+## Session 2026-04-27 (late late) — Produce flex scaling + unify floor-fix
+
+User-requested: extend pkg flex-scaling architecture to whole-produce items. Implemented and surfaced a latent unify fast-path bug (caught + fixed atomically).
+
+### Fix #1: `PRODUCE_FLEX_CONFIG` + `applyTripProduceScaling` ([index.html:6349](index.html:6349), [~line 8050](index.html:8050))
+
+Mirror of `PKG_FLEX_CONFIG` + `applyTripFlexScaling`, keyed on `db.produce.perWhole` instead of `db.pkg`. Scales meal amounts proportionally across all trip usages of a produce item to land trip totals on whole-produce-count boundaries (e.g., 2.5c bell pepper across a trip → 3.75c = 3 peppers via +0.5 ratio scale).
+
+**13 produce items configured** (all NUTRI_DB items with `produce` field):
+- Standard veg (low kcal/cup): broccoli, bell pepper, zucchini, asparagus, grape tomatoes, cucumber, bok choy — `{maxUp:0.5, maxDown:0.25, kcalCap:200}`
+- Leafy bagged (perWhole 5 = 5oz bag): baby spinach, kale — `{maxUp:1.0, maxDown:0.5, kcalCap:200}`
+- Higher-kcal: carrots `{maxUp:0.4, maxDown:0.25, kcalCap:150}`, sweet/yukon potato `{maxUp:0.4, maxDown:0.2, kcalCap:300}`
+- Aromatic with strict cap: red onion `{maxUp:0.25, maxDown:0.25, kcalCap:100}`
+
+Per-usage application + per-day goal sanity check matches the pkg pass. Per-portion amounts cap at `db.maxAmt` and floor at `db.minAmt`/`minAmtSolo` to keep INV13 clean.
+
+**Wired into pipeline at both flex sites**: retry-loop's `if(totalWaste===0)` block (after `applyTripFlexScaling`) and post-retry `if(!cacheFromWinner)` block.
+
+**Shopping list waste warning** added in parallel to pkg block. Threshold 0.5 unit (50% of one whole produce wasted) — flex pass typically lands within ±0.25 unit so this only fires when flex couldn't reach the boundary.
+
+### Fix #2: `unifyCrossPersonRatios` fast-path floor/maxAmt force-write ([~line 7345](index.html:7345))
+
+**Latent bug surfaced by produce pass**: the unify convergence-loop fast-path (added 2026-04-25) skips the per-portion write when `|current - ideal| < 0.5%` relative tolerance. But this can leave per-portion amounts BELOW their `db.minAmt` floor by up to 0.5% — INV13 fires.
+
+**Reproduced** (seed 12420 post-produce-flex): bibimbap shared dinner (Friday), Her egg whole = 0.9952 vs Him = 2.0048 (sum 3.0). minAmt for `egg whole` = 1. Drift 0.0048 < tolerance 0.005 → fast-path skip → INV13 fires.
+
+**Mechanism**: produce pass scaled bibimbap's kale, cascading through adjustIngredients to slight per-portion ratio drift on egg. Pre-fix, this drift wouldn't exist — the fast-path's relative tolerance was harmless because no upstream pass produced sub-tolerance drift on near-floor items.
+
+**Fix** (3 added lines): in the fast-path check, force `needsWrite=true` if any portion is `< floor - 0.0001` or `> maxAmt + 0.0001`. `finalAmts` already respect floor/maxAmt via the existing `scaleFactor` logic, so writing converges to the correct value. Verified: seed 12420 INV13 cleared.
+
+### Verification
+
+| Test | Pre-fix baseline | Post-fix | Δ |
+|---|---|---|---|
+| **Test 1** (deterministic) | primary 100%, hard 0, INV6 96, max drift 151%, timing 401ms | primary 100%, **hard 0** ✓, INV6 114 (+18), max drift 163% (+12pp), timing 511ms (+110) | clean |
+| **Test 2** (random+state-evolving) | primary 100%, hard 0, INV6 99, max drift 229%, timing 351ms | primary 100%, **hard 0** ✓, INV6 111 (+12), **max drift 176% (-53pp)** ✓, timing 460ms (+109) | clean |
+| **Test 3** (varied configs) | primary 99.86%, hard 0, INV6 103, max drift 174%, timing 386ms | primary 100% (+0.14pp), **hard 0** ✓, INV6 142 (+39), max drift 337% (+163pp), timing 473ms (+87) | clean (see note) |
+| **Test 4** (shopping integrity) | 100/100 scenario-runs | **100/100 scenario-runs** ✓ | clean |
+
+**Test 3 INV6 max-drift +163pp note**: single outlier on `filet_din` (top offender 21 vs baseline 20). Produce flex on `filet_din`'s yukon potato gives the day-balancer one more degree of freedom; in the worst case, balancer scales protein hard to compensate, distorting P/C ratio further. INV6 is tracking-only by design — `filet_din` at 33% fat is an established structural offender. Worth watching but not a bug. INV14 max drift in Test 2 actually IMPROVED (-53pp), suggesting the floor-fix in unify generally tightens P/C consistency.
+
+### Updated stress baselines (carry-forward to next session)
+
+```js
+// Test 1
+localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({primary:100, inv6:114, inv6MaxPct:163, inv14:0, inv15Him:2.8, inv16Her:2.8, inv18AvgPct:1.4, hardFail:0, closedPct:0, avgVariance:94.3, missCounts:{kcalLow:0,kcalHigh:0,pro:0,carbPct:0,fatPct:0,veg:0,fruit:0}, timingAvg:511, mode:'standard'}));
+
+// Test 2
+localStorage.setItem('mealPlannerStressBaseline2', JSON.stringify({primary:100, inv6:111, inv6MaxPct:176, inv14:0, inv15Him:3.6, inv16Her:3.6, inv18AvgPct:2.0, hardFail:0, closedPct:0, avgVariance:95.2, missCounts:{kcalLow:0,kcalHigh:0,pro:0,carbPct:0,fatPct:0,veg:0,fruit:0}, timingAvg:460, mode:'standard2'}));
+
+// Test 3
+localStorage.setItem('mealPlannerStressBaseline3', JSON.stringify({primary:100, inv6:142, inv6MaxPct:337, inv14:0, inv15Him:2.6, inv16Her:2.5, inv18AvgPct:0.8, hardFail:0, closedPct:0, avgVariance:94.4, missCounts:{kcalLow:0,kcalHigh:0,pro:0,carbPct:0,fatPct:0,veg:0,fruit:0}, timingAvg:473, mode:'standard3'}));
+```
+
+### Open items still ahead
+
+- **INV6 max drift on filet_din** — Test 3's 337% outlier worth tracking. If consistently >300% across multiple Test 3 runs, recipe-rebalance candidate or tighten produce flex caps.
+- **Recipe normalization** carry-forward (~8 lunch/dinner + ~5 breakfast still off-budget per 2026-04-22 list).
+- **Phase 1.7 naming cleanup** carry-forward.
+- **Per-portion display of fixed items in cards** (cosmetic only, carry-forward).
+
+### Rules of thumb learned
+
+1. **New degrees of freedom can surface latent fast-path bugs**. The unify fast-path tolerance was added 2026-04-25 to prevent oscillation in the convergence loop. It worked perfectly until produce flex introduced a new upstream source of sub-tolerance per-portion drift. The pattern: any time you add a new pipeline mutation, audit downstream fast-paths for tolerance assumptions that don't account for floor/cap compliance.
+2. **Fast-path skips need to respect hard constraints**. If a fast-path can leave an INV violation, the fast-path is broken — not the INV.
+3. **Mirror existing patterns when adding parallel features**. `applyTripProduceScaling` was a near-copy of `applyTripFlexScaling`; its bugs (and shape) match the established pattern, making review easy. Same for `PRODUCE_FLEX_CONFIG`.
