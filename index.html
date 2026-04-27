@@ -4815,6 +4815,41 @@ function verifyInvariants(){
     }
   });
 
+  // ── Invariant 20: Pkg waste over 1% (hard) ──
+  // Per pkg item per trip, fail if (waste / bought) > 1%. Historically the
+  // pipeline achieved 100% zero-waste rate; if any pkg item ends with >1%
+  // wasted of what was bought, the pipeline didn't fit it. Surface that as
+  // a hard fail so silent regressions can't slip through.
+  // Skips longShelfLife items (egg white carton — legitimately carries
+  // between trips). Reads buildShoppingList output (post-pipeline) so it
+  // sees the same numbers the user sees in the shopping tab.
+  ['cook1','cook2'].forEach(function(trip){
+    var grouped = buildShoppingList(trip, 'both');
+    Object.keys(grouped).forEach(function(cat){
+      grouped[cat].forEach(function(item){
+        var db = NUTRI_DB[item.dbKey];
+        if(!db || !db.pkg || db.pkg.longShelfLife) return;
+        var totalNum = (item.hisSum?item.hisSum.num:0) + (item.herSum?item.herSum.num:0);
+        if(totalNum <= 0) return;
+        var unit = (item.hisSum||item.herSum||{}).unit;
+        var perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
+        if(perPkg <= 0) return;
+        var bought = Math.ceil(totalNum/perPkg) * perPkg;
+        var waste = bought - totalNum;
+        if(bought > 0){
+          var wastePct = waste / bought;
+          if(wastePct > 0.01){
+            violations.push('INV20 pkg-waste-over-1pct: '+trip+' '+item.dbKey
+              +' used='+totalNum.toFixed(3)+unit
+              +' bought='+bought.toFixed(3)+unit
+              +' waste='+waste.toFixed(3)+unit
+              +' pct='+(wastePct*100).toFixed(1)+'%');
+          }
+        }
+      });
+    });
+  });
+
   return violations;
 }
 
@@ -7729,6 +7764,13 @@ function postBalanceWastePass(){
       // in the config (none currently, but defensive).
       var cfg=PKG_FLEX_CONFIG[dbKey]||PRODUCE_FLEX_CONFIG[dbKey];
       var maxFlexPct=cfg ? (direction==='up'?(cfg.maxUp||0):(cfg.maxDown||0)) : 0.25;
+      // Produce items: bypass maxFlexPct clamp so the waste pass can always
+      // round to nearest perWhole boundary. Per-portion db.minAmt and
+      // db.maxAmt caps below + the day-goal revert downstream still bound
+      // the actual scale (so it's "round to nearest whole within per-portion
+      // bounds" — not unlimited). For pkg, keep the configured cap since
+      // pkg has cost per-unit and recipe distortion concerns are tighter.
+      var isProduce = !!(db.produce && !db.pkg);
 
       var grid=0.25;
       if(info.unit==='oz')grid=1;
@@ -7746,8 +7788,10 @@ function postBalanceWastePass(){
       var batchAdjustments=[];
       info.batches.forEach(function(b){
         var batchShare=(info.total>0)?(b.batchTotal/info.total)*target:0;
-        var maxFlex=b.batchTotal*maxFlexPct;
-        if(batchShare>maxFlex)batchShare=maxFlex;
+        if(!isProduce){
+          var maxFlex=b.batchTotal*maxFlexPct;
+          if(batchShare>maxFlex)batchShare=maxFlex;
+        }
         var newBatchTotal=direction==='up'?b.batchTotal+batchShare:b.batchTotal-batchShare;
         newBatchTotal=Math.round(newBatchTotal/grid)*grid;
         if(newBatchTotal<grid)newBatchTotal=grid;
@@ -7940,11 +7984,13 @@ function randomizeWeek(target, seed){
     // by the retry loop exiting on first zero-miss (line below).
     let goalMisses = Infinity;
     if (totalWaste === 0) {
-      // applyTripFlexScaling invalidates internally after each setOverride/
-      // revert; no extra invalidate needed before runBalanceAdjusters.
-      // applyTripFlexScaling now handles BOTH pkg AND produce in one pass
-      // (unified 2026-04-27).
-      applyTripFlexScaling(randTarget);
+      // Pre-loop trip-level flex scaling was removed 2026-04-27 — empirical
+      // test (Test A vs B over 100 deterministic seeds) showed it didn't
+      // reduce pkg waste vs running postBalanceWastePass alone in the
+      // convergence loop. Net waste was slightly LOWER without it (-1.4%)
+      // and INV6 P/C drift count dropped 39% (max drift -26pp). The
+      // proportional pre-loop scale was distorting recipes more than it
+      // saved on package boundaries.
       runBalanceAdjusters();
       goalMisses = 0;
       const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
@@ -8029,9 +8075,7 @@ function randomizeWeek(target, seed){
   }
   if (!cacheFromWinner) {
     // Full balance pipeline — runs only when cache wasn't restored from
-    // winning retry, or when rerolls invalidated it. applyTripFlexScaling
-    // invalidates internally; no extra invalidate needed.
-    applyTripFlexScaling(randTarget);
+    // winning retry, or when rerolls invalidated it.
     runBalanceAdjusters();
   }
   // Final solo-slot grid snap — day-balancer/flex-scaling can leave non-batch
@@ -8054,181 +8098,6 @@ function randomizeWeek(target, seed){
   }
 }
 
-// Trip-level boundary-fitting scale for flex ingredients (BOTH pkg AND produce).
-// Proportionally scales ALL meals in a trip that use a flex ingredient to hit
-// the nearest clean perUnit boundary (perPkg for cans/containers, perWhole for
-// whole produce). Respects per-ingredient flex ranges. Direction: closer-wins
-// (picks whichever boundary is fewer cups away from the current trip total).
-//
-// Unified pkg+produce 2026-04-27: the only differences between pkg and produce
-// items are (1) where perUnit comes from in the DB and (2) which flex config
-// they live in. The scaling math is identical.
-function applyTripFlexScaling(randTarget){
-  const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
-  // Leftover map is stable across this function — SEL isn't mutated, only
-  // balanced ingredient amounts. Compute once at top.
-  invalidateLeftoverCache();
-  const leftovers = computeLeftovers();
-  // Build the unified set of dbKeys to process (pkg + produce flex configs).
-  const allFlexKeys = {};
-  Object.keys(PKG_FLEX_CONFIG).forEach(function(k){allFlexKeys[k]=true;});
-  Object.keys(PRODUCE_FLEX_CONFIG).forEach(function(k){allFlexKeys[k]=true;});
-  ['cook1','cook2'].forEach(function(trip){
-    const days = TRIP_DAYS_STATIC[trip] || [];
-    Object.keys(allFlexKeys).forEach(function(dbKey){
-      const db = NUTRI_DB[dbKey]; if (!db) return;
-      // Determine perUnit: pkg drained/cups, else produce perWhole.
-      let perUnit = 0;
-      if (db.pkg && !db.pkg.longShelfLife) {
-        perUnit = (db.pkg.drained && (db.unit === 'cup' || db.unit === 'oz')) ? db.pkg.drained : (db.pkg.cups || 0);
-      } else if (db.produce) {
-        perUnit = db.produce.perWhole;
-      }
-      if (perUnit <= 0) return;
-      const cfg = PKG_FLEX_CONFIG[dbKey] || PRODUCE_FLEX_CONFIG[dbKey];
-      if (!cfg) return;
-
-      // Find all cook-day usages of this ingredient in this trip.
-      const usages = []; // {p, d, s, idx, curAmt, lMult}
-      let tripTotal = 0;
-      days.forEach(function(d){
-        persons.forEach(function(p){
-          SLOTS.forEach(function(s){
-            if (s==='late_snack'||s==='shake') return;
-            const key = sk(p,d,s);
-            if (SKIPPED[key]||EAT_OUT[key]) return;
-            const lo = leftovers[key];
-            if (lo && lo.isLeftover) return;
-            const lMult = (lo && !lo.isLeftover && lo.servings > 1) ? lo.servings : 1;
-            const mealId = getMealId(p,d,s); if (!mealId) return;
-            const meal = MEALS.find(m=>m.id===mealId); if (!meal || !meal[p]) return;
-            const ovrIngr = applyOverrides(meal[p], p, d, s);
-            // Get adjusted amount from day-balanced data (matches what cards/shopping show)
-            const balanced = getBalancedSlotIngredients(p,d,s);
-            ovrIngr.forEach(function(ing, idx){
-              if (ing.dbKey !== dbKey) return;
-              let curAmt = ing.amt;
-              if (balanced) {
-                const bi = balanced.find(function(b){return b.dbKey === dbKey;});
-                if (bi) curAmt = bi.amt;
-              }
-              usages.push({p:p, d:d, s:s, idx:idx, curAmt:curAmt, lMult:lMult});
-              tripTotal += curAmt * lMult;
-            });
-          });
-        });
-      });
-      if (usages.length === 0 || tripTotal <= 0) return;
-
-      // Compute best target: closer-wins boundary (picks the perUnit multiple
-      // that requires the smallest scale change). Falls back to the other side
-      // if the closer side exceeds the flex range.
-      const unitsCeil = Math.ceil(tripTotal / perUnit);
-      const unitsFloor = Math.floor(tripTotal / perUnit);
-      const targetUp = unitsCeil * perUnit;
-      const targetDown = unitsFloor * perUnit;
-      const upDelta = targetUp - tripTotal;
-      const downDelta = tripTotal - targetDown;
-      const scaleUp = tripTotal > 0 ? targetUp / tripTotal : 1;
-      const scaleDown = tripTotal > 0 ? targetDown / tripTotal : 1;
-      const upInRange = upDelta > 0.01 && (scaleUp - 1) <= cfg.maxUp;
-      const downInRange = downDelta > 0.01 && targetDown > 0 && cfg.maxDown > 0 && (1 - scaleDown) <= cfg.maxDown;
-      let chosenScale = null;
-      if (upDelta <= downDelta) {
-        if (upInRange) chosenScale = scaleUp;
-        else if (downInRange) chosenScale = scaleDown;
-      } else {
-        if (downInRange) chosenScale = scaleDown;
-        else if (upInRange) chosenScale = scaleUp;
-      }
-      if (chosenScale === null || Math.abs(chosenScale - 1) < 0.001) return;
-
-      // Sanity check: ensure each affected meal has enough scalable carb/fat
-      // capacity for the day-balancer to trim the added calories back. If a
-      // meal is already rock-bottom on carb/fat, skip.
-      const dayDeltaKcal = {};
-      usages.forEach(function(u){
-        const perServAddKcal = (chosenScale - 1) * u.curAmt * db.kcal;
-        const dayKey = u.p + '_' + u.d;
-        dayDeltaKcal[dayKey] = (dayDeltaKcal[dayKey] || 0) + perServAddKcal;
-      });
-      let hasTrimCapacity = true;
-      Object.keys(dayDeltaKcal).forEach(function(k){
-        const p = k.split('_')[0], d = k.split('_')[1];
-        const addKcal = dayDeltaKcal[k];
-        if (addKcal <= 0) return;
-        // Count trimable scalable carb/fat kcal across the day's slots
-        let trimable = 0;
-        SLOTS.forEach(function(s){
-          if (s === 'late_snack' || s === 'shake') return;
-          if (SKIPPED[sk(p,d,s)] || EAT_OUT[sk(p,d,s)]) return;
-          const bal = getBalancedSlotIngredients(p,d,s);
-          if (!bal) return;
-          bal.forEach(function(i){
-            if (i.scalable === false) return;
-            if (i.role !== 'carb' && i.role !== 'fat') return;
-            const idb = NUTRI_DB[i.dbKey];
-            if (!idb) return;
-            // Allowable trim: down to 50% of original amt for carb, to 0.25 for fat
-            const minAmt = (i.role === 'fat') ? 0.25 : (i.origAmt || i.amt) * 0.5;
-            const trimAmt = Math.max(0, i.amt - minAmt);
-            trimable += trimAmt * idb.kcal;
-          });
-        });
-        // Need trim capacity to absorb at least the added kcal (with some slack)
-        if (trimable < addKcal * 0.75) hasTrimCapacity = false;
-      });
-      if (!hasTrimCapacity) return;
-
-      // Per-usage scaling: try each meal individually. If scaling that day's
-      // usage breaks a daily goal, skip it and move on. This way we get as
-      // close to the package boundary as possible without blowing any day.
-      function checkDayGoals(p, d){
-        var t = calcTotals(p, d);
-        var fv = computeDailyFV(p, d);
-        var mk = t.pro*4 + t.fat*9 + t.carb*4;
-        return (Math.abs(t.kcal - CAL_BASE[p]) <= 100) && (t.pro >= (PRO_TARGET[p]||0))
-            && (mk === 0 || (t.carb*4)/mk <= 0.55) && (mk === 0 || (t.fat*9)/mk <= 0.30)
-            && (fv.veg >= 3) && (fv.fruit >= 1);
-      }
-      usages.forEach(function(u){
-        // Snapshot this specific override
-        var ovs = getOverrides(u.p, u.d, u.s);
-        var existing = ovs ? ovs.find(function(o){return o.idx === u.idx;}) : null;
-        var prevAmt = existing && existing.amt !== undefined ? existing.amt : null;
-        // Apply scaled amount — clamp to per-portion [minAmt..maxAmt] so flex
-        // scaling can't push per-serving past the threshold (INV13 gap otherwise).
-        // Floor uses minAmtSolo when this slot is solo (1-portion batch).
-        var newAmt = u.curAmt * chosenScale;
-        if (typeof db.maxAmt === 'number' && newAmt > db.maxAmt) newAmt = db.maxAmt;
-        var loIsSolo = (function(){
-          var lo = leftovers[sk(u.p, u.d, u.s)];
-          return !(lo && !lo.isLeftover && lo.servings > 1);
-        })();
-        var floor = (loIsSolo && typeof db.minAmtSolo === 'number') ? db.minAmtSolo
-                  : (typeof db.minAmt === 'number' ? db.minAmt : 0);
-        if (newAmt < floor) newAmt = floor;
-        setOverride(u.p, u.d, u.s, u.idx, 'amt', newAmt);
-        invalidateLeftoverCache();
-        // Check if this day still hits all goals (day-balancer re-runs via calcTotals)
-        if (!checkDayGoals(u.p, u.d)) {
-          // Revert just this usage — day can't absorb it
-          if (prevAmt !== null) {
-            setOverride(u.p, u.d, u.s, u.idx, 'amt', prevAmt);
-          } else {
-            var ovrList = getOverrides(u.p, u.d, u.s);
-            if (ovrList) {
-              var filtered = ovrList.filter(function(o){return o.idx !== u.idx;});
-              if (filtered.length) OVERRIDES[sk(u.p,u.d,u.s)] = filtered;
-              else delete OVERRIDES[sk(u.p,u.d,u.s)];
-            }
-          }
-          invalidateLeftoverCache();
-        }
-      });
-    });
-  });
-}
 
 // For each day whose per-person goals aren't all met, try random meal swaps
 // for that day only. Revert if waste worsens or the day still fails.
@@ -11007,7 +10876,7 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0};
     violations.forEach(function(v){
       var m=v.match(/^INV(\d+)/);if(!m)return;
       var key='INV'+m[1];if(counts[key]!==undefined)counts[key]++;
@@ -11176,7 +11045,7 @@ window.MPStress=(function(){
     var kcalBins={'<-150':0,'-150..-120':0,'-120..-100':0,'+100..+120':0,'+120..+150':0,'>+150':0};
     var fatBins={'30.0-30.2':0,'30.2-30.5':0,'30.5-31.0':0,'31.0-32.0':0,'>32.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
@@ -11941,12 +11810,12 @@ window.MPStress=(function(){
     lines.push('');
 
     // ── HARD INVARIANTS ─────────────────────────────────────────
-    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19'];
+    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20'];
     var firedHard=hardKeys.filter(function(k){return a.invTotals[k]>0;});
     lines.push('### Hard Invariants');
     lines.push('');
     if(firedHard.length===0){
-      lines.push('**all 0 ✓** (INV1-5, 7-13, 17)');
+      lines.push('**all 0 ✓** (INV1-5, 7-13, 17, 19, 20)');
     }else{
       lines.push('**FAIL** — '+firedHard.map(function(k){return k+'='+a.invTotals[k];}).join(', '));
     }
@@ -12043,7 +11912,7 @@ window.MPStress=(function(){
     // INVs (6,14,15,16,18) get their own delta rows.
     if(baseline && baseline.invTotals){
       var changedInvs=[];
-      ['INV1','INV2','INV3','INV4','INV5','INV6','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV14','INV15','INV16','INV17','INV18','INV19'].forEach(function(k){
+      ['INV1','INV2','INV3','INV4','INV5','INV6','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV14','INV15','INV16','INV17','INV18','INV19','INV20'].forEach(function(k){
         var bv=baseline.invTotals[k]||0;
         var cv=a.invTotals[k]||0;
         if(bv!==cv){
