@@ -7345,21 +7345,21 @@ function unifyCrossPersonRatios(){
           var needsWrite=false;
           for(var wi=0;wi<portionItems.length;wi++){
             var pew=portionItems[wi]; if(!pew.item)continue;
-            // Force write if floor/maxAmt would be violated. The fast-path's
-            // 0.5% relative tolerance can otherwise mask sub-tolerance drift
-            // that pushes a portion below db.minAmt — finalAmts respect
-            // floor + scaleFactor, so writing converges to the correct value.
-            // Caught 2026-04-27 late late: applyTripProduceScaling cascade
-            // produced 0.9952 cup egg on Her shared bibimbap (drift 0.0048 <
-            // tolerance 0.0050), INV13 fired on minAmt=1 floor.
+            // Force write if floor/maxAmt would be violated (defense-in-depth
+            // for INV13 — finalAmts already respect floor/maxAmt via scaleFactor).
             if(floor>0 && pew.item.amt<floor-0.0001){needsWrite=true;break;}
             if(db.maxAmt!=null && pew.item.amt>db.maxAmt+0.0001){needsWrite=true;break;}
             if(db.wholeOnly){
               if(pew.item.amt !== finalAmts[wi]){needsWrite=true;break;}
             }else{
+              // Tightened 2026-04-27 late late: was 0.5% relative tolerance
+              // (chose to be sub-INV7 1% to break unify↔snap oscillation).
+              // 0.5% allowed sub-tolerance drift on intermediate-value
+              // portions that could push downstream toward floor violations.
+              // 0.001 absolute matches snap's tolerance; loop converges
+              // because snap-accepted state is also unify-accepted.
               var _d=Math.abs(pew.item.amt-finalAmts[wi]);
-              var _tol=Math.max(0.0001, 0.005*Math.abs(pew.item.amt));
-              if(_d>_tol){needsWrite=true;break;}
+              if(_d>0.001){needsWrite=true;break;}
             }
           }
           if(!needsWrite)return;
