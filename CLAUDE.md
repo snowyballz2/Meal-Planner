@@ -1645,3 +1645,93 @@ localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({primary:100, i
 ```
 
 (Test 2 / Test 3 baselines unchanged — re-test post-cook-anchor at full 100 seeds for confirmation.)
+
+## Session 2026-04-27 (late) — Variety filter symmetry + Test 3 anti-collision
+
+Two-fix session driven by the open "Test 2 INV14=2 fires" carry-forward item. Resolved that, then surfaced (and fixed) a structural fault in Test 3's `applyVaried`.
+
+### Fix #1: `getRecentMealIds` symmetric lookback + SEL-direct reads ([index.html:6447](index.html:6447))
+
+**Root cause**: Phase 1 iterates persons-outer, days-inner (Him's whole week, then Her's). The variety filter was BACKWARD-only — when picking Her-Mon-din it couldn't see Him-Thu-din (3 days FORWARD), even though Him's full week was already in SEL. Her could pick the same meal at gap=3, producing a hidden INV14 violation that `rerollInv14Violations` couldn't always swap out of. Secondary issue: function used `getMealId` which falls back to DEFAULTS, polluting the recent set with starter-plan picks instead of actually-picked meals.
+
+**Bug confirmed by direct unit test** (planted Him-Thu-din = `salmon_lentils`, called `getRecentMealIds(0, DAYS, 4)` for Her-Mon-pick → returned no `salmon_lentils` despite the household pick being live in SEL).
+
+**Fix** (~25 lines):
+- Read `SEL` directly (mirrors `getLastWeekMealIds`'s prev-week branch — eliminates DEFAULTS noise)
+- Add forward-window loop symmetric to backward (no cross-week forward — no `_nextWeekKey` concept)
+- Extracted `pushFromDay` helper to keep the 3 branches consistent
+
+**Verification (Test 1, 100 deterministic seeds)**:
+- Primary 100% (unchanged), all hard INVs 0
+- INV6: 123 → **96** (-22%)
+- INV6 max drift: 212% → **151%** (-61pp)
+- INV6 200%+ tail cleared
+
+**Verification (Test 2, 100 randomized + state-evolving + random prior-week SEL)**:
+- Primary 99.93% → **100%** (+0.07pp)
+- **INV14: 2 → 0** ✓
+- INV6: 123 → 99 (-19%)
+- All hard INVs 0
+
+### Fix #2: `applyVaried` collision-aware ([index.html:10735](index.html:10735))
+
+**Root cause** (surfaced during Test 3 verification of fix #1): Test 3's `applyVaried` randomly placed 0-3 high-fat meal locks per person at random (day, slot) with NO anti-collision logic. With only 3 meals in HIGH_FAT_MEALS pool and ~3 expected total picks per run, pigeonhole guaranteed same-meal duplicates, often at adjacent days. **MANUAL_SET locks bypass the variety filter and reroll passes** — the randomizer literally cannot fix violations applyVaried manufactures. Test 3's saved baseline `INV11=0` was a 1-in-150 lucky single-sample (empirical fire rate ~5% per run, P(0 in 100 runs) ≈ 0.7%).
+
+Five design defects in original applyVaried:
+1. No collision detection (same (d,s) overwrites silently; lock counter still increments)
+2. No same-meal-adjacent-day check → INV11 fires by construction
+3. No same-meal-within-5-days check → INV14 fires by construction
+4. MANUAL_SET bypasses every guard
+5. HIGH_FAT_MEALS has only 3 entries — small pool
+
+**Statistical confirmation pre-fix-#2** (4 paired samples × 25 seeds, monkey-patched pre-fix-#1 vs post-fix-#1):
+
+| Metric | Pre-fix-#1 (sum 100 seeds) | Post-fix-#1 (sum 100 seeds) | Per-25 mean SD |
+|---|---|---|---|
+| INV11 | 5 [0,1,2,2] | 6 [2,2,1,1] | ~0.5-0.8 |
+| INV14 | 27 [6,8,5,8] | 24 [7,7,3,7] | ~1.3-1.7 |
+| INV6 | 114 | 106 | — |
+| Primary | 99.71% | 99.86% | — |
+
+Confirmed: fix #1 is statistically equivalent or slightly better on Test 3. The INV11/INV14 fires were structural to applyVaried, not introduced by fix #1.
+
+**Fix** (~20 lines): Track `placed = [{mealId, dayIdx}]` per applyVaried call. For each pick, shuffle the meal pool and place the first non-conflicting meal (gap >= 5 from any prior same-meal placement). If all 3 meals conflict at this day, skip the pick (lock counter reflects successful placements only). Skip overwrites of already-MANUAL_SET slots.
+
+The **gap >= 5 threshold** matches INV14's 5-day window AND conservatively prevents INV11: leftover detector's batch window is 3 days (cook + 2 leftover), so worst-case `lastDayIdx = cook+2`; INV11 requires `gap_days >= 2` ⇒ next anchor must be ≥ cook+5.
+
+**Verification (Test 3, 100 seeds with collision-aware applyVaried)**:
+- Primary 99.86% (1 fatPct + 1 kcalLow miss across 1400 person-days; non-deterministic noise)
+- **INV11: 4 → 0** ✓
+- **INV14: 19 → 0** ✓
+- All hard INVs 0
+- INV6: 115 → 103 (-12)
+- INV6 max drift: 191% → 174% (-17pp)
+- Timing 386ms avg (similar to baseline 365)
+
+### Updated stress baselines (carry-forward to next session)
+
+```js
+// Test 1 (post fix #1 — applyVaried fix is Test-3-only, doesn't affect Test 1):
+localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({primary:100, inv6:96, inv6MaxPct:151, inv14:0, inv15Him:3.2, inv16Her:3.1, inv18AvgPct:2.2, hardFail:0, closedPct:0, avgVariance:92.8, missCounts:{kcalLow:0,kcalHigh:0,pro:0,carbPct:0,fatPct:0,veg:0,fruit:0}, timingAvg:401, mode:'standard'}));
+
+// Test 2 (post fix #1):
+localStorage.setItem('mealPlannerStressBaseline2', JSON.stringify({primary:100, inv6:99, inv6MaxPct:229, inv14:0, inv15Him:3.6, inv16Her:3.5, inv18AvgPct:2.2, hardFail:0, closedPct:0, avgVariance:93.6, missCounts:{kcalLow:0,kcalHigh:0,pro:0,carbPct:0,fatPct:0,veg:0,fruit:0}, timingAvg:351, mode:'standard2'}));
+
+// Test 3 (post fix #2):
+localStorage.setItem('mealPlannerStressBaseline3', JSON.stringify({primary:99.86, inv6:103, inv6MaxPct:174, inv14:0, inv15Him:2.9, inv16Her:2.6, inv18AvgPct:0.8, hardFail:0, closedPct:0, avgVariance:93.7, missCounts:{kcalLow:1,kcalHigh:0,pro:0,carbPct:0,fatPct:1,veg:0,fruit:0}, timingAvg:386, mode:'standard3'}));
+```
+
+### Open items carry-forward
+
+- **INV6 max drift 229% in Test 2** — single-sample volatility on a non-deterministic test. Top offenders rotated to recipe-normalization candidates (`cannellini_kale_soup`, `turkey_sweet_potato_hash`, `protein_pancakes`).
+- **Recipe normalization** carry-forward (~8 lunch/dinner + ~5 breakfast still off-budget per 2026-04-22 list).
+- **Phase 1.7 naming cleanup** carry-forward.
+- **Per-portion display of fixed items in cards** (cosmetic only, carry-forward).
+- **Vegetable pkg/produce-flex scaling** — explicitly DEFERRED per user.
+
+### Rules of thumb learned
+
+1. **Iteration order matters for filters with directionality**. The variety filter was backward-only because it was DESIGNED in a vacuum, not in concert with Phase 1's persons-outer iteration. When the iteration-order/filter-direction relationship gets out of sync, you get blind-spot bugs that are hard to surface (rare gap=3-only failures here).
+2. **Test config self-consistency matters**. A test that manufactures invariant violations the code can't fix produces unreliable metrics. Verify your fixtures are self-consistent before measuring quality from them.
+3. **Lucky-baseline pitfalls**. A single 100-sample baseline of `INV=0` doesn't prove rate is 0 — it bounds rate above by something. Run multiple samples to understand the distribution before declaring "no regression". Here, `INV11=0` baseline was a 0.7%-probability draw.
+4. **Monkey-patch unit tests for A/B**. Reverting code in-memory and re-running gives a clean A/B comparison without git churn. Used here to confirm fix #1's Test 3 numbers were structural noise, not regression — assigning `getRecentMealIds = window._preFixVariant` works because top-level `function f(...)` declarations in `<script>` tags are global window properties.

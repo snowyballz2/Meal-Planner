@@ -6444,49 +6444,51 @@ function getLastWeekMealIds() {
   return ids;
 }
 
-// Household-level: scans BOTH persons' history over the previous `lookback`
-// days, crossing into the chronological previous week when needed. If either
-// him or her had meal X as an anchor cook recently, it's in the set for both.
-// Leftover entries are skipped — eating a leftover isn't a new cook.
-// Also includes the CURRENT day's already-picked slots (any earlier slot in
-// the iteration order) to prevent same-day same-meal selections — the bug
-// that caused shared lunch + shared dinner to land on the same meal,
-// creating gap=0 INV14 violations and per-portion under-budget cascades.
+// Household-level: scans BOTH persons' picks within ±`lookback` days of
+// `dayIndex` (symmetric window), crossing into the chronological previous
+// week on the backward side. If either him or her had meal X as an anchor
+// cook recently, it's in the set for both. Leftover entries are skipped
+// — eating a leftover isn't a new cook.
+//
+// SYMMETRIC (forward + backward): Phase 1 iterates persons-outer, days-inner
+// (Him's whole week first, then Her's). Without the forward look, Her-Mon
+// can't see Him-Thu (3 days forward) even though Him-Thu is already in SEL,
+// and Her ends up picking the same meal — producing a hidden gap=3 INV14
+// violation that rerollInv14Violations may not be able to swap out of.
+// Forward look closes that hole. Post-Phase-1 callsites (rerollMissDays,
+// Phase 3, Phase 4, rerollInv14Violations) also benefit: a swap candidate
+// is rejected if it would create an N-day gap in EITHER direction.
+//
+// Reads SEL directly (not via getMealId) so DEFAULTS doesn't pollute the
+// recent set. Variety is about what's been actively picked this randomize,
+// not about the static starter plan. Mirrors getLastWeekMealIds which also
+// reads weekData[...].sel directly.
 function getRecentMealIds(dayIndex, days, lookback) {
   const recent = [];
   const leftovers = computeLeftovers();
+  function pushFromDay(pp, d) {
+    SLOTS.forEach(function(s) {
+      if (s === 'late_snack' || s === 'shake') return;
+      const id = SEL[sk(pp, d, s)];
+      if (!id || recent.indexOf(id) >= 0) return;
+      const lo = leftovers[sk(pp, d, s)];
+      if (lo && lo.isLeftover) return;
+      recent.push(id);
+    });
+  }
   // Same-day already-picked slots — covers cross-slot repeats Phase 1 would
   // otherwise create when iterating breakfast → lunch → snack → dinner.
   const todayDay = days[dayIndex];
   if (todayDay) {
-    SLOTS.forEach(function(s) {
-      if (s === 'late_snack' || s === 'shake') return;
-      ['him','her'].forEach(function(pp){
-        const id = getMealId(pp, todayDay, s);
-        if (!id || recent.indexOf(id) >= 0) return;
-        const lo = leftovers[sk(pp, todayDay, s)];
-        if (lo && lo.isLeftover) return;
-        recent.push(id);
-      });
-    });
+    ['him','her'].forEach(function(pp){ pushFromDay(pp, todayDay); });
   }
+  // Backward window (this week + cross into prev week)
   for (let b = 1; b <= lookback; b++) {
     const prevIdx = dayIndex - b;
     if (prevIdx >= 0) {
-      // Same week — check both persons
       const prevDay = days[prevIdx];
-      SLOTS.forEach(function(s) {
-        if (s === 'late_snack' || s === 'shake') return;
-        ['him','her'].forEach(function(pp){
-          const id = getMealId(pp, prevDay, s);
-          if (!id || recent.indexOf(id) >= 0) return;
-          const lo = leftovers[sk(pp, prevDay, s)];
-          if (lo && lo.isLeftover) return;
-          recent.push(id);
-        });
-      });
+      ['him','her'].forEach(function(pp){ pushFromDay(pp, prevDay); });
     } else {
-      // Cross into chronological previous week — check both persons
       const lastWeekDayIdx = 7 + prevIdx;
       if (lastWeekDayIdx >= 0 && lastWeekDayIdx < 7) {
         const lastDay = DAYS[lastWeekDayIdx];
@@ -6500,6 +6502,15 @@ function getRecentMealIds(dayIndex, days, lookback) {
           });
         });
       }
+    }
+  }
+  // Forward window (this week only — no _nextWeekKey concept; future-week
+  // SEL is not part of the current randomize's scope).
+  for (let f = 1; f <= lookback; f++) {
+    const fwdIdx = dayIndex + f;
+    if (fwdIdx < days.length) {
+      const fwdDay = days[fwdIdx];
+      ['him','her'].forEach(function(pp){ pushFromDay(pp, fwdDay); });
     }
   }
   return recent;
@@ -10723,6 +10734,20 @@ window.MPStress=(function(){
 
   function applyVaried(rng){
     var cfg={eatOuts:0,skips:0,locks:0,shared:0};
+    // Track every household placement so we don't manufacture INV11/INV14
+    // violations the randomizer can't fix (MANUAL_SET bypasses the variety
+    // filter and reroll passes). Enforce gap >= 5 between same-meal placements
+    // — matches INV14's 5-day window and conservatively also prevents INV11
+    // since the leftover detector's batch window is 3 days (cook + 2 leftovers
+    // = max lastDayIdx of cook+2; INV11 needs gap_days >= 2 ⇒ next anchor
+    // ≥ cook+5).
+    var placed=[]; // [{mealId, dayIdx}]
+    function wouldViolate(mealId, dayIdx){
+      for(var i=0;i<placed.length;i++){
+        if(placed[i].mealId===mealId && Math.abs(placed[i].dayIdx-dayIdx)<5)return true;
+      }
+      return false;
+    }
     ['him','her'].forEach(function(p){
       // Eat-outs AND skips both excluded — focus stress on manual locks and
       // random sharing since those are the pipeline-driven variations.
@@ -10732,8 +10757,25 @@ window.MPStress=(function(){
         var s=(rng()<0.5)?'lunch':'dinner';
         var k=sk(p,d,s);
         if(EAT_OUT[k]||SKIPPED[k])continue;
-        SEL[k]=HIGH_FAT_MEALS[Math.floor(rng()*HIGH_FAT_MEALS.length)];
-        MANUAL_SET[k]=true;cfg.locks++;
+        if(MANUAL_SET[k])continue; // skip overwrites of an earlier pick
+        // Try each meal in shuffled order; place the first non-conflicting one.
+        // If all 3 high-fat meals conflict at this day, skip this attempt
+        // (don't increment cfg.locks — counter reflects successful placements).
+        var pool=HIGH_FAT_MEALS.slice();
+        for(var x=pool.length-1;x>0;x--){
+          var j=Math.floor(rng()*(x+1));
+          var tmp=pool[x];pool[x]=pool[j];pool[j]=tmp;
+        }
+        var dayIdx=DAYS.indexOf(d);
+        var meal=null;
+        for(var m=0;m<pool.length;m++){
+          if(!wouldViolate(pool[m],dayIdx)){meal=pool[m];break;}
+        }
+        if(!meal)continue;
+        SEL[k]=meal;
+        MANUAL_SET[k]=true;
+        placed.push({mealId:meal,dayIdx:dayIdx});
+        cfg.locks++;
       }
     });
     var sh=Math.floor(rng()*4);
