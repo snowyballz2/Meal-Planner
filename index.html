@@ -523,7 +523,7 @@ var NUTRI_DB = {
   'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz',type:'pouch'},wholeOnly:true,minAmt:1,maxAmt:1},
   'triscuit':              {kcal:20,  pro:0.4,fat:0.7, carb:3.3, unit:'each', wholeOnly:true},
   // Milks
-  'coconut milk':{kcal:420,pro:1,fat:14,carb:2,unit:'cup',brand:'Chaokoh',minAmt:0.125,maxAmt:0.5},
+  'coconut milk':{kcal:420,pro:1,fat:14,carb:2,unit:'cup',brand:'Chaokoh',pkg:{size:13.5,unit:'oz',cups:1.5,type:'can',acceptableWaste:true},minAmt:0.125,maxAmt:0.5},
   'coconut water':         {kcal:50,  pro:0,  fat:0,   carb:12,  unit:'cup', brand:'H2C', minAmt:0.25, maxAmt:2},
   'oat milk':              {kcal:100, pro:3,  fat:2,   carb:17,  unit:'cup', brand:'Elmhurst', minAmt:0.25, maxAmt:2},
   '1% milk':               {kcal:110, pro:8,  fat:2.5, carb:13,  unit:'cup', brand:'Horizon Organic', minAmt:0.5, maxAmt:2, maxAmtSolo:1},
@@ -1533,7 +1533,7 @@ const MEALS=[
     I('black pepper',0.5,'fixed',false)
   ]},
 
- {id:'shrimp_coconut_curry',label:'Shrimp coconut curry with jasmine rice',slots:['lunch','dinner'],
+ {id:'shrimp_coconut_curry',label:'Shrimp coconut curry with jasmine rice',slots:['lunch','dinner'],noRandomize:true,
   steps:['Sauté bell pepper in non-stick skillet 2 min. Remove and set aside.','Add ginger and garlic to the same pan, cook 30 sec.','Add red curry paste and press against the pan. Fry 30–60 sec, stirring constantly — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 2–3 min to thicken.','Return bell pepper. Add shrimp, cook 3 min until pink.','Stir in spinach until wilted. Squeeze lime.','Serve over warm jasmine rice (from rice cooker).'],
   him:{},her:{},
   ingredients:[
@@ -1736,7 +1736,7 @@ const MEALS=[
     I('gochujang',1,'condiment',false)
   ]},
 
- {id:'red_curry',label:'Crispy tofu red curry with jasmine rice',slots:['lunch','dinner'],
+ {id:'red_curry',label:'Crispy tofu red curry with jasmine rice',slots:['lunch','dinner'],noRandomize:true,
   steps:['Press tofu: wrap in paper towels and press under a heavy object 10 min. Cut into 1-inch cubes.','Dry-sear tofu cubes in a hot non-stick pan 3–4 min per side until golden and crispy. Remove and set aside.','Add red curry paste to the pan and press against the surface. Fry 30–60 sec, stirring constantly — the paste has embedded oil that releases and blooms the aromatics.','Whisk in coconut milk a splash at a time into the paste to emulsify, then add ~6 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1 min.','Add broccoli and bell pepper. Simmer 6–8 min until veg is tender.','Add kale, edamame, and return tofu to the pan. Cook 2 min until kale is wilted.','Serve over warm jasmine rice (from rice cooker).'],
   him:{},her:{},
   ingredients:[
@@ -2107,7 +2107,7 @@ const MEALS=[
     I('lime',0.5,'condiment',false)
   ]},
 
- {id:'coconut_turkey_curry',label:'Coconut turkey curry with jasmine rice',slots:['lunch','dinner'],
+ {id:'coconut_turkey_curry',label:'Coconut turkey curry with jasmine rice',slots:['lunch','dinner'],noRandomize:true,
   steps:['Heat avocado oil in a large skillet over medium heat. Add shallots and cook 5 min until softened.','Add ginger and garlic, cook 2 min until fragrant.','Push aromatics to the side. Add red curry paste to the cleared space and press against the pan. Fry 30–60 sec, stirring — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1–2 min to thicken.','Add bell peppers and sauté 2–3 min. Add ground turkey and cook 7–8 min until no longer pink.','Add zucchini and simmer 5 min until tender.','Stir in spinach until wilted. Serve over warm jasmine rice (from rice cooker). Garnish with cilantro, lime wedges, red pepper flakes.'],
   him:{},her:{},
   ingredients:[
@@ -2248,7 +2248,7 @@ const MEALS=[
     I('lime',0.5,'condiment',false)
   ]},
 
- {id:'chickpea_curry_bowl',label:'Chickpea & spinach curry',slots:['lunch','dinner'],
+ {id:'chickpea_curry_bowl',label:'Chickpea & spinach curry',slots:['lunch','dinner'],noRandomize:true,
   steps:['Warm hot brown rice (from rice cooker) with the edamame stirred through. Set aside as the bowl base.','Heat a dry pan over medium. Add red curry paste and press against the pan. Fry 30–60 sec, stirring — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1–2 min to thicken.','Add chickpeas (from Instant Pot) and spinach. Simmer 5–6 min until spinach wilts and chickpeas are heated through.','Spoon curry over the rice-edamame base.'],
   him:{},her:{},
   ingredients:[
@@ -2612,6 +2612,11 @@ function applyOverrides(port,p,d,s){
     const newIng=Object.assign({},ing);
     if(o.dbKey!==undefined)newIng.dbKey=o.dbKey;
     if(o.amt!==undefined)newIng.amt=o.amt;
+    // Forward `scalable` so override-pinned amounts can opt out of per-slot
+    // calorie scaling. Used by `roundPkgItemsToBoundary` to freeze pkg
+    // protein/sauce amounts at perPkg-multiple values; the day balancer
+    // then compensates via non-pkg ingredients. (Added 2026-04-28.)
+    if(o.scalable!==undefined)newIng.scalable=o.scalable;
     return newIng;
   });
 }
@@ -4815,35 +4820,74 @@ function verifyInvariants(){
     }
   });
 
-  // ── Invariant 20: Pkg waste over 1% (hard) ──
-  // Per pkg item per trip, fail if (waste / bought) > 1%. Historically the
-  // pipeline achieved 100% zero-waste rate; if any pkg item ends with >1%
-  // wasted of what was bought, the pipeline didn't fit it. Surface that as
-  // a hard fail so silent regressions can't slip through.
-  // Skips longShelfLife items (egg white carton — legitimately carries
-  // between trips). Reads buildShoppingList output (post-pipeline) so it
-  // sees the same numbers the user sees in the shopping tab.
+  // ── Invariants 20/21/22: Waste tracking (hard) ──
+  // INV20 = combined "total" hard tracker. Fires once per pkg waste >1%
+  //         AND once per produce waste >50%-of-perWhole. INV20 count =
+  //         INV21 count + INV22 count by construction. Useful as a
+  //         single number to answer "is there ANY waste violation?"
+  // INV21 = pkg-only split (1% of bought threshold). Fires per pkg item
+  //         per trip when (waste / bought) > 1%.
+  // INV22 = produce-only split (>50% of one whole-produce unit threshold).
+  //         Lax threshold because produce sizes are structurally coarse
+  //         (broccoli head = 2c, carrots bunch = 0.75c) and recipes use
+  //         fractional cups; small sub-50% waste is unavoidable noise.
+  //
+  // Skips pkg longShelfLife items (egg white carton — legitimately carries
+  // between trips). Reads buildShoppingList output (post-pipeline) so the
+  // gauge sees the same numbers the user sees in the shopping tab.
+  // (INV20 was the original 2026-04-27 pkg-only invariant. On 2026-04-28
+  //  it was repurposed as the rolled-up combined tracker, with INV21+INV22
+  //  added as the split detail. Both old INV20 baselines and new ones
+  //  remain comparable since the pkg threshold is unchanged.)
   ['cook1','cook2'].forEach(function(trip){
     var grouped = buildShoppingList(trip, 'both');
     Object.keys(grouped).forEach(function(cat){
       grouped[cat].forEach(function(item){
         var db = NUTRI_DB[item.dbKey];
-        if(!db || !db.pkg || db.pkg.longShelfLife) return;
+        if(!db) return;
         var totalNum = (item.hisSum?item.hisSum.num:0) + (item.herSum?item.herSum.num:0);
         if(totalNum <= 0) return;
         var unit = (item.hisSum||item.herSum||{}).unit;
-        var perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
-        if(perPkg <= 0) return;
-        var bought = Math.ceil(totalNum/perPkg) * perPkg;
-        var waste = bought - totalNum;
-        if(bought > 0){
-          var wastePct = waste / bought;
-          if(wastePct > 0.01){
-            violations.push('INV20 pkg-waste-over-1pct: '+trip+' '+item.dbKey
-              +' used='+totalNum.toFixed(3)+unit
-              +' bought='+bought.toFixed(3)+unit
-              +' waste='+waste.toFixed(3)+unit
-              +' pct='+(wastePct*100).toFixed(1)+'%');
+
+        // PKG branch (INV20 + INV21). `acceptableWaste:true` items (e.g.
+        // coconut milk — manual-add curries only, container is shopping-only)
+        // are excluded from the hard tracker but still appear in shopping
+        // list with the standard waste warning.
+        if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+          var perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
+          if(perPkg > 0){
+            var bought = Math.ceil(totalNum/perPkg) * perPkg;
+            var waste = bought - totalNum;
+            if(bought > 0){
+              var wastePct = waste / bought;
+              if(wastePct > 0.01){
+                var detail = trip+' '+item.dbKey
+                  +' used='+totalNum.toFixed(3)+unit
+                  +' bought='+bought.toFixed(3)+unit
+                  +' waste='+waste.toFixed(3)+unit
+                  +' pct='+(wastePct*100).toFixed(1)+'%';
+                violations.push('INV20 waste-over-threshold (pkg): '+detail);
+                violations.push('INV21 pkg-waste-over-1pct: '+detail);
+              }
+            }
+          }
+        }
+
+        // PRODUCE branch (INV20 + INV22). `db.produce.acceptableWaste:true`
+        // would skip; not currently used but reserved for symmetry with pkg.
+        if(db.produce && !db.produce.acceptableWaste){
+          var perWhole = db.produce.perWhole;
+          if(perWhole > 0){
+            var pBought = Math.ceil(totalNum/perWhole) * perWhole;
+            var pWaste = pBought - totalNum;
+            if(pWaste > perWhole * 0.5){
+              var pDetail = trip+' '+item.dbKey
+                +' used='+totalNum.toFixed(3)+unit
+                +' bought='+pBought.toFixed(3)+unit
+                +' waste='+pWaste.toFixed(3)+unit+' ('+(pWaste/perWhole*100).toFixed(0)+'% of one whole)';
+              violations.push('INV20 waste-over-threshold (produce): '+pDetail);
+              violations.push('INV22 produce-waste-over-50pct-of-whole: '+pDetail);
+            }
           }
         }
       });
@@ -6505,6 +6549,127 @@ function canFlexFitToBoundary(dbKey, amount, perUnit) {
   return false;
 }
 
+// Items that get the "round trip total to nearest perPkg multiple" freeze
+// treatment. For each item per trip:
+//   1. Compute trip total X (sum of estimated per-portion balanced amounts
+//      across cook anchors, weighted by lMult for shared/leftover batches)
+//   2. Compute Y_nearest = max(perPkg, round(X/perPkg) * perPkg) (never zero)
+//   3. Try scaling each usage by (Y_nearest/X). If all per-portion amounts
+//      stay within [minAmt(Solo), maxAmt], apply via setOverride with
+//      `scalable:false` so the per-slot calorie adjuster doesn't re-scale
+//      our pinned amount. Day balancer compensates via non-pkg items.
+//   4. If Y_nearest blocks on maxAmt, try Y_floor (round DOWN) instead.
+//      If Y_nearest blocks on minAmt, try Y_ceil (round UP) instead.
+//      If both directions fail → leave as-is. Prevents oscillation.
+//
+// Items: 5 proteins (tofu firm, silken tofu, ground turkey 93, ground
+// chicken, canned tuna) + 2 sauces/liquids (chicken broth, marinara).
+// Skips db.pkg.acceptableWaste items (e.g. coconut milk).
+// Added 2026-04-28.
+var ROUND_PKG_ITEMS = ['tofu firm','silken tofu','ground turkey 93','ground chicken','canned tuna','chicken broth','marinara'];
+
+function roundPkgItemsToBoundary(randTarget){
+  var persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  invalidateLeftoverCache();
+  var leftovers = computeLeftovers();
+  ['cook1','cook2'].forEach(function(trip){
+    var days = TRIP_DAYS_STATIC[trip] || [];
+    ROUND_PKG_ITEMS.forEach(function(dbKey){
+      var db = NUTRI_DB[dbKey];
+      if(!db || !db.pkg || db.pkg.longShelfLife || db.pkg.acceptableWaste) return;
+      var perPkg = (db.pkg.drained && (db.unit==='cup'||db.unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
+      if(perPkg <= 0) return;
+
+      // Find cook-anchor usages of this ingredient in this trip
+      var usages = []; // {p, d, s, idx, estAmt, lMult, isSolo}
+      var tripTotal = 0;
+      days.forEach(function(d){
+        persons.forEach(function(p){
+          if(p!=='him'&&p!=='her')return;
+          SLOTS.forEach(function(s){
+            if(s==='late_snack'||s==='shake')return;
+            var key = sk(p,d,s);
+            if(SKIPPED[key]||EAT_OUT[key])return;
+            var lo = leftovers[key];
+            if(lo && lo.isLeftover) return; // anchors only
+            var lMult = (lo && !lo.isLeftover && lo.servings>1) ? lo.servings : 1;
+            var isSolo = (lMult === 1);
+            var mealId = getMealId(p,d,s); if(!mealId) return;
+            var meal = MEALS.find(function(m){return m.id===mealId;});
+            if(!meal || !meal[p] || !meal[p].ingredients) return;
+            var ovrIngr = applyOverrides(meal[p], p, d, s);
+            // Compute estimated slot scale (linear: budget/recipe_kcal). Use
+            // post-override ingredients so previously-pinned items don't get
+            // re-counted. Excludes scalable:false items from base kcal.
+            var baseKcal = 0;
+            ovrIngr.forEach(function(i){
+              var idb = NUTRI_DB[i.dbKey];
+              if(!idb) return;
+              if(i.scalable === false) return; // not part of scale base
+              baseKcal += idb.kcal * (i.amt||0);
+            });
+            var slotScale = (s!=='shake' && SLOT_BUDGET[s] && baseKcal>0) ? getSlotBudget(p,d,s)/baseKcal : 1;
+            ovrIngr.forEach(function(ing, idx){
+              if(ing.dbKey !== dbKey) return;
+              var estAmt = (ing.scalable === false) ? (ing.amt||0) : (ing.amt||0) * slotScale;
+              usages.push({p:p, d:d, s:s, idx:idx, estAmt:estAmt, lMult:lMult, isSolo:isSolo});
+              tripTotal += estAmt * lMult;
+            });
+          });
+        });
+      });
+      if(usages.length === 0 || tripTotal <= 0) return;
+
+      // Candidate targets — pick nearest perPkg multiple, with min = perPkg.
+      var nearest = Math.round(tripTotal/perPkg) * perPkg;
+      if(nearest < perPkg) nearest = perPkg;
+      var floorMult = Math.floor(tripTotal/perPkg) * perPkg;
+      var ceilMult  = Math.ceil(tripTotal/perPkg)  * perPkg;
+      if(floorMult < perPkg) floorMult = perPkg;
+      if(ceilMult  < perPkg) ceilMult  = perPkg;
+      // The "other" direction = whichever (floor/ceil) isn't nearest.
+      var other = (nearest === ceilMult) ? floorMult : ceilMult;
+
+      // Already on boundary — skip.
+      if(Math.abs(tripTotal - nearest) < 0.01) return;
+
+      function tryTarget(Y){
+        if(Y <= 0) return {ok:false, reason:'zero'};
+        var scale = Y/tripTotal;
+        var newAmts = [];
+        for(var i=0;i<usages.length;i++){
+          var u = usages[i];
+          var newAmt = u.estAmt * scale;
+          var floorAmt = (u.isSolo && typeof db.minAmtSolo === 'number')
+            ? db.minAmtSolo
+            : (typeof db.minAmt === 'number' ? db.minAmt : 0);
+          if(typeof db.maxAmt === 'number' && newAmt > db.maxAmt + 0.0001){
+            return {ok:false, reason:'maxAmt'};
+          }
+          if(newAmt < floorAmt - 0.0001){
+            return {ok:false, reason:'minAmt'};
+          }
+          newAmts.push({u:u, newAmt:newAmt});
+        }
+        return {ok:true, newAmts:newAmts, target:Y};
+      }
+
+      // Try nearest first, fall back to opposite direction if blocked.
+      var chosen = tryTarget(nearest);
+      if(!chosen.ok) chosen = tryTarget(other);
+      if(!chosen.ok) return; // both directions failed — leave as-is
+
+      // Apply overrides — set both amt and scalable:false so the per-slot
+      // adjuster respects the pinned amount.
+      chosen.newAmts.forEach(function(na){
+        setOverride(na.u.p, na.u.d, na.u.s, na.u.idx, 'amt', na.newAmt);
+        setOverride(na.u.p, na.u.d, na.u.s, na.u.idx, 'scalable', false);
+      });
+    });
+  });
+  invalidateLeftoverCache();
+}
+
 // Cold-path trip-waste estimator shared by `rerollMissDays` and
 // `rerollInv14Violations`. The retry loop also calls this. Iterates over
 // (Mon-Wed, Thu-Sun) trips separately, summing flex-aware waste counts.
@@ -6559,9 +6724,10 @@ function _fastTripWasteForPersons(days, persons){
     // flex bounds in isolation, ignoring per-day kcal budgets, INV13 maxAmt
     // caps, and per-usage day-goal-break reverts. Optimistic skipping let
     // the retry loop pick combos that *predicted* zero waste but the actual
-    // pipeline couldn't deliver. Counting honestly: -35% INV20 fires across
-    // 100 seeds (382 → 248), +0.43pp primary hit rate, no closed-off meals
-    // (all 124 picked meals still get picked, just rebalanced frequencies).
+    // pipeline couldn't deliver. Counting honestly: -35% pkg-waste fires
+    // across 100 seeds (382 → 248 — measured against then-INV20, now INV21),
+    // +0.43pp primary hit rate, no closed-off meals (all 124 picked meals
+    // still get picked, just rebalanced frequencies).
     if(waste>0.01) w++;
   });
   Object.keys(produceTotals).forEach(function(k){
@@ -10882,7 +11048,7 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV21:0,INV22:0};
     violations.forEach(function(v){
       var m=v.match(/^INV(\d+)/);if(!m)return;
       var key='INV'+m[1];if(counts[key]!==undefined)counts[key]++;
@@ -10943,9 +11109,9 @@ window.MPStress=(function(){
     // run starts from this run's output (used by runStandard2 to simulate
     // real-world repeated Randomize clicks and exercise state-evolution paths).
     if(!opts.persistState) restore(snap);
-    // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16, INV18) from the "real fail" list
+    // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16, INV18, INV21, INV22) from the "real fail" list
     var nonInv6=violations.filter(function(v){
-      return !v.startsWith('INV6 ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ') && !v.startsWith('INV18 ');
+      return !v.startsWith('INV6 ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ') && !v.startsWith('INV18 ') && !v.startsWith('INV21 ') && !v.startsWith('INV22 ');
     }).slice(0,30);
     // Extract INV15/16 leftover-eaten counts per person
     var leftoversEaten={him:0,her:0};
@@ -11051,7 +11217,7 @@ window.MPStress=(function(){
     var kcalBins={'<-150':0,'-150..-120':0,'-120..-100':0,'+100..+120':0,'+120..+150':0,'>+150':0};
     var fatBins={'30.0-30.2':0,'30.2-30.5':0,'30.5-31.0':0,'31.0-32.0':0,'>32.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV21:0,INV22:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
@@ -11206,7 +11372,7 @@ window.MPStress=(function(){
       missCounts:missCounts,
       kcalBins:kcalBins,fatBins:fatBins,vegBins:vegBins,
       invTotals:invTotals,
-      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&invTotals[k]>0;}), // INV19 IS hard — counts toward "any fail"
+      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV21'&&k!=='INV22'&&invTotals[k]>0;}), // INV19/INV20 hard — count toward "any fail". INV21/22 tracking-only (split detail of INV20).
       // INV13 fires per-ingredient that has db.minAmt/maxAmt defined; ingredients without those are exempt by construction.
       invSamples:invSamples,
       topMeals:topMeals,
@@ -11733,7 +11899,7 @@ window.MPStress=(function(){
     var cur={
       primary: a.primaryHitRate*100,
       inv14: a.inv14Breakdown.total,
-      hardFail: Object.keys(a.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&a.invTotals[k]>0;}).length, // INV19 hard, counted
+      hardFail: Object.keys(a.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV21'&&k!=='INV22'&&a.invTotals[k]>0;}).length, // INV19/INV20 hard, counted. INV21/22 tracking-only (split detail of INV20).
       closedPct: (function(){
         var ta=0,tc=0;
         ['breakfast','lunch','dinner','snack'].forEach(function(s){
@@ -11918,7 +12084,7 @@ window.MPStress=(function(){
     // INVs (6,14,15,16,18) get their own delta rows.
     if(baseline && baseline.invTotals){
       var changedInvs=[];
-      ['INV1','INV2','INV3','INV4','INV5','INV6','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV14','INV15','INV16','INV17','INV18','INV19','INV20'].forEach(function(k){
+      ['INV1','INV2','INV3','INV4','INV5','INV6','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV14','INV15','INV16','INV17','INV18','INV19','INV20','INV21','INV22'].forEach(function(k){
         var bv=baseline.invTotals[k]||0;
         var cv=a.invTotals[k]||0;
         if(bv!==cv){
@@ -12145,7 +12311,7 @@ window.MPStress=(function(){
       // Worst single-run cap-hit rate, for monitoring stragglers (one
       // outlier can hide under a healthy avg). Surfaced alongside avgPct.
       inv18WorstRunPct: agg.rbaCap?(agg.rbaCap.worstRunRate*100):0,
-      hardFail: Object.keys(agg.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&agg.invTotals[k]>0;}).length, // INV19 hard, counted
+      hardFail: Object.keys(agg.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV21'&&k!=='INV22'&&agg.invTotals[k]>0;}).length, // INV19/INV20 hard, counted. INV21/22 tracking-only (split detail of INV20).
       closedPct: (function(){
         var ta=0,tc=0;
         ['breakfast','lunch','dinner','snack'].forEach(function(s){
