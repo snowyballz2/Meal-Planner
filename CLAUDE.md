@@ -1802,3 +1802,184 @@ localStorage.setItem('mealPlannerStressBaseline3', JSON.stringify({primary:100, 
 1. **New degrees of freedom can surface latent fast-path bugs**. The unify fast-path tolerance was added 2026-04-25 to prevent oscillation in the convergence loop. It worked perfectly until produce flex introduced a new upstream source of sub-tolerance per-portion drift. The pattern: any time you add a new pipeline mutation, audit downstream fast-paths for tolerance assumptions that don't account for floor/cap compliance.
 2. **Fast-path skips need to respect hard constraints**. If a fast-path can leave an INV violation, the fast-path is broken — not the INV.
 3. **Mirror existing patterns when adding parallel features**. `applyTripProduceScaling` was a near-copy of `applyTripFlexScaling`; its bugs (and shape) match the established pattern, making review easy. Same for `PRODUCE_FLEX_CONFIG`.
+
+## Session 2026-04-28 — INV split, round-pkg algorithm, 3-option experiment matrix
+
+Long, dense session. Concluded the bisect investigation + Fix A path from the 2026-04-27 (late late late) carry-forward, then designed and tested a structural fix for pkg waste. Five commits, branch lineage `MP_2026-04-27_V1` → `MP_2026-04-28_V5`.
+
+### Branch label convention (introduced this session, persistent)
+
+`MP_<YYYY-MM-DD>_V<N>` — N increments per commit on the same day; resets to V1 on a new day's first commit. Replaces `wip-produce-pkg-unification` as the canonical mainline. Old archive branches use `old_mod_*` prefix. **The user does NOT consider any of the following "main"** in their mental model — only `MP_<date>_V<N>` is canonical:
+- `main` (git label, points at 20245b9 — pre-wip baseline)
+- `wip-produce-pkg-unification` (prior label, preserved on remote, do not promote)
+- `old_mod_fixA-on-pre-wip-snapshot` (archived experimental branch)
+
+### Stress test baselines saved (carry forward to next session)
+
+```js
+// Test 1 (deterministic, seeds 12345..12444):
+localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({primary:98.79, inv6:58, inv6MaxPct:127, inv14:0, inv15Him:2.8, inv16Her:2.9, inv18AvgPct:81.0, hardFail:1, closedPct:0, avgVariance:93.9, missCounts:{kcalLow:2,kcalHigh:1,pro:1,carbPct:7,fatPct:2,veg:3,fruit:2}, timingAvg:1010, mode:'standard'}));
+// Test 2 (random + state-evolving + random prior-week SEL):
+localStorage.setItem('mealPlannerStressBaseline2', JSON.stringify({primary:98.86, inv6:60, inv6MaxPct:157, inv14:0, inv15Him:3.3, inv16Her:3.4, inv18AvgPct:91.0, hardFail:1, closedPct:0, avgVariance:95.5, missCounts:{kcalLow:3,kcalHigh:0,pro:0,carbPct:7,fatPct:2,veg:4,fruit:2}, timingAvg:967, mode:'standard2'}));
+// Test 3 (random + per-run varied configs):
+localStorage.setItem('mealPlannerStressBaseline3', JSON.stringify({primary:99.21, inv6:67, inv6MaxPct:145, inv14:3, inv15Him:2.4, inv16Her:2.6, inv18AvgPct:77.0, hardFail:1, closedPct:0, avgVariance:93.1, missCounts:{kcalLow:0,kcalHigh:0,pro:1,carbPct:5,fatPct:1,veg:3,fruit:2}, timingAvg:969, mode:'standard3'}));
+```
+
+(Note: these baselines reflect Commit 1 state — pre-Option-3 wiring. Re-save after settling on V5/Phase 2 winner if needed.)
+
+### Test 4 (shopping integrity) state at end of session
+
+100 runs × 10 scenarios = **all 10 scenarios passed all seeds**. ✓
+
+### INV split: INV20 / INV21 / INV22
+
+INV20 was previously pkg-only. Split this session:
+- **INV20 (HARD)**: combined "any waste" tracker. Fires once per pkg waste >1% AND once per produce waste >50%-of-perWhole. By construction `INV20 count = INV21 count + INV22 count`.
+- **INV21 (tracking)**: pkg-only split. Per pkg item per trip, fires if `(waste/bought) > 1%`.
+- **INV22 (tracking)**: produce-only split. Per produce item per trip, fires if `waste > perWhole × 0.5`.
+
+Both INV21 and INV22 are **tracking-only** (don't count toward "hard fail" total). INV20 is the hard count. The split exists for diagnostic clarity.
+
+Wired into all 4 enumeration sites: `parseInvariants` counts, `aggregate.invTotals`, `formatReport.hardKeys`, per-INV iteration.
+
+`db.pkg.acceptableWaste` flag (and parallel `db.produce.acceptableWaste`) excludes specific items from all three invariants. Currently used for coconut milk (manual-add curries — acceptable to waste).
+
+### Coconut milk treatment
+
+- **Restored pkg field** on coconut milk DB: `pkg:{size:13.5, unit:'oz', cups:1.5, type:'can', acceptableWaste:true}`. Standard 13.5oz Thai coconut milk can ≈ 1.5 cups. Container info now flows to shopping list display + waste warning.
+- **acceptableWaste:true** flag tells INV20/21/22 verifier to skip this item (coconut milk waste is not tracked as a violation).
+- **All 4 coconut curry recipes flagged `noRandomize:true`**: `shrimp_coconut_curry`, `red_curry`, `coconut_turkey_curry`, `chickpea_curry_bowl`. Phase 1 won't pick them; user must add manually.
+
+### Part D: `applyOverrides` extended to forward `scalable`
+
+One-line addition to `applyOverrides`:
+```js
+if(o.scalable!==undefined)newIng.scalable=o.scalable;
+```
+Previously only `dbKey` and `amt` flowed through. Now `scalable:false` on overrides actually sticks — required for the round-pass to "pin" an amount with the per-slot adjuster respecting the pin. Verified safe: no existing code sets `scalable` on overrides, so the change only enables the new flow.
+
+### `roundPkgItemsToBoundary` function (new)
+
+Round trip totals for protein/sauce pkg items to the nearest perPkg multiple, pin amounts via overrides with `scalable:false`. Algorithm:
+
+1. For each item in `ROUND_PKG_ITEMS` (`tofu firm`, `silken tofu`, `ground turkey 93`, `ground chicken`, `canned tuna`, `chicken broth`, `marinara`):
+2. Compute trip total `X` from estimated per-portion amounts (recipe.amt × slot_scale × lMult)
+3. Compute `Y = max(perPkg, round(X / perPkg) × perPkg)` (never zero — minimum 1 container)
+4. Try scaling each usage by `Y / X`. If all per-portion amounts stay within `[minAmt(Solo), maxAmt]`, apply via `setOverride({amt, scalable:false})`.
+5. **Fallback**: if `nearest` blocked by maxAmt → try `Y_floor`. If `nearest` blocked by minAmt → try `Y_ceil`. If both directions fail, leave as-is (no oscillation).
+
+Beans excluded (no recipes use canned variants currently). Coconut milk excluded via `acceptableWaste` flag.
+
+Function defined unconditionally; only the call sites in `randomizeWeek` differ across the 3 options tested below.
+
+### 3-Option Experiment Matrix (this session's centerpiece)
+
+Three integration strategies for the round-pass + estimate:
+
+| Option | Round-pass timing | Estimate strategy |
+|---|---|---|
+| **3 (hybrid, V2)** | only INSIDE `if(totalWaste===0)` block | recipe base × scale (unchanged from Fix A) |
+| **1 (run-first, V3)** | BEFORE the `_fastTripWasteForPersons` gate | reads via `applyOverrides` to see post-rounded state |
+| **2 (smarter estimate, V4)** | only INSIDE conditional | inline-predicts round-pass outcome (`_roundPassWouldFix`) |
+
+Test 1 results (100 deterministic seeds):
+
+| Metric | Commit 1 (V1) | Option 3 (V2) | Option 1 (V3) | Option 2 (V4) | V5 (winner) |
+|---|---|---|---|---|---|
+| INV20 (total) | 741 | **716** ✓ | 751 | 738 | 735 |
+| INV21 (pkg) | 291 | **261** ✓ | 260 | 273 | 271 |
+| INV22 (produce) | 450 | 455 | 491 ⚠ | 465 | 464 |
+| **Hit rate** | 98.36% | 98.21% | 98.36% | 97.43% ⚠ | **98.79%** ✓ |
+| Variance | 94.6% | 94.6% | 95.0% | 95.7% | 94.0% |
+| INV6 P/C drift | 48 | 57 | **167 ⚠** | 78 | 72 |
+| INV6 max drift | 186% | 186% | 201% | 149% | **127%** ✓ |
+| INV18 cap-hit avg | 83% | 79% | **94% ⚠** | 81% | 87% |
+| Other-hard regressions | 0 | 0 | 0 | **INV13=1** ⚠ | 0 |
+| Timing avg | 1006ms | 1016ms | 920ms | 944ms | 1060ms |
+
+**Option 3 won** for Phase 1 (-10% INV21, smallest side-effect cost). Option 1 introduced severe ratio drift (INV6 +109) and oscillation (INV18 +11pp). Option 2 surfaced INV13 violation on seed 12428.
+
+V5 = Option 3 + scallion/garlic threshold relaxation (see below). Hit rate matches saved baseline (98.79%) exactly.
+
+### INV13 surfaced via Option 2 (root-cause investigation)
+
+Option 2's smarter gate let through a previously-rejected SEL combo for seed 12428: 4-portion `turkey_lettuce_wraps` batch (him Wed lunch cook + her Wed lunch sameDayShared + him Fri dinner leftover + her Fri dinner leftover).
+
+**Math chain**:
+- Recipe scallion = 2 each (per portion). `scalable:false`.
+- Per-slot adjuster (which doesn't scale `scalable:false` items) → each portion has 2 scallions pre-unify
+- `unifyCrossPersonRatios` redistributes ALL ingredient amounts (including `scalable:false`) kcal-proportionally across batch portions
+- `totalAmt = 8` scallions, `totalBatchKcal ~ 2700`
+- her Fri dinner kcal share ~ 12% → her Fri dinner scallion = 8 × 0.12 = **0.93**, below `minAmt:1` → **INV13 fires**
+
+**This is a latent bug in `unifyCrossPersonRatios`** that exists for ANY shared/leftover batch where:
+1. Recipe contains a `scalable:false` item with `minAmt > 0`
+2. Lowest-kcal-share portion gets `recipe.amt × N_portions × portion_kcal_share / batch_total_kcal < minAmt`
+
+For 4-portion lunch/dinner batches (the realistic geometry — leftover slots are restricted to lunch/dinner per detector design), share can drop to ~12-15%. Risk surface (current DB):
+
+| Item | minAmt | Recipe usage | Margin |
+|---|---|---|---|
+| **scallion (pre-V5)** | **1.0** | 2 | **-0.07** ← fires |
+| **soy sauce** | **0.5** | 1 | **+0.02** ← borderline |
+| garlic | 0.5 | 2-3 | safe |
+| ginger / sesame seeds / spices | 0.125 | 0.5 | safe |
+| pinned proteins (round-pass) | 3 | 8oz × 4 → 32oz | borderline at low-kcal portion |
+
+### V5 (the threshold relaxation)
+
+Two attempted fixes, only the second survived:
+
+**Attempt 1 — unify+INV7 fix (REVERTED at user request)**: skip `scalable:false` items in `unifyCrossPersonRatios` (don't kcal-prop redistribute them), and exempt them from INV7. Worked: INV13 cleared, INV7 also clean. But user wanted to keep current unify semantics.
+
+**Attempt 2 — DB threshold relaxation (LANDED in V5)**:
+- `scallion`: `minAmt 1 → 0.5`, `minAmtSolo 2 → 1`
+- `garlic`: `minAmt 0.5` (unchanged), added `minAmtSolo: 1`
+
+Rationale: per-portion display amounts in shared batches are kcal-prop fractions of a whole-count cooked total. Recipe `scallion=2` × 4 portions = 8 scallions in pot. Each portion's display is "her share of the 8" — fictional fractional. Allowing display down to 0.5 doesn't change shopping (still buys 8) or cooking (still puts 8 in pot). Solo cooks (1 portion = full dish) get the tighter `minAmtSolo` floor ensuring "at least 1 scallion / 1 garlic clove" actually goes into the dish.
+
+**Soy sauce left at minAmt:0.5 unchanged** per user decision — borderline but no violation today.
+
+### Commit chain (today)
+
+```
+MP_2026-04-28_V1 (011a2dc) Split waste tracker INV20/21/22 + coconut + Part D + round-pass defined
+MP_2026-04-28_V2 (74028fc) Option 3 wiring: round-pass inside conditional only
+MP_2026-04-28_V3 (f18a7b0) Option 1 wiring: run-first + applyOverrides reads (later reverted)
+MP_2026-04-28_V4 (9830bba) Option 2 wiring: smart inline estimate (later reverted)
+MP_2026-04-28_V5 (5616c05) Revert V3+V4 + scallion/garlic threshold relaxation (HEAD, pushed)
+```
+
+### Carryforward — next session focus
+
+User stated: "We will continue our dive into the pkg issues and run through specific examples and how we can possibly improve on our option 3 implementation."
+
+Specifically:
+1. **Drill into specific pkg waste examples** with V5 active. Top contributors per Test 1 V5 run:
+   - chicken broth, ground turkey 93, tofu firm (recurring offenders)
+   - marinara
+   - Single-meal solo waste dominant pattern (one meal × small amount → forced to whole package)
+2. **Improve Option 3 implementation** — explore what's still being missed:
+   - Day-balancer interaction with pinned proteins
+   - Could round-pass reach more boundaries with different fallback heuristics?
+   - Phase 2 candidate from earlier: pkg-increment freeze (allow pinned amounts to step ± perPkg).
+3. **Soy sauce** is borderline (saw 0.52 vs min 0.5 on V5 test). Loosen its threshold too if it ever fires, or proactively.
+
+### Phase 2 (deferred, parked for handoff)
+
+User had originally proposed:
+> when we freeze them.. we freeze them to that package size, but allow them to be +_ by package size increments only
+
+Implementation idea: new `scalable: 'pkg-increments'` value (or `pkgIncrement: perPkg` field on overrides) — adjuster respects the constraint by only scaling by ratios that move trip total by integer multiples of perPkg. This adds flexibility on top of Option 3's hard-pin. Untouched in this session.
+
+### Rules of thumb learned this session
+
+1. **Latent bugs surface when SEL pool widens.** INV13 fired when Option 2's smarter gate let through configurations that pre-existed but had been incidentally filtered out by the previous gate. Predicting "what new SEL combos will pass" is hard; new gate logic deserves stress-test scrutiny on hard-INV count.
+2. **Threshold relaxation can solve assertion violations without changing pipeline semantics.** When the math is correct but the ASSERTION threshold is too tight for fractional kcal-prop displays, loosening the threshold is sometimes cleaner than reworking the math.
+3. **Don't assume deletions** (memory rule reinforced). When asked to "split", "rename", or "replace", treat as additive by default. Ask before removing related artifacts. Today: I removed INV20 thinking the user wanted a clean replace; user clarified INV20 should stay as the rolled-up combined tracker.
+4. **Per-portion display ≠ shopping reality.** For shared batches, what's shown per portion is the kcal-prop split of a whole-count cooked total. Fractional displays are imaginary; shopping list reads the batch total (whole-count) via cook-anchor architecture.
+5. **Option 3 won despite being the simplest.** Option 1 (run-first) and Option 2 (smarter estimate) both had bigger code surfaces and surfaced ratio-drift / oscillation / INV13 issues. The simplest-integration option (run-pass inside the conditional only) had the cleanest trade-offs. Pattern: when adding a new pipeline pass, conservative integration first.
+
+### Communication rules reinforced this session
+- Memory entry added: `feedback_dont_assume_deletions.md`. Treat add/split/rename/replace as additive by default; explicitly ask before deleting bundled artifacts.
+
