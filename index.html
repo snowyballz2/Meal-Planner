@@ -444,7 +444,7 @@ var NUTRI_DB = {
   'egg noodles cooked':    {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', note:'cooked; macros match USDA cooked egg noodles (~221 kcal/cup); ~1 cup dry yields ~2.5 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
   'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:3,pkg:{size:32,unit:'oz',cups:4,type:'carton'}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75, minAmt:0.5, minAmtSolo:1, maxAmt:2},
-  'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each', cupsEach:0.125, wholeWhenSolo:true, minAmt:1, minAmtSolo:2, maxAmt:4},
+  'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each', cupsEach:0.125, wholeWhenSolo:true, minAmt:0.5, minAmtSolo:1, maxAmt:4},
   'bok choy':              {kcal:9,   pro:1,  fat:0.1, carb:1.5, unit:'cup', produce:{perWhole:2,label:'head bok choy'}, minAmt:0.25, maxAmt:2.5},
   'bean sprouts':          {kcal:31,  pro:3,  fat:0.2, carb:6,   unit:'cup', minAmt:0.25, maxAmt:2.0},
   // Fruits
@@ -502,7 +502,7 @@ var NUTRI_DB = {
   'cilantro':              {kcal:1,   pro:0.1,fat:0,   carb:0.1, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'chili flake':           {kcal:6,   pro:0.3,fat:0.3, carb:0.9, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'red pepper flake':      {kcal:6,   pro:0.3,fat:0.3, carb:0.9, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
-  'garlic':{kcal:4,pro:0.2,fat:0,carb:1,unit:'cloves',minAmt:0.5,maxAmt:4},
+  'garlic':{kcal:4,pro:0.2,fat:0,carb:1,unit:'cloves',minAmt:0.5,minAmtSolo:1,maxAmt:4},
   'lemon':                 {kcal:12,  pro:0.5,fat:0.1, carb:4,   unit:'each', minAmt:0.25, maxAmt:1},
   'ginger':                {kcal:6,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'lemongrass':            {kcal:5,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', minAmt:0.5, maxAmt:2},
@@ -6680,11 +6680,6 @@ function roundPkgItemsToBoundary(randTarget){
 function _fastTripWasteForPersons(days, persons){
   const pkgTotals={};
   const produceTotals={};
-  // Option 2: per-item per-usage tracking for inline round-pass prediction.
-  // For each ROUND_PKG_ITEMS dbKey we collect the estimated per-portion
-  // amounts (and isSolo flag) so we can simulate the round-pass and decide
-  // whether to count waste or treat it as fixable.
-  const pkgUsages={};
   days.forEach(function(d){
     persons.forEach(function(p){
       if(p!=='him'&&p!=='her')return;
@@ -6703,20 +6698,14 @@ function _fastTripWasteForPersons(days, persons){
           m.ingredients.forEach(function(i){const db=NUTRI_DB[i.dbKey]; if(db) bk+=db.kcal*(i.amt||0);});
           if(bk>0) scale=getSlotBudget(p,d,s)/bk;
         }
-        const isSolo = (lMult === 1);
         m.ingredients.forEach(function(ing){
           const db=NUTRI_DB[ing.dbKey];
           if(!db)return;
           const eff=(ing.scalable===false)?(ing.amt||0):(ing.amt||0)*scale;
-          if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+          if(db.pkg && !db.pkg.longShelfLife){
             pkgTotals[ing.dbKey]=(pkgTotals[ing.dbKey]||0)+eff*lMult;
-            // Track per-usage for Option 2 round-pass prediction
-            if(typeof ROUND_PKG_ITEMS!=='undefined' && ROUND_PKG_ITEMS.indexOf(ing.dbKey)>=0){
-              if(!pkgUsages[ing.dbKey]) pkgUsages[ing.dbKey]=[];
-              pkgUsages[ing.dbKey].push({estAmt:eff, isSolo:isSolo});
-            }
           }
-          if(db.produce && !db.produce.acceptableWaste){
+          if(db.produce){
             produceTotals[ing.dbKey]=(produceTotals[ing.dbKey]||0)+eff*lMult;
           }
         });
@@ -6724,34 +6713,6 @@ function _fastTripWasteForPersons(days, persons){
     });
   });
   let w=0;
-  // Option 2 round-pass predictor — used inside the pkg block below to
-  // decide whether the round-pass would clean up waste for a given item.
-  // Returns true if scaling all per-usage estimated amounts by Y/X stays
-  // within [minAmt(Solo), maxAmt] for SOME Y in {Y_nearest, Y_other}.
-  function _roundPassWouldFix(dbKey, X, perPkg){
-    const db = NUTRI_DB[dbKey];
-    const usages = pkgUsages[dbKey];
-    if(!db || !usages || !usages.length || X <= 0 || perPkg <= 0) return false;
-    let nearest = Math.round(X/perPkg)*perPkg;
-    if(nearest < perPkg) nearest = perPkg;
-    let other = (nearest >= X) ? Math.floor(X/perPkg)*perPkg : Math.ceil(X/perPkg)*perPkg;
-    if(other < perPkg) other = perPkg;
-    function tryY(Y){
-      if(Y <= 0) return false;
-      const scale = Y/X;
-      for(let i=0;i<usages.length;i++){
-        const u = usages[i];
-        const newAmt = u.estAmt * scale;
-        const floorAmt = (u.isSolo && typeof db.minAmtSolo === 'number')
-          ? db.minAmtSolo
-          : (typeof db.minAmt === 'number' ? db.minAmt : 0);
-        if(typeof db.maxAmt === 'number' && newAmt > db.maxAmt + 0.0001) return false;
-        if(newAmt < floorAmt - 0.0001) return false;
-      }
-      return true;
-    }
-    return tryY(nearest) || tryY(other);
-  }
   Object.keys(pkgTotals).forEach(function(k){
     const db=NUTRI_DB[k]; if(!db||!db.pkg) return;
     const perPkg=(db.pkg.drained&&(db.unit==='cup'||db.unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
@@ -6767,14 +6728,7 @@ function _fastTripWasteForPersons(days, persons){
     // across 100 seeds (382 → 248 — measured against then-INV20, now INV21),
     // +0.43pp primary hit rate, no closed-off meals (all 124 picked meals
     // still get picked, just rebalanced frequencies).
-    //
-    // Option 2 (2026-04-28): if waste>0.01 BUT the round-pass would fix it,
-    // skip counting. Predictor mirrors roundPkgItemsToBoundary's logic
-    // (same per-portion bound checks, same nearest/other fallback).
-    if(waste>0.01){
-      if(_roundPassWouldFix(k, pkgTotals[k], perPkg)) return;
-      w++;
-    }
+    if(waste>0.01) w++;
   });
   Object.keys(produceTotals).forEach(function(k){
     const db=NUTRI_DB[k]; if(!db||!db.produce) return;
@@ -8185,11 +8139,6 @@ function randomizeWeek(target, seed){
     _randomizeWeekCore(randTarget);
 
     invalidateLeftoverCache();
-    // OPTION 2 wiring (2026-04-28): no state mutation before the gate. The
-    // estimate (`_fastTripWasteForPersons`) inline-predicts whether the
-    // round-pass would succeed for each pkg item; success → not counted as
-    // waste. Round-pass actually runs inside the `if(totalWaste===0)` block
-    // (same as Option 3). No applyOverrides reads in the gate.
     // Fast approximate trip waste for retry selection — flex-aware count of
     // packages whose waste can't be flex-fitted. Single source of truth via
     // `_fastTripWasteForPersons`; reroll stages use the same helper so
