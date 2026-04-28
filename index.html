@@ -8156,13 +8156,12 @@ function randomizeWeek(target, seed){
     // by the retry loop exiting on first zero-miss (line below).
     let goalMisses = Infinity;
     if (totalWaste === 0) {
-      // Pre-loop trip-level flex scaling was removed 2026-04-27 — empirical
-      // test (Test A vs B over 100 deterministic seeds) showed it didn't
-      // reduce pkg waste vs running postBalanceWastePass alone in the
-      // convergence loop. Net waste was slightly LOWER without it (-1.4%)
-      // and INV6 P/C drift count dropped 39% (max drift -26pp). The
-      // proportional pre-loop scale was distorting recipes more than it
-      // saved on package boundaries.
+      // OPTION 3 wiring (2026-04-28): round-pass runs INSIDE the conditional
+      // only. Estimate above sees recipe-base × scale (no overrides), so
+      // candidates that would benefit from the round-pass are filtered out
+      // by the gate. Round-pass only affects winners that already cleared
+      // the (Fix-A-strict) gate. This is the most conservative integration.
+      roundPkgItemsToBoundary(randTarget);
       runBalanceAdjusters();
       goalMisses = 0;
       const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
@@ -8248,6 +8247,9 @@ function randomizeWeek(target, seed){
   if (!cacheFromWinner) {
     // Full balance pipeline — runs only when cache wasn't restored from
     // winning retry, or when rerolls invalidated it.
+    // OPTION 3 wiring: round-pass before balancer here too, so post-retry
+    // pipeline matches the inside-loop pipeline.
+    roundPkgItemsToBoundary(randTarget);
     runBalanceAdjusters();
   }
   // Final solo-slot grid snap — day-balancer/flex-scaling can leave non-batch
