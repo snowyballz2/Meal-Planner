@@ -6680,6 +6680,11 @@ function roundPkgItemsToBoundary(randTarget){
 function _fastTripWasteForPersons(days, persons){
   const pkgTotals={};
   const produceTotals={};
+  // Option 2: per-item per-usage tracking for inline round-pass prediction.
+  // For each ROUND_PKG_ITEMS dbKey we collect the estimated per-portion
+  // amounts (and isSolo flag) so we can simulate the round-pass and decide
+  // whether to count waste or treat it as fixable.
+  const pkgUsages={};
   days.forEach(function(d){
     persons.forEach(function(p){
       if(p!=='him'&&p!=='her')return;
@@ -6691,27 +6696,25 @@ function _fastTripWasteForPersons(days, persons){
         const lo=(_leftoverCache||computeLeftovers())[key];
         if(lo&&lo.isLeftover)return;
         const lMult=(lo&&!lo.isLeftover&&lo.servings>1)?lo.servings:1;
-        const m=getMeal(mealId); if(!m||!m[p]||!m[p].ingredients)return;
-        // OPTION 1 (2026-04-28): read post-override ingredients via applyOverrides
-        // so that round-pass-pinned amounts flow into the estimate. Items with
-        // override `scalable:false` skip the linear scale (already pinned). Other
-        // items still get linear-scaled estimate as before.
-        const ingrs = applyOverrides(m[p], p, d, s);
+        const m=getMeal(mealId); if(!m||!m.ingredients)return;
         let scale=1;
         if(s!=='shake'&&SLOT_BUDGET[s]){
           let bk=0;
-          ingrs.forEach(function(i){
-            if(i.scalable===false)return; // pinned items don't contribute to scale base
-            const db=NUTRI_DB[i.dbKey]; if(db) bk+=db.kcal*(i.amt||0);
-          });
+          m.ingredients.forEach(function(i){const db=NUTRI_DB[i.dbKey]; if(db) bk+=db.kcal*(i.amt||0);});
           if(bk>0) scale=getSlotBudget(p,d,s)/bk;
         }
-        ingrs.forEach(function(ing){
+        const isSolo = (lMult === 1);
+        m.ingredients.forEach(function(ing){
           const db=NUTRI_DB[ing.dbKey];
           if(!db)return;
           const eff=(ing.scalable===false)?(ing.amt||0):(ing.amt||0)*scale;
           if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
             pkgTotals[ing.dbKey]=(pkgTotals[ing.dbKey]||0)+eff*lMult;
+            // Track per-usage for Option 2 round-pass prediction
+            if(typeof ROUND_PKG_ITEMS!=='undefined' && ROUND_PKG_ITEMS.indexOf(ing.dbKey)>=0){
+              if(!pkgUsages[ing.dbKey]) pkgUsages[ing.dbKey]=[];
+              pkgUsages[ing.dbKey].push({estAmt:eff, isSolo:isSolo});
+            }
           }
           if(db.produce && !db.produce.acceptableWaste){
             produceTotals[ing.dbKey]=(produceTotals[ing.dbKey]||0)+eff*lMult;
@@ -6721,6 +6724,34 @@ function _fastTripWasteForPersons(days, persons){
     });
   });
   let w=0;
+  // Option 2 round-pass predictor — used inside the pkg block below to
+  // decide whether the round-pass would clean up waste for a given item.
+  // Returns true if scaling all per-usage estimated amounts by Y/X stays
+  // within [minAmt(Solo), maxAmt] for SOME Y in {Y_nearest, Y_other}.
+  function _roundPassWouldFix(dbKey, X, perPkg){
+    const db = NUTRI_DB[dbKey];
+    const usages = pkgUsages[dbKey];
+    if(!db || !usages || !usages.length || X <= 0 || perPkg <= 0) return false;
+    let nearest = Math.round(X/perPkg)*perPkg;
+    if(nearest < perPkg) nearest = perPkg;
+    let other = (nearest >= X) ? Math.floor(X/perPkg)*perPkg : Math.ceil(X/perPkg)*perPkg;
+    if(other < perPkg) other = perPkg;
+    function tryY(Y){
+      if(Y <= 0) return false;
+      const scale = Y/X;
+      for(let i=0;i<usages.length;i++){
+        const u = usages[i];
+        const newAmt = u.estAmt * scale;
+        const floorAmt = (u.isSolo && typeof db.minAmtSolo === 'number')
+          ? db.minAmtSolo
+          : (typeof db.minAmt === 'number' ? db.minAmt : 0);
+        if(typeof db.maxAmt === 'number' && newAmt > db.maxAmt + 0.0001) return false;
+        if(newAmt < floorAmt - 0.0001) return false;
+      }
+      return true;
+    }
+    return tryY(nearest) || tryY(other);
+  }
   Object.keys(pkgTotals).forEach(function(k){
     const db=NUTRI_DB[k]; if(!db||!db.pkg) return;
     const perPkg=(db.pkg.drained&&(db.unit==='cup'||db.unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
@@ -6736,7 +6767,14 @@ function _fastTripWasteForPersons(days, persons){
     // across 100 seeds (382 → 248 — measured against then-INV20, now INV21),
     // +0.43pp primary hit rate, no closed-off meals (all 124 picked meals
     // still get picked, just rebalanced frequencies).
-    if(waste>0.01) w++;
+    //
+    // Option 2 (2026-04-28): if waste>0.01 BUT the round-pass would fix it,
+    // skip counting. Predictor mirrors roundPkgItemsToBoundary's logic
+    // (same per-portion bound checks, same nearest/other fallback).
+    if(waste>0.01){
+      if(_roundPassWouldFix(k, pkgTotals[k], perPkg)) return;
+      w++;
+    }
   });
   Object.keys(produceTotals).forEach(function(k){
     const db=NUTRI_DB[k]; if(!db||!db.produce) return;
@@ -8147,14 +8185,11 @@ function randomizeWeek(target, seed){
     _randomizeWeekCore(randTarget);
 
     invalidateLeftoverCache();
-    // OPTION 1 wiring (2026-04-28): clear any leftover overrides from prior
-    // retry, then run the round-pass BEFORE the waste estimate. The estimate
-    // (`_fastTripWasteForPersons`) reads via applyOverrides, so it now sees
-    // the post-rounded amounts. Candidates whose pkg waste can be cleaned by
-    // the round-pass pass through the gate; ones that genuinely can't be
-    // fixed (both directions blocked) still register as waste.
-    Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
-    roundPkgItemsToBoundary(randTarget);
+    // OPTION 2 wiring (2026-04-28): no state mutation before the gate. The
+    // estimate (`_fastTripWasteForPersons`) inline-predicts whether the
+    // round-pass would succeed for each pkg item; success → not counted as
+    // waste. Round-pass actually runs inside the `if(totalWaste===0)` block
+    // (same as Option 3). No applyOverrides reads in the gate.
     // Fast approximate trip waste for retry selection — flex-aware count of
     // packages whose waste can't be flex-fitted. Single source of truth via
     // `_fastTripWasteForPersons`; reroll stages use the same helper so
