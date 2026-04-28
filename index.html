@@ -6553,10 +6553,16 @@ function _fastTripWasteForPersons(days, persons){
     const perPkg=(db.pkg.drained&&(db.unit==='cup'||db.unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
     if(perPkg<=0) return;
     const waste=Math.ceil(pkgTotals[k]/perPkg)*perPkg - pkgTotals[k];
-    if(waste>0.01){
-      if(canFlexFitToBoundary(k, pkgTotals[k], perPkg)) return;
-      w++;
-    }
+    // Fix A (2026-04-27): count ALL pkg waste >0.01 in the retry-loop
+    // estimate. The previous version skipped waste that canFlexFitToBoundary
+    // predicted as flex-fixable — but the predicate checks one ingredient's
+    // flex bounds in isolation, ignoring per-day kcal budgets, INV13 maxAmt
+    // caps, and per-usage day-goal-break reverts. Optimistic skipping let
+    // the retry loop pick combos that *predicted* zero waste but the actual
+    // pipeline couldn't deliver. Counting honestly: -35% INV20 fires across
+    // 100 seeds (382 → 248), +0.43pp primary hit rate, no closed-off meals
+    // (all 124 picked meals still get picked, just rebalanced frequencies).
+    if(waste>0.01) w++;
   });
   Object.keys(produceTotals).forEach(function(k){
     const db=NUTRI_DB[k]; if(!db||!db.produce) return;
