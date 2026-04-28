@@ -6691,21 +6691,29 @@ function _fastTripWasteForPersons(days, persons){
         const lo=(_leftoverCache||computeLeftovers())[key];
         if(lo&&lo.isLeftover)return;
         const lMult=(lo&&!lo.isLeftover&&lo.servings>1)?lo.servings:1;
-        const m=getMeal(mealId); if(!m||!m.ingredients)return;
+        const m=getMeal(mealId); if(!m||!m[p]||!m[p].ingredients)return;
+        // OPTION 1 (2026-04-28): read post-override ingredients via applyOverrides
+        // so that round-pass-pinned amounts flow into the estimate. Items with
+        // override `scalable:false` skip the linear scale (already pinned). Other
+        // items still get linear-scaled estimate as before.
+        const ingrs = applyOverrides(m[p], p, d, s);
         let scale=1;
         if(s!=='shake'&&SLOT_BUDGET[s]){
           let bk=0;
-          m.ingredients.forEach(function(i){const db=NUTRI_DB[i.dbKey]; if(db) bk+=db.kcal*(i.amt||0);});
+          ingrs.forEach(function(i){
+            if(i.scalable===false)return; // pinned items don't contribute to scale base
+            const db=NUTRI_DB[i.dbKey]; if(db) bk+=db.kcal*(i.amt||0);
+          });
           if(bk>0) scale=getSlotBudget(p,d,s)/bk;
         }
-        m.ingredients.forEach(function(ing){
+        ingrs.forEach(function(ing){
           const db=NUTRI_DB[ing.dbKey];
           if(!db)return;
           const eff=(ing.scalable===false)?(ing.amt||0):(ing.amt||0)*scale;
-          if(db.pkg && !db.pkg.longShelfLife){
+          if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
             pkgTotals[ing.dbKey]=(pkgTotals[ing.dbKey]||0)+eff*lMult;
           }
-          if(db.produce){
+          if(db.produce && !db.produce.acceptableWaste){
             produceTotals[ing.dbKey]=(produceTotals[ing.dbKey]||0)+eff*lMult;
           }
         });
@@ -8139,6 +8147,14 @@ function randomizeWeek(target, seed){
     _randomizeWeekCore(randTarget);
 
     invalidateLeftoverCache();
+    // OPTION 1 wiring (2026-04-28): clear any leftover overrides from prior
+    // retry, then run the round-pass BEFORE the waste estimate. The estimate
+    // (`_fastTripWasteForPersons`) reads via applyOverrides, so it now sees
+    // the post-rounded amounts. Candidates whose pkg waste can be cleaned by
+    // the round-pass pass through the gate; ones that genuinely can't be
+    // fixed (both directions blocked) still register as waste.
+    Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
+    roundPkgItemsToBoundary(randTarget);
     // Fast approximate trip waste for retry selection — flex-aware count of
     // packages whose waste can't be flex-fitted. Single source of truth via
     // `_fastTripWasteForPersons`; reroll stages use the same helper so
