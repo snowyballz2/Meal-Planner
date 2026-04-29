@@ -1983,3 +1983,133 @@ Implementation idea: new `scalable: 'pkg-increments'` value (or `pkgIncrement: p
 ### Communication rules reinforced this session
 - Memory entry added: `feedback_dont_assume_deletions.md`. Treat add/split/rename/replace as additive by default; explicitly ask before deleting bundled artifacts.
 
+## Session 2026-04-29 — `freezeTripTotals` rewrite, Option C unify, celery cup-produce revamp
+
+Branch: `MP_2026-04-29_V1`. Long, iterative session through several false starts on the round-pass / freeze architecture, ending with a clean working state.
+
+### Headline numbers (Test 1, 100 seeds, deterministic)
+
+| Metric | Saved baseline | Session end | Δ |
+|---|---|---|---|
+| Primary hit rate | 98.79% | 97.36% | -1.43pp |
+| INV7 (cross-person ratio) | 0 | **0** ✓ | clean |
+| INV20 (waste hard) | 247 | **107** | **-140** ✓ |
+| INV21 (pkg waste tracking) | 0 | 67 | new split |
+| INV22 (produce waste tracking) | 0 | 40 | new split |
+| INV18 (cap-hit rate) | 81% | **0%** | -81pp ✓ |
+| INV6 (P/C tracking) | 58 | 100 | +42 |
+| INV14 | 0 | **0** | clean |
+| veg under-3c misses | 3 | 16 | +13 (regression — see below) |
+| Timing avg | ~1010ms | ~995ms | similar |
+
+Net: pkg/produce trip-total waste roughly halved (-140 INV20 fires), convergence-loop oscillation eliminated, INV7 clean, INV14 clean. Primary hit rate regression is concentrated entirely in **veg-under-3c** misses (16 fires, 14 of them in 2.75-3.0c bucket — just under threshold) caused by disabling both `boostBatchVegForDailyTarget` and `boostFV`'s growth on frozen veg. Open follow-up.
+
+### Architecture changes (this session)
+
+#### `freezeTripTotals` — full rewrite of the round-pass
+
+Replaces `roundPkgItemsToBoundary` (left defined but unused). New algorithm:
+
+1. **Operates on already-adjusted/unified cache values**, not estimates. Caller's previous `runBalanceAdjusters` pass populates the cache with per-slot-adjusted + day-balanced + unified amounts.
+2. For each trip × eligible item, gather **contributors**:
+   - **Solo cook** = single portion (`lo.portions.length === 1` or no `lo`).
+   - **Multi-cook batch** = anchor + all leftover slots (uses `lo.portions`).
+3. **Solos** scale + snap to ingredient grid (0.25c, 1oz, etc.). Solo new amt may end up at current value (no boundary crossed) or ±1 grid step.
+4. **Multi-cook batches** absorb the remainder so trip total lands on perUnit. With multiple multi-cook batches, distribute via **largest-remainder** paired-snap (each batch total on grid, sum = absorbable).
+5. **Per-portion within batch**: scale by `new_total / old_total` (uniform). Preserves whatever ratio unify produced.
+6. **Trade hierarchy** when bounds fail (per-portion < minAmt or > maxAmt):
+   1. Cap the failing batch at its max-feasible / min-feasible total.
+   2. Redistribute leftover absorbable to other batches.
+   3. Bump solos up/down by 1 grid step within `[minAmt(Solo), maxAmt(Solo)]`.
+   4. Try `Y_other` (the other rounding direction).
+   5. If still infeasible, leave trip unfrozen for this item.
+7. **Writes** cache amts directly (immediate visibility) AND `setOverride('amt', ..., 'scalable', false)` (persists across cache rebuild). **Invalidates affected day caches** at the end so the caller's next `runBalanceAdjusters` re-runs `balanceDayMacros` to compensate any kcal shift via non-frozen items.
+
+#### Pipeline order around freeze
+
+Each call site (retry-loop and post-retry) now does:
+```
+runBalanceAdjusters();   // unify produces ratios, populates cache
+freezeTripTotals(target); // writes cache+overrides, invalidates affected days
+runBalanceAdjusters();   // rebuild via per-slot adjuster (frozen items respected via override),
+                         // balanceDayMacros compensates non-frozen items, unify reconciles
+```
+
+Cost: ~2× convergence work. Timing 995ms avg (similar to baseline 1010ms — convergence loop exits faster post-freeze because most items are already at fixed point).
+
+#### Option C — unify uses slot budget as kcal-prop denominator
+
+unify (`unifyCrossPersonRatios`) was previously using **actual portion kcal** (`Σ db.kcal × ing.amt` for each slot's ingredients) as the denominator for kcal-prop redistribution. After freeze writes, frozen items' amts shift, slot kcals shift, post-rebuild unify produces ratios at NEW kcals — different from freeze's locked ratios. Drift fired INV7.
+
+Option C: replace `kcal = Σ(db.kcal × i.amt)` with `kcal = getSlotBudget(p, d, s)`. Slot budgets are **constants** independent of cache state. Pre-freeze and post-freeze ratios both compute as `budget_him / budget_her` → identical. Frozen items at uniform-scaled-pre-freeze ratio = budget ratio. Non-frozen items at unify's current-budget ratio = budget ratio. **All ingredients in batch at the same ratio.** INV7 clean.
+
+Single-line change in unify (line 7961). The earlier **"option B" attempt** (let unify process frozen items, iterate) was tried first and reverted — INV8 fires from off-grid batch totals and unify→snap oscillation. Option C wins.
+
+#### `_clampThresh` mts fix for batch-leftover slots
+
+`getDayBalancedIngredients` previously computed `mts = (lo && !lo.isLeftover) ? lo.totalServings : 1`. Leftover slots got mts=1 → `isSharedOrLeftover=false` → `_effMin` used `db.minAmtSolo`, which clamped freeze-pinned values UP on the leftover side, breaking ratio uniformity.
+
+Fix: for leftover slots (`lo.isLeftover === true`), search the leftover map for a cook anchor whose `lo.portions` contains this slot, use that anchor's `totalServings` for mts. Now batch-leftover slots see mts > 1 → `isSharedOrLeftover=true` → `_effMin` returns `db.minAmt` (matches freeze's bound check).
+
+#### `boostFV` skip-frozen check (the actual bug for veg drift)
+
+`boostFV` inside `balanceDayMacros` (P4 priority) was growing frozen veg by 0.25c when day was under 3c veg target — it ignored `scalable:false`. This shifted batch totals off perWhole AND broke cross-person ratios. Confused with `boostBatchVegForDailyTarget` (disabled separately) — they're TWO different boost functions:
+
+- `boostBatchVegForDailyTarget` runs in `runBalanceAdjusters` convergence loop, grows whole batches. **Disabled this session.**
+- `boostFV` runs in `balanceDayMacros` P4, grows a single ingredient slot by 0.25c. **Now skips frozen items.**
+
+Fix: added `if(x.scalable===false && (in ROUND_PKG_ITEMS || ROUND_PRODUCE_ITEMS)) return false;` to boostFV's filter. Also added `scalable: i.scalable` to `itemsByRole`'s output object so the check has the data.
+
+#### `postBalanceWastePass` disabled in convergence loop
+
+Earlier in session: replaced by freeze for the trip-rounding job. Function still defined for revert safety; call site in `runBalanceAdjusters` line 8090 is `var w = false; // var w = postBalanceWastePass(); ...`.
+
+#### Other cleanups
+
+- **Veg/fruit recipe-base pin** in `getDayBalancedIngredients` lines 3603-3614 **removed**. Was forcing veg to recipe-base regardless of adjustIngredients output, breaking unify's kcal-prop ratios on cross-person batches.
+- **`adjustIngredients` solo-only veg protections**: gated to `!isSharedOrLeftover` so they only fire on solo cooks. Multi-cook batches let veg scale freely (unify's batch-level veg-floor still applies).
+- **Carrot float bug fix**: `Math.ceil(6.75 / 0.75) = Math.ceil(9.000000000002) = 10` — buying an extra carrot. New `_pkgsNeeded(total, perUnit)` helper does `Math.ceil(total/perUnit - 1e-9)`. Applied at 5 sites: `shopQtyWithCount` (produce display + pkg display), shopping list waste display, INV20 verifier (pkg + produce branches), `_fastTripWasteForPersons`.
+- **`unifyCrossPersonRatios` skip-frozen check**: added at the top of the per-ingredient anchor loop. Frozen items in `ROUND_PKG_ITEMS ∪ ROUND_PRODUCE_ITEMS` with `scalable:false` are skipped. Recipe-fixed items (scalable:false NOT in our lists, e.g. salsa, garlic powder) are still unified — keeps INV7 happy on those. (Two failed attempts before landing here: skipping ALL scalable:false broke recipe-fixed item unification.)
+- **`snapBatchTotals`, `snapBatchTotalsToGrid`, `snapSoloSlotAmountsToGrid`**: same skip-frozen check (`ROUND_PKG_ITEMS ∪ ROUND_PRODUCE_ITEMS` items with scalable:false).
+
+### DB / recipe data changes
+
+- **Celery revamped from `each` to `cup`** (per user). Old: `unit:'each', cupsEach:0.5, wholeOnly:true, minAmt:1, minAmtSolo:2, maxAmt:3`. New: `unit:'cup', produce:{perWhole:0.5, label:'stalk celery'}, minAmt:0.125, minAmtSolo:0.5, maxAmt:2`. Macros doubled (kcal 6→12, pro 0.6, fat 0.2, carb 2.4 — per cup, since 1 stalk = 0.5 cup). `wholeOnly` flag removed → INV7 now checks celery's cross-person ratios (was exempted before).
+- **Celery added to `ROUND_PRODUCE_ITEMS`** (now 14 items).
+- **6 recipes' celery amounts converted**: 2 stalks → 1 cup (celery_yogurt_dip, celery_tuna_salad, celery_apple_plate, chicken_noodle_soup); 1 stalk → 0.5 cup (lentil_soup_lean, cannellini_kale_soup).
+- **Red onion `minAmt` 0.1 → 0.125** (per user). `minAmtSolo` stays at 0.25.
+
+### Verified clean (test/seed level)
+
+- Seed 12345: chicken_noodle_soup batch — all ingredients at 1.558 ratio (= 896/575 budget ratio). INV7 0.
+- Seed 12353: salmon_lentils baby spinach — him 1.523, her 0.977. **Was firing 21.8% drift**, now matches budget ratio.
+- Seed 12444: quinoa_bowl broccoli — her 1.075, him 1.675. **Was firing 18.9% drift**, now matches.
+- Seeds 12412, 12427: chicken_noodle_soup red onion — both clean now.
+
+### Open items for next session
+
+1. **veg-under-3c regression** (16 misses vs 3 baseline). Disabling both veg boosts on frozen items leaves no path to grow veg when day is under target AND the recipe's veg is already frozen at perWhole. Options:
+   - Re-enable `boostBatchVegForDailyTarget` with the same scalable:false skip we added to boostFV. With both boosts skipping frozen items, growth would have to come from non-frozen veg sources only — limited.
+   - Allow freeze to round UP for veg-short days (heuristic: if any day's veg target is at risk, prefer Y_ceil over Y_floor).
+   - Have freeze grow veg ABOVE perWhole boundary if needed for daily target (sacrificing the perWhole alignment for veg specifically).
+2. **INV20 = 107 remaining waste fires.** Top contributors per the violation samples: chicken broth (multi-trip cases, perUnit=4 cup), red onion (single-meal solo cases, perUnit=1 cup). Most fires are cases where freeze couldn't land trip total on perWhole because per-portion bounds blocked both Y_nearest and Y_other. Could investigate per-seed trade fallback opportunities.
+3. **INV6 max drift 222%** (`sweet_potato_egg_hash` 26 fires, top offender). Recipe-rebalance candidate.
+4. **Test 2 / Test 3 not re-run** with current state. Need fresh baselines saved.
+
+### Carry-forward localStorage seeds
+
+```js
+// Test 1 (deterministic, seeds 12345..12444):
+localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({primary:97.36, inv6:100, inv6MaxPct:222, inv14:0, inv15Him:3.5, inv16Her:2.5, inv18AvgPct:0, hardFail:1, closedPct:0, avgVariance:94.4, missCounts:{kcalLow:3, kcalHigh:0, pro:2, carbPct:9, fatPct:6, veg:16, fruit:4}, timingAvg:995, mode:'standard'}));
+```
+
+(Test 2/3 baselines from prior sessions are stale; re-run when continuing.)
+
+### Rules of thumb learned this session
+
+1. **Multiple boost functions can share root causes.** I disabled `boostBatchVegForDailyTarget` (the convergence-loop pass) and incorrectly told the user "boost is off" — but `boostFV` (a different function inside `balanceDayMacros`) was still actively growing frozen veg by 0.25c. The bug fix needed both. **Lesson**: when a class of functions exists (boost, snap, unify), check ALL of them for the same skip logic when adding a new constraint like "frozen items immutable."
+2. **`itemsByRole`'s output schema matters.** Adding a new filter condition (`scalable:false skip`) required adding the field to `itemsByRole`'s output object. Easy to miss when the input flag is `ignoreScalableFalse=true` — it includes scalable:false items but doesn't expose the flag to downstream filters.
+3. **`mts` for batch leftovers is a structural detail with downstream consequences.** Per-slot adjuster's `_effMin`/`_effMax` use mts to switch between minAmt and minAmtSolo. Treating leftover slots as solo (mts=1) was the cause of the freeze-pin clamp-up bug. **Look up the cook anchor's totalServings, don't default to 1.**
+4. **Slot budget as denominator > actual portion kcal as denominator** for unify. Slot budgets are pipeline-stable; actual portion kcals shift with every freeze/snap/boost write. Using budgets makes unify's ratios invariant to upstream mutations.
+5. **Test 1's "freeze + invalidate + rebuild" round-trip is what makes the architecture work.** Earlier attempts to skip the rebuild (write cache directly, no invalidate) avoided INV7 drift but broke kcal compensation. The correct fix is rebuild + use mts + skip frozen in boost/snap/unify.
+

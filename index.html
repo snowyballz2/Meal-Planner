@@ -436,11 +436,11 @@ var NUTRI_DB = {
   'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, maxAmt:2.0},
   'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.25, maxAmt:2.0},
   'grape tomatoes':        {kcal:27,  pro:1.3,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'pint grape tomatoes'}, minAmt:0.25, maxAmt:2.0},
-  'red onion':             {kcal:64,  pro:1.8,fat:0.2, carb:15,  unit:'cup', produce:{perWhole:1,label:'medium red onion'}, minAmt:0.1, minAmtSolo:0.25, maxAmt:0.5},
+  'red onion':             {kcal:64,  pro:1.8,fat:0.2, carb:15,  unit:'cup', produce:{perWhole:1,label:'medium red onion'}, minAmt:0.125, minAmtSolo:0.25, maxAmt:0.5},
   'zucchini':              {kcal:20,  pro:1.5,fat:0.2, carb:3.5, unit:'cup', produce:{perWhole:1.5,label:'medium zucchini'}, minAmt:0.25, maxAmt:2.0},
   'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.25, maxAmt:2.0},
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.25, maxAmt:2.0},
-  'celery':                {kcal:6,   pro:0.3,fat:0.1, carb:1.2, unit:'each', cupsEach:0.5, wholeOnly:true, minAmt:1, minAmtSolo:2, maxAmt:3},
+  'celery':                {kcal:12,  pro:0.6,fat:0.2, carb:2.4, unit:'cup', produce:{perWhole:0.5,label:'stalk celery'}, minAmt:0.125, minAmtSolo:0.5, maxAmt:2},
   'egg noodles cooked':    {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', note:'cooked; macros match USDA cooked egg noodles (~221 kcal/cup); ~1 cup dry yields ~2.5 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
   'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:3,pkg:{size:32,unit:'oz',cups:4,type:'carton'}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75, minAmt:0.5, minAmtSolo:1, maxAmt:2},
@@ -902,7 +902,12 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
   const scalable = [];
   ingredients.forEach(function(ing, idx) {
     if (!ing.scalable) return;
-    if (targetDelta < 0 && ing.role === 'veg') return; // don't cut vegetables
+    // 2026-04-29: gated to solo-only (mts=1). For multi-cook batches, veg
+    // needs to scale (down or up) like every other ingredient so unify's
+    // kcal-prop ratios across portions align with the rest of the recipe;
+    // otherwise INV7 fires on the veg ratio mismatch. Solo cooks keep the
+    // floor (don't shrink veg below recipe base).
+    if (!isSharedOrLeftover && targetDelta < 0 && ing.role === 'veg') return;
     const db = NUTRI_DB[ing.dbKey];
     if (!db || db.kcal === 0) return;
     if (ing.amt <= 0) return;
@@ -934,8 +939,11 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     // No fat freeze — uniform scaling preserves ratios (fat% stays same)
     // The fat drop in step 2 handles cases where fat% is too high after scaling down
 
-    // Veg: never reduce below original
-    if (item.role === 'veg' && newAmt < item.ing.amt) {
+    // Veg: never reduce below original (solo only; 2026-04-29).
+    // For multi-cook batches, veg scales down to track unify's kcal-prop
+    // split across portions — pinning a leftover at recipe base breaks
+    // ratio uniformity. Solo cooks keep the floor.
+    if (!isSharedOrLeftover && item.role === 'veg' && newAmt < item.ing.amt) {
       newAmt = item.ing.amt;
     }
 
@@ -2022,7 +2030,7 @@ const MEALS=[
   steps:['Cut celery into sticks.','Stir garlic powder, dill, black pepper, and a squeeze of lemon into the Greek yogurt.','Dip celery in the yogurt.'],
   him:{},her:{},
   ingredients:[
-    I('celery',2,'veg',false),
+    I('celery',1,'veg',false),
     I('greek yogurt 0%',0.75,'protein'),
     I('garlic powder',0.5,'fixed',false),
     I('dill',0.5,'fixed',false),
@@ -2034,7 +2042,7 @@ const MEALS=[
   steps:['Cut celery into sticks for dipping or leave in 4" "boats".','Mix tuna with Greek yogurt, a squeeze of lemon, and black pepper.','Pile tuna salad onto celery boats, or dip celery sticks into it.'],
   him:{},her:{},
   ingredients:[
-    I('celery',2,'veg',false),
+    I('celery',1,'veg',false),
     I('tuna pouch',1,'protein',false),
     I('greek yogurt 0%',0.25,'protein'),
     I('lemon',0.25,'fixed',false),
@@ -2045,7 +2053,7 @@ const MEALS=[
   steps:['Cut celery into sticks and slice the apple.','Arrange on a plate.'],
   him:{},her:{},
   ingredients:[
-    I('celery',2,'veg',false),
+    I('celery',1,'veg',false),
     I('apple',1,'fruit',false)
   ]},
 
@@ -2176,7 +2184,7 @@ const MEALS=[
     I('egg noodles cooked',1.25,'carb'),
     I('chicken broth',2.5,'liquid'),
     I('carrots',0.75,'veg'),
-    I('celery',2,'veg'),
+    I('celery',1,'veg'),
     I('red onion',0.25,'veg'),
     I('avocado oil',0.5,'fat'),
     I('garlic',1,'fixed',false),
@@ -2314,7 +2322,7 @@ const MEALS=[
     I('egg white',0.5,'protein'),
     I('kale',1,'veg'),
     I('carrots',0.5,'veg'),
-    I('celery',1,'veg'),
+    I('celery',0.5,'veg'),
     I('chicken broth',2,'liquid'),
     I('garlic',1,'fixed',false),
     I('italian seasoning',0.5,'fixed',false),
@@ -2344,7 +2352,7 @@ const MEALS=[
     I('egg white',0.25,'protein'),
     I('kale',1.5,'veg'),
     I('carrots',0.5,'veg'),
-    I('celery',1,'veg'),
+    I('celery',0.5,'veg'),
     I('chicken broth',2.5,'liquid'),
     I('garlic',2,'fixed',false),
     I('lemon',0.5,'condiment',false),
@@ -2613,9 +2621,9 @@ function applyOverrides(port,p,d,s){
     if(o.dbKey!==undefined)newIng.dbKey=o.dbKey;
     if(o.amt!==undefined)newIng.amt=o.amt;
     // Forward `scalable` so override-pinned amounts can opt out of per-slot
-    // calorie scaling. Used by `roundPkgItemsToBoundary` to freeze pkg
-    // protein/sauce amounts at perPkg-multiple values; the day balancer
-    // then compensates via non-pkg ingredients. (Added 2026-04-28.)
+    // calorie scaling. Used by `freezeTripTotals` to pin pkg/produce amounts
+    // at perUnit-multiple values; the day balancer compensates via non-frozen
+    // ingredients. (Added 2026-04-28.)
     if(o.scalable!==undefined)newIng.scalable=o.scalable;
     return newIng;
   });
@@ -2993,6 +3001,20 @@ var SHOP_DISPLAY_NAMES={
   'lentils cooked':'Lentils, cooked',
   'chickpeas cooked':'Chickpeas, cooked'
 };
+
+// Epsilon-tolerant ceil for "how many packages/wholes do we need?" counts.
+// Plain Math.ceil(total/perUnit) is fooled by JS float precision when the
+// quotient is mathematically an integer: e.g. 6.75/0.75 evaluates to
+// 9.000000000000002, and Math.ceil rounds that UP to 10 — buying one extra
+// carrot you don't need. Subtracting a tiny epsilon (1e-9) before ceiling
+// absorbs the noise: a quotient that's actually 9 + 1e-15 rounds back to 9,
+// while a quotient that's 9.001 (genuinely needs the next pkg) is unchanged.
+// 2026-04-29.
+function _pkgsNeeded(total, perUnit){
+  if(!(perUnit > 0) || !(total > 0)) return 0;
+  return Math.ceil(total/perUnit - 1e-9);
+}
+
 function shopQtyWithCount(dbKey,qtyObj){
   const base=fmtQty(qtyObj);
   if(!qtyObj)return base;
@@ -3001,7 +3023,7 @@ function shopQtyWithCount(dbKey,qtyObj){
 
   // Produce count conversion
   if(db.produce){
-    let count=Math.ceil(qtyObj.num/db.produce.perWhole);
+    let count=_pkgsNeeded(qtyObj.num, db.produce.perWhole);
     if(count<=0)count=1;
     return count+' '+db.produce.label+(count>1&&!db.produce.label.match(/bunch|bag/)?'s':'');
   }
@@ -3257,7 +3279,7 @@ function buildShoppingList(trip,who){
           // legitimately carry between trips. Every other pkg type
           // (can/jar/carton/pouch/container) is flagged.
           if(!db.pkg.longShelfLife){
-            const pkgsNeeded=Math.ceil(totalNum/perPkg);
+            const pkgsNeeded=_pkgsNeeded(totalNum, perPkg);
             const totalFromPkgs=pkgsNeeded*perPkg;
             const wasteAmt=totalFromPkgs-totalNum;
             if(wasteAmt>0.05){
@@ -3277,7 +3299,7 @@ function buildShoppingList(trip,who){
         const totalNum=(item.hisSum?item.hisSum.num:0)+(item.herSum?item.herSum.num:0);
         const perWhole=db.produce.perWhole;
         if(perWhole>0&&totalNum>0){
-          const wholesNeeded=Math.ceil(totalNum/perWhole);
+          const wholesNeeded=_pkgsNeeded(totalNum, perWhole);
           const totalFromWholes=wholesNeeded*perWhole;
           const wasteAmt=totalFromWholes-totalNum;
           // Threshold 0.5 unit (50% of one whole produce wasted) — flex pass
@@ -3582,34 +3604,57 @@ function getDayBalancedIngredients(p,d){
       slotAdj=getSlotAdjustment(p,d,s);
     }
     const hints=buildMacroHints(p,d,s);
-    const mts=(lo&&!lo.isLeftover)?(lo.totalServings||lo.servings||1):1;
+    // 2026-04-29: leftover slots that belong to a multi-portion batch must
+    // use the BATCH's totalServings (not 1) so adjustIngredients's mts-aware
+    // bound logic (`_effMin`/`_effMax`) treats them as part of a shared/
+    // leftover cook, not as solo. Without this, _effMin returns minAmtSolo
+    // for cross-person leftover slots — which clamps post-freeze pinned
+    // amounts UP to minAmtSolo and breaks ratio uniformity (the freeze's
+    // bound check uses db.minAmt, but rebuild's clamp uses minAmtSolo →
+    // mismatch fires INV7). Find the cook anchor's totalServings by
+    // scanning the leftover map for an anchor whose `portions` includes
+    // this slot.
+    let mts;
+    if(lo && !lo.isLeftover){
+      mts = lo.totalServings || lo.servings || 1;
+    } else if(lo && lo.isLeftover){
+      mts = 1;
+      const myKey = sk(p,d,s);
+      for(const ak in leftovers){
+        const al = leftovers[ak];
+        if(!al || al.isLeftover || !al.portions) continue;
+        if(al.portions.some(function(pt){return sk(pt.p,pt.d,pt.s)===myKey;})){
+          mts = al.totalServings || al.servings || 1;
+          break;
+        }
+      }
+    } else {
+      mts = 1;
+    }
     // Always route through adjustIngredients — even when slotAdj=0, its
     // early-return branches apply the minAmt/maxAmt clamp so INV13 holds.
     const adj=adjustIngredients(ingr,slotAdj,s,hints,mts);
-    // Look up base recipe amounts for veg/fruit cap
+    // Look up base recipe amounts (kept for reference — used downstream by
+    // unify's veg-floor logic and freeze's bound checks via recipeAmt).
     var mealDef=getMeal(getMealId(p,d,s));
     var baseAmts={};
     if(mealDef&&mealDef.ingredients)mealDef.ingredients.forEach(function(ri){baseAmts[ri.dbKey]=ri.amt;});
+    // 2026-04-29: removed the veg/fruit recipe-base pin. The pin was forcing
+    // veg/fruit to recipeAmt regardless of adjustIngredients output, which
+    // (a) broke unify's kcal-prop ratios on cross-person batches because
+    //     veg ratio stayed at 1.0 while scalable items hit the budget ratio,
+    // (b) clobbered freezeTripTotals's pinned amounts on cache rebuild —
+    //     freeze writes a scalable:false override, but the rebuild reset
+    //     veg/fruit back to recipe base, leaving INV7 firing on frozen
+    //     produce.
+    // adjustIngredients now scales veg/fruit like other scalable items;
+    // db.minAmt (with db.minAmtSolo for single-portion cooks) handles
+    // per-portion floors and db.maxAmt handles ceilings inside adjust-
+    // Ingredients itself. boostFV / boostBatchVegForDailyTarget still
+    // grow veg upward when the daily veg target is missed.
     slots[s]=adj.map(function(a){
       var amt=a.newAmt;
       var recipeAmt=baseAmts[a.ing.dbKey]||a.ing.amt;
-      // Veg/fruit: ALWAYS use base recipe amount. The per-slot adjuster
-      // must not scale them. Only the daily-level boostFV can increase
-      // them to meet the 3-cup veg floor. Nothing else touches them.
-      // minAmt/maxAmt still apply — base recipe may be below the floor
-      // (e.g. salmon_bowl's 0.125c carrots) and INV13 needs the clamp.
-      // Solo slots (mts=1) use db.minAmtSolo if defined — higher floor for
-      // aromatic quality on single-portion cooks (e.g. 2 scallions).
-      if(a.ing.role==='veg'||a.ing.role==='fruit'){
-        amt=recipeAmt;
-        var vdb=NUTRI_DB[a.ing.dbKey];
-        if(vdb){
-          var vmin = (mts===1 && typeof vdb.minAmtSolo==='number') ? vdb.minAmtSolo
-                   : (typeof vdb.minAmt==='number' ? vdb.minAmt : 0);
-          if(vmin>0&&amt<vmin)amt=vmin;
-          if(typeof vdb.maxAmt==='number'&&amt>vdb.maxAmt)amt=vdb.maxAmt;
-        }
-      }
       return {dbKey:a.ing.dbKey, amt:amt, role:a.ing.role,
               scalable:a.ing.scalable, origAmt:a.ing.amt, recipeAmt:recipeAmt};
     });
@@ -3775,7 +3820,7 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
         if(role&&i.role!==role)return;
         const db=NUTRI_DB[i.dbKey]; if(!db)return;
         const isPkg=!!(db.pkg&&!db.pkg.longShelfLife);
-        out.push({slot:s,idx:idx,db:db,cur:i.amt,isPkg:isPkg,role:i.role,origAmt:i.origAmt,recipeAmt:i.recipeAmt,dbKey:i.dbKey});
+        out.push({slot:s,idx:idx,db:db,cur:i.amt,isPkg:isPkg,role:i.role,origAmt:i.origAmt,recipeAmt:i.recipeAmt,dbKey:i.dbKey,scalable:i.scalable});
       });
     });
     return out;
@@ -3908,6 +3953,14 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     const items=itemsByRole(role, true).filter(function(x){
       if(slotFilter && slotFilter.indexOf(x.slot) === -1) return false;
       if(x.db.unit!=='cup' && !(x.db.unit==='each' && x.db.cupsEach))return false;
+      // 2026-04-29: skip FREEZE-set frozen items. boostFV grew frozen veg
+      // by 0.25c increments, which (a) pushed trip totals off perWhole and
+      // (b) created post-rebuild ratios that didn't match what freeze locked
+      // — INV7 fired because frozen items were rewritten asymmetrically
+      // across cross-person batches.
+      if(x.scalable===false &&
+         (ROUND_PKG_ITEMS.indexOf(x.dbKey) >= 0 ||
+          ROUND_PRODUCE_ITEMS.indexOf(x.dbKey) >= 0)) return false;
       var baseAmt=x.recipeAmt||x.origAmt||x.cur;
       var isLeaf=(x.dbKey==='baby spinach'||x.dbKey==='kale'||x.dbKey==='bok choy');
       // Per-ingredient maxAmt (when defined) takes precedence. Fallback:
@@ -4856,7 +4909,7 @@ function verifyInvariants(){
         if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
           var perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
           if(perPkg > 0){
-            var bought = Math.ceil(totalNum/perPkg) * perPkg;
+            var bought = _pkgsNeeded(totalNum, perPkg) * perPkg;
             var waste = bought - totalNum;
             if(bought > 0){
               var wastePct = waste / bought;
@@ -4878,7 +4931,7 @@ function verifyInvariants(){
         if(db.produce && !db.produce.acceptableWaste){
           var perWhole = db.produce.perWhole;
           if(perWhole > 0){
-            var pBought = Math.ceil(totalNum/perWhole) * perWhole;
+            var pBought = _pkgsNeeded(totalNum, perWhole) * perWhole;
             var pWaste = pBought - totalNum;
             if(pWaste > perWhole * 0.5){
               var pDetail = trip+' '+item.dbKey
@@ -6568,6 +6621,434 @@ function canFlexFitToBoundary(dbKey, amount, perUnit) {
 // Added 2026-04-28.
 var ROUND_PKG_ITEMS = ['tofu firm','silken tofu','ground turkey 93','ground chicken','canned tuna','chicken broth','marinara'];
 
+// Produce items get the "round trip total to nearest perWhole multiple" freeze
+// treatment too. perWhole comes from db.produce.perWhole. Same algorithm as
+// ROUND_PKG_ITEMS, just a different per-unit value. Parallel structure to
+// ROUND_PKG_ITEMS — keeps the freeze function symmetric across pkg + produce.
+// 2026-04-29.
+var ROUND_PRODUCE_ITEMS = ['baby spinach','kale','broccoli','bell pepper','carrots','grape tomatoes','red onion','zucchini','asparagus','bok choy','cucumber','sweet potato','yukon potato','celery'];
+
+// freezeTripTotals — runs after the per-slot adjuster + day-balancer have
+// populated the cache (stages 1+2). For each trip × eligible item:
+//  - Sum trip total across solo cooks + multi-cook batches (uses cache amts).
+//  - Round to nearest perUnit multiple. Solos snap to native grid; multi-cook
+//    batches absorb the remainder via largest-remainder paired-snap so each
+//    batch total lands on grid AND Σ batch totals == absorbable.
+//  - Within each batch, per-portion amts are kcal-prop split of the new
+//    batch total (preserved by scaling the whole batch uniformly).
+//  - Trade hierarchy when per-portion bounds fail: cap the failing batch at
+//    its max-feasible, redistribute surplus to other batches, then bump solos
+//    up/down by one grid step at a time within [minAmt(Solo), maxAmt(Solo)].
+//    If still infeasible at Y_nearest, try Y_other. If both fail, leave the
+//    trip unfrozen for this item.
+//  - Writes overrides {amt, scalable:false} on every affected portion and
+//    invalidates affected day caches so the next read rebuilds via
+//    adjustIngredients (respects scalable:false) + balanceDayMacros (com-
+//    pensates non-frozen items for any kcal shift).
+//
+// Unify and snap functions skip ingredients where any portion's cache item
+// carries scalable:false — the freeze is the authority on those amounts.
+//
+// Replaces the older roundPkgItemsToBoundary mechanism. 2026-04-29.
+function freezeTripTotals(randTarget){
+  var persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  // Caller must run runBalanceAdjusters first so the cache is populated and
+  // unify has produced kcal-prop ratios for every batch. Freeze applies
+  // uniform scaling per batch, which preserves those ratios.
+  //
+  // CRITICAL: do NOT invalidate the cache at the start. It would wipe the
+  // unified state we depend on — getBalancedSlotIngredients would lazy-
+  // rebuild via adjustIngredients (per-slot, not unified), giving us non-
+  // kcal-prop ratios on non-frozen items in cross-person batches → INV7.
+  // We rely on the caller's runBalanceAdjusters having left both caches
+  // valid (computeLeftovers populates _leftoverCache; unify/snap leave
+  // _dayBalancedCache fully populated and unified).
+  //
+  // We DO invalidate affected day caches at the END so the caller can run
+  // runBalanceAdjusters again — that rebuild calls adjustIngredients (which
+  // respects the new scalable:false overrides → frozen items pinned) +
+  // balanceDayMacros (which compensates non-frozen items for the kcal shift
+  // freeze caused). Without that compensation, days drift off-budget.
+  var leftovers = computeLeftovers();
+  var allItems = ROUND_PKG_ITEMS.concat(ROUND_PRODUCE_ITEMS);
+  var affectedDays = {};
+
+  ['cook1','cook2'].forEach(function(trip){
+    var days = TRIP_DAYS_STATIC[trip] || [];
+    allItems.forEach(function(dbKey){
+      var info = _freezeOneItem(dbKey, days, persons, leftovers);
+      if(!info) return;
+      // Write directly to cache AND record an override (with scalable:false).
+      // Cache write makes the freeze immediately visible (avoids a stale read
+      // before the post-freeze runBalanceAdjusters rebuilds). Override
+      // persists across the cache rebuild we trigger below — adjustIngredients
+      // reads it via applyOverrides, sees scalable:false, leaves frozen item
+      // at the override amt; balanceDayMacros and the post-freeze unify then
+      // compensate via non-frozen items.
+      info.solos.forEach(function(so){
+        var soCache = _dayBalancedCache[pk(so.p, so.d)];
+        if(soCache && soCache[so.s] && soCache[so.s][so.idx]){
+          soCache[so.s][so.idx].amt = so.amt;
+          soCache[so.s][so.idx].scalable = false;
+        }
+        setOverride(so.p, so.d, so.s, so.idx, 'amt', so.amt);
+        setOverride(so.p, so.d, so.s, so.idx, 'scalable', false);
+        affectedDays[so.p+'_'+so.d] = {p:so.p, d:so.d};
+      });
+      info.batches.forEach(function(b){
+        b.portions.forEach(function(pt){
+          var ptCache = _dayBalancedCache[pk(pt.p, pt.d)];
+          if(ptCache && ptCache[pt.s] && ptCache[pt.s][pt.idx]){
+            ptCache[pt.s][pt.idx].amt = pt.amt;
+            ptCache[pt.s][pt.idx].scalable = false;
+          }
+          setOverride(pt.p, pt.d, pt.s, pt.idx, 'amt', pt.amt);
+          setOverride(pt.p, pt.d, pt.s, pt.idx, 'scalable', false);
+          affectedDays[pt.p+'_'+pt.d] = {p:pt.p, d:pt.d};
+        });
+      });
+    });
+  });
+
+  // Invalidate affected day caches so the caller's next runBalanceAdjusters
+  // call rebuilds via adjustIngredients (frozen items pinned via overrides)
+  // + balanceDayMacros (non-frozen items compensate for the kcal shift).
+  // unify (also called by runBalanceAdjusters) skips frozen items via the
+  // ROUND_*_ITEMS check we added; non-frozen items get re-unified kcal-prop.
+  Object.keys(affectedDays).forEach(function(k){
+    var ad = affectedDays[k];
+    delete _dayBalancedCache[pk(ad.p, ad.d)];
+  });
+}
+
+// Compute and return the freeze plan for one (item, trip), or null if the
+// trip can't be cleanly frozen for this item.
+function _freezeOneItem(dbKey, days, persons, leftovers){
+  var db = NUTRI_DB[dbKey];
+  if(!db) return null;
+  var perUnit, grid;
+  if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+    perUnit = (db.pkg.drained && (db.unit==='cup'||db.unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
+  } else if(db.produce){
+    perUnit = db.produce.perWhole;
+  } else return null;
+  if(!(perUnit > 0)) return null;
+  // Native ingredient grid (oz=1, cup=0.25, tbsp=0.5 etc.).
+  grid = 0.25;
+  if(db.unit==='oz'||db.unit==='slice'||db.unit==='scoop'||db.unit==='serving') grid = 1;
+  else if(db.unit==='cup') grid = 0.25;
+  else if(db.unit==='tbsp'||db.halfSnap) grid = 0.5;
+  else if(db.unit==='each') grid = db.wholeOnly ? 1 : 0.25;
+  if(db.wholeOnly) grid = 1;
+
+  // Collect contributors from cook anchors only.
+  var solos = []; // [{p, d, s, idx, amt}]
+  var batches = []; // [{portions:[{p,d,s,idx,amt,kcal}], batchTotal, batchKcal}]
+  days.forEach(function(d){
+    persons.forEach(function(p){
+      if(p!=='him' && p!=='her') return;
+      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+        var key = sk(p, d, s);
+        if(SKIPPED[key] || EAT_OUT[key]) return;
+        var lo = leftovers[key];
+        if(lo && lo.isLeftover) return; // anchors only
+        var bal = getBalancedSlotIngredients(p, d, s); // triggers stages 1+2 build if cache missing
+        if(!bal) return;
+        var idx = -1;
+        for(var k=0; k<bal.length; k++){
+          if(bal[k].dbKey === dbKey){ idx = k; break; }
+        }
+        if(idx < 0) return;
+        var portionList = (lo && lo.portions) ? lo.portions : [{p:p, d:d, s:s}];
+        if(portionList.length === 1){
+          solos.push({p:p, d:d, s:s, idx:idx, amt:bal[idx].amt});
+        } else {
+          var portions = [];
+          var batchTotal = 0;
+          var batchKcal = 0;
+          portionList.forEach(function(pt){
+            var pbal = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
+            if(!pbal) return;
+            var pidx = -1;
+            for(var kk=0; kk<pbal.length; kk++){
+              if(pbal[kk].dbKey === dbKey){ pidx = kk; break; }
+            }
+            if(pidx < 0) return;
+            var pkcal = 0;
+            pbal.forEach(function(it){var idb = NUTRI_DB[it.dbKey]; if(idb) pkcal += idb.kcal * it.amt;});
+            portions.push({p:pt.p, d:pt.d, s:pt.s, idx:pidx, amt:pbal[pidx].amt, kcal:pkcal});
+            batchTotal += pbal[pidx].amt;
+            batchKcal += pkcal;
+          });
+          if(portions.length > 0 && batchTotal > 0.001 && batchKcal > 0.001){
+            batches.push({portions:portions, batchTotal:batchTotal, batchKcal:batchKcal});
+          }
+        }
+      });
+    });
+  });
+  if(solos.length === 0 && batches.length === 0) return null;
+
+  var soloSum = solos.reduce(function(a,x){return a+x.amt;}, 0);
+  var batchSum = batches.reduce(function(a,b){return a+b.batchTotal;}, 0);
+  var tripTotal = soloSum + batchSum;
+  if(!(tripTotal > 0.001)) return null;
+
+  // Bounds (per-portion).
+  var floorSolo = (typeof db.minAmtSolo==='number') ? db.minAmtSolo
+                : (typeof db.minAmt==='number' ? db.minAmt : 0);
+  var capSolo   = (typeof db.maxAmtSolo==='number') ? db.maxAmtSolo
+                : (typeof db.maxAmt==='number' ? db.maxAmt : Infinity);
+  var floorB    = (typeof db.minAmt==='number') ? db.minAmt : 0;
+  var capB      = (typeof db.maxAmt==='number') ? db.maxAmt : Infinity;
+
+  // Already on perUnit boundary — freeze current values, no scaling.
+  var Y_round = Math.round(tripTotal/perUnit) * perUnit;
+  if(Math.abs(tripTotal - Y_round) < 0.001 && Y_round >= perUnit){
+    return _onBoundary(solos, batches);
+  }
+  // Try Y_nearest first, then Y_other.
+  var Y_nearest = Math.max(perUnit, Y_round);
+  var floorMult = Math.max(perUnit, Math.floor(tripTotal/perUnit) * perUnit);
+  var ceilMult  = Math.max(perUnit, Math.ceil(tripTotal/perUnit) * perUnit);
+  var Y_other   = (Y_nearest === ceilMult) ? floorMult : ceilMult;
+
+  var ctx = {db:db, grid:grid, floorSolo:floorSolo, capSolo:capSolo, floorB:floorB, capB:capB};
+  var attempt = _tryFreezeY(Y_nearest, solos, batches, tripTotal, ctx);
+  if(!attempt.ok) attempt = _tryFreezeY(Y_other, solos, batches, tripTotal, ctx);
+  if(!attempt.ok) return null;
+  return {solos: attempt.solos, batches: attempt.batches};
+}
+
+// Build a "no-scale" freeze plan for the on-boundary case.
+function _onBoundary(solos, batches){
+  return {
+    solos: solos.map(function(s){return {p:s.p, d:s.d, s:s.s, idx:s.idx, amt:s.amt};}),
+    batches: batches.map(function(b){
+      return {portions: b.portions.map(function(pt){return {p:pt.p, d:pt.d, s:pt.s, idx:pt.idx, amt:pt.amt};})};
+    })
+  };
+}
+
+// Try to land trip total at Y. Solos snap to grid; batches absorb the
+// remainder via largest-remainder paired-snap; trade kicks in when per-
+// portion bounds fail (cap failing batch, redistribute, bump solos).
+function _tryFreezeY(Y, solos, batches, tripTotal, ctx){
+  var grid = ctx.grid;
+  var scale = Y / tripTotal;
+
+  // Step 1: scale + snap solos.
+  var newSolos = [];
+  for(var i=0; i<solos.length; i++){
+    var so = solos[i];
+    var scaled = so.amt * scale;
+    var snapped = Math.round(scaled / grid) * grid;
+    if(snapped < grid) snapped = grid;
+    if(snapped > ctx.capSolo + 0.0001 || snapped < ctx.floorSolo - 0.0001){
+      // Solo's snap is out of bounds. Trade can't move a solo PAST its
+      // bounds — different bumps would only make it worse. This Y is
+      // infeasible regardless of trade; signal to try Y_other.
+      return {ok:false, reason:'solo_bound', soloIdx:i};
+    }
+    newSolos.push({p:so.p, d:so.d, s:so.s, idx:so.idx, amt:snapped});
+  }
+  var soloSnapSum = newSolos.reduce(function(a,x){return a+x.amt;}, 0);
+  var absorbable = Y - soloSnapSum;
+
+  // Step 2: distribute absorbable across multi-cook batches.
+  if(batches.length === 0){
+    if(Math.abs(absorbable) <= 0.001){
+      return {ok:true, solos:newSolos, batches:[]};
+    }
+    // No batch to absorb — try bumping solos by ±1 grid step toward Y.
+    var traded = _tradeSolosOnly(newSolos, absorbable, ctx);
+    if(traded) return {ok:true, solos:traded, batches:[]};
+    return {ok:false, reason:'no_absorber'};
+  }
+
+  // Try basic distribution; if it fails per-portion bounds, trade.
+  var basic = _distributeAcrossBatches(absorbable, batches, ctx);
+  if(basic.ok){
+    return {ok:true, solos:newSolos, batches:basic.batches};
+  }
+  // Trade: cap the failing batch and redistribute. Surplus may go to other
+  // batches and then to solos (one grid step each, within maxAmtSolo).
+  var traded = _tradeBatchesAndSolos(Y, soloSnapSum, newSolos, batches, basic, ctx);
+  if(traded) return {ok:true, solos:traded.solos, batches:traded.batches};
+  return {ok:false, reason:'trade_fail'};
+}
+
+// Largest-remainder distribution of absorbable across multi-cook batches.
+// Each batch's new_total snaps to grid; sums preserved exactly.
+function _distributeAcrossBatches(absorbable, batches, ctx){
+  var grid = ctx.grid;
+  if(batches.length === 1){
+    var b = batches[0];
+    var nt = absorbable;
+    if(nt < grid) return {ok:false, reason:'batch_zero'};
+    // Uniform scale: preserves the per-portion ratios that unify already
+    // produced (kcal-prop). If unify ran before freeze, ratios are kcal-prop;
+    // uniform scale keeps them that way without recomputing kcal denominators
+    // (which would drift after freeze writes change portion kcals).
+    var batchScale = nt / b.batchTotal;
+    var portions = b.portions.map(function(pt){
+      return {p:pt.p, d:pt.d, s:pt.s, idx:pt.idx, amt:pt.amt * batchScale};
+    });
+    var minP = Math.min.apply(null, portions.map(function(p){return p.amt;}));
+    var maxP = Math.max.apply(null, portions.map(function(p){return p.amt;}));
+    if(minP < ctx.floorB - 0.0001) return {ok:false, reason:'batch_min', batchIdx:0, newTotal:nt};
+    if(maxP > ctx.capB + 0.0001) return {ok:false, reason:'batch_max', batchIdx:0, newTotal:nt};
+    return {ok:true, batches:[{portions:portions, newTotal:nt}]};
+  }
+  var multiSum = batches.reduce(function(a,b){return a+b.batchTotal;}, 0);
+  if(!(multiSum > 0.001)) return {ok:false, reason:'multi_zero'};
+  var shares = batches.map(function(b){return b.batchTotal * absorbable / multiSum;});
+  var floors = shares.map(function(sh){return Math.max(grid, Math.floor(sh / grid) * grid);});
+  var totalFloor = floors.reduce(function(a,b){return a+b;}, 0);
+  var rem = absorbable - totalFloor;
+  var extraSteps = Math.round(rem / grid);
+  // Sort batch indices by descending fractional part — top extraSteps get +1 grid.
+  var indices = batches.map(function(_, i){return i;});
+  indices.sort(function(a, b){
+    var fa = (shares[a] - floors[a]) / grid;
+    var fb = (shares[b] - floors[b]) / grid;
+    return fb - fa;
+  });
+  var newTotals = floors.slice();
+  for(var ei=0; ei<extraSteps && ei<indices.length; ei++) newTotals[indices[ei]] += grid;
+  // Validate per-portion bounds for each batch.
+  var newBatches = [];
+  for(var bi=0; bi<batches.length; bi++){
+    var bb = batches[bi];
+    var nt2 = newTotals[bi];
+    if(nt2 < grid) return {ok:false, reason:'batch_zero', batchIdx:bi, newTotal:nt2};
+    // Uniform scale (see comment in batches.length===1 branch).
+    var batchScale2 = nt2 / bb.batchTotal;
+    var portions2 = bb.portions.map(function(pt){
+      return {p:pt.p, d:pt.d, s:pt.s, idx:pt.idx, amt:pt.amt * batchScale2};
+    });
+    var minP2 = Math.min.apply(null, portions2.map(function(p){return p.amt;}));
+    var maxP2 = Math.max.apply(null, portions2.map(function(p){return p.amt;}));
+    if(minP2 < ctx.floorB - 0.0001) return {ok:false, reason:'batch_min', batchIdx:bi, newTotal:nt2};
+    if(maxP2 > ctx.capB + 0.0001) return {ok:false, reason:'batch_max', batchIdx:bi, newTotal:nt2};
+    newBatches.push({portions:portions2, newTotal:nt2});
+  }
+  return {ok:true, batches:newBatches};
+}
+
+// Trade when no batches exist and absorbable != 0: try bumping solos in the
+// needed direction by 1 grid step each, within [minAmt(Solo), maxAmt(Solo)].
+function _tradeSolosOnly(newSolos, absorbable, ctx){
+  var grid = ctx.grid;
+  var direction = absorbable > 0 ? 1 : -1;
+  var stepsNeeded = Math.round(Math.abs(absorbable) / grid);
+  if(stepsNeeded === 0) return newSolos;
+  // Greedy: bump each solo at most enough times to satisfy.
+  // Build a feasibility map per solo.
+  var solos = newSolos.map(function(s){return {p:s.p, d:s.d, s:s.s, idx:s.idx, amt:s.amt};});
+  var stepsRemaining = stepsNeeded;
+  // Each iter: pick a solo with room in `direction`, bump 1 step.
+  for(var iter=0; iter<stepsNeeded * solos.length + 1; iter++){
+    if(stepsRemaining === 0) break;
+    var picked = -1;
+    for(var i=0; i<solos.length; i++){
+      var nextAmt = solos[i].amt + direction * grid;
+      if(direction > 0 && nextAmt <= ctx.capSolo + 0.0001){ picked = i; break; }
+      if(direction < 0 && nextAmt >= ctx.floorSolo - 0.0001 && nextAmt >= grid){ picked = i; break; }
+    }
+    if(picked < 0) return null; // no room left
+    solos[picked].amt += direction * grid;
+    stepsRemaining--;
+  }
+  return stepsRemaining === 0 ? solos : null;
+}
+
+// Trade for the batch+solo case. Cap the failing batch at its max/min-feasible,
+// redistribute leftover absorbable to other batches (proportional + snap),
+// then bump solos within their bounds to absorb any final residue.
+function _tradeBatchesAndSolos(Y, soloSnapSum, newSolos, batches, basicResult, ctx){
+  var grid = ctx.grid;
+  if(batches.length === 0) return null;
+  if(basicResult.batchIdx === undefined || basicResult.reason === 'multi_zero') return null;
+
+  // Cap the failing batch.
+  var failIdx = basicResult.batchIdx;
+  var failBatch = batches[failIdx];
+  var capNewTotal;
+  if(basicResult.reason === 'batch_max'){
+    // Largest-kcal portion = capB → batch_total = capB × batch_kcal / max_portion_kcal.
+    var maxKcal = Math.max.apply(null, failBatch.portions.map(function(p){return p.kcal;}));
+    if(!(maxKcal > 0.001)) return null;
+    capNewTotal = ctx.capB * failBatch.batchKcal / maxKcal;
+    capNewTotal = Math.floor(capNewTotal / grid) * grid; // snap DOWN so cap holds
+    if(capNewTotal < grid) return null;
+  } else if(basicResult.reason === 'batch_min'){
+    // Smallest-kcal portion = floorB → batch_total = floorB × batch_kcal / min_portion_kcal.
+    var minKcal = Math.min.apply(null, failBatch.portions.map(function(p){return p.kcal;}));
+    if(!(minKcal > 0.001)) return null;
+    capNewTotal = ctx.floorB * failBatch.batchKcal / minKcal;
+    capNewTotal = Math.ceil(capNewTotal / grid) * grid; // snap UP so floor holds
+  } else if(basicResult.reason === 'batch_zero'){
+    // Tried to drop to zero — set cap to grid (one step) and redistribute the rest.
+    capNewTotal = grid;
+  } else return null;
+
+  // Re-validate failing batch with capped new_total. Uniform scale preserves
+  // unify's per-portion ratios (matches _distributeAcrossBatches strategy).
+  var capScale = capNewTotal / failBatch.batchTotal;
+  var capPortions = failBatch.portions.map(function(pt){
+    return {p:pt.p, d:pt.d, s:pt.s, idx:pt.idx, amt:pt.amt * capScale};
+  });
+  var minP = Math.min.apply(null, capPortions.map(function(p){return p.amt;}));
+  var maxP = Math.max.apply(null, capPortions.map(function(p){return p.amt;}));
+  if(minP < ctx.floorB - 0.0001 || maxP > ctx.capB + 0.0001) return null;
+
+  // Distribute remaining absorbable across OTHER batches.
+  var remainingAbsorbable = (Y - soloSnapSum) - capNewTotal;
+  var otherBatches = batches.filter(function(_, i){return i !== failIdx;});
+  var otherPlan = otherBatches.length > 0
+    ? _distributeAcrossBatches(remainingAbsorbable, otherBatches, ctx)
+    : (Math.abs(remainingAbsorbable) < 0.001 ? {ok:true, batches:[]} : {ok:false, reason:'no_other'});
+
+  // If other batches couldn't absorb the residue, try bumping solos.
+  var solosOut = newSolos.map(function(s){return {p:s.p, d:s.d, s:s.s, idx:s.idx, amt:s.amt};});
+  if(!otherPlan.ok){
+    // residue = how much we need to shift to/from solos
+    var residue = otherPlan.reason === 'no_other'
+      ? remainingAbsorbable
+      : (otherPlan.batchIdx !== undefined ? remainingAbsorbable - otherPlan.newTotal : remainingAbsorbable);
+    // If batch_max/min on another batch, that's deeper fail — give up trade for now.
+    if(otherPlan.reason !== 'no_other') return null;
+    // Try moving solos by ±grid step each, within [floorSolo, capSolo].
+    var direction = residue > 0 ? 1 : -1;
+    var stepsNeeded = Math.round(Math.abs(residue) / grid);
+    for(var ii=0; ii<stepsNeeded; ii++){
+      var picked = -1;
+      for(var i=0; i<solosOut.length; i++){
+        var nextAmt = solosOut[i].amt + direction * grid;
+        if(direction > 0 && nextAmt <= ctx.capSolo + 0.0001){ picked = i; break; }
+        if(direction < 0 && nextAmt >= ctx.floorSolo - 0.0001 && nextAmt >= grid){ picked = i; break; }
+      }
+      if(picked < 0) return null; // out of solo headroom
+      solosOut[picked].amt += direction * grid;
+    }
+    otherPlan = {ok:true, batches:[]}; // residue absorbed by solos
+  }
+
+  // Reassemble the full batch plan in original order.
+  var batchPlan = new Array(batches.length);
+  batchPlan[failIdx] = {portions:capPortions, newTotal:capNewTotal};
+  var op = 0;
+  for(var i=0; i<batches.length; i++){
+    if(i === failIdx) continue;
+    batchPlan[i] = otherPlan.batches[op++] || null;
+  }
+  // Sanity: any null entries means we miscounted other batches — fail safe.
+  for(var i=0; i<batchPlan.length; i++){ if(!batchPlan[i]) return null; }
+
+  return {solos: solosOut, batches: batchPlan};
+}
+
 function roundPkgItemsToBoundary(randTarget){
   var persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
   invalidateLeftoverCache();
@@ -6717,7 +7198,7 @@ function _fastTripWasteForPersons(days, persons){
     const db=NUTRI_DB[k]; if(!db||!db.pkg) return;
     const perPkg=(db.pkg.drained&&(db.unit==='cup'||db.unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
     if(perPkg<=0) return;
-    const waste=Math.ceil(pkgTotals[k]/perPkg)*perPkg - pkgTotals[k];
+    const waste=_pkgsNeeded(pkgTotals[k], perPkg)*perPkg - pkgTotals[k];
     // Fix A (2026-04-27): count ALL pkg waste >0.01 in the retry-loop
     // estimate. The previous version skipped waste that canFlexFitToBoundary
     // predicted as flex-fixable — but the predicate checks one ingredient's
@@ -6734,7 +7215,7 @@ function _fastTripWasteForPersons(days, persons){
     const db=NUTRI_DB[k]; if(!db||!db.produce) return;
     const perWhole=db.produce.perWhole;
     if(perWhole<=0) return;
-    const waste=Math.ceil(produceTotals[k]/perWhole)*perWhole - produceTotals[k];
+    const waste=_pkgsNeeded(produceTotals[k], perWhole)*perWhole - produceTotals[k];
     // Threshold matches the shopping-list waste warning: only count "real"
     // waste of >50% of one whole produce. Smaller fractional waste is
     // unavoidable noise on every produce item.
@@ -7278,6 +7759,10 @@ function snapSoloSlotAmountsToGrid(){
           if (!db) return;
           if (db.pkg && !db.pkg.longShelfLife) return;
           if (bi.amt < 0.001) return;
+          // Skip FREEZE-set frozen items only (not recipe-fixed scalable:false).
+          if (bi.scalable === false &&
+              (ROUND_PKG_ITEMS.indexOf(bi.dbKey) >= 0 ||
+               ROUND_PRODUCE_ITEMS.indexOf(bi.dbKey) >= 0)) return;
           // Preserve threshold-floor values: halfSnap items at minAmt:0.125
           // (cinnamon, salt, etc.) and minAmtSolo overrides shouldn't be
           // bumped UP to the next native grid step.
@@ -7346,6 +7831,10 @@ function snapBatchTotalsToGrid(){
         bal.forEach(function(bi,idx){
           var db=NUTRI_DB[bi.dbKey];if(!db)return;
           if(db.pkg&&!db.pkg.longShelfLife)return;
+          // Skip FREEZE-set frozen items only (not recipe-fixed scalable:false).
+          if(bi.scalable===false &&
+             (ROUND_PKG_ITEMS.indexOf(bi.dbKey) >= 0 ||
+              ROUND_PRODUCE_ITEMS.indexOf(bi.dbKey) >= 0)) return;
 
           var portions=[];
           var total=0;
@@ -7503,8 +7992,19 @@ function unifyCrossPersonRatios(){
           var slots=getDayBalancedIngredients(pt.p,pt.d);
           if(!slots||!slots[pt.s])return;
           var bal=slots[pt.s];
-          var kcal=0;
-          bal.forEach(function(i){var db=NUTRI_DB[i.dbKey];if(db)kcal+=db.kcal*i.amt;});
+          // 2026-04-29 (option C): use slot BUDGET as the kcal-prop
+          // denominator instead of the slot's actual current kcal. The slot
+          // budget is a constant — independent of what's currently in the
+          // slot's cache. Pre-freeze and post-freeze portion-kcal-share
+          // ratios are therefore identical, so freeze's uniform scaling
+          // (which preserves pre-freeze ratios) lands at the same ratio
+          // post-freeze unify produces for non-frozen items. Frozen and
+          // non-frozen items end up at the same ratio across batch portions
+          // → INV7 clean. Without this, unify's actual-kcal denominator
+          // shifts with freeze writes, drifting non-frozen items off the
+          // frozen items' locked ratio. Solo cooks unchanged (unify only
+          // processes multi-person batches).
+          var kcal=getSlotBudget(pt.p,pt.d,pt.s);
           portionInfo.push({p:pt.p,d:pt.d,s:pt.s,bal:bal,kcal:kcal});
         });
         if(portionInfo.length<2)return;
@@ -7527,6 +8027,14 @@ function unifyCrossPersonRatios(){
         var batchChanged=false;
         anchorInfo.bal.forEach(function(anchorItem){
           var db=NUTRI_DB[anchorItem.dbKey];if(!db)return;
+          // Skip FREEZE-set frozen items — freezeTripTotals owns these
+          // per-portion amts. We must only skip items in our freeze lists,
+          // NOT recipe-defined scalable:false items (spices, salsa, fixed
+          // condiments) — those still need kcal-prop unification across
+          // cross-person batches or INV7 will fire on them.
+          if(anchorItem.scalable===false &&
+             (ROUND_PKG_ITEMS.indexOf(anchorItem.dbKey) >= 0 ||
+              ROUND_PRODUCE_ITEMS.indexOf(anchorItem.dbKey) >= 0)) return;
           // Resolve per-portion floor: db.minAmt for flagged items (PB, oils,
           // coconut), recipe base amount for veg/fruit, 0 otherwise.
           var floor=0;
@@ -7728,6 +8236,10 @@ function snapBatchTotals(){
           // whole packages (e.g. 3 cans = 5.25 cups). The per-serving amount
           // is just total ÷ servings, nobody measures it directly.
           if(db.pkg&&!db.pkg.longShelfLife)return;
+          // Skip FREEZE-set frozen items only (not recipe-fixed scalable:false).
+          if(ingr.scalable===false &&
+             (ROUND_PKG_ITEMS.indexOf(ingr.dbKey) >= 0 ||
+              ROUND_PRODUCE_ITEMS.indexOf(ingr.dbKey) >= 0)) return;
           var unit=db.unit||'';
           var grid=0.25;
           if(unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving')grid=1;
@@ -8087,9 +8599,17 @@ function runBalanceAdjusters(){
     changed=false;
     var u=unifyCrossPersonRatios();                    // always run — feeds s/g; not tracked for exit
     var s=snapBatchTotals();            if(s)changed=true;
-    var w=postBalanceWastePass();       if(w)changed=true;
+    // 2026-04-28: disabled — round-pass freezes pkg trip totals upstream, so
+    // postBalanceWastePass has no remaining job. Kept defined for now while
+    // the round-pass rewrite lands; re-enable here only if reverting the
+    // freeze-based architecture.
+    var w=false; // var w=postBalanceWastePass();       if(w)changed=true;
     var g=snapBatchTotalsToGrid();      if(g)changed=true;
-    var b=boostBatchVegForDailyTarget();if(b)changed=true;
+    // 2026-04-29: disabled — boost was growing frozen veg batches by 0.25c
+    // increments, ignoring the scalable:false flag, which pushed trip totals
+    // off perWhole boundaries set by freezeTripTotals. Will re-enable after
+    // it's taught to skip frozen items (or moved to run BEFORE freeze).
+    var b=false; // var b=boostBatchVegForDailyTarget(); if(b)changed=true;
     if(_rec)_rec.iters.push({u:u,s:s,w:w,g:g,b:b});
   }
   // Hit safety cap: still `changed` after exhausting iterations.
@@ -8156,12 +8676,18 @@ function randomizeWeek(target, seed){
     // by the retry loop exiting on first zero-miss (line below).
     let goalMisses = Infinity;
     if (totalWaste === 0) {
-      // OPTION 3 wiring (2026-04-28): round-pass runs INSIDE the conditional
-      // only. Estimate above sees recipe-base × scale (no overrides), so
-      // candidates that would benefit from the round-pass are filtered out
-      // by the gate. Round-pass only affects winners that already cleared
-      // the (Fix-A-strict) gate. This is the most conservative integration.
-      roundPkgItemsToBoundary(randTarget);
+      // 2026-04-29: runBalanceAdjusters first so the cache is populated and
+      // unify has produced kcal-prop ratios for all batches. Then freeze
+      // applies uniform-scale-per-batch which preserves unify's ratios.
+      // Frozen items get scalable:false on cache + override; freeze
+      // invalidates affected day caches at the end. Run runBalanceAdjusters
+      // a second time to rebuild those days (adjustIngredients respects
+      // scalable:false → frozen items pinned; balanceDayMacros compensates
+      // non-frozen items for the kcal shift; unify skips frozen items in
+      // cross-person batches via the ROUND_*_ITEMS check, re-unifies the
+      // rest).
+      runBalanceAdjusters();
+      freezeTripTotals(randTarget);
       runBalanceAdjusters();
       goalMisses = 0;
       const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
@@ -8247,9 +8773,11 @@ function randomizeWeek(target, seed){
   if (!cacheFromWinner) {
     // Full balance pipeline — runs only when cache wasn't restored from
     // winning retry, or when rerolls invalidated it.
-    // OPTION 3 wiring: round-pass before balancer here too, so post-retry
-    // pipeline matches the inside-loop pipeline.
-    roundPkgItemsToBoundary(randTarget);
+    // 2026-04-29: same order as inside the retry loop — balancer first so
+    // unify produces kcal-prop ratios, then freeze with uniform scale, then
+    // balancer again to compensate non-frozen items for the kcal shift.
+    runBalanceAdjusters();
+    freezeTripTotals(randTarget);
     runBalanceAdjusters();
   }
   // Final solo-slot grid snap — day-balancer/flex-scaling can leave non-batch
