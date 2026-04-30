@@ -436,7 +436,7 @@ var NUTRI_DB = {
   'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, maxAmt:2.0},
   'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.25, maxAmt:2.0},
   'grape tomatoes':        {kcal:27,  pro:1.3,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'pint grape tomatoes'}, minAmt:0.25, maxAmt:2.0},
-  'red onion':             {kcal:64,  pro:1.8,fat:0.2, carb:15,  unit:'cup', produce:{perWhole:1,label:'medium red onion'}, minAmt:0.125, minAmtSolo:0.25, maxAmt:0.5},
+  'red onion':             {kcal:64,  pro:1.8,fat:0.2, carb:15,  unit:'cup', produce:{perWhole:1,label:'medium red onion'}, minAmt:0.125, minAmtSolo:0.25, maxAmt:1.0},
   'zucchini':              {kcal:20,  pro:1.5,fat:0.2, carb:3.5, unit:'cup', produce:{perWhole:1.5,label:'medium zucchini'}, minAmt:0.25, maxAmt:2.0},
   'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.25, maxAmt:2.0},
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.25, maxAmt:2.0},
@@ -1998,7 +1998,7 @@ const MEALS=[
   him:{},her:{},
   ingredients:[
     I('shrimp',4,'protein'),
-    I('cucumber',1,'veg',false),
+    I('cucumber',1,'veg'),
     I('lemon',0.5,'fixed',false),
     I('dill',0.5,'fixed',false),
     I('black pepper',0.25,'fixed',false)
@@ -2009,7 +2009,7 @@ const MEALS=[
   him:{},her:{},
   ingredients:[
     I('chickpeas cooked',0.5,'protein'),
-    I('cucumber',1,'veg',false),
+    I('cucumber',1,'veg'),
     I('lemon',0.5,'fixed',false),
     I('dill',0.5,'fixed',false),
     I('black pepper',0.25,'fixed',false)
@@ -2030,7 +2030,7 @@ const MEALS=[
   steps:['Cut celery into sticks.','Stir garlic powder, dill, black pepper, and a squeeze of lemon into the Greek yogurt.','Dip celery in the yogurt.'],
   him:{},her:{},
   ingredients:[
-    I('celery',1,'veg',false),
+    I('celery',1,'veg'),
     I('greek yogurt 0%',0.75,'protein'),
     I('garlic powder',0.5,'fixed',false),
     I('dill',0.5,'fixed',false),
@@ -2042,7 +2042,7 @@ const MEALS=[
   steps:['Cut celery into sticks for dipping or leave in 4" "boats".','Mix tuna with Greek yogurt, a squeeze of lemon, and black pepper.','Pile tuna salad onto celery boats, or dip celery sticks into it.'],
   him:{},her:{},
   ingredients:[
-    I('celery',1,'veg',false),
+    I('celery',1,'veg'),
     I('tuna pouch',1,'protein',false),
     I('greek yogurt 0%',0.25,'protein'),
     I('lemon',0.25,'fixed',false),
@@ -2053,7 +2053,7 @@ const MEALS=[
   steps:['Cut celery into sticks and slice the apple.','Arrange on a plate.'],
   him:{},her:{},
   ingredients:[
-    I('celery',1,'veg',false),
+    I('celery',1,'veg'),
     I('apple',1,'fruit',false)
   ]},
 
@@ -2061,7 +2061,7 @@ const MEALS=[
   steps:['Slice cucumber. Dip in hummus.'],
   him:{},her:{},
   ingredients:[
-    I('cucumber',1.5,'veg',false),
+    I('cucumber',1.5,'veg'),
     I('hummus',3,'fat')
   ]},
 
@@ -2274,7 +2274,7 @@ const MEALS=[
   ingredients:[
     I('chickpeas cooked',2.1,'protein'),
     I('grape tomatoes',0.75,'veg'),
-    I('cucumber',1.25,'veg',false),
+    I('cucumber',1.25,'veg'),
     I('bell pepper',0.75,'veg'),
     I('red onion',0.1,'veg'),
     I('olive oil',0.5,'fat'),
@@ -6838,18 +6838,25 @@ function _tryFreezeY(Y, solos, batches, tripTotal, ctx){
   var scale = Y / tripTotal;
 
   // Step 1: scale + snap solos.
+  // When a solo's scaled snap would exceed its per-portion cap (or fall below
+  // its floor), CLAMP the solo at the bound rather than failing the whole Y
+  // attempt. The clamped solo stops contributing additional absorption, but
+  // the trade pass below (`_tradeSolosOnly`) can still bump OTHER solos to
+  // make up the difference. Pattern that motivated this: trip = lentil 3c
+  // (already at chicken-broth maxAmt:3) + congee 0.75c, target = 4c carton.
+  // Without clamping, lentil's snap of 3.20 exceeds cap → return solo_bound,
+  // 0.25c stays as waste. With clamping, lentil stays at 3, _tradeSolosOnly
+  // bumps congee 0.75 → 1.00, trip lands on 4c boundary cleanly.
+  // Snap clamp DOWN at cap (Math.floor) and UP at floor (Math.ceil) to keep
+  // the clamped value on the ingredient grid for downstream consumers.
   var newSolos = [];
   for(var i=0; i<solos.length; i++){
     var so = solos[i];
     var scaled = so.amt * scale;
     var snapped = Math.round(scaled / grid) * grid;
     if(snapped < grid) snapped = grid;
-    if(snapped > ctx.capSolo + 0.0001 || snapped < ctx.floorSolo - 0.0001){
-      // Solo's snap is out of bounds. Trade can't move a solo PAST its
-      // bounds — different bumps would only make it worse. This Y is
-      // infeasible regardless of trade; signal to try Y_other.
-      return {ok:false, reason:'solo_bound', soloIdx:i};
-    }
+    if(snapped > ctx.capSolo) snapped = Math.floor(ctx.capSolo / grid) * grid;
+    if(snapped < ctx.floorSolo) snapped = Math.max(grid, Math.ceil(ctx.floorSolo / grid) * grid);
     newSolos.push({p:so.p, d:so.d, s:so.s, idx:so.idx, amt:snapped});
   }
   var soloSnapSum = newSolos.reduce(function(a,x){return a+x.amt;}, 0);
