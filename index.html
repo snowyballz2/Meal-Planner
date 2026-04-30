@@ -6650,7 +6650,12 @@ var ROUND_PRODUCE_ITEMS = ['baby spinach','kale','broccoli','bell pepper','carro
 // carries scalable:false — the freeze is the authority on those amounts.
 //
 // Replaces the older roundPkgItemsToBoundary mechanism. 2026-04-29.
-function freezeTripTotals(randTarget){
+// `attemptSwap`=true enables the last-resort solo-pkg swap pass: when freeze
+// can't reach a package boundary AND the trip would fire INV20, swap the
+// offending solo meal to a non-pkg alternative. Caller passes true only for
+// the post-retry call site (NOT the retry-loop site, which runs 60+ times
+// and would compound cost). 2026-04-29 (late).
+function freezeTripTotals(randTarget, attemptSwap){
   var persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
   // Caller must run runBalanceAdjusters first so the cache is populated and
   // unify has produced kcal-prop ratios for every batch. Freeze applies
@@ -6677,7 +6682,130 @@ function freezeTripTotals(randTarget){
     var days = TRIP_DAYS_STATIC[trip] || [];
     allItems.forEach(function(dbKey){
       var info = _freezeOneItem(dbKey, days, persons, leftovers);
-      if(!info) return;
+      if(!info){
+        if(attemptSwap){
+          var swap = _trySwapForWaste(dbKey, trip, days, persons, leftovers);
+          if(swap){
+            var key = sk(swap.p, swap.d, swap.s);
+            SEL[key] = swap.newMealId;
+            if(weekData[activeWeek] && weekData[activeWeek].ts){
+              weekData[activeWeek].ts[key] = Date.now();
+            }
+            clearOverrides(swap.p, swap.d, swap.s);
+            affectedDays[swap.p+'_'+swap.d] = {p:swap.p, d:swap.d};
+            if(swap.sharedSlot){
+              var otherP = swap.p==='him' ? 'her' : 'him';
+              var oKey = sk(otherP, swap.d, swap.s);
+              SEL[oKey] = swap.newMealId;
+              if(weekData[activeWeek] && weekData[activeWeek].ts){
+                weekData[activeWeek].ts[oKey] = Date.now();
+              }
+              clearOverrides(otherP, swap.d, swap.s);
+              affectedDays[otherP+'_'+swap.d] = {p:otherP, d:swap.d};
+            }
+            // CO-CONTRIBUTOR CLEANUP: the OUTGOING meal might have shared
+            // pkg/produce ingredients with OTHER slots in this trip. Their
+            // freeze overrides were sized assuming the OLD trip composition
+            // (with the swapped-out meal contributing). Now that contribution
+            // is gone — those overrides are stale and would lock subsequent
+            // freezes into wrong amounts.
+            //
+            // Example: turkey_zucchini_boats (gt93 + marinara) on Him Sun.
+            // Earlier in the freeze loop, gt93 cook2 wrote overrides:
+            //   Him Sun gt93 = 9.6oz + Her Sat gt93 = 6.4oz = 16oz container.
+            // Now we swap Him Sun → burrito_bowl (no gt93). Without this
+            // cleanup, Her Sat keeps 6.4oz override even though it's now
+            // alone in cook2 → trip total 6.4oz wastes 9.6oz of a 16oz can.
+            // With cleanup: clear Her Sat's gt93 override; the post-swap RBA
+            // re-adjusts gt93 to recipe-base; freeze re-evaluates; if it can
+            // still resolve, great; otherwise this slot may also get swapped.
+            var oldMeal = getMeal(swap.oldMealId);
+            if(oldMeal && oldMeal.ingredients){
+              var swapTargetKeys = {};
+              swapTargetKeys[key] = true;
+              if(swap.sharedSlot){
+                var otherPck = swap.p==='him' ? 'her' : 'him';
+                swapTargetKeys[sk(otherPck, swap.d, swap.s)] = true;
+              }
+              // Helper: clear OVERRIDES[k][idx for coKey] on a single slot.
+              var _clearIngOverride = function(p, d, s, coKey){
+                var k2 = sk(p, d, s);
+                var mealId = SEL[k2]; if(!mealId) return false;
+                var meal = getMeal(mealId);
+                if(!meal || !meal.ingredients) return false;
+                var idx = -1;
+                for(var ii=0; ii<meal.ingredients.length; ii++){
+                  if(meal.ingredients[ii].dbKey === coKey){ idx = ii; break; }
+                }
+                if(idx < 0) return false;
+                var ovList = OVERRIDES[k2];
+                if(!ovList) return false;
+                var changed = false;
+                for(var jj=ovList.length-1; jj>=0; jj--){
+                  if(ovList[jj].idx === idx){ ovList.splice(jj, 1); changed = true; }
+                }
+                if(ovList.length === 0) delete OVERRIDES[k2];
+                if(changed) affectedDays[p+'_'+d] = {p:p, d:d};
+                return changed;
+              };
+              oldMeal.ingredients.forEach(function(ing){
+                var coKey = ing.dbKey;
+                if(coKey === dbKey) return; // already handled by this freeze attempt
+                if(ROUND_PKG_ITEMS.indexOf(coKey) < 0 && ROUND_PRODUCE_ITEMS.indexOf(coKey) < 0) return;
+                // Iterate THIS TRIP's days only. For each slot found using
+                // coKey, also clear ANY cross-trip batch portions (anchor or
+                // leftover) so the whole batch's state stays consistent —
+                // partial override clearing across batch portions breaks
+                // unify and triggers INV7/INV8.
+                days.forEach(function(d){
+                  ['him','her'].forEach(function(p){
+                    if(p!=='him' && p!=='her') return;
+                    ['breakfast','lunch','snack','dinner'].forEach(function(s){
+                      var k2 = sk(p, d, s);
+                      if(swapTargetKeys[k2]) return; // swap target already cleared via clearOverrides
+                      var cleared = _clearIngOverride(p, d, s, coKey);
+                      if(!cleared) return;
+                      // If this slot is part of a batch (anchor with leftovers,
+                      // or a leftover itself), clear coKey overrides on ALL
+                      // batch portions — they may live in another trip.
+                      var lo = leftovers[k2];
+                      var anchorLo = null;
+                      if(lo && !lo.isLeftover && lo.portions){
+                        anchorLo = lo;
+                      } else if(lo && lo.isLeftover){
+                        // Leftover slot — find its anchor by scanning leftovers
+                        // for an anchor whose portions include k2.
+                        for(var akey in leftovers){
+                          var alo = leftovers[akey];
+                          if(alo && !alo.isLeftover && alo.portions){
+                            for(var pi=0; pi<alo.portions.length; pi++){
+                              var pp = alo.portions[pi];
+                              if(sk(pp.p, pp.d, pp.s) === k2){ anchorLo = alo; break; }
+                            }
+                            if(anchorLo) break;
+                          }
+                        }
+                      }
+                      if(anchorLo){
+                        anchorLo.portions.forEach(function(pt){
+                          if(sk(pt.p, pt.d, pt.s) === k2) return; // already cleared above
+                          _clearIngOverride(pt.p, pt.d, pt.s, coKey);
+                        });
+                      }
+                    });
+                  });
+                });
+              });
+            }
+            // Full cache invalidation + RBA so subsequent freeze items see
+            // a consistent unified state with all stale overrides resolved.
+            invalidateLeftoverCache();
+            runBalanceAdjusters();
+            leftovers = computeLeftovers();
+          }
+        }
+        return;
+      }
       // Write directly to cache AND record an override (with scalable:false).
       // Cache write makes the freeze immediately visible (avoids a stale read
       // before the post-freeze runBalanceAdjusters rebuilds). Override
@@ -6818,6 +6946,122 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   if(!attempt.ok) attempt = _tryFreezeY(Y_other, solos, batches, tripTotal, ctx);
   if(!attempt.ok) return null;
   return {solos: attempt.solos, batches: attempt.batches};
+}
+
+// Last-resort swap when freeze can't reach a package boundary AND the trip
+// would fire INV20. Targets solo single-meal cases. Replaces the offending
+// meal with a non-pkg, non-discouraged alternative that fits the slot budget
+// and passes a STRICTER variety filter (rejects ALL recent matches; doesn't
+// allow leftover-extending — see comment below).
+//
+// Returns {p, d, s, newMealId, sharedSlot} or null. Caller applies the swap.
+//
+// 2026-04-29 (late): inside-freeze swap pass.
+// Items where we accept package waste rather than swap out the offending meal.
+// Strategy A (Phase 3) still tries to PAIR these — this only blocks the
+// last-resort swap-out path. User preference: a marinara jar's waste is
+// acceptable when no pairing exists. 2026-04-29 (late).
+var SWAP_OUT_EXCLUDE = {'marinara':true};
+
+function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
+  if(SWAP_OUT_EXCLUDE[dbKey]) return null;
+  var db = NUTRI_DB[dbKey];
+  if(!db) return null;
+  var perUnit = 0, isPkg = false;
+  if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+    perUnit = (db.pkg.drained && (db.unit==='cup'||db.unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
+    isPkg = true;
+  } else if(db.produce && !db.produce.acceptableWaste){
+    perUnit = db.produce.perWhole;
+  } else return null;
+  if(!(perUnit > 0)) return null;
+
+  var usingMeals = [];
+  var totalUsed = 0;
+  days.forEach(function(d){
+    persons.forEach(function(p){
+      if(p!=='him' && p!=='her') return;
+      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+        var key = sk(p, d, s);
+        if(SKIPPED[key] || EAT_OUT[key]) return;
+        var lo = leftovers[key];
+        if(lo && lo.isLeftover) return;
+        var mealId = SEL[key]; if(!mealId) return;
+        var meal = getMeal(mealId);
+        if(!meal || !meal.ingredients) return;
+        if(!meal.ingredients.some(function(i){return i.dbKey===dbKey;})) return;
+        var portionList = (lo && lo.portions) ? lo.portions : [{p:p, d:d, s:s}];
+        var portionTotal = 0;
+        portionList.forEach(function(pt){
+          var bal = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
+          if(!bal) return;
+          var ing = bal.find(function(i){return i.dbKey===dbKey;});
+          if(ing) portionTotal += ing.amt;
+        });
+        usingMeals.push({p:p, d:d, s:s, mealId:mealId, lo:lo, batchTotal:portionTotal});
+        totalUsed += portionTotal;
+      });
+    });
+  });
+  if(usingMeals.length === 0) return null;
+
+  // INV20 threshold check.
+  var bought = _pkgsNeeded(totalUsed, perUnit) * perUnit;
+  var waste = bought - totalUsed;
+  if(isPkg){
+    if(bought <= 0 || (waste / bought) <= 0.01) return null;
+  } else {
+    if(waste <= perUnit * 0.5) return null;
+  }
+
+  // Only solo single-meal — multi-meal/multi-portion cases are conservative skip.
+  if(usingMeals.length !== 1) return null;
+  var mu = usingMeals[0];
+  if(mu.lo && (mu.lo.totalServings > 1 || mu.lo.crossPersonCook || mu.lo.shared)) return null;
+  if(MANUAL_SET[sk(mu.p, mu.d, mu.s)]) return null;
+
+  var noRandomizeIds = {};
+  MEALS.forEach(function(m){if(m.noRandomize) noRandomizeIds[m.id] = true;});
+
+  var slotBudget = getSlotBudget(mu.p, mu.d, mu.s);
+  var dayIdx = DAYS.indexOf(mu.d);
+  var recent = (mu.s==='lunch'||mu.s==='dinner') ? getRecentMealIds(dayIdx, DAYS, 4) : [];
+  var lastWk = (mu.s==='lunch'||mu.s==='dinner') ? getLastWeekMealIds() : [];
+  var sharedSlot = SHARED_SCHEDULE[dk(mu.d, mu.s)] === 'shared';
+
+  var candidates = getMealsForSlot(mu.s).filter(function(m){
+    if(m.id === mu.mealId) return false;
+    if(!m[mu.p]) return false;
+    if(noRandomizeIds[m.id]) return false;
+    if(mealUsesDiscouraged(m)) return false;
+    if(mealUsesPkg(m.id)) return false;
+    if(sharedSlot && (!m.him || !m.her)) return false;
+    // Variety filter STRICTER than other phases: reject ALL recent matches,
+    // even if they could leftover-extend an existing anchor. Reason:
+    // leftover-extending would CREATE a new cross-person batch (cook anchor
+    // + new leftover) that may bind at maxAmt and trigger INV7.
+    if(mu.s==='lunch' || mu.s==='dinner'){
+      if(lastWk.indexOf(m.id) >= 0) return false;
+      if(recent.indexOf(m.id) >= 0) return false;
+    }
+    var cBase = 0;
+    m.ingredients.forEach(function(i){var idb = NUTRI_DB[i.dbKey]; if(idb) cBase += idb.kcal*(i.amt||0);});
+    if(slotBudget > 0 && (cBase < slotBudget * 0.35 || cBase > slotBudget * 2.5)) return false;
+    return true;
+  });
+  if(!candidates.length) return null;
+
+  var best = null, bestDiff = Infinity;
+  candidates.forEach(function(c){
+    var cBase = 0;
+    c.ingredients.forEach(function(i){var idb = NUTRI_DB[i.dbKey]; if(idb) cBase += idb.kcal*(i.amt||0);});
+    var diff = Math.abs(cBase - slotBudget);
+    if(diff < bestDiff){ bestDiff = diff; best = c; }
+  });
+  if(!best) return null;
+  // oldMealId returned so caller can clean up co-contributor overrides for
+  // the OUTGOING meal's pkg/produce ingredients in other trip slots.
+  return {p:mu.p, d:mu.d, s:mu.s, oldMealId:mu.mealId, newMealId:best.id, sharedSlot:sharedSlot};
 }
 
 // Build a "no-scale" freeze plan for the on-boundary case.
@@ -8778,15 +9022,23 @@ function randomizeWeek(target, seed){
     cacheFromWinner = false;
   }
   if (!cacheFromWinner) {
-    // Full balance pipeline — runs only when cache wasn't restored from
-    // winning retry, or when rerolls invalidated it.
-    // 2026-04-29: same order as inside the retry loop — balancer first so
-    // unify produces kcal-prop ratios, then freeze with uniform scale, then
-    // balancer again to compensate non-frozen items for the kcal shift.
     runBalanceAdjusters();
-    freezeTripTotals(randTarget);
+    freezeTripTotals(randTarget, true);
+    runBalanceAdjusters();
+  } else {
+    freezeTripTotals(randTarget, true);
     runBalanceAdjusters();
   }
+  // Pass 2 (with swap) — re-establishes overrides on items whose batches got
+  // cleared by the swap pass's co-contributor cleanup but whose cook anchor
+  // lives in a trip the first pass already iterated past. Also catches cases
+  // where pass 1's cleanup removed a co-contributor that pass 1's freeze had
+  // relied on (e.g., pass 1 freeze writes silken tofu Her Mon snack 6oz +
+  // Her Tue dinner 8oz → another swap clears Her Tue dinner's silken tofu
+  // → Her Mon snack alone at 3oz can't fill the carton). attemptSwap=true
+  // here lets pass 2 swap the now-orphaned slot.
+  freezeTripTotals(randTarget, true);
+  runBalanceAdjusters();
   // Final solo-slot grid snap — day-balancer/flex-scaling can leave non-batch
   // amounts sub-grid (honey 6.7586 tbsp etc). Runs last so the cache reaches
   // verifyInvariants with clean per-serving amounts.
@@ -8798,6 +9050,13 @@ function randomizeWeek(target, seed){
   // only mutates the snack slot's cache entry, never the whole day's cache
   // (snacks are never batch members so this is safe).
   rerollKcalOffSnacks(randTarget);
+  // Pass 3 (no swap) — rerollKcalOffSnacks may have swapped a snack to/from
+  // a meal that uses ROUND_PKG_ITEMS or ROUND_PRODUCE_ITEMS (e.g. swap to
+  // cucumber_hummus_light adds 2c cucumber to the trip total, throwing off
+  // a previously-clean perWhole boundary). Re-freeze to absorb those
+  // post-reroll changes. Most items hit _onBoundary fast-path; cost ~50ms.
+  freezeTripTotals(randTarget);
+  runBalanceAdjusters();
   // Runtime invariant check — alert on any data inconsistency
   var inv=verifyInvariants();
   if(inv.length)console.warn('INVARIANT VIOLATIONS ('+inv.length+'):\n'+inv.join('\n'));
@@ -9024,12 +9283,45 @@ function rerollKcalOffSnacks(randTarget){
       const cached = getDayBalancedIngredients(p,d);
       if(!cached.snack) return; // snack slot not built (e.g., empty meal)
       // Snacks are exempt from the 5-day household-repeat rule (small pool).
+      // Also reject candidates that introduce ROUND_PRODUCE_ITEMS the trip
+      // wasn't already using — swapping IN cucumber_hummus_light to a slot
+      // where no other meal in the trip uses cucumber would create new
+      // produce waste (Sat her snack at 2c cucumber alone → buy 2 cucumbers,
+      // waste 1c). mealUsesPkg already covers ROUND_PKG_ITEMS via db.pkg.
+      // 2026-04-29 (late): added produce check.
+      const trip = TRIP_DAYS_STATIC.cook1.indexOf(d) >= 0 ? 'cook1' : 'cook2';
+      const tripDays = TRIP_DAYS_STATIC[trip] || [];
+      const tripProduceUsed = {}; // dbKey -> true if any other slot in trip uses it
+      tripDays.forEach(function(td){
+        ['him','her'].forEach(function(tp){
+          ['breakfast','lunch','snack','dinner'].forEach(function(ts){
+            const tk = sk(tp,td,ts);
+            if(tk === key) return; // skip the slot we're considering swapping
+            const tMealId = SEL[tk]; if(!tMealId) return;
+            const tMeal = getMeal(tMealId);
+            if(!tMeal || !tMeal.ingredients) return;
+            tMeal.ingredients.forEach(function(ing){
+              if(ROUND_PRODUCE_ITEMS.indexOf(ing.dbKey) >= 0){
+                tripProduceUsed[ing.dbKey] = true;
+              }
+            });
+          });
+        });
+      });
       const candidates = getMealsForSlot('snack').filter(function(m){
         if(!m[p])return false;
         if(noRandomizeIds[m.id])return false;
         if(mealUsesPkg(m.id))return false;
         if(mealUsesDiscouraged(m))return false;
         if(m.id===curId)return false;
+        // Reject candidates that introduce a NEW ROUND_PRODUCE_ITEMS dbKey
+        // not already in use by other meals in the trip. Items already in
+        // trip can be added without creating new waste (just enlarges existing
+        // usage). New introductions can.
+        var introducesNewProduce = m.ingredients.some(function(ing){
+          return ROUND_PRODUCE_ITEMS.indexOf(ing.dbKey) >= 0 && !tripProduceUsed[ing.dbKey];
+        });
+        if(introducesNewProduce) return false;
         return true;
       });
       if(!candidates.length)return;

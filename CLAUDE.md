@@ -2113,3 +2113,99 @@ localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({primary:97.36,
 4. **Slot budget as denominator > actual portion kcal as denominator** for unify. Slot budgets are pipeline-stable; actual portion kcals shift with every freeze/snap/boost write. Using budgets makes unify's ratios invariant to upstream mutations.
 5. **Test 1's "freeze + invalidate + rebuild" round-trip is what makes the architecture work.** Earlier attempts to skip the rebuild (write cache directly, no invalidate) avoided INV7 drift but broke kcal compensation. The correct fix is rebuild + use mts + skip frozen in boost/snap/unify.
 
+## Session 2026-04-30 — Solo-pkg swap pass + 3-pass freeze + co-contributor cleanup
+
+Session goal: drive INV20 down from the prior session's 103 fires while keeping all hard INVs at 0. Net result: **INV20 = 12, all 12 are intentional marinara-waste cases** (`SWAP_OUT_EXCLUDE`); zero unintentional waste fires.
+
+### Headline numbers (Test 1, 100-seed deterministic)
+
+| Metric | Session start | Final | Δ |
+|---|---|---|---|
+| Primary hit rate | 97.36% | 98.36% | **+1.00pp** ✓ |
+| INV20 (hard) | 103 | 12 (all marinara) | **−91 (−88%)** ✓ |
+| INV20 excluding marinara | — | **0** | — |
+| INV21 (pkg-waste, tracking) | 67 | 12 | −55 |
+| INV22 (produce-waste, tracking) | 36 | **0** | **−36** |
+| Hard INVs (INV1–13, 17, 19) | 0 | 0 ✓ | clean |
+| INV6 (tracking) | 100 | 112 | +12 |
+| INV14 | 0 | 0 ✓ | clean |
+| veg miss | 16 | 8 | −8 |
+
+### What landed
+
+1. **`red onion maxAmt 0.5 → 1.0`** (DB) — closed 35 produce fires from `mediterranean_chickpea_salad` (0.1c) and `chicken_noodle_soup` (0.25c) where freeze couldn't scale up to fill an onion within `maxAmt:0.5`.
+
+2. **`scalable:false` removed** on cucumber/celery in 7 recipes — exposed pre-existing latent INV7 vulnerability where unify SKIPS items where `scalable:false AND in ROUND_*_ITEMS` (assumes freeze owns them), but freeze applies UNIFORM scale (assumes pre-state was unified). When both conditions held, cross-person batches landed at 1:1 ratio instead of kcal-prop. Affected `mediterranean_chickpea_salad` cucumber + 6 snack recipes (snacks structurally can't fire INV7 since they're never in shared batches, but cleaned up for hygiene).
+
+3. **`_tryFreezeY` solo-bound CLAMP fix** ([index.html:6859](index.html:6859)) — replaced fail-fast solo-bound rejection with clamp-and-continue. Lets `_tradeSolosOnly` redistribute the absorbable across non-clamped solos. Fixes pattern like `lentil_soup_lean 3c (at maxAmt) + savory_congee 0.75c → 4c carton`: previously aborted the whole Y attempt, now clamps lentil at 3c and bumps congee 0.75 → 1.0 to fill the carton.
+
+4. **`_trySwapForWaste` last-resort swap pass** ([index.html:6822-6952](index.html:6822)) — when freeze can't reach package boundary AND INV20 would fire, swap the offending solo meal to a non-pkg alternative. Components:
+   - **`SWAP_OUT_EXCLUDE = {marinara: true}`** per user decision: marinara waste is acceptable; Phase 3 Strategy A still tries to pair marinara, but no last-resort swap-out for it.
+   - **Strict variety filter**: rejects ALL recent matches (no `isBatchLeftoverEligible` override). Reason: leftover-extending CREATES a new cross-person batch (cook anchor + new leftover) which can bind at maxAmt and trigger INV7.
+   - **Batch-aware co-contributor cleanup**: when a swap fires, the OUTGOING meal's pkg/produce ingredients had stale freeze overrides on co-contributor slots in the same trip. Cleanup iterates current trip's days for slots using each co-contributor item, then walks the slot's batch (anchor's `lo.portions`, may cross trips) to clear ALL portions' overrides — keeps batches consistent without nuking unrelated cooks in other trips.
+   - Full `invalidateLeftoverCache + runBalanceAdjusters` after each swap so subsequent freeze items see clean unified state.
+
+5. **Three-pass freeze in `randomizeWeek`**:
+   - **Pass 1** (`attemptSwap=true`): primary freeze + last-resort swaps. Co-contributor cleanup may clear overrides on items already processed.
+   - **Pass 2** (`attemptSwap=true`): re-establishes overrides on items whose batches got cleared by pass 1's cleanup but whose cook anchor lives in a trip pass 1 already iterated past. ALSO catches "orphaned solo" cases — when pass 1 freeze relied on a co-contributor (e.g., silken tofu Her Mon snack 6oz + Her Tue dinner 8oz = 14oz container) and another pass 1 swap removed the co-contributor (Her Tue dinner spicy_tofu_chicken_noodles → non-tofu meal), Her Mon snack is now alone at 3oz can't fill the carton; pass 2 swap-out fires.
+   - **Pass 3** (`attemptSwap=false`, after `rerollKcalOffSnacks`): handles new pkg/produce contributors introduced by snack swaps. Most items hit `_onBoundary` fast-path; cost ~50ms.
+
+6. **`rerollKcalOffSnacks` filter extension** ([index.html:9281-9320](index.html:9281)): existing filter excluded pkg-using meals (`mealUsesPkg`); now also excludes meals that introduce a new ROUND_PRODUCE_ITEMS dbKey not already in use by other meals in the trip. Prevents `cucumber_hummus_light` swap-in to a slot when no other trip meal uses cucumber (would create fresh produce waste).
+
+### Bugs investigated and root-caused this session
+
+1. **Cucumber INV7 fire on seed 12415** — `mediterranean_chickpea_salad` had cucumber tagged `scalable:false`. Unify skipped (frozen-list check), per-slot adjuster doesn't touch scalable:false items, so both portions stayed at recipe-base 1:1 ratio. Freeze's uniform-scale-per-batch preserved 1:1 → INV7 drift 35.8%. Fix: remove `scalable:false` on cucumber/celery in 7 recipes.
+
+2. **INV7 cascading from swap on seed 12397** — early swap-pass version let `lemongrass_salad` swap-in for Her Friday dinner where Him already had `lemongrass_salad` cooked Wednesday → leftover-detector formed a new cross-person batch (Wed+Fri) where kale at Him 2.5c (cap) didn't kcal-prop with Her 1.5c. Fix: tightened variety filter to reject all recent matches (no `isBatchLeftoverEligible` override).
+
+3. **INV8 on cucumber 2.4444c batch on seed 12375** — cross-trip batch (Her Wed dinner cook in cook1 + Her Fri dinner leftover in cook2). Per-trip cleanup cleared Wed's portion override but left Fri's intact → partial state → unify reproduced kcal-prop without snapping → batch total off-grid. Fix: batch-aware cleanup walks `lo.portions` to clear ALL portions of any batch a co-contributor is in, even cross-trip.
+
+4. **INV20 ground turkey 93 stale-override on seed 12351** — pass 1 cucumber freeze wrote overrides Him Sun 9.6oz + Her Sat 6.4oz = 16oz container. Then pass 1's marinara swap fired on Him Sun → cleared his 9.6oz override → trip became Her Sat alone at 6.4oz → 16oz buy → 9.6oz waste. Fix: co-contributor cleanup also iterates the OUTGOING meal's pkg/produce ingredients on co-using slots, clears them so freeze re-evaluates the post-swap trip state.
+
+5. **INV20 cucumber on seed 12434** — `rerollKcalOffSnacks` swapped Sat her snack from `rxbar_apple` (no cucumber) to `cucumber_hummus_light` (2.0c cucumber) AFTER all freeze passes. Trip went from clean 4.5c (3 cucumbers) to 6.5c (5 cucumbers, 1c waste). Fix: pass 3 freeze AFTER `rerollKcalOffSnacks` + filter extension to exclude produce-introducing snack swap-ins.
+
+6. **INV20 silken tofu on seed 12354** — Phase 1 picks `miso_edamame` (Her Mon snack, 3oz silken tofu) AND `spicy_tofu_chicken_noodles` (Her Tue dinner, 4oz silken tofu). Pass 1 freeze succeeds: trip 7oz scales to 14oz container (writes 6oz / 8oz). Then pass 1's other swap fires (e.g., chicken broth swap removing spicy_tofu_chicken_noodles via outgoing). Cleanup clears silken tofu overrides on co-contributor slots → Her Mon snack reverts to 3oz scalable:true. Pass 2 sees 1 user (3oz) but originally had `attemptSwap=false` → no swap, INV20 fires. Fix: pass 2 now has `attemptSwap=true` to handle these orphaned-solo cases.
+
+### Three-pass freeze rationale
+
+Each pass has a distinct job:
+
+```
+Pass 1 (attemptSwap=true):  RBA → freeze+swap → RBA
+  ↓ swap pass may have cleared overrides on co-contributor slots
+Pass 2 (attemptSwap=true):  freeze+swap → RBA
+  ↓ re-establishes overrides on cleared items + handles orphaned solos
+Pass 3 (attemptSwap=false): runs AFTER snapSoloSlotAmountsToGrid + rerollKcalOffSnacks
+                            freeze → RBA
+  ↓ snack reroll may have introduced new pkg/produce contributors
+```
+
+Cost: ~50-100ms per extra pass (most items hit `_onBoundary` fast-path; only items affected by cleanup actually re-process). Acceptable trade for closing all non-marinara waste fires.
+
+### Stress baselines (carry-forward to next session)
+
+```js
+// Test 1 (deterministic, seeds 12345..12444):
+localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({primary:98.36, inv6:112, inv14:0, inv15Him:2.6, inv16Her:2.5, inv18AvgPct:0, hardFail:1, closedPct:0, avgVariance:94.5, missCounts:{kcalLow:4, kcalHigh:0, pro:0, carbPct:3, fatPct:5, veg:8, fruit:3}, timingAvg:870, mode:'standard'}));
+```
+
+(Test 2/3 baselines stale from earlier sessions; re-run when continuing.)
+
+### Open items for next session
+
+1. **2 silken tofu fires structural** — `silken_tofu_smoothie` Him breakfast at 12oz vs 14oz container (86% used). Recipe sized so Him's portion lands at silken tofu `maxAmt:12`. Can't bump without raising maxAmt. Acceptable as-is.
+2. **INV6 (tracking) 112** — top offenders cluster around fat-heavy or unusually-shaped recipes. Not promoted to hard.
+3. **Marinara waste pattern** — 12 fires intentional (`SWAP_OUT_EXCLUDE`). User accepts. Strategy A (Phase 3) still tries to pair marinara when possible.
+
+### Rules of thumb learned this session
+
+1. **Cleanup operations have asymmetric impact across freeze passes.** Pass 1's swap-cleanup cleared overrides on co-contributor slots. Pass 2 needed to re-process those slots. `attemptSwap=false` on pass 2 left orphaned-solo cases (where the co-contributor was swapped away) without a way to fix them. **Lesson**: any pass that introduces state changes (cleanups, swaps, swap-ins) should be followed by a pass with the same recovery capabilities.
+
+2. **Batch-aware cleanup is a sweet spot between per-trip and whole-week.** Per-trip cleanup misses cross-trip batches (partial state → INV7/INV8). Whole-week cleanup nukes unrelated freeze writes (INV20 spike). The right answer is per-trip iteration that walks individual batches' portions across trips via the leftover map.
+
+3. **`mealUsesPkg` covers `db.pkg` only — not `db.produce`.** When extending pkg-aware filters to also handle produce items, must add the produce check separately. (Both `_trySwapForWaste`'s candidate filter AND `rerollKcalOffSnacks`'s filter needed this extension.)
+
+4. **Three-pass freeze decouples concerns.** Pass 1 does the heavy lifting (swaps + cleanup). Pass 2 handles the cleanup's downstream effects (cleared overrides). Pass 3 handles late-stage state changes (rerollKcalOffSnacks). Each pass has a clear job; together they converge to a clean state without infinite cascade.
+
+5. **The user's "intent vs metric" distinction.** Marinara waste fires are INV20 (hard), but the user accepts them — they're "expected waste from acceptable single-jar use." Adding `SWAP_OUT_EXCLUDE` is the surgical way to prevent the swap-out without changing INV20's threshold. Keeps the metric honest while respecting user intent.
+
