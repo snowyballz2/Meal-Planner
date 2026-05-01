@@ -2209,3 +2209,101 @@ localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({primary:98.36,
 
 5. **The user's "intent vs metric" distinction.** Marinara waste fires are INV20 (hard), but the user accepts them — they're "expected waste from acceptable single-jar use." Adding `SWAP_OUT_EXCLUDE` is the surgical way to prevent the swap-out without changing INV20's threshold. Keeps the metric honest while respecting user intent.
 
+## Session 2026-05-01 — INV20 soft/hard split, batch-only ground meat bounds, swap-pass refinement, shopping display polish
+
+Session focus: refine INV20 reporting (soft/hard split for accepted-waste items), unblock multi-cook batches for ground meats, then a sweep of shopping-list display fixes.
+
+### Headline numbers (Test 1 + Test 2, 100-seed runs)
+
+**Test 1 (deterministic, seeds 12345..12444):**
+
+| Metric | Session start | Final | Δ |
+|---|---|---|---|
+| Primary hit rate | 98.36% | 98.07% | -0.29pp |
+| INV20 (waste) | 12 (12 marinara, all hard) | **0** | **-12** ✓ |
+| Hard invariants | 1 fail | **all 0 ✓** | **-1** |
+| INV6 (P/C drift) | 112 | 90 | -22 |
+| Closed-off | 0.0% | 1.7% | +1.72pp (spicy_tofu) |
+| veg miss | 8 | 14 | +6 |
+
+**Test 2 (randomized + state-evolving):**
+
+| Metric | Session start | Final | Δ |
+|---|---|---|---|
+| Primary hit rate | 95.71% | 96.64% | +0.93pp |
+| INV20 (waste) | 7 | **0** | **-7** ✓ |
+| INV14 | 1 | 0 | -1 |
+| Hard invariants | 1 fail | **all 0 ✓** | **-1** |
+| INV6 | 77 | 86 | +9 |
+| Closed-off | 0.0% | 0.0% | unchanged |
+
+Both tests now have **0 hard invariants firing** with INV20 = 0.
+
+### What landed
+
+1. **INV20 soft/hard split via `softWaste:true` pkg flag.** Marinara and chicken broth pkg fields gained `softWaste:true`. Verifier emits BOTH `INV20` and `INV20Soft` lines for these. Aggregator's `hardFail` computation subtracts `INV20Soft` from `INV20` so soft fires don't count as regressions. Key Metrics table shows split: e.g., `47 (23 soft, 24 hard)`. Hard Invariants line uses `inv20Hard = INV20 - INV20Soft`. User intent: keep marinara/broth fires visible (INV20 > 0) without counting them as hard regressions.
+
+2. **`SWAP_OUT_EXCLUDE` is now CONDITIONAL.** Items in the exclude list (marinara, chicken broth) are exempt from last-resort swap-out ONLY when waste% < 25%. Above that threshold the waste is "egregious" enough that swap fires. Implementation: check moved AFTER waste computation in `_trySwapForWaste`. Test 1: all 22 prior soft fires had waste% > 25%, so they got swapped out → INV20 went 22 → 0.
+
+3. **`ground chicken` and `ground turkey 93` get batch-only loosened bounds.** Solos preserve original (4/12 chicken; 3/12 turkey). Batches use `minAmt:3.5, maxAmt:12.5`. Implementation via `minAmtSolo`/`maxAmtSolo` overrides — `_effMin`/`_effMax` switch on `isSharedOrLeftover`. Eliminates the 3 ground-chicken multi-cook batch fires we saw in Test 2 (squeeze cases like spicy_tofu_chicken_noodles 23oz 3-portion batch where Y=16 dropped Her below min and Y=32 pushed Him above max).
+
+4. **`ground_chicken_stir_fry` recipe: ground chicken 8oz → 7oz.** Recipe rebalance to fit lunch/dinner kcal target. Lower per-portion brings 3-portion batches closer to 32oz container, reducing waste.
+
+5. **`apple` wholeOnly:true** — apples now snap to integer count. `apple_cinnamon_oats` recipe bumped 0.75 → 1 apple to match.
+
+6. **Dry shopping conversion: 1/8 grid → 1/4 grid.** Cleaner display values for cooked grain/bean dry-cup conversions. Was `Math.ceil(dryAmt*8)/8` → now `*4)/4`.
+
+7. **Shopping categorization fixes:**
+   - `1% milk` added to `SHOP_CAT_MAP.dairy` (was falling through to "Produce" default).
+   - `egg whole`, `egg white`, `hard boiled egg` added to `SHOP_CAT_MAP.meat` (eggs aren't dairy).
+
+8. **Custom shopping display rules in `shopQtyWithCount`:**
+   - **Leafy greens** (`baby spinach`, `kale`): show total oz needed (rounded up to 0.5oz) instead of "N 3.5oz containers". User wants oz total since leafy greens come in varying container sizes.
+   - **`longShelfLife` pkg** (egg white): show trip-total amount + container cups. Format: `2.25 cups (4 cups)` — first number is trip usage, second is what one container holds. User can decide whether to buy a new carton based on existing pantry leftover.
+
+9. **`INV20` row added to Key Metrics table** (always shown). Format: `47 (23 soft, 24 hard)` when split, `0` when none.
+
+### Architectural lessons
+
+1. **Soft/hard invariant split is a clean pattern.** When the user accepts certain waste (marinara/broth single-jar) but wants visibility, emit BOTH the hard line AND a parallel soft line. Aggregator's `hardFail` computation subtracts soft from hard. Key Metrics table shows the breakdown. Doesn't change the underlying invariant logic — just the reporting.
+
+2. **Batch-only bounds via `minAmtSolo`/`maxAmtSolo`.** When you want different per-portion bounds for batches vs solos, set the BATCH value as `minAmt`/`maxAmt` (used in batch path via `floorB`/`capB` and `_effMin` when `isSharedOrLeftover`) and the SOLO value as `minAmtSolo`/`maxAmtSolo` (used in solo path via `floorSolo`/`capSolo` and `_effMin` when not shared/leftover). Pre-existing helper architecture; just adds another use case (loosen batches relative to solos).
+
+3. **The "spicy_tofu closed-off" puzzle is a deterministic-seed artifact, not a real meal-pool problem.** Test 1's fixed seeds 12345..12444 reliably pick spicy_tofu_chicken_noodles in solo positions where freeze can't fit either pkg item (silken tofu 6oz / ground chicken 6oz can't fill 14oz / 16oz containers respectively). My swap pass fires for the FIRST-iterated pkg item (silken tofu) and removes the meal. Test 2 (nondeterministic + state-evolving) explores enough configurations that batches form organically — spicy_tofu got picked 16 times across Test 2 with 0 INV20 fires.
+
+4. **Pairing-chance defer (option B) was tried and reverted.** Idea: defer swap if any of the OUTGOING meal's other pkg/produce ingredients have co-users in the trip (would have a pairing chance). Implementation correct, but had no measurable effect on Test 1 because Test 1's deterministic seeds rarely produce trips where two meals share a pkg item. Reverted; doesn't actually help spicy_tofu's solo case.
+
+5. **Recipe-side fixes for multi-cook batch geometry are limited by kcal-share math.** For 3-portion batches (Him cook + Him leftover + Her cross-person), kcal-share is ~37.8% Him / 24.5% Her, FIXED by daily budgets. At Y=32 ground chicken: Him gets 32×0.378 = 12.08, just over maxAmt 12. Recipe changes shift trip total but the cap still binds. The batch-only `maxAmt:12.5` loosening was the structural fix — not recipe-side reductions.
+
+### Stress baselines (carry-forward to next session)
+
+```js
+// Test 1 (deterministic, seeds 12345..12444):
+localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({
+  primary:98.07, inv6:90, inv14:0, inv15Him:2.8, inv16Her:2.5,
+  inv18AvgPct:0, hardFail:0, closedPct:1.72, avgVariance:93.9,
+  missCounts:{kcalLow:3, kcalHigh:1, pro:1, carbPct:5, fatPct:3, veg:14, fruit:4},
+  invTotals:{INV20:0, INV20Soft:0, INV21:0, INV22:0, INV6:90, INV14:0},
+  timingAvg:860, mode:'standard'
+}));
+
+// Test 2 (randomized + state-evolving):
+localStorage.setItem('mealPlannerStressBaseline2', JSON.stringify({
+  primary:96.64, inv6:86, inv14:0, inv15Him:3.9, inv16Her:4.3,
+  inv18AvgPct:0, hardFail:0, closedPct:0, avgVariance:95.4,
+  missCounts:{kcalLow:4, kcalHigh:2, pro:1, carbPct:5, fatPct:7, veg:22, fruit:8},
+  invTotals:{INV20:0, INV20Soft:0, INV21:0, INV22:0, INV6:86, INV14:0},
+  timingAvg:825, mode:'standard2'
+}));
+```
+
+### Open items for next session
+
+1. **`spicy_tofu_chicken_noodles` closed off in Test 1** (lunch + dinner). Not closed off in Test 2 — only Test 1's deterministic seeds reliably solo it. Worth a Phase 1 scoring penalty for multi-pkg solo placements if we want to fix Test 1 specifically; otherwise it's a deterministic-test artifact.
+
+2. **veg=14 misses in Test 1** (vs 8 prior). Consistent pattern: Her at 2.75-3.0c bucket. Drilled earlier — root cause is `yogurt_bowl_sweet` dominating breakfast (15.6% pick rate, 0c veg) + her smaller dinner budget compressing recipe veg. Recipe-side or Phase 1 scoring change needed.
+
+3. **veg=22 in Test 2** (largely unchanged). Same pattern.
+
+4. **INV6 max drift 271%** in Test 1 (from `salmon_stir_fry_din`). Tracking-only.
+

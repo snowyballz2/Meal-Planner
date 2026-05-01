@@ -381,7 +381,7 @@ var NUTRI_DB = {
   'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each', minAmt:1, maxAmt:6},
   'chicken breast':        {kcal:31,  pro:5.8,fat:0.7, carb:0,   unit:'oz', minAmt:4, maxAmt:16},
   'chicken thigh':         {kcal:36,  pro:4.8,fat:1.8, carb:0,   unit:'oz', minAmt:4, maxAmt:16},
-  'ground turkey 93':      {kcal:38,  pro:5.3,fat:1.8, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}, minAmt:3, maxAmt:12},
+  'ground turkey 93':      {kcal:38,  pro:5.3,fat:1.8, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}, minAmt:3.5, maxAmt:12.5, minAmtSolo:3, maxAmtSolo:12},
   'salmon':                {kcal:52,  pro:5.7,fat:3.1, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
   'halibut':               {kcal:26,  pro:5.3,fat:0.4, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
   'filet mignon':          {kcal:57,  pro:6.6,fat:3.2, carb:0,   unit:'oz', minAmt:4, maxAmt:12},
@@ -442,14 +442,14 @@ var NUTRI_DB = {
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.25, maxAmt:2.0},
   'celery':                {kcal:12,  pro:0.6,fat:0.2, carb:2.4, unit:'cup', produce:{perWhole:0.5,label:'stalk celery'}, minAmt:0.125, minAmtSolo:0.5, maxAmt:2},
   'egg noodles cooked':    {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', note:'cooked; macros match USDA cooked egg noodles (~221 kcal/cup); ~1 cup dry yields ~2.5 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
-  'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:3,pkg:{size:32,unit:'oz',cups:4,type:'carton'}},
+  'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:3,pkg:{size:32,unit:'oz',cups:4,type:'carton',softWaste:true}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75, minAmt:0.5, minAmtSolo:1, maxAmt:2},
   'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each', cupsEach:0.125, wholeWhenSolo:true, minAmt:0.5, minAmtSolo:1, maxAmt:4},
   'bok choy':              {kcal:9,   pro:1,  fat:0.1, carb:1.5, unit:'cup', produce:{perWhole:2,label:'head bok choy'}, minAmt:0.25, maxAmt:2.5},
   'bean sprouts':          {kcal:31,  pro:3,  fat:0.2, carb:6,   unit:'cup', minAmt:0.25, maxAmt:2.0},
   // Fruits
   'banana':                {kcal:105, pro:1.3,fat:0.4, carb:27,  unit:'each', cupsEach:1, minAmt:0.5, maxAmt:1},
-  'apple':                 {kcal:95,  pro:0.5,fat:0.3, carb:25,  unit:'each', cupsEach:1.5, minAmt:0.5, maxAmt:1},
+  'apple':                 {kcal:95,  pro:0.5,fat:0.3, carb:25,  unit:'each', cupsEach:1.5, wholeOnly:true, minAmt:1, maxAmt:1},
   'orange':                {kcal:62,  pro:1.2,fat:0.2, carb:15,  unit:'each', cupsEach:0.75, minAmt:0.5, maxAmt:1},
   'mixed berries':         {kcal:70,  pro:1,  fat:0.5, carb:17,  unit:'cup', brand:'Giant', altUnits:{g:140}, minAmt:0.25, maxAmt:1.5},
   'acai':                  {kcal:70,  pro:1,  fat:1.5, carb:13,  unit:'cup', brand:'Sambazon', altUnits:{g:115}, minAmt:0.25, maxAmt:1},
@@ -482,7 +482,7 @@ var NUTRI_DB = {
   'red wine vinegar':      {kcal:3,   pro:0,  fat:0,   carb:0,   unit:'tbsp', minAmt:0.5, maxAmt:2},
   'balsamic vinegar':      {kcal:14,  pro:0.1,fat:0,   carb:3,   unit:'tbsp', minAmt:0.5, maxAmt:2},
   'salsa':                 {kcal:5,   pro:0.2,fat:0,   carb:1,   unit:'tbsp', minAmt:1, maxAmt:4},
-  'marinara':{kcal:66,pro:2,fat:1.5,carb:12,unit:'cup',pkg:{size:24,unit:'oz',cups:3,type:'jar'},maxAmt:2.0},
+  'marinara':{kcal:66,pro:2,fat:1.5,carb:12,unit:'cup',pkg:{size:24,unit:'oz',cups:3,type:'jar',softWaste:true},maxAmt:2.0},
   'white miso':{kcal:33,pro:2,fat:1,carb:4.3,unit:'tbsp',minAmt:0.5,maxAmt:2},
   'tomatillo sauce':       {kcal:5,   pro:0.2,fat:0.2, carb:1,   unit:'tbsp', minAmt:1, maxAmt:3},
   'broth concentrate':     {kcal:15,  pro:1.5,fat:0,   carb:1.5, unit:'tbsp', halfSnap:true, minAmt:0.5, maxAmt:2},
@@ -506,7 +506,7 @@ var NUTRI_DB = {
   'lemon':                 {kcal:12,  pro:0.5,fat:0.1, carb:4,   unit:'each', minAmt:0.25, maxAmt:1},
   'ginger':                {kcal:6,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'lemongrass':            {kcal:5,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', minAmt:0.5, maxAmt:2},
-  'ground chicken':        {kcal:35,  pro:5.8,fat:1.3, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}, minAmt:4, maxAmt:12},
+  'ground chicken':        {kcal:35,  pro:5.8,fat:1.3, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}, minAmt:3.5, maxAmt:12.5, minAmtSolo:4, maxAmtSolo:12},
   'oyster sauce':          {kcal:9,   pro:0.3,fat:0,   carb:2,   unit:'tbsp'},
   'dark soy sauce':        {kcal:10,  pro:0.9,fat:0,   carb:1.5, unit:'tbsp'},
   'tahini':                {kcal:89,  pro:2.6,fat:8,   carb:3,   unit:'tbsp', minAmt:0.25, maxAmt:2},
@@ -1587,7 +1587,7 @@ const MEALS=[
     I('oats',0.375,'carb'),
     I('1% milk',1,'liquid'),
     I('protein powder',1,'protein'),
-    I('apple',0.75,'fruit',false),
+    I('apple',1,'fruit',false),
     I('cinnamon',0.5,'fixed',false)
   ]},
 
@@ -2289,7 +2289,7 @@ const MEALS=[
   steps:['Brown ground chicken over medium-high heat.','Add broccoli, bell pepper, carrots. Stir-fry 4–5 min.','Add soy sauce, ginger, garlic. Toss.','Serve over brown rice.'],
   him:{},her:{},
   ingredients:[
-    I('ground chicken',8,'protein'),
+    I('ground chicken',7,'protein'),
     I('brown rice cooked',1,'carb'),
     I('broccoli',0.75,'veg'),
     I('bell pepper',0.5,'veg'),
@@ -2955,9 +2955,9 @@ var SHOP_CAT_MAP={
   oils:['avocado oil','sesame oil','olive oil'],
   supplements:['protein powder','creatine'],
   pantry:['chicken broth','egg noodles cooked','oat flour','chia seeds','granola','granola strawberry','granola cinnamon','granola kind zero','rxbar','triscuit','udon noodles','whole wheat pasta cooked','baking powder','honey tbsp','maple syrup','peanut butter','almond butter','cashew milk (sweetened)','sugar','coconut milk','black beans canned','black beans cooked','cannellini beans canned','cannellini beans cooked','lentils cooked','chickpeas cooked'],
-  dairy:['greek yogurt 0%','mozzarella','feta','butter','cheddar jack'],
+  dairy:['greek yogurt 0%','mozzarella','feta','butter','cheddar jack','1% milk'],
   frozen:['mixed berries','edamame','acai'],
-  meat:['chicken breast','chicken thigh','ground turkey 93','ground chicken','filet mignon','shrimp'],
+  meat:['chicken breast','chicken thigh','ground turkey 93','ground chicken','filet mignon','shrimp','egg whole','egg white','hard boiled egg'],
   seafood:['salmon','halibut','canned tuna','tuna pouch']
 };
 function getIngredientCategory(name){
@@ -3021,6 +3021,17 @@ function shopQtyWithCount(dbKey,qtyObj){
   const db=NUTRI_DB[dbKey];
   if(!db)return base;
 
+  // Custom display: leafy greens — show total oz needed (rounded up to 0.5oz).
+  // 3.5oz container holds db.produce.perWhole cups (1.5c for spinach/kale).
+  // User wants oz total since leafy greens are typically sold by oz with
+  // varying container sizes (3.5oz / 5oz / bagged); count-of-containers is
+  // less actionable than oz needed. 2026-05-01.
+  if((dbKey==='baby spinach' || dbKey==='kale') && db.produce && db.produce.perWhole>0){
+    var ozPerCup=3.5/db.produce.perWhole;
+    var ozTotal=Math.ceil(qtyObj.num*ozPerCup*2)/2;
+    return ozTotal+' oz';
+  }
+
   // Produce count conversion
   if(db.produce){
     let count=_pkgsNeeded(qtyObj.num, db.produce.perWhole);
@@ -3028,15 +3039,28 @@ function shopQtyWithCount(dbKey,qtyObj){
     return count+' '+db.produce.label+(count>1&&!db.produce.label.match(/bunch|bag/)?'s':'');
   }
 
+  // Long-shelf-life pkg (egg white carton): show trip-total amount with
+  // container size in parens. Cartons carry between trips, so what user
+  // needs is "how much this trip" + "container holds N cups".
+  // 2026-05-01.
+  if(db.pkg && db.pkg.longShelfLife){
+    var amt=qtyObj.num;
+    var unit=qtyObj.unit;
+    var label=amt+' '+unit+(amt!==1&&unit!=='oz'?'s':'');
+    var containerCups=db.pkg.cups;
+    return label+' ('+containerCups+' cups)';
+  }
+
   // Dry-equivalent conversion for cooked grains/beans/legumes. Recipe
   // measurements are in cooked-cup (what's eaten); shopping needs the dry
   // amount you actually buy. db.dry.ratio = cooked-cup → dry-cup multiplier
-  // (e.g., 0.4 means 1 cup cooked rice = 0.4 cup dry). Round up to 1/8 cup
-  // for clean shopping quantities.
+  // (e.g., 0.4 means 1 cup cooked rice = 0.4 cup dry). Round up to 1/4 cup
+  // for clean shopping quantities (was 1/8 — user prefers 0.25 grid).
+  // 2026-05-01.
   if(db.dry && qtyObj.unit==='cup'){
     let dryAmt=qtyObj.num*db.dry.ratio;
-    let rounded=Math.ceil(dryAmt*8)/8;
-    if(rounded<=0)rounded=0.125;
+    let rounded=Math.ceil(dryAmt*4)/4;
+    if(rounded<=0)rounded=0.25;
     let label=db.dry.label||'cup dry';
     // Pluralize "cup" → "cups" when amount > 1 (only for the default label)
     if(label==='cup dry' && rounded>1)label='cups dry';
@@ -4905,7 +4929,12 @@ function verifyInvariants(){
         // PKG branch (INV20 + INV21). `acceptableWaste:true` items (e.g.
         // coconut milk — manual-add curries only, container is shopping-only)
         // are excluded from the hard tracker but still appear in shopping
-        // list with the standard waste warning.
+        // list with the standard waste warning. `softWaste:true` items
+        // (marinara, chicken broth) STILL fire INV20 for visibility but
+        // emit a parallel INV20Soft tracking line; the aggregator's hardFail
+        // computation subtracts INV20Soft from INV20 so soft fires don't
+        // count as hard regressions. User-accepted "single-jar/carton waste
+        // is OK" items.
         if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
           var perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
           if(perPkg > 0){
@@ -4921,6 +4950,9 @@ function verifyInvariants(){
                   +' pct='+(wastePct*100).toFixed(1)+'%';
                 violations.push('INV20 waste-over-threshold (pkg): '+detail);
                 violations.push('INV21 pkg-waste-over-1pct: '+detail);
+                if(db.pkg.softWaste){
+                  violations.push('INV20Soft soft-waste (pkg): '+detail);
+                }
               }
             }
           }
@@ -6959,12 +6991,16 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
 // 2026-04-29 (late): inside-freeze swap pass.
 // Items where we accept package waste rather than swap out the offending meal.
 // Strategy A (Phase 3) still tries to PAIR these — this only blocks the
-// last-resort swap-out path. User preference: a marinara jar's waste is
-// acceptable when no pairing exists. 2026-04-29 (late).
-var SWAP_OUT_EXCLUDE = {'marinara':true};
+// last-resort swap-out path. User preference: marinara jar + chicken broth
+// carton waste is acceptable when no pairing exists.
+// 2026-04-29 (late): added marinara. 2026-04-30: added chicken broth.
+var SWAP_OUT_EXCLUDE = {'marinara':true, 'chicken broth':true};
 
 function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
-  if(SWAP_OUT_EXCLUDE[dbKey]) return null;
+  // SWAP_OUT_EXCLUDE check moved AFTER waste calculation. Items in
+  // SWAP_OUT_EXCLUDE are exempt only when waste% < 25%; if waste exceeds
+  // that, swap is allowed since the waste is no longer "acceptable single
+  // jar/carton". 2026-05-01.
   var db = NUTRI_DB[dbKey];
   if(!db) return null;
   var perUnit = 0, isPkg = false;
@@ -7012,6 +7048,14 @@ function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
     if(bought <= 0 || (waste / bought) <= 0.01) return null;
   } else {
     if(waste <= perUnit * 0.5) return null;
+  }
+  // SWAP_OUT_EXCLUDE: items like marinara/chicken broth are exempt from
+  // last-resort swap-out ONLY when waste% is below 25%. Above that the
+  // waste is too large to accept — proceed with normal swap path.
+  // 2026-05-01.
+  if(SWAP_OUT_EXCLUDE[dbKey]){
+    var wastePctSE = isPkg ? (waste / bought) : (waste / perUnit);
+    if(wastePctSE < 0.25) return null;
   }
 
   // Only solo single-meal — multi-meal/multi-portion cases are conservative skip.
@@ -11877,8 +11921,11 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV21:0,INV22:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0};
     violations.forEach(function(v){
+      // Match INV20Soft first (longer suffix); fall back to INV<digits>.
+      var ms=v.match(/^(INV20Soft)\b/);
+      if(ms){counts[ms[1]]++;return;}
       var m=v.match(/^INV(\d+)/);if(!m)return;
       var key='INV'+m[1];if(counts[key]!==undefined)counts[key]++;
     });
@@ -11938,9 +11985,9 @@ window.MPStress=(function(){
     // run starts from this run's output (used by runStandard2 to simulate
     // real-world repeated Randomize clicks and exercise state-evolution paths).
     if(!opts.persistState) restore(snap);
-    // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16, INV18, INV21, INV22) from the "real fail" list
+    // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16, INV18, INV20Soft, INV21, INV22) from the "real fail" list
     var nonInv6=violations.filter(function(v){
-      return !v.startsWith('INV6 ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ') && !v.startsWith('INV18 ') && !v.startsWith('INV21 ') && !v.startsWith('INV22 ');
+      return !v.startsWith('INV6 ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ') && !v.startsWith('INV18 ') && !v.startsWith('INV20Soft ') && !v.startsWith('INV21 ') && !v.startsWith('INV22 ');
     }).slice(0,30);
     // Extract INV15/16 leftover-eaten counts per person
     var leftoversEaten={him:0,her:0};
@@ -12046,7 +12093,7 @@ window.MPStress=(function(){
     var kcalBins={'<-150':0,'-150..-120':0,'-120..-100':0,'+100..+120':0,'+120..+150':0,'>+150':0};
     var fatBins={'30.0-30.2':0,'30.2-30.5':0,'30.5-31.0':0,'31.0-32.0':0,'>32.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV21:0,INV22:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
@@ -12201,7 +12248,7 @@ window.MPStress=(function(){
       missCounts:missCounts,
       kcalBins:kcalBins,fatBins:fatBins,vegBins:vegBins,
       invTotals:invTotals,
-      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV21'&&k!=='INV22'&&invTotals[k]>0;}), // INV19/INV20 hard — count toward "any fail". INV21/22 tracking-only (split detail of INV20).
+      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV21'&&k!=='INV22'&&invTotals[k]>0;}), // INV19/INV20 hard — count toward "any fail". INV20Soft/INV21/22 tracking-only.
       // INV13 fires per-ingredient that has db.minAmt/maxAmt defined; ingredients without those are exempt by construction.
       invSamples:invSamples,
       topMeals:topMeals,
@@ -12725,10 +12772,20 @@ window.MPStress=(function(){
       var sign=d>=0?'+':'';
       return sign+d.toFixed(unit==='pp'?2:(unit==='pct'?2:0))+(unit||'');
     }
+    // INV20 hard-count: total INV20 fires minus INV20Soft (marinara/broth
+    // accepted-waste items still fire INV20 for visibility but don't count
+    // as hard regressions). The hardFail flag includes INV20 only if its
+    // hard portion (= INV20 - INV20Soft) is > 0.
+    var _inv20Hard = (a.invTotals.INV20||0) - (a.invTotals.INV20Soft||0);
     var cur={
       primary: a.primaryHitRate*100,
       inv14: a.inv14Breakdown.total,
-      hardFail: Object.keys(a.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV21'&&k!=='INV22'&&a.invTotals[k]>0;}).length, // INV19/INV20 hard, counted. INV21/22 tracking-only (split detail of INV20).
+      inv20Hard: _inv20Hard,
+      hardFail: Object.keys(a.invTotals).filter(function(k){
+        if(k==='INV20') return _inv20Hard > 0;
+        // Tracking-only invariants
+        return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV21'&&k!=='INV22'&&a.invTotals[k]>0;
+      }).length,
       closedPct: (function(){
         var ta=0,tc=0;
         ['breakfast','lunch','dinner','snack'].forEach(function(s){
@@ -12764,18 +12821,28 @@ window.MPStress=(function(){
     lines.push('### Key Metrics'+(baseline?' (vs saved baseline)':''));
     lines.push('');
     if(baseline){
+      var baseInv20 = (baseline.invTotals && baseline.invTotals.INV20!=null) ? baseline.invTotals.INV20 : null;
+      var baseInv20Soft = (baseline.invTotals && baseline.invTotals.INV20Soft!=null) ? baseline.invTotals.INV20Soft : 0;
+      var curInv20 = a.invTotals.INV20||0;
+      var curInv20Soft = a.invTotals.INV20Soft||0;
+      var inv20Cell = function(total, soft){
+        return total + (soft>0 ? ' ('+soft+' soft, '+(total-soft)+' hard)' : '');
+      };
       lines.push('| Metric | Baseline | Current | Δ |');
       lines.push('|---|---|---|---|');
       lines.push('| Primary hit rate | '+pct(baseline.primary,2)+' | '+pct(cur.primary,2)+' | '+delta(cur.primary,baseline.primary,'pp')+' |');
+      lines.push('| INV20 (waste) | '+(baseInv20!=null?inv20Cell(baseInv20,baseInv20Soft):'—')+' | '+inv20Cell(curInv20,curInv20Soft)+' | '+(baseInv20!=null?delta(curInv20,baseInv20,''):'—')+' |');
       lines.push('| INV6 (P/C drift) | '+(baseline.inv6!=null?baseline.inv6:'—')+' | '+(a.invTotals.INV6||0)+' | '+(baseline.inv6!=null?delta(a.invTotals.INV6||0,baseline.inv6,''):'—')+' |');
       lines.push('| INV14 total | '+baseline.inv14+' | '+cur.inv14+' | '+delta(cur.inv14,baseline.inv14,'')+' |');
       lines.push('| Hard invariants | '+(baseline.hardFail===0?'all 0':baseline.hardFail+' fail')+' | '+(cur.hardFail===0?'all 0 ✓':cur.hardFail+' FAIL')+' | '+(cur.hardFail===baseline.hardFail?'unchanged':(cur.hardFail>baseline.hardFail?'+'+(cur.hardFail-baseline.hardFail):(cur.hardFail-baseline.hardFail).toString()))+' |');
       lines.push('| Meals closed-off | '+pct(baseline.closedPct,1)+' | '+pct(cur.closedPct,1)+' | '+delta(cur.closedPct,baseline.closedPct,'pp')+' |');
       lines.push('| Avg variance | '+pct(baseline.avgVariance,1)+' | '+pct(cur.avgVariance,1)+' | '+delta(cur.avgVariance,baseline.avgVariance,'pp')+' |');
     }else{
+      var _curInv20=a.invTotals.INV20||0, _curInv20S=a.invTotals.INV20Soft||0;
       lines.push('| Metric | Value |');
       lines.push('|---|---|');
       lines.push('| Primary hit rate | '+pct(cur.primary,2)+' |');
+      lines.push('| INV20 (waste) | '+_curInv20+(_curInv20S>0?' ('+_curInv20S+' soft, '+(_curInv20-_curInv20S)+' hard)':'')+' |');
       lines.push('| INV14 total | '+cur.inv14+' ('+f(cur.inv14/a.nRuns,2)+'/run) |');
       lines.push('| Hard invariants | '+(cur.hardFail===0?'all 0 ✓':cur.hardFail+' FAILING')+' |');
       lines.push('| Meals closed-off | '+pct(cur.closedPct,1)+' (never picked) |');
@@ -12812,13 +12879,23 @@ window.MPStress=(function(){
 
     // ── HARD INVARIANTS ─────────────────────────────────────────
     var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20'];
-    var firedHard=hardKeys.filter(function(k){return a.invTotals[k]>0;});
+    // INV20 hard-count subtracts soft-waste fires (marinara, chicken broth)
+    // so the "Hard Invariants" line reflects only items that actually need
+    // attention.
+    var inv20HardCnt = (a.invTotals.INV20||0) - (a.invTotals.INV20Soft||0);
+    var firedHard=hardKeys.filter(function(k){
+      if(k==='INV20') return inv20HardCnt > 0;
+      return a.invTotals[k]>0;
+    });
     lines.push('### Hard Invariants');
     lines.push('');
     if(firedHard.length===0){
       lines.push('**all 0 ✓** (INV1-5, 7-13, 17, 19, 20)');
     }else{
-      lines.push('**FAIL** — '+firedHard.map(function(k){return k+'='+a.invTotals[k];}).join(', '));
+      lines.push('**FAIL** — '+firedHard.map(function(k){
+        if(k==='INV20') return k+'='+inv20HardCnt+' (hard; '+(a.invTotals.INV20Soft||0)+' soft excluded)';
+        return k+'='+a.invTotals[k];
+      }).join(', '));
     }
     // Dedicated row for INV17 so it's always surfaced, not buried under the
     // "all 0" collapse. Lets the user spot balancer-view drift immediately.
@@ -13140,7 +13217,13 @@ window.MPStress=(function(){
       // Worst single-run cap-hit rate, for monitoring stragglers (one
       // outlier can hide under a healthy avg). Surfaced alongside avgPct.
       inv18WorstRunPct: agg.rbaCap?(agg.rbaCap.worstRunRate*100):0,
-      hardFail: Object.keys(agg.invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV21'&&k!=='INV22'&&agg.invTotals[k]>0;}).length, // INV19/INV20 hard, counted. INV21/22 tracking-only (split detail of INV20).
+      hardFail: (function(){
+        var inv20Hard = (agg.invTotals.INV20||0) - (agg.invTotals.INV20Soft||0);
+        return Object.keys(agg.invTotals).filter(function(k){
+          if(k==='INV20') return inv20Hard > 0;
+          return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV21'&&k!=='INV22'&&agg.invTotals[k]>0;
+        }).length;
+      })(),
       closedPct: (function(){
         var ta=0,tc=0;
         ['breakfast','lunch','dinner','snack'].forEach(function(s){
