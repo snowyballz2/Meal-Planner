@@ -872,6 +872,18 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
   }
   function _clampThresh(ings){
     return ings.map(function(i){
+      // 2026-05-03: skip FREEZE-pinned items only (scalable:false AND in
+      // ROUND_PKG_ITEMS / ROUND_PRODUCE_ITEMS). Clamping these can silently
+      // violate the freeze contract on early-return rebuilds — e.g., a
+      // batch-only maxAmt of 12.5oz silently clamped to maxAmtSolo=12 when
+      // the cook anchor's mts==1 evaluates as solo. Other scalable:false
+      // items (recipe-fixed oils/sauces/spices) STILL get clamped — they
+      // rely on this path to keep them within minAmt/maxAmt bounds.
+      if(i.scalable===false &&
+         (typeof ROUND_PKG_ITEMS!=='undefined' && ROUND_PKG_ITEMS.indexOf(i.dbKey)>=0 ||
+          typeof ROUND_PRODUCE_ITEMS!=='undefined' && ROUND_PRODUCE_ITEMS.indexOf(i.dbKey)>=0)){
+        return {ing:i,newAmt:i.amt};
+      }
       var db=NUTRI_DB[i.dbKey];
       var a=i.amt;
       if(db){
@@ -4070,7 +4082,7 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
       proGap = proTarget - t.pro;
       calGap0 = CAL_BASE[p] ? (CAL_BASE[p] - t.kcal) : 0;
       fv = dailyFV();
-      vegGap = 3 - fv.veg;
+      vegGap = 2.75 - fv.veg; // 2026-05-03: lowered from 3 — accepted veg range
     }
     refreshMacros();
 
@@ -7778,21 +7790,22 @@ function clearWeek(){
   invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();autoSaveWeek();
 }
 // ── Boost batch veg across portions to hit daily target ──────
-// Last-resort veg booster for days stuck under 3c because their only
+// Last-resort veg booster for days stuck under 2.75c because their only
 // veg-bearing slot is a frozen batch leftover. The regular boostFV skips
 // frozen slots (can't modify a leftover in isolation without breaking
 // INV1). This step grows the WHOLE BATCH by +0.25c of one veg item at a
 // time, propagating to every portion. Physically: the cook makes a
 // slightly bigger pot of veg. Other days eating from the same batch get
 // the extra veg too — harmless (veg is ~30 kcal/cup at most).
+// 2026-05-03: threshold lowered 3 → 2.75 to match accepted veg range.
 function boostBatchVegForDailyTarget(){
   // Idempotent: reads via getBalancedSlotIngredients (lazy-build via
   // getDayBalancedIngredients when day cache missing). The top-of-loop
-  // fast-path `if(fv.veg>=3)break` exits immediately when the day's veg
+  // fast-path `if(fv.veg>=2.75)break` exits immediately when the day's veg
   // target is already met — so calling this twice in a row is a no-op on
-  // the second call for every day (post-first-pass state has fv.veg >= 3
+  // the second call for every day (post-first-pass state has fv.veg >= 2.75
   // on boosted days, or else the inner loop hit its cap/no-picked break
-  // conditions and veg is stuck below 3 regardless of how many times we
+  // conditions and veg is stuck below 2.75 regardless of how many times we
   // call). No affectedDays bookkeeping: this function grows a batch by
   // 0.25c at a time (~10-30 kcal); the balancer is NOT re-run because
   // the kcal drift is below meaningful thresholds.
@@ -7804,7 +7817,7 @@ function boostBatchVegForDailyTarget(){
       var safety=10;
       while(safety-->0){
         var fv=computeDailyFV(p,d);
-        if(fv.veg>=3)break;
+        if(fv.veg>=2.75)break;
         // Find a frozen batch slot with a veg item below 3× recipe base
         var picked=null;
         SLOTS.forEach(function(s){
@@ -8748,7 +8761,7 @@ function postBalanceWastePass(){
           var fatPct=mk>0?(t.fat*9)/mk:0;
           var carbPct=mk>0?(t.carb*4)/mk:0;
           var fv=computeDailyFV(ap,ad);
-          if(Math.abs(t.kcal-tgt)>100||t.pro<pm||carbPct>0.55||fatPct>0.30||fv.veg<3||fv.fruit<1){
+          if(Math.abs(t.kcal-tgt)>100||t.pro<pm||carbPct>0.55||fatPct>0.30||fv.veg<2.75||fv.fruit<1){
             anyBroken=true;
           }
         });
@@ -8894,7 +8907,29 @@ function randomizeWeek(target, seed){
     // The outer post-loop code re-runs these passes on the committed winner; the
     // passes are idempotent so the re-run is safe, and the extra cost is bounded
     // by the retry loop exiting on first zero-miss (line below).
+    //
+    // 2026-05-03: TWO Q3 attempts both produced INV7 hard-invariant fires.
+    //
+    // Attempt 1 (in-loop, `totalWaste <= bestWaste`): freeze writes accumulate
+    // on Phase-4-locked Her shared-schedule slots that Phase 1 of the next
+    // retry skips clearing → cross-retry leak → freeze runs against polluted
+    // state → INV7/INV8 fires on seed 12419.
+    //
+    // Attempt 2 (post-loop tail resolution with explicit OVERRIDES clear per
+    // attempt): produced a different INV7 pattern (3 seeds in T1 — 12345,
+    // 12347, 12379) on hummus_wrap with mixed-ratio fires (chicken/hummus at
+    // kcal-prop, ROUND_PRODUCE_ITEMS veg at recipe-base equal-split). Root
+    // cause not pinned: freeze's per-batch uniform scaling preserves vs
+    // breaks kcal-prop for ROUND_*_ITEMS in tail-resolution states
+    // differently than in zero-waste in-loop states. Needs deeper
+    // investigation into freeze's behavior on non-zero-waste pre-states.
+    //
+    // The "tied non-zero-waste" discrimination gap remains OPEN. Any future
+    // attempt MUST verify across the full deterministic 100 seeds that no
+    // hard INV (1-13, 17, 19, 20-hard) fires — not just spot-check seeds.
     let goalMisses = Infinity;
+    let inv14 = Infinity;
+    let retryCaches = null;
     if (totalWaste === 0) {
       // 2026-04-29: runBalanceAdjusters first so the cache is populated and
       // unify has produced kcal-prop ratios for all batches. Then freeze
@@ -8920,28 +8955,18 @@ function randomizeWeek(target, seed){
           const mk=t.pro*4+t.fat*9+t.carb*4;
           const carbPct=mk>0?(t.carb*4)/mk:0;
           const fatPct=mk>0?(t.fat*9)/mk:0;
-          const ok=(Math.abs(t.kcal-calT)<=100)&&(t.pro>=proT)&&(carbPct<=0.55)&&(fatPct<=0.30)&&(fv.veg>=3)&&(fv.fruit>=1);
+          const ok=(Math.abs(t.kcal-calT)<=100)&&(t.pro>=proT)&&(carbPct<=0.55)&&(fatPct<=0.30)&&(fv.veg>=2.75)&&(fv.fruit>=1);
           if(!ok)goalMisses++;
         });
       });
-    }
-    // Stage 1a: snapshot _dayBalancedCache + _leftoverCache here so the
-    // post-retry block can skip the 7-stage post-balance pipeline rerun on
-    // the winner. CRITICAL: this must run BEFORE the explicit
-    // invalidateLeftoverCache() at the next `if (totalWaste === 0)` block —
-    // that call wipes both caches, so a post-invalidate snapshot gets {}.
-    let retryCaches = null;
-    if (totalWaste === 0) {
+      // Stage 1a: snapshot post-pipeline caches so the post-retry block can
+      // skip the pipeline rerun on the winner. Must happen BEFORE the
+      // invalidateLeftoverCache() below (countInv14's invalidate would wipe
+      // both caches and a post-invalidate snapshot gets {}).
       retryCaches = {
         dayBalanced: JSON.parse(JSON.stringify(_dayBalancedCache)),
         leftover: _leftoverCache ? JSON.parse(JSON.stringify(_leftoverCache)) : null
       };
-    }
-    // Count INV14 only when waste=0 (the common final state). Avoids the N²
-    // cook-pair scan on losing retries. When waste>0, inv14 stays Infinity so
-    // the lexicographic tiebreaker (waste, misses, inv14) ignores it.
-    let inv14 = Infinity;
-    if (totalWaste === 0) {
       invalidateLeftoverCache();
       inv14 = countInv14();
     }
@@ -8957,6 +8982,7 @@ function randomizeWeek(target, seed){
     }
     if (totalWaste === 0 && goalMisses === 0 && inv14 === 0) break;
   }
+
   // Restore best state. The retry-loop's countInv14 step invalidates the
   // cache at end of every retry, so by the time we exit the loop the
   // live cache is EMPTY (not "winning retry's state" even on early-break).
@@ -9058,7 +9084,7 @@ function rerollMissDays(randTarget){
       const mk=t.pro*4+t.fat*9+t.carb*4;
       const carbPct=mk>0?(t.carb*4)/mk:0;
       const fatPct=mk>0?(t.fat*9)/mk:0;
-      if(!(Math.abs(t.kcal-calT)<=100)||!(t.pro>=proT)||!(carbPct<=0.55)||!(fatPct<=0.30)||!(fv.veg>=3)||!(fv.fruit>=1))ok=false;
+      if(!(Math.abs(t.kcal-calT)<=100)||!(t.pro>=proT)||!(carbPct<=0.55)||!(fatPct<=0.30)||!(fv.veg>=2.75)||!(fv.fruit>=1))ok=false;
     });
     return ok;
   }
@@ -9078,7 +9104,7 @@ function rerollMissDays(randTarget){
       if(t.pro<proT)misses++;
       if(carbPct>0.55)misses++;
       if(fatPct>0.30)misses++;
-      if(fv.veg<3)misses++;
+      if(fv.veg<2.75)misses++;
       if(fv.fruit<1)misses++;
     });
     return misses;
@@ -9216,7 +9242,7 @@ function rerollKcalOffSnacks(randTarget){
     if(t.pro<proT)misses++;
     if(carbPct>0.55)misses++;
     if(fatPct>0.30)misses++;
-    if(fv.veg<3)misses++;
+    if(fv.veg<2.75)misses++;
     if(fv.fruit<1)misses++;
     return misses;
   }
@@ -9358,7 +9384,7 @@ function rerollInv14Violations(randTarget){
       if(t.pro<proT)misses++;
       if(carbPct>0.55)misses++;
       if(fatPct>0.30)misses++;
-      if(fv.veg<3)misses++;
+      if(fv.veg<2.75)misses++;
       if(fv.fruit<1)misses++;
     });
     return misses;
@@ -11823,7 +11849,7 @@ window.MPStress=(function(){
     var fatPct=mk>0?(t.fat*9)/mk:0;
     var kd=t.kcal-calT;
     return{p:p,d:d,kcal:t.kcal,kcalDelta:kd,pro:t.pro,proDelta:t.pro-proT,carbPct:carbPct,fatPct:fatPct,veg:fv.veg,fruit:fv.fruit,
-      fails:{kcalLow:kd<-100?-kd:0,kcalHigh:kd>100?kd:0,pro:t.pro<proT?(proT-t.pro):0,carbPct:carbPct>0.55?(carbPct-0.55):0,fatPct:fatPct>0.30?(fatPct-0.30):0,veg:fv.veg<3?(3-fv.veg):0,fruit:fv.fruit<1?(1-fv.fruit):0}};
+      fails:{kcalLow:kd<-100?-kd:0,kcalHigh:kd>100?kd:0,pro:t.pro<proT?(proT-t.pro):0,carbPct:carbPct>0.55?(carbPct-0.55):0,fatPct:fatPct>0.30?(fatPct-0.30):0,veg:fv.veg<2.75?(2.75-fv.veg):0,fruit:fv.fruit<1?(1-fv.fruit):0}};
   }
 
   function collectVegCeilings(){
@@ -12209,6 +12235,52 @@ window.MPStress=(function(){
   }
 
   function cleanSave(){clearTimeout(_selSaveTimer);saveWeeks();}
+
+  // 2026-05-03: state-cleanliness detection for stress harness.
+  // Returns array of "dirty" descriptors, empty if pristine. Used by
+  // runStandard2/3/4 to warn at start and tag agg.startedDirty so
+  // saveBaseline can refuse to persist a corrupted-state baseline.
+  // Excludes SHARED_SCHEDULE because the harness overrides it via
+  // _applyStandardSharedSchedule (user's own schedule is restored after).
+  function _isPristine(){
+    var dirty=[];
+    if(Object.keys(SEL).length) dirty.push(Object.keys(SEL).length+' SEL entries');
+    if(Object.keys(MANUAL_SET).length) dirty.push(Object.keys(MANUAL_SET).length+' MANUAL_SET');
+    if(Object.keys(EAT_OUT).length) dirty.push(Object.keys(EAT_OUT).length+' EAT_OUT');
+    if(Object.keys(SKIPPED).length) dirty.push(Object.keys(SKIPPED).length+' SKIPPED');
+    if(Object.keys(OVERRIDES).length) dirty.push(Object.keys(OVERRIDES).length+' OVERRIDES');
+    if(Object.keys(LATE_SNACK).length) dirty.push(Object.keys(LATE_SNACK).length+' LATE_SNACK');
+    if(weekData.last && Object.keys(weekData.last.sel||{}).length) dirty.push(Object.keys(weekData.last.sel).length+' weekData.last.sel entries');
+    if(weekData.next && Object.keys(weekData.next.sel||{}).length) dirty.push(Object.keys(weekData.next.sel).length+' weekData.next.sel entries');
+    return dirty;
+  }
+
+  // 2026-05-03: full state clear for runStandard auto-clean. Globals
+  // (SEL, OVERRIDES, etc.) are aliases of weekData.this.*; clearing them
+  // clears that week. Also wipes weekData.last/next so the variety filter
+  // starts from a clean prev-week pool. Restored via snapshot()/restore()
+  // pair around the call site.
+  function _clearAllState(){
+    Object.keys(SEL).forEach(function(k){delete SEL[k];});
+    Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
+    Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+    Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
+    Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
+    Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
+    Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
+    Object.keys(ADJ_TARGETS).forEach(function(k){delete ADJ_TARGETS[k];});
+    if(weekData.last){
+      if(weekData.last.sel) Object.keys(weekData.last.sel).forEach(function(k){delete weekData.last.sel[k];});
+      if(weekData.last.overrides) Object.keys(weekData.last.overrides).forEach(function(k){delete weekData.last.overrides[k];});
+      if(weekData.last.manualSet) Object.keys(weekData.last.manualSet).forEach(function(k){delete weekData.last.manualSet[k];});
+    }
+    if(weekData.next){
+      if(weekData.next.sel) Object.keys(weekData.next.sel).forEach(function(k){delete weekData.next.sel[k];});
+      if(weekData.next.overrides) Object.keys(weekData.next.overrides).forEach(function(k){delete weekData.next.overrides[k];});
+      if(weekData.next.manualSet) Object.keys(weekData.next.manualSet).forEach(function(k){delete weekData.next.manualSet[k];});
+    }
+    invalidateLeftoverCache();
+  }
   function runBaseline(runs){
     runs=runs||50;
     var results=[];
@@ -12234,21 +12306,25 @@ window.MPStress=(function(){
   }
   function runStandard(runs){
     runs=runs||100;
-    // Save user's SHARED_SCHEDULE so we don't contaminate their state
-    var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
+    // 2026-05-03: auto-clear state for Test 1. Prevents the state-corruption
+    // class of bugs where prior experiments leak meals/overrides/etc. into
+    // the snapshot that every seed restores to. Snapshot+restore wraps the
+    // whole run so user's state survives unchanged.
+    var userSnap=snapshot();
+    _clearAllState();
     _applyStandardSharedSchedule();
     try{
       var results=[];
       var baseSeed=12345;
       for(var i=0;i<runs;i++){results.push(runOne('standard',baseSeed+i,null));}
-      cleanSave();
       window._stressRuns=results;
       var agg=aggregate(results);
+      agg.startedDirty=false; // auto-cleared, always clean
       console.log(formatReport(agg));
       return agg;
     }finally{
-      Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
-      Object.keys(userSched).forEach(function(k){SHARED_SCHEDULE[k]=userSched[k];});
+      restore(userSnap);
+      cleanSave(); // persist user's restored state to localStorage
     }
   }
   // Test 2: true-randomized counterpart to runStandard. Differs on THREE axes:
@@ -12285,6 +12361,14 @@ window.MPStress=(function(){
   }
   function runStandard2(runs){
     runs=runs||100;
+    // 2026-05-03: detect pristine state at start. Test 2 intentionally
+    // evolves state (persistState:true) — but if the FIRST run starts from
+    // a contaminated baseline, all numbers are skewed. Warn + tag agg so
+    // saveBaseline can refuse to persist a corrupted-state baseline.
+    var dirty=_isPristine();
+    if(dirty.length){
+      console.warn('⚠ runStandard2: starting from non-pristine state ('+dirty.join(', ')+'). Numbers may not match clean baselines. saveBaseline will refuse this run unless force:true.');
+    }
     var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
     _applyStandardSharedSchedule();
     var initSnap=snapshot();
@@ -12297,6 +12381,8 @@ window.MPStress=(function(){
       cleanSave();
       window._stressRuns=results;
       var agg=aggregate(results);
+      agg.startedDirty=dirty.length>0;
+      agg.dirtyDetails=dirty;
       console.log(formatReport(agg));
       return agg;
     }finally{
@@ -12320,6 +12406,11 @@ window.MPStress=(function(){
   // so applyVaried's random configs accumulate cleanly without drift.
   function runStandard3(runs){
     runs=runs||100;
+    // 2026-05-03: detect pristine state at start (same rationale as runStandard2).
+    var dirty=_isPristine();
+    if(dirty.length){
+      console.warn('⚠ runStandard3: starting from non-pristine state ('+dirty.join(', ')+'). Numbers may not match clean baselines. saveBaseline will refuse this run unless force:true.');
+    }
     var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
     _applyStandardSharedSchedule();
     var initSnap=snapshot();
@@ -12331,6 +12422,8 @@ window.MPStress=(function(){
       cleanSave();
       window._stressRuns=results;
       var agg=aggregate(results);
+      agg.startedDirty=dirty.length>0;
+      agg.dirtyDetails=dirty;
       console.log(formatReport(agg));
       return agg;
     }finally{
@@ -12620,6 +12713,13 @@ window.MPStress=(function(){
   }
   function runStandard4(runs){
     runs=runs||100;
+    // 2026-05-03: detect pristine state at start. Test 4 doesn't roll up to
+    // a saveBaseline-able agg, but the warning still surfaces user-visible
+    // contamination so they can clean before drawing conclusions.
+    var dirty=_isPristine();
+    if(dirty.length){
+      console.warn('⚠ runStandard4: starting from non-pristine state ('+dirty.join(', ')+'). Shopping integrity scenario results may not match clean baselines.');
+    }
     var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
     _applyStandardSharedSchedule();
     var initSnap=snapshot();
@@ -13129,7 +13229,15 @@ window.MPStress=(function(){
 
   // Save/clear reference baseline (persisted to localStorage) for session-
   // over-session deltas in formatReport's KEY METRICS block.
-  function saveBaseline(agg){
+  // 2026-05-03: refuse to save when agg.startedDirty is true. Use
+  // saveBaseline(agg, {force:true}) to override (e.g., if you intentionally
+  // want a dirty-state reference).
+  function saveBaseline(agg, opts){
+    opts = opts || {};
+    if(agg && agg.startedDirty && !opts.force){
+      console.error('saveBaseline: REFUSED — run started from non-pristine state ('+(agg.dirtyDetails||['unknown']).join(', ')+'). Saving this baseline would corrupt future deltas. Either re-run from a clean state (runStandard auto-clears) or pass {force:true} to override.');
+      return false;
+    }
     var mode=(agg&&agg.mode)||'standard';
     var key=(mode==='standard2')?'mealPlannerStressBaseline2':(mode==='standard3')?'mealPlannerStressBaseline3':'mealPlannerStressBaseline';
     var b={
