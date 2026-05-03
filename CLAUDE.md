@@ -2307,3 +2307,74 @@ localStorage.setItem('mealPlannerStressBaseline2', JSON.stringify({
 
 4. **INV6 max drift 271%** in Test 1 (from `salmon_stir_fry_din`). Tracking-only.
 
+## Session 2026-05-02 — Audit cleanup, memory consolidation, Phase 1 freeze-overrides bug fix, lots of reverts
+
+Long iterative session. 3 audit cleanups landed early, memory consolidation halved the index, then a deep dive into shared-cook overshoot (seed 70 +617 family) led through multiple failed fixes before settling on the right one (Phase 1 cleanup) with a small recipe nudge.
+
+### What landed (in commit order)
+
+1. **`roundPkgItemsToBoundary` deleted** (101 lines). Replaced by `freezeTripTotals` 2026-04-29; verified zero callers, only one stale comment reference.
+2. **`SHOP_DISPLAY_NAMES` cleanup**: removed 3 dead duplicate keys (`'lentils cooked':'Lentils'`, `'chickpeas cooked':'Chickpeas'`, `'black beans cooked':'Black beans'` — all overwritten later in the table by the descriptive `, cooked` form). Removed orphan `'white beans cooked':'White beans'` (no matching NUTRI_DB entry — leftover from the 2026-04-18 `white_bean_soup` merge).
+3. **Memory consolidation** via `consolidate-memory` skill. `MEMORY.md` 47.6 KB → 2.8 KB (-94%), 116 lines → 32 lines. Added 4 new topic files: `system_invariants.md`, `system_freeze_and_overrides.md`, `system_data_model.md`, `reference_extra_stress_tests.md`. All inlined detail moved into topic files; index reduced to one-line pointers.
+4. **`_clearFreezeOverrides()` at start of `randomizeWeek`** ([index.html:8847](index.html:8847)). The actual bug fix from this session. Phase 1's `clearOverrides` at line 9806 is gated by `if (locked[sk(p,d,s)]) return;` — skipping MANUAL_SET / EAT_OUT slots. Once shared-schedule slots get MANUAL_SET=true via setSchedule, their `scalable:false` overrides accumulate across runs. Subsequent randomizes inherit pinned values that may be stale, leading to cook-anchor over-allocation (seed 70-style +617 days). New helper clears only `scalable:false` overrides at start of randomizeWeek (preserves user UI overrides which are amt-only).
+5. **Oats added to `yogurt_snack`** ([index.html:1834](index.html:1834)). Recipe ceiling 339 → 639 kcal. Without a scalable carb, ingredient maxAmts capped achievable kcal at 339 — well below him breakfast budget (512). Adding `I('oats',0.25,'carb')` gives the recipe room to scale into breakfast slot when picked there. `noRatioCheck:true` already in place so the added carb doesn't fire INV6 spuriously.
+
+### Investigations (deep but non-shipping)
+
+- **Seed 70 him Wed +617 stress overshoot** — drilled mechanism: Phase 1 picks turkey-using meals on both Wed breakfast solo + Wed dinner shared. Adjuster wants ~26.7oz turkey trip total. Freeze rounds to 32oz (closer to 26.7 than 16). Distributes excess via solo bump to maxAmtSolo cap (12oz from adjuster's 5.7oz = +6.3oz, +240 kcal of forced turkey on a slot already at budget). Lunch +389 over from day-balancer cascade. Dinner +241 from batch over-allocation. Three independent mechanisms stacking on one day — extremely rare (1 of 1400 day-randomizations).
+
+- **Day-kcal feasibility rule** (proposed, implemented, REVERTED). Idea: reject freeze proposals + balancer mutations that would push day kcal past `CAL_BASE ± 100`. Symmetric with "improve toward target if currently out of bounds" branch. Two implementation iterations:
+  - Strict (reject any out-of-bounds projection): catastrophic. Rejected single-step mutations from intermediate states even when paired correction would have cleaned up.
+  - Relaxed with pair-aware atomic check for P1 (ADD+TRIM): better but still hurt Tests 1+2 (primary -1.93pp). Macros couldn't be corrected when balancer's free moves were blocked. Reverted entirely.
+
+- **P0 multi-step boost** (Option A — proposed, REVERTED). Inner loop in P0 to keep boosting until calGap0 ≤ 100 or no candidate. Implemented symmetric (multi-trim + multi-boost). Tested; multi-trim over-corrected, spiked carbPct/fatPct misses. Asymmetric variant (multi-boost, single-trim) was even worse. The single-step version's strength is that other priorities INTERLEAVE between P0's grid steps, smoothing the trajectory. Multi-step short-circuits that interleaving. Reverted.
+
+- **Final per-day RBA on off-target days** (proposed, REVERTED). After last RBA: for each day off `CAL_BASE` by >100, invalidate cache + run `runBalanceAdjusters()` to trigger fresh balanceDayMacros via cache rebuild. Test 1 +1.07pp ✓ but Test 2 -0.57pp + veg=27 (was 12). Hard INVs clean in both. Mixed result; reverted to keep things consistent.
+
+### Tests + new baselines
+
+Saved baselines (carry-forward to next session):
+
+```js
+// Test 1 (deterministic, seeds 12345..12444):
+localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({
+  primary:95.43, inv6:132, inv14:0, hardFail:0,
+  missCounts:{kcalLow:12, kcalHigh:4, pro:12, carbPct:15, fatPct:9, veg:15, fruit:7},
+  mode:'standard'
+}));
+
+// Test 2 (randomized + state-evolving):
+localStorage.setItem('mealPlannerStressBaseline2', JSON.stringify({
+  primary:96.57, inv6:89, inv14:1, hardFail:0,
+  missCounts:{kcalLow:10, kcalHigh:5, pro:1, carbPct:11, fatPct:6, veg:19, fruit:4},
+  mode:'standard2'
+}));
+```
+
+**Note on numbers**: state drifted across all the experimental code edits + their reverts. The same seeds in different starting states produce different deterministic outcomes (this is the user-accepted state-dependent variance). The "best" we briefly saw post-revert + Phase1 fix was 97.57% / 96.93%, but state evolved through the subsequent experiments. End-of-session baselines are the new persistent reference.
+
+### Architectural lessons reinforced
+
+1. **Per-mutation rules can't substitute for multi-step convergence.** The day-kcal feasibility rule and P0 multi-step both failed because they short-circuited the balancer's natural priority interleaving. The single-step balancer's strength is that each priority gets a turn between mutations.
+
+2. **State-dependent baselines mean comparisons are noisy.** Numbers shift seed-over-seed because starting state evolves. Save the same baseline at the end of session you compare against; don't expect numbers to perfectly match across days.
+
+3. **The Phase 1 freeze-overrides cleanup was a real bug.** Previous sessions assumed Phase 1 clears overrides on every slot — it doesn't. MANUAL_SET / EAT_OUT slots retain stale freeze pins forever. The seed 70 +617 family was real but state-driven; fixing the leak doesn't directly fix +617 (that needs batch-aware sizing) but does prevent the WORST cases from snowballing.
+
+4. **Run a baseline at end of every session, not after each experiment.** Saving mid-experiment baselines pollutes future comparisons.
+
+5. **State-aware testing** — when an experiment looks like it helped (Test 1 +1.07pp), check Test 2 too. Test 1 is deterministic and one specific seed range; Test 2 explores broader configurations. Both passing is the real signal.
+
+### Open items for next session
+
+Carryforward from prior sessions:
+- **Day-kcal-aware Y_floor/Y_ceil selection in freeze** (modest, low-risk gain — investigation laid out in chat earlier this session). Currently freeze picks Y_nearest (closest perPkg multiple). Day-kcal-aware would score Y_floor vs Y_ceil by predicted day-kcal disruption and prefer the one that keeps days closer to target. Helps cases where both directions are feasible (∼50% of freeze items per stress run).
+- **Batch-aware cook sizing** (when a cook anchor feeds N portions same-day or across days, size to weighted budget across all fed days, not just cook-day's slot budget alone) — the structural fix for kcalLow on undersized cooks (seed 14 turkey_zucchini_boats family).
+- **veg miss pattern** (~15-19/run): yogurt_bowl_sweet dominates breakfast (~14% pick rate, 0c veg) + her smaller dinner budget compresses recipe veg. Recipe-side or Phase 1 scoring change.
+- **Closed-off in Test 1** (15 meals never picked): `viet_vermicelli`, `thai_peanut_noodle`, `salmon_bowl`, `chicken_noodle_soup`, `salmon_stir_fry_din`, `lemongrass_salad`, `spicy_tofu_chicken_noodles`, `lentil_soup_lean`, `korean_rice_bowl`, `quinoa_breakfast_bowl`, `yogurt_oat_bowl` — same pattern as before, recipe-pool issue not pipeline issue.
+- **INV6 max drift `salmon_stir_fry_din`** (Test 1 17 fires; Test 2 15 fires) — consistent top offender across both tests. Recipe rebalance candidate.
+
+### Branch & commit
+- Pre-session HEAD: `MP_2026-05-01_V1` at 308fbac
+- Today's tip: `MP_2026-05-02_V1` (single commit: audit cleanup + Phase 1 freeze-overrides fix + yogurt_snack oats)
+

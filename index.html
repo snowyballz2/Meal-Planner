@@ -1830,13 +1830,16 @@ const MEALS=[
     I('orange',1,'fruit',false)
   ]},
 
- {id:'yogurt_snack',label:'Greek yogurt + berries',slots:['breakfast','snack'],
-  // noRatioCheck: yogurt-dominant meal, only fruit + capped honey — ratio drift is design.
+ {id:'yogurt_snack',label:'Greek yogurt bowl with berries & oats',slots:['breakfast','snack'],
+  // noRatioCheck: yogurt-dominant meal, only fruit + capped honey + oats — ratio drift is design.
+  // Oats added 2026-05-02 so the recipe can scale to breakfast budget — without a scalable
+  // carb, ingredient maxAmts capped achievable kcal at 339, well below him breakfast 512.
   noRatioCheck:true,
-  steps:['Spoon yogurt into bowl. Add berries. Drizzle honey.'],
+  steps:['Spoon yogurt into bowl. Top with oats and berries. Drizzle honey.'],
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',1,'protein'),
+    I('oats',0.25,'carb'),
     I('mixed berries',0.5,'fruit',false),
     I('honey tbsp',0.5,'condiment')
   ]},
@@ -2608,6 +2611,26 @@ function setOverride(p,d,s,idx,field,value){
   existing[field]=value;
 }
 function clearOverrides(p,d,s){delete OVERRIDES[sk(p,d,s)];}
+// Clear all freeze-written overrides (scalable:false) across every slot.
+// Called at the start of randomizeWeek to prevent stale freeze pins from
+// previous runs leaking into the new one. User-set ingredient overrides
+// (UI dropdown adjustments — amt-only, no scalable field) are preserved.
+//
+// Without this, MANUAL_SET / EAT_OUT slots — which Phase 1 deliberately
+// skips when clearing overrides — accumulate scalable:false overrides
+// across runs. The accumulated overrides freeze ingredient amounts at
+// values that pin shared cooks above slot budget and the day-balancer
+// can't trim them, surfacing as kcalHigh days (e.g., seed 70 him Wed +617).
+// 2026-05-02.
+function _clearFreezeOverrides(){
+  Object.keys(OVERRIDES).forEach(function(k){
+    var ov = OVERRIDES[k];
+    if(!ov || !ov.length) return;
+    var filtered = ov.filter(function(o){return o.scalable !== false;});
+    if(filtered.length === 0) delete OVERRIDES[k];
+    else if(filtered.length !== ov.length) OVERRIDES[k] = filtered;
+  });
+}
 
 // Apply overrides to a port's ingredients, returns new array
 function applyOverrides(port,p,d,s){
@@ -2982,8 +3005,7 @@ var SHOP_DISPLAY_NAMES={
   'brown rice cooked':'Brown rice','jasmine rice cooked':'Jasmine rice','white rice cooked':'White rice',
   'whole wheat pasta cooked':'Whole wheat pasta','rice vermicelli cooked':'Rice vermicelli',
   'egg noodles cooked':'Egg noodles','udon noodles':'Udon noodles',
-  'lentils cooked':'Lentils','black beans cooked':'Black beans','white beans cooked':'White beans',
-  'chickpeas cooked':'Chickpeas','quinoa cooked':'Quinoa','farro cooked':'Farro',
+  'quinoa cooked':'Quinoa','farro cooked':'Farro',
   'baby spinach':'Baby spinach','tofu firm':'Firm tofu','silken tofu':'Silken tofu',
   'canned tuna':'Tuna, canned','tuna pouch':'Tuna pouch',
   'ground chicken':'Ground chicken','filet mignon':'Filet mignon',
@@ -6681,7 +6703,6 @@ var ROUND_PRODUCE_ITEMS = ['baby spinach','kale','broccoli','bell pepper','carro
 // Unify and snap functions skip ingredients where any portion's cache item
 // carries scalable:false — the freeze is the authority on those amounts.
 //
-// Replaces the older roundPkgItemsToBoundary mechanism. 2026-04-29.
 // `attemptSwap`=true enables the last-resort solo-pkg swap pass: when freeze
 // can't reach a package boundary AND the trip would fire INV20, swap the
 // offending solo meal to a non-pkg alternative. Caller passes true only for
@@ -7342,108 +7363,6 @@ function _tradeBatchesAndSolos(Y, soloSnapSum, newSolos, batches, basicResult, c
   for(var i=0; i<batchPlan.length; i++){ if(!batchPlan[i]) return null; }
 
   return {solos: solosOut, batches: batchPlan};
-}
-
-function roundPkgItemsToBoundary(randTarget){
-  var persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
-  invalidateLeftoverCache();
-  var leftovers = computeLeftovers();
-  ['cook1','cook2'].forEach(function(trip){
-    var days = TRIP_DAYS_STATIC[trip] || [];
-    ROUND_PKG_ITEMS.forEach(function(dbKey){
-      var db = NUTRI_DB[dbKey];
-      if(!db || !db.pkg || db.pkg.longShelfLife || db.pkg.acceptableWaste) return;
-      var perPkg = (db.pkg.drained && (db.unit==='cup'||db.unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
-      if(perPkg <= 0) return;
-
-      // Find cook-anchor usages of this ingredient in this trip
-      var usages = []; // {p, d, s, idx, estAmt, lMult, isSolo}
-      var tripTotal = 0;
-      days.forEach(function(d){
-        persons.forEach(function(p){
-          if(p!=='him'&&p!=='her')return;
-          SLOTS.forEach(function(s){
-            if(s==='late_snack'||s==='shake')return;
-            var key = sk(p,d,s);
-            if(SKIPPED[key]||EAT_OUT[key])return;
-            var lo = leftovers[key];
-            if(lo && lo.isLeftover) return; // anchors only
-            var lMult = (lo && !lo.isLeftover && lo.servings>1) ? lo.servings : 1;
-            var isSolo = (lMult === 1);
-            var mealId = getMealId(p,d,s); if(!mealId) return;
-            var meal = MEALS.find(function(m){return m.id===mealId;});
-            if(!meal || !meal[p] || !meal[p].ingredients) return;
-            var ovrIngr = applyOverrides(meal[p], p, d, s);
-            // Compute estimated slot scale (linear: budget/recipe_kcal). Use
-            // post-override ingredients so previously-pinned items don't get
-            // re-counted. Excludes scalable:false items from base kcal.
-            var baseKcal = 0;
-            ovrIngr.forEach(function(i){
-              var idb = NUTRI_DB[i.dbKey];
-              if(!idb) return;
-              if(i.scalable === false) return; // not part of scale base
-              baseKcal += idb.kcal * (i.amt||0);
-            });
-            var slotScale = (s!=='shake' && SLOT_BUDGET[s] && baseKcal>0) ? getSlotBudget(p,d,s)/baseKcal : 1;
-            ovrIngr.forEach(function(ing, idx){
-              if(ing.dbKey !== dbKey) return;
-              var estAmt = (ing.scalable === false) ? (ing.amt||0) : (ing.amt||0) * slotScale;
-              usages.push({p:p, d:d, s:s, idx:idx, estAmt:estAmt, lMult:lMult, isSolo:isSolo});
-              tripTotal += estAmt * lMult;
-            });
-          });
-        });
-      });
-      if(usages.length === 0 || tripTotal <= 0) return;
-
-      // Candidate targets — pick nearest perPkg multiple, with min = perPkg.
-      var nearest = Math.round(tripTotal/perPkg) * perPkg;
-      if(nearest < perPkg) nearest = perPkg;
-      var floorMult = Math.floor(tripTotal/perPkg) * perPkg;
-      var ceilMult  = Math.ceil(tripTotal/perPkg)  * perPkg;
-      if(floorMult < perPkg) floorMult = perPkg;
-      if(ceilMult  < perPkg) ceilMult  = perPkg;
-      // The "other" direction = whichever (floor/ceil) isn't nearest.
-      var other = (nearest === ceilMult) ? floorMult : ceilMult;
-
-      // Already on boundary — skip.
-      if(Math.abs(tripTotal - nearest) < 0.01) return;
-
-      function tryTarget(Y){
-        if(Y <= 0) return {ok:false, reason:'zero'};
-        var scale = Y/tripTotal;
-        var newAmts = [];
-        for(var i=0;i<usages.length;i++){
-          var u = usages[i];
-          var newAmt = u.estAmt * scale;
-          var floorAmt = (u.isSolo && typeof db.minAmtSolo === 'number')
-            ? db.minAmtSolo
-            : (typeof db.minAmt === 'number' ? db.minAmt : 0);
-          if(typeof db.maxAmt === 'number' && newAmt > db.maxAmt + 0.0001){
-            return {ok:false, reason:'maxAmt'};
-          }
-          if(newAmt < floorAmt - 0.0001){
-            return {ok:false, reason:'minAmt'};
-          }
-          newAmts.push({u:u, newAmt:newAmt});
-        }
-        return {ok:true, newAmts:newAmts, target:Y};
-      }
-
-      // Try nearest first, fall back to opposite direction if blocked.
-      var chosen = tryTarget(nearest);
-      if(!chosen.ok) chosen = tryTarget(other);
-      if(!chosen.ok) return; // both directions failed — leave as-is
-
-      // Apply overrides — set both amt and scalable:false so the per-slot
-      // adjuster respects the pinned amount.
-      chosen.newAmts.forEach(function(na){
-        setOverride(na.u.p, na.u.d, na.u.s, na.u.idx, 'amt', na.newAmt);
-        setOverride(na.u.p, na.u.d, na.u.s, na.u.idx, 'scalable', false);
-      });
-    });
-  });
-  invalidateLeftoverCache();
 }
 
 // Cold-path trip-waste estimator shared by `rerollMissDays` and
@@ -8913,6 +8832,12 @@ function runBalanceAdjusters(){
 
 function randomizeWeek(target, seed){
   sharedSchedOpen=false;
+  // Clear freeze-written overrides from any previous run. Phase 1 skips
+  // clearOverrides on locked slots (MANUAL_SET / EAT_OUT), so without
+  // this, scalable:false overrides on shared-schedule slots accumulate
+  // across runs and pin cook amounts at stale values. User UI overrides
+  // (amt-only) are preserved. 2026-05-02.
+  _clearFreezeOverrides();
   // Reset INV18 counters for this randomize. Each runBalanceAdjusters
   // call within this randomize increments _rbaCallCount; cap-hits also
   // increment _rbaCapHits. verifyInvariants reads the ratio at the end.
