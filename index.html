@@ -6275,9 +6275,21 @@ function renderMeals(){
           const dimStyle=isPaintDim?'opacity:0.3;pointer-events:none;':'';
           const lClick=isPaintCol?'onclick="event.stopPropagation();paintTap(\''+de+'\',\'left\')"':'onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchstart="event.stopPropagation();event.preventDefault();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchcancel="clearTimeout(_schedLongPress);_schedLongPress=null"';
           const rClick=isPaintCol?'onclick="event.stopPropagation();paintTap(\''+de+'\',\'right\')"':'onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchstart="event.stopPropagation();event.preventDefault();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchcancel="clearTimeout(_schedLongPress);_schedLongPress=null"';
+          // 2026-05-03: when ONLY one side is highlighted (eat-out alone, manual
+          // alone, queued alone), give the highlighted side its own divider via
+          // its own border (lBdr/rBdr) so width + opacity match the other 3 sides.
+          // Previously the divider used midCol (1.5px .4), which mismatched Manual's
+          // 2px .6 borders → the highlighted side looked 3-sided / "open" on the
+          // divider corner. Symmetric fix for both Her-only and Him-only cases.
+          const lSelfHi=isShared||himSkip||(himManual&&lNormal)||(isPaintCol&&himQueued);
+          const rSelfHi=isShared||herSkip||(herManual&&rNormal)||(isPaintCol&&herQueued);
+          const lOnlyHi=lSelfHi&&!rSelfHi;
+          const rOnlyHi=rSelfHi&&!lSelfHi;
+          const lBdrRightFinal=lOnlyHi?lBdr:(rOnlyHi?'none':(lBg!==rBg?'1.5px solid '+midCol:'none'));
+          const rBdrLeftFinal=rOnlyHi?rBdr:'none';
           html+='<div class="sched-pill-wrap" style="'+dimStyle+'">'
-            +'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+';border-right:'+(lBg!==rBg?'1.5px solid '+midCol:'none')+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>'
-            +'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+';border-left:none;color:'+rCol+'" '+rClick+'>'+rLabel+'</div>'
+            +'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+';border-right:'+lBdrRightFinal+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>'
+            +'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+';border-left:'+rBdrLeftFinal+';color:'+rCol+'" '+rClick+'>'+rLabel+'</div>'
             +'</div>';
         });
       });
