@@ -504,6 +504,7 @@ var NUTRI_DB = {
   'red pepper flake':      {kcal:6,   pro:0.3,fat:0.3, carb:0.9, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'garlic':{kcal:4,pro:0.2,fat:0,carb:1,unit:'cloves',minAmt:0.5,minAmtSolo:1,maxAmt:4},
   'lemon':                 {kcal:12,  pro:0.5,fat:0.1, carb:4,   unit:'each', minAmt:0.25, maxAmt:1},
+  'grapefruit juice':      {kcal:6,   pro:0.07,fat:0,  carb:1.4, unit:'tbsp', halfSnap:true, minAmt:0.5, maxAmt:3},
   'ginger':                {kcal:6,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'lemongrass':            {kcal:5,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', minAmt:0.5, maxAmt:2},
   'ground chicken':        {kcal:35,  pro:5.8,fat:1.3, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}, minAmt:3.5, maxAmt:12.5, minAmtSolo:4, maxAmtSolo:12},
@@ -1903,6 +1904,23 @@ const MEALS=[
     I('rice vinegar',0.25,'condiment',false),
     I('sesame seeds',0.25,'fixed',false),
     I('garlic',1.25,'fixed',false),
+    I('ginger',0.25,'fixed',false)
+  ]},
+
+ {id:'sticky_miso_salmon_bowl',label:'Sticky miso salmon bowl',slots:['lunch','dinner'],
+  steps:['Whisk white miso, honey, avocado oil, grated ginger, grapefruit zest (~1/2 tsp per serving), and grapefruit juice in a large bowl. Season salmon lightly with salt, add to bowl, gently toss to coat. Marinate at room temp ~15 min.',
+         'Place a rack ~5 inches from the broiler element; set broiler to high. Arrange salmon on a foil-lined sheet, leaving the marinade on and spreading any excess on top of the fillets (helps browning). Broil until glossy and charred in spots — ~5 min for medium-rare, ~7 for medium.',
+         'Fluff warm rice (from rice cooker) with salt and a few grinds of pepper. Plate: rice, salmon on top, scallions and sliced cucumber alongside. Optional toppings: kimchi, chile crisp, toasted nori.'],
+  him:{},her:{},
+  ingredients:[
+    I('salmon',6,'protein'),
+    I('white rice cooked',1,'carb'),
+    I('cucumber',1,'veg'),
+    I('scallion',1,'veg'),
+    I('white miso',0.75,'condiment'),
+    I('honey tbsp',0.5,'condiment'),
+    I('grapefruit juice',1,'condiment',false),
+    I('avocado oil',0.25,'fat'),
     I('ginger',0.25,'fixed',false)
   ]},
 
