@@ -6142,21 +6142,36 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
       }).join('');
       ingrHtml='<div class="ingr-edit-grid">'+ingrHtml+'</div>';
       if(showBanner){
-        const adjDir = slotAdj>0?'+':'';
+        // 2026-05-04 Q2 polish: list ONLY user-edited ingredients (not
+        // slot-adjuster scalings, not freeze pins). Compare against recipe
+        // base amount so the banner shows what the user changed FROM the
+        // original recipe. Header phrased as manual-edit (not auto-adjust)
+        // since by definition the listed changes are user-driven.
+        const userOverrideIdxs = (function(){
+          const _ov = getOverrides(person, day, s);
+          if(!_ov || !_ov.length) return {};
+          const set = {};
+          _ov.forEach(function(o){
+            if(o.scalable !== false) set[o.idx] = true;
+          });
+          return set;
+        })();
         const changeLines = [];
-        adjResult.forEach(function(a){
-          if(Math.abs(a.newAmt - a.ing.amt) > 0.02){
-            const db = NUTRI_DB[a.ing.dbKey];
-            const unit = db ? db.unit : '';
-            const fmtAmt = fmtFrac;
-            const dir = a.newAmt > a.ing.amt ? '↑' : '↓';
-            const kcalDiff = Math.round((a.newAmt - a.ing.amt) * (db?db.kcal:0));
-            const diffSign = kcalDiff > 0 ? '+' : '';
-            changeLines.push(dir+' <b>'+a.ing.dbKey+'</b>: '+fmtAmt(a.ing.amt)+' → '+fmtAmt(a.newAmt)+' '+unit+' ('+diffSign+kcalDiff+' kcal)');
-          }
+        adjResult.forEach(function(a, ix){
+          if(!userOverrideIdxs[ix]) return;
+          const recipeAmt = (port.ingredients[ix] && port.ingredients[ix].amt !== undefined)
+            ? port.ingredients[ix].amt : 0;
+          if(Math.abs(a.newAmt - recipeAmt) <= 0.02) return;
+          const db = NUTRI_DB[a.ing.dbKey];
+          const unit = db ? db.unit : '';
+          const fmtAmt = fmtFrac;
+          const dir = a.newAmt > recipeAmt ? '↑' : '↓';
+          const kcalDiff = Math.round((a.newAmt - recipeAmt) * (db?db.kcal:0));
+          const diffSign = kcalDiff > 0 ? '+' : '';
+          changeLines.push(dir+' <b>'+a.ing.dbKey+'</b>: '+fmtAmt(recipeAmt)+' → '+fmtAmt(a.newAmt)+' '+unit+' ('+diffSign+kcalDiff+' kcal)');
         });
         if(changeLines.length){
-          adjBanner='<div class="adj-info">⚡ Auto-adjusted <b>'+adjDir+slotAdj+' kcal</b> to hit daily target:<br>'
+          adjBanner='<div class="adj-info">✏️ Manual edits to this slot:<br>'
             +changeLines.join('<br>')+'</div>';
         }
       }
