@@ -7901,10 +7901,30 @@ function paintAccept(){
     }
   });
   saveSharedSchedule();
-  // 2026-05-03: form or update the link group for this meal.
-  // - First, remove any existing group for this meal (we'll rebuild from queued).
-  // - If 2+ queued slots → create a new group with the queued slots.
-  // - If <2 queued slots → no group (single Manual Set is fine alone).
+  // 2026-05-03 (revised): form or update the link group for this meal.
+  // CRITICAL: also evict any queued slot from OTHER groups it might already
+  // belong to. Without this eviction, painting meal Z onto cells already in
+  // groups for meals X and Y leaves stale references — getLinkGroupForSlot
+  // returns the FIRST match (the old group X/Y), so render shows stale
+  // colors and the new paint operation appears to "do nothing" (the old
+  // group's outline + bg dominate, regardless of SEL change to meal Z).
+  for(var qi=0; qi<queuedSlots.length; qi++){
+    var q=queuedSlots[qi];
+    for(var gi=LEFTOVER_LINKS.length-1; gi>=0; gi--){
+      var g=LEFTOVER_LINKS[gi];
+      if(g.meal===_paintMealId) continue; // we'll fully rebuild this meal's group below
+      var sIdx=-1;
+      for(var sj=0; sj<g.slots.length; sj++){
+        var sl=g.slots[sj];
+        if(sl.p===q.p && sl.d===q.d && sl.s===q.s){sIdx=sj; break;}
+      }
+      if(sIdx>=0){
+        g.slots.splice(sIdx,1);
+        if(g.slots.length<=1) LEFTOVER_LINKS.splice(gi,1);
+      }
+    }
+  }
+  // Now remove any existing group FOR THIS MEAL (rebuilt from queued below)
   for(var gi=LEFTOVER_LINKS.length-1; gi>=0; gi--){
     if(LEFTOVER_LINKS[gi].meal===_paintMealId) LEFTOVER_LINKS.splice(gi,1);
   }
