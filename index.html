@@ -303,7 +303,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sched-panel{background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border);padding:10px 12px;margin-bottom:10px;box-shadow:var(--shadow)}
 .sched-hdr{display:flex;align-items:center;justify-content:space-between;cursor:pointer}
 .sched-title{font-size:13px;font-weight:700;color:var(--text)}
-.sched-grid{display:grid;grid-template-columns:36px 1fr 1fr 1fr 1fr;gap:4px;margin-top:8px}
+.sched-grid{display:grid;grid-template-columns:36px 1fr 1fr 1fr;gap:4px;margin-top:8px}
 .sched-btn{padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:var(--bg);border:1.5px solid var(--border);color:var(--gray)}
 .sched-btn-set{border-color:rgba(167,139,250,.5);color:#A78BFA}
 .sched-day{font-size:11px;font-weight:700;display:flex;align-items:center}
@@ -6334,11 +6334,13 @@ function renderMeals(){
     if(sharedSchedOpen){
       // Spacer between header buttons and grid
       html+='<div style="height:5px"></div>';
-      // Grid header: Day + Breakfast + Lunch + Dinner + Snack (snack added 2026-05-03)
+      // Grid header: Day + Breakfast + Lunch + Dinner. Snack column was
+      // added briefly 2026-05-03 then removed — too wide for iPhone screens.
+      // Snacks are still picked via the meal cards directly.
       html+='<div class="sched-grid">';
       html+='<div></div>';
-      ['breakfast','lunch','dinner','snack'].forEach(function(ss){
-        const _prId=ss==='breakfast'?'breakfasts':ss==='lunch'?'lunches':ss==='dinner'?'dinners':'snacks';
+      ['breakfast','lunch','dinner'].forEach(function(ss){
+        const _prId=ss==='breakfast'?'breakfasts':ss==='lunch'?'lunches':'dinners';
         // 2026-05-03: paint mode is now CROSS-COLUMN — all columns are equally
         // paintable, no dimming. Header still shows shared-preset zones.
         if(_paintMode){
@@ -6352,8 +6354,7 @@ function renderMeals(){
         }
       });
       // Day rows
-      const slots3=['breakfast','lunch','dinner'];     // for day-name color (B/L/D)
-      const slots4=['breakfast','lunch','dinner','snack']; // for grid cells (snack added 2026-05-03)
+      const slots3=['breakfast','lunch','dinner'];     // for grid cells AND day-name color
       DAYS.forEach(function(dd){
         const dayAllShared=slots3.every(function(ss){return SHARED_SCHEDULE[dk(dd,ss)]==='shared';});
         const dayAllSkip=slots3.every(function(ss){return SHARED_SCHEDULE[dk(dd,ss)]==='skip-both';});
@@ -6364,7 +6365,7 @@ function renderMeals(){
         } else {
           html+='<div class="sched-day" style="color:'+dayCol+';cursor:pointer" onclick="event.stopPropagation();schedTapDay(\''+dde+'\')">'+dd.slice(0,3)+'</div>';
         }
-        slots4.forEach(function(ss){
+        slots3.forEach(function(ss){
           const state=SHARED_SCHEDULE[dk(dd,ss)]||'normal';
           const himSkip=(state==='skip-him'||state==='skip-both');
           const herSkip=(state==='skip-her'||state==='skip-both');
@@ -6492,12 +6493,14 @@ function renderMeals(){
       } else {
         html+='<div style="display:flex;gap:4px;align-items:center">';
         const ss1=_paintSavedSlot;
-        // 2026-05-03: categories + existing groups for edit. Bkfst/Main/Snack
-        // for new. Existing groups appended as "↻ <meal> (<color>)" so user
-        // can pick one to edit (pre-loads the group's cells in paint mode).
+        // 2026-05-03: categories + existing groups for edit. Bkfst/Main for
+        // new (Snack removed when the snack column was reverted — picking
+        // snack here had no column to paint to). Existing groups appended
+        // as "↻ <meal> (<color>)" so user can pick one to edit (pre-loads
+        // the group's cells in paint mode).
         html+='<select id="paintSlotSel" class="paint-select" style="flex-shrink:0" onchange="onPaintSlotChange()">';
         html+='<option value="">Category</option>';
-        [{v:'breakfast',l:'Bkfst'},{v:'main',l:'Main'},{v:'snack',l:'Snack'}].forEach(function(o){
+        [{v:'breakfast',l:'Bkfst'},{v:'main',l:'Main'}].forEach(function(o){
           html+='<option value="'+o.v+'"'+(ss1===o.v?' selected':'')+'>'+o.l+'</option>';
         });
         if(LEFTOVER_LINKS.length){
