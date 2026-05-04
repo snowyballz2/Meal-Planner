@@ -2378,3 +2378,185 @@ Carryforward from prior sessions:
 - Pre-session HEAD: `MP_2026-05-01_V1` at 308fbac
 - Today's tip: `MP_2026-05-02_V1` (single commit: audit cleanup + Phase 1 freeze-overrides fix + yogurt_snack oats)
 
+## Session 2026-05-03 — Audit Q1/Q2/Q5 fixes + sticky_miso recipe + Schedule UI link-group feature
+
+14 commits across one day. Afternoon: 3 audit fixes landed (Q1/Q2/Q5 from a 5-question audit). Evening: full new feature shipped — paint-based leftover-link groups in the Schedule UI.
+
+### Audit fixes (commit `3d2377f`, afternoon)
+
+- **Q1 — `_isPristine()` helper.** `runStandard()` (Test 1) auto-clears state at start. `runStandard2/3/4` warn at start when state is dirty (state evolution intentional, but worth surfacing). `saveBaseline()` refuses dirty-state runs unless `force:true` — prevents accidentally baseline'ing a polluted state.
+- **Q2 — Veg primary-goal threshold dropped 3 → 2.75** across 7 sites: in-pipeline goal checks, balancer `boostFV` target, MPStress `measureDay`. Reflects that 2.75c is "close enough" to the structural 3c target — Her especially clusters in 2.75-3.0c bucket due to budget-driven kcal-prop scaling.
+- **Q5 — `_clampThresh` skip-frozen guard scoped to `ROUND_PKG_ITEMS ∪ ROUND_PRODUCE_ITEMS` only.** Other `scalable:false` items (oils, soy sauce, spices) still get clamped — they rely on `_clampThresh` to stay within `minAmt`/`maxAmt` bounds. The earlier blanket skip was overreach.
+- **Q3 — OPEN.** Tied non-zero-waste discrimination: when multiple retries achieve the same totalWaste > 0, no tiebreak by goal-miss is applied (zero-waste retries get the full pipeline + miss measurement; non-zero-waste don't). Two attempts both produced INV7 hard fires; failure modes documented inline at [index.html:9285](index.html:9285). Any future attempt MUST verify across full deterministic 100 seeds that no hard INV fires — not just spot-check.
+
+**Test 1 (deterministic 100 seeds): 96.64% → 97.29% (+0.65pp). All hard INVs at 0. Timing 3163ms → 1266ms (-60%, primarily from veg threshold cutting `rerollMissDays` work — more days exit "veg miss" state earlier).**
+
+### New recipe (`a889fea`)
+
+- **`sticky_miso_salmon_bowl`** — NYT / Andy Baraghani recipe. Slots: lunch + dinner. Salmon + jasmine rice + miso-honey glaze + bok choy. Provides another salmon option to relieve pressure on `salmon_stir_fry_din` / `salmon_lentils` rotation.
+
+### Leftover Links — new Schedule UI feature (10 commits, evening)
+
+User-painted groups that mark explicit cook-anchor + leftover relationships across cells. New first-class data-model concept (not derived).
+
+**Data structure** ([index.html:2507-2611](index.html:2507)):
+- `LEFTOVER_LINKS = []` — alias to `weekData[activeWeek].leftoverLinks`. Migrated to empty array on load if missing.
+- Each group: `{ id, meal, slots:[{p,d,s}, ...], colorIdx }` where slots can mix person/day/slot freely (solo + shared cells, any combination).
+- All slots in a group get `MANUAL_SET=true` so randomize leaves them alone (Phase 1's `isLockedForRandomize` check covers them).
+- **Anchor** = the slot at the earliest `(day-index, slot-order)` in the group; possibly multiple slots if shared (same day+slot, different person). Slot order: breakfast=0, lunch=1, snack=2, dinner=3.
+- **Leftovers** = all other slots in the group.
+- **`colorIdx`** (0..5) cycles a fixed palette: cyan, orange, lime, rose, amber, fuchsia. Lowest unused index allocated on creation; reuse from 0 when all 6 in use.
+
+**Helpers**: `getLinkGroupForSlot(p,d,s)`, `getLinkGroupForMeal(mealId)`, `isLinkAnchor(group, p, d, s)`, `_allocateLinkColor()`, `removeFromLinkGroup(p,d,s)` (dissolves to single-slot groups), `rebindLeftoverLinks()` (called after week switches).
+
+**Schedule UI changes** (`f7bd069` + 9 follow-ups):
+- **3-zone pill** per cell: left zone (Him), center zone (cell-wide / shared), right zone (Her). Tap a zone to queue/unqueue while in paint mode. Center zone is invisible-but-paintable; doesn't add visual lines.
+- **Paint mode flow**: open picker → pick category (Bkfst | Main) → pick meal → enter paint mode → tap zones to queue cells → Assign forms/updates the group. Cancel exits without writes.
+- **Picker shows existing groups** as `↻ <meal label> (<color name>)` options below the meal dropdown. Selecting one enters edit mode pre-loaded with the group's cells queued. Edit mode adds a Delete button (wipes MANUAL_SET + SEL on every slot in the group + removes the group; `deleteCurrentGroup` calls `clearOverrides` per slot to clear any freeze pins cleanly).
+- **Single-cell paints don't form groups.** Solo single-cell = Manual purple border + purple bg. Shared single-cell = shared green bg + Manual purple border + center green fill. Multi-cell paints (real leftover-link case) form a group as before.
+- **Paint accept evicts queued slots from OTHER groups before forming new group** (`86c82e0`) — prevents one slot belonging to two groups.
+- **Linked cells locked from tap-cycle**: tapping a leftover/anchor in normal mode no-ops (existing `MANUAL_SET` check on `schedTapLeft/Right`). To modify a group: enter edit mode via picker.
+- **Visual treatment**: anchor = transparent bg + group-color outline. Leftover = group-color bg (.45 alpha tint) + same outline. Each group reads as one color family; link beats shared-green.
+- **Picker meal options grouped by primary protein** (`698734f`) — matches the normal meal dropdown layout. Reuses `buildMealSelectOpts()` helper.
+
+**SNACK column was added then reverted** (`f7bd069` → `02b5a6f`). Too wide for iPhone screen (5-column grid → text cramped). Schedule grid stays at 4 columns: Day | Bkfst | Lunch | Dinner. Snacks remain pickable via meal cards on each day. Data model still supports snack slots in link groups (the array is slot-agnostic), but the UI no longer exposes painting into the snack slot.
+
+### Stress baselines (carry-forward to next session)
+
+```js
+// Test 1 (deterministic, seeds 12345..12444):
+localStorage.setItem('mealPlannerStressBaseline', JSON.stringify({
+  primary:97.29, hardFail:0, mode:'standard'
+  // Full payload not re-saved this session — re-run after next change to capture severity.
+}));
+```
+
+(Test 2 / Test 3 not re-run this session. Schedule UI work doesn't touch the pipeline so stress numbers should be unchanged from `3d2377f` measurement.)
+
+### Open items for next session
+
+**Q3 — Tied non-zero-waste retry discrimination** (parked, BACK BURNER per user, but kept on the list):
+- Failure modes documented inline at [index.html:9285](index.html:9285). Two attempts produced INV7 hard fires.
+- Attempt 1 (in-loop, `totalWaste <= bestWaste`): freeze writes accumulate on Phase-4-locked Her shared-schedule slots that Phase 1 of the next retry skips clearing → cross-retry leak → INV7/INV8 fires (seed 12419).
+- Attempt 2 (post-loop tail resolution with explicit OVERRIDES clear per attempt): different INV7 pattern (3 seeds: 12345, 12347, 12379) on `hummus_wrap` with mixed-ratio fires. Root cause not pinned; needs deeper investigation into freeze's behavior on non-zero-waste pre-states.
+
+**Q4 — Freeze pipeline efficiency + kcal-misses ≤150 floor** (parked, BACK BURNER per user). Full plan from audit:
+
+*Diagnosis (where the ~3163ms goes per click pre-Q2):*
+- 60 retries × {Phase 1 + countWaste} ≈ ~1500ms
+- Post-retry ~1500ms split: RBA → freeze(swap pass1) → RBA (~700ms); freeze(swap pass2) → RBA (~400ms); snap → rerollSnacks; freeze(no-swap pass3) → RBA (~400ms)
+- Pass 2 only matters if Pass 1's `_trySwapForWaste` actually swapped a meal AND co-contributor cleanup cleared overrides Pass 1 had touched
+- Pass 3 only matters if `rerollKcalOffSnacks` swapped to/from a `ROUND_*_ITEMS`-using meal
+
+*Concrete optimizations (no behavior change, ~30-50% timing recovery on typical clicks):*
+
+A. **Track whether passes are needed.** Make `freezeTripTotals` return `{swapsApplied:N, overrideWrites:M}`. Skip Pass 2 when Pass 1 did 0 swaps. Skip Pass 3 when `rerollKcalOffSnacks` returns 0 changes affecting pkg/produce slots.
+
+B. **Cache per-trip `_onBoundary` snapshot** so the fast-path doesn't re-iterate from scratch each pass.
+
+C. **Per-day kcal validator on freeze writes — the kcal-≤150 fix.** Same pattern as the deleted `applyTripFlexScaling` (per-write goal validation with revert):
+```js
+// Inside freezeTripTotals, before applying overrides for an item:
+var dryRunCacheImpact = computeDayKcalImpact(plan);
+var anyDayBreaks150 = false;
+plan.affectedDays.forEach(function(pd) {
+  var current = calcTotals(pd.p, pd.d).kcal;
+  var afterFreeze = current + dryRunCacheImpact[pd.p+'_'+pd.d];
+  if (Math.abs(afterFreeze - CAL_BASE[pd.p]) > 150 + 80) anyDayBreaks150 = true;
+});
+if (anyDayBreaks150) {
+  // Try Y_other instead of Y_nearest. If both break, leave unfrozen.
+  // Acceptable cost: 1 small pkg waste fire vs a >150 cal miss.
+}
+```
+**This is structurally different from the banned per-mutation-gate pattern** (see `feedback_no_per_mutation_gates.md`): freeze isn't a convergence loop, it's a discrete per-item choice between Y_nearest / Y_other / unfrozen. Adding kcal-impact to that 3-way scoring is expanding existing scoring, not gating intermediate state.
+
+D. **Use the 4 catastrophic kcal misses (>±150) as test bed.** `MPStress.inspectRun(seed)` for each, see exactly what freeze pinned that pushed them off. Then write the validator targeted to those patterns. Trade-off: validator can leave a few small pkg fires (chosen waste vs miss). With `SWAP_OUT_EXCLUDE` soft/hard split, encode "OK to leak 0.5c marinara to save a 200-cal miss."
+
+Recommended ordering: **D → C → A/B**.
+
+**Carryforward from 2026-05-02** (untouched this session):
+- **Day-kcal-aware Y_floor/Y_ceil selection in freeze** (subset of Q4-C).
+- **Batch-aware cook sizing** (structural fix for kcalLow on undersized cooks).
+- **veg miss pattern** (`yogurt_bowl_sweet` dominates breakfast).
+- **Closed-off meals in Test 1** (15 never-picked).
+- **INV6 max drift `salmon_stir_fry_din`** (recipe rebalance candidate).
+
+### Branch & commit
+- Pre-session HEAD: `MP_2026-05-02_V1` at c2b39dc
+- Today's commits: `3d2377f` (audit fixes) → `a889fea` (sticky_miso) → 12 schedule UI commits → `02b5a6f` (HEAD, SNACK column revert)
+- All committed to `main` (no `MP_2026-05-03_V*` branch label this session).
+
+## Session 2026-05-04 — Banner gating (Q2) + auto-link-groups (Q5)
+
+Two features landed in one commit. Q3 and Q4 (from prior session) intentionally deferred — back-burner per user.
+
+### Q2 — Auto-adjust banner / Reset button gated to user-origin overrides
+
+The "⚡ Auto-adjusted ..." banner and the "↺ Reset to original" button on cards both fired when ANY override existed for a slot. After every randomize, `freezeTripTotals` writes overrides on every `ROUND_*_ITEMS` slot (with `scalable:false`), so post-randomize most slots showed the banner — confusing because the user didn't make those changes.
+
+**Fix**: new `_hasUserOverrides(p,d,s)` helper at [index.html:2786](index.html:2786). Filters out freeze-written overrides via the existing `o.scalable === false` heuristic (already used by `_clearFreezeOverrides`). Two sites updated ([5972](index.html:5972), [6104](index.html:6104)) — banner check in `computeCardMacros` and Reset button gate in card render.
+
+User edits via `onIngrAmt`/`onIngrSwap` set `amt` only (no `scalable` field), so they pass the user-origin check and surface the banner correctly.
+
+Verified: post-randomize state has 36 freeze-only override slots, all return `false` from `_hasUserOverrides` → banner hidden. Simulated user ingredient edit → returns `true` → banner shows.
+
+### Q5 — Auto-link-groups + manual-group validator
+
+Schedule grid now visualizes every cook+leftover batch automatically — colored bands for each group without requiring manual paint. New first-class concept layered on top of the existing manual `LEFTOVER_LINKS`.
+
+**Architecture**:
+- **Manual groups** continue living in `weekData[w].leftoverLinks` (persistent, sticky across randomizes).
+- **Auto-groups** are *transient*: computed at render time from `computeLeftovers()`'s output, NOT persisted. Stored in module-level `_autoLinkGroups` array. Regenerated every `renderMeals` call → can never drift from SEL state.
+- **Conflict rule**: auto-group skips any batch whose slots are already in a manual group. Manual wins.
+- **Editing**: picker dropdown lists both manual + auto via `↻ <meal label> (<color>)` (deduped by mealId). Picking an auto-group enters edit mode pre-loaded with its slots; saving via `paintAccept` materializes it into `LEFTOVER_LINKS` (without `auto` flag — promotes to manual).
+
+**Three new helpers** at [index.html:2625–2750](index.html:2625):
+- `_validateManualLinkGroups()` — drops slots from manual groups whose current meal no longer matches `group.meal`. Dissolves to ≤1 slot. Self-healing on every render — closes the latent drift hole when user changes a slot's meal via card dropdown.
+- `_buildAutoLinkGroups()` — iterates `computeLeftovers()` cook anchors, filters to multi-portion lunch/dinner anchors not already manual-grouped, emits transient entries with cycling colors.
+- Both wired at top of `renderMeals()` ([6310](index.html:6310)).
+
+**Filter rules** (after iterative polish per user feedback):
+- Anchor must be lunch or dinner (no snack/breakfast batches per user request).
+- All portion slots must be lunch or dinner.
+- Skip if every portion is at the anchor's exact (day, slot) — pure same-day-same-slot shared cook with no leftover relationship to visualize. Same-day cross-slot batches (Mon lunch → Mon dinner) DO form auto-groups.
+- Skip if any portion's slot is already in a manual group.
+
+**Detector-found shared visual**: `_autoSharedCells` is a transient lookup (parallel to `_autoLinkGroups`) populated when a candidate is filtered out as same-day-same-slot only. Schedule cell render at [6534](index.html:6534) ORs `state==='shared'` with `_autoSharedCells[dk(d,s)]` so the cell renders shared-green even when SHARED_SCHEDULE is 'normal'. **Doesn't mutate SHARED_SCHEDULE** — preserves the data-model contract that SHARED_SCHEDULE is user-intent only. Day-name color (`dayAllShared`) also respects this.
+
+**Color palette** (after user-driven trimming + addition):
+- Removed `rose` rgb(244, 63, 94) — too close to eat-out red.
+- Added `violet` rgb(139, 92, 246) — distinct from Manual purple rgb(167, 139, 250) (more saturated/deeper) and from fuchsia (more blue, less pink).
+- Final: `cyan, orange, lime, amber, fuchsia, violet` (6 colors).
+- Allocation: simple `i % palette.length` cycling. Earlier draft had sort-by-day + `availableColors` plumbing that avoided manual-used colors — both removed per user "this sounds overly complicated for what it is".
+
+**Lookup updates**: `getLinkGroupForSlot` and `getLinkGroupForMeal` ([2562, 2589](index.html:2562)) check both `LEFTOVER_LINKS` (manual, first) and `_autoLinkGroups` (transient, second). Manual wins on conflict.
+
+**Picker dropdown** at [6661](index.html:6661): dedupes by `mealId` so manual + auto for the same meal don't show twice. Manual takes precedence.
+
+### Verified end-to-end (browser preview)
+
+- 8 auto-groups detected on initial state, all real cook+leftover batches with lunch/dinner anchors.
+- After randomize: 36 freeze-only override slots, all return `false` from `_hasUserOverrides` → banner hidden.
+- Simulated user ingredient edit (setOverride amt only) → `_hasUserOverrides` true → banner shows.
+- Picker dropdown shows manual + auto with `↻ <meal> (<color>)` format, deduped.
+- Materialization: pick auto-group → Assign → entry moves from `_autoLinkGroups` (5→4) into `LEFTOVER_LINKS` (0→1). Subsequent renders skip rebuilding for that meal because slots are now in manual.
+- Validator: changing a slot's meal causes the validator to drop that slot on next render. Dissolves group at ≤1.
+- Same-day same-slot batch test: planted same meal on both Mon dinner sides → `_autoSharedCells['Monday_dinner'] = true`, SHARED_SCHEDULE stayed 'normal', `isShared` evaluates true (cell renders green).
+- Same-day cross-slot batch test: planted same meal on Mon lunch + Mon dinner → auto-group formed correctly.
+
+### Stress (no pipeline changes — confirmed unchanged)
+
+Q2 + Q5 are pure render/visual work. No randomizer changes; no expected stress impact.
+
+### Open items (carry-forward)
+
+- **Q3** (tied non-zero-waste discrimination) — back-burner per user. Failure modes documented at [index.html:9285](index.html:9285).
+- **Q4** (freeze pipeline efficiency + kcal-≤150 floor) — back-burner per user. Full plan documented in 2026-05-03 session entry above.
+- **Q5 reserve** — was the original "test whether auto-adjust still works" item. The user's request for auto-link-groups got assigned the Q5 label too, so the testing item is informally tracked but unlabeled. Pick up next session if needed.
+- All 2026-05-02 carry-forward items still open.
+
+### Branch & commit
+- Pre-session HEAD: `02b5a6f` (2026-05-03 SNACK revert)
+- Today's tip: `MP_2026-05-04_V1` (single commit: Q2 banner gating + Q5 auto-link-groups + manual validator + 6-color palette + detector-found shared visual)
+

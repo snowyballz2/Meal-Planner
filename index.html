@@ -2526,13 +2526,15 @@ function initSharedSchedule(){
 var LEFTOVER_LINKS = []; // alias to weekData[activeWeek].leftoverLinks
 var LEFTOVER_LINK_COLORS = [
   // Visually distinct from existing palette (Him blue, Her pink, shared green,
-  // eat-out red, Manual purple, leftover-yellow).
+  // eat-out red, Manual purple, leftover-yellow). Rose was removed 2026-05-04
+  // — too close to eat-out red. Violet added 2026-05-04 — distinct from
+  // Manual purple (deeper, more saturated) and fuchsia (more blue).
   { name:'cyan',    rgb:'6,182,212' },
   { name:'orange',  rgb:'249,115,22' },
   { name:'lime',    rgb:'132,204,22' },
-  { name:'rose',    rgb:'244,63,94' },
   { name:'amber',   rgb:'217,119,6' },
-  { name:'fuchsia', rgb:'217,70,239' }
+  { name:'fuchsia', rgb:'217,70,239' },
+  { name:'violet',  rgb:'139,92,246' }
 ];
 // Slot-ordering for anchor identification. Matches the existing leftover
 // detector's cookSlots ordering (breakfast=0, lunch=1, snack=2, dinner=3).
@@ -2540,23 +2542,41 @@ var _LO_SLOT_ORDER = {breakfast:0, lunch:1, snack:2, dinner:3};
 function _dayslotKey(d, s){
   return DAYS.indexOf(d)*100 + (_LO_SLOT_ORDER[s]||0);
 }
-// Find which group (if any) contains this slot.
+// Find which group (if any) contains this slot. Manual groups checked first
+// (they win on conflict, though _buildAutoLinkGroups skips slots already in
+// a manual group so this shouldn't normally happen).
 function getLinkGroupForSlot(p, d, s){
-  if(!LEFTOVER_LINKS || !LEFTOVER_LINKS.length) return null;
-  for(var i=0; i<LEFTOVER_LINKS.length; i++){
-    var g = LEFTOVER_LINKS[i];
-    for(var j=0; j<g.slots.length; j++){
-      var sl = g.slots[j];
-      if(sl.p===p && sl.d===d && sl.s===s) return g;
+  if(LEFTOVER_LINKS && LEFTOVER_LINKS.length){
+    for(var i=0; i<LEFTOVER_LINKS.length; i++){
+      var g = LEFTOVER_LINKS[i];
+      for(var j=0; j<g.slots.length; j++){
+        var sl = g.slots[j];
+        if(sl.p===p && sl.d===d && sl.s===s) return g;
+      }
+    }
+  }
+  if(_autoLinkGroups && _autoLinkGroups.length){
+    for(var ai=0; ai<_autoLinkGroups.length; ai++){
+      var ag = _autoLinkGroups[ai];
+      for(var aj=0; aj<ag.slots.length; aj++){
+        var asl = ag.slots[aj];
+        if(asl.p===p && asl.d===d && asl.s===s) return ag;
+      }
     }
   }
   return null;
 }
-// Find the group (if any) that's currently using this meal.
+// Find the group (if any) that's currently using this meal. Manual first.
 function getLinkGroupForMeal(mealId){
-  if(!LEFTOVER_LINKS || !LEFTOVER_LINKS.length) return null;
-  for(var i=0; i<LEFTOVER_LINKS.length; i++){
-    if(LEFTOVER_LINKS[i].meal === mealId) return LEFTOVER_LINKS[i];
+  if(LEFTOVER_LINKS && LEFTOVER_LINKS.length){
+    for(var i=0; i<LEFTOVER_LINKS.length; i++){
+      if(LEFTOVER_LINKS[i].meal === mealId) return LEFTOVER_LINKS[i];
+    }
+  }
+  if(_autoLinkGroups && _autoLinkGroups.length){
+    for(var ai=0; ai<_autoLinkGroups.length; ai++){
+      if(_autoLinkGroups[ai].meal === mealId) return _autoLinkGroups[ai];
+    }
   }
   return null;
 }
@@ -2609,6 +2629,127 @@ function removeFromLinkGroup(p, d, s){
 function rebindLeftoverLinks(){
   if(!weekData[activeWeek].leftoverLinks) weekData[activeWeek].leftoverLinks = [];
   LEFTOVER_LINKS = weekData[activeWeek].leftoverLinks;
+}
+
+// ── AUTO-LINK GROUPS (transient, derived from leftover detector, 2026-05-04) ──
+// After every renderMeals, _buildAutoLinkGroups regenerates this list from
+// computeLeftovers(). Multi-portion lunch/dinner cook anchors that aren't
+// already part of a manual group get a colored band so the user can see
+// every cook+leftover relationship at a glance.
+//
+// Lifecycle: NOT persisted. Recomputed every render → can never drift from
+// SEL/leftover detector state. Manual groups (LEFTOVER_LINKS) live in
+// weekData[w].leftoverLinks and ARE persisted.
+//
+// Editing an auto-group via the picker materializes it into LEFTOVER_LINKS
+// as a manual group (paintAccept's existing path pushes a new manual entry).
+// On the next render, the auto-builder skips that batch (slots in manual)
+// and the auto-group disappears — replaced by the manual one.
+//
+// Snack anchors and snack-portion leftovers are excluded by user request:
+// auto-groups only form when anchor.s and all portion.s are in {lunch, dinner}.
+var _autoLinkGroups = [];
+
+// Cells the detector found as same-day-same-slot shared cooks (no leftover
+// relationship, so no auto-group). Schedule grid ORs these with
+// SHARED_SCHEDULE === 'shared' so detector-found shared cooks render green
+// without mutating SHARED_SCHEDULE (which is reserved for user intent per
+// the data-model contract). Repopulated every render. 2026-05-04.
+var _autoSharedCells = {};
+
+// Drop slots from manual groups whose current meal no longer matches the
+// group's meal (e.g., user changed a slot's meal via card dropdown). Groups
+// that drop to ≤1 slot are dissolved. Self-healing on every render.
+// 2026-05-04 Q5.
+function _validateManualLinkGroups(){
+  if(!LEFTOVER_LINKS || !LEFTOVER_LINKS.length) return;
+  for(var gi=LEFTOVER_LINKS.length-1; gi>=0; gi--){
+    var g = LEFTOVER_LINKS[gi];
+    if(!g.slots || !g.slots.length){LEFTOVER_LINKS.splice(gi,1); continue;}
+    var validSlots = g.slots.filter(function(sl){
+      return getMealId(sl.p, sl.d, sl.s) === g.meal;
+    });
+    if(validSlots.length === g.slots.length) continue;
+    if(validSlots.length <= 1) LEFTOVER_LINKS.splice(gi,1);
+    else g.slots = validSlots;
+  }
+}
+
+// Build transient auto-link-groups from cook anchors with ≥2 lunch/dinner
+// portions. Skips batches whose slots are already in a manual group.
+// Allocates colors fresh every render (manual-used colors first excluded;
+// once exhausted, cycles through the palette — color reuse is acceptable).
+// 2026-05-04 Q5.
+function _buildAutoLinkGroups(){
+  _autoLinkGroups = [];
+  _autoSharedCells = {};
+  var leftovers;
+  try { leftovers = computeLeftovers(); } catch(e) { return; }
+  if(!leftovers) return;
+
+  var manualSlotKeys = {};
+  if(LEFTOVER_LINKS && LEFTOVER_LINKS.length){
+    LEFTOVER_LINKS.forEach(function(g){
+      g.slots.forEach(function(sl){manualSlotKeys[sk(sl.p,sl.d,sl.s)]=true;});
+    });
+  }
+
+  // Iterate cook anchors. Skip:
+  //   - leftovers (only anchors)
+  //   - <2 portions (no relationship to show)
+  //   - non-lunch/dinner anchors (snack/breakfast excluded per user request)
+  //   - all-same-(day,slot) batches: pure shared cook with no leftover, falls
+  //     back to standard shared-green visual. Cross-slot same-day leftovers
+  //     (Mon lunch cook → Mon dinner leftover) DO count.
+  //   - any portion already in a manual group (manual wins on conflict).
+  // Color cycles 0..5 by iteration order; 7th item reuses color of 1st.
+  var autoIdx = 0;
+  Object.keys(leftovers).forEach(function(k){
+    var lo = leftovers[k];
+    if(lo.isLeftover) return;
+    if(!lo.portions || lo.portions.length < 2) return;
+
+    var keyParts = k.split('_');
+    if(keyParts.length < 3) return;
+    var anchorP = keyParts[0], anchorD = keyParts[1], anchorS = keyParts[2];
+    if(anchorS !== 'lunch' && anchorS !== 'dinner') return;
+
+    var mealId = getMealId(anchorP, anchorD, anchorS);
+    if(!mealId) return;
+
+    var validPortions = lo.portions.filter(function(pt){
+      return pt.s === 'lunch' || pt.s === 'dinner';
+    });
+    if(validPortions.length < 2) return;
+
+    // Skip if every portion is at the anchor's (day, slot) — pure same-day-
+    // same-slot shared cook with no leftover relationship to visualize.
+    // Mark the cell in _autoSharedCells so the schedule grid renders it
+    // shared-green even when SHARED_SCHEDULE doesn't have it as 'shared'
+    // (e.g., randomizer incidentally put the same meal on Him + Her at a
+    // cell not in the user's shared preset).
+    var hasNonAnchorCell = validPortions.some(function(pt){
+      return pt.d !== anchorD || pt.s !== anchorS;
+    });
+    if(!hasNonAnchorCell){
+      _autoSharedCells[dk(anchorD, anchorS)] = true;
+      return;
+    }
+
+    var anyManual = validPortions.some(function(pt){
+      return manualSlotKeys[sk(pt.p,pt.d,pt.s)];
+    });
+    if(anyManual) return;
+
+    _autoLinkGroups.push({
+      id: 'auto_'+k,
+      meal: mealId,
+      slots: validPortions.map(function(pt){return {p:pt.p, d:pt.d, s:pt.s};}),
+      colorIdx: autoIdx % LEFTOVER_LINK_COLORS.length,
+      auto: true
+    });
+    autoIdx++;
+  });
 }
 // Split pill: tap toggles skip, long press toggles shared
 // Left tap: normal ↔ skip-him. Right tap: normal ↔ skip-her.
@@ -2773,6 +2914,16 @@ function setOverride(p,d,s,idx,field,value){
   existing[field]=value;
 }
 function clearOverrides(p,d,s){delete OVERRIDES[sk(p,d,s)];}
+// Returns true only if at least one override entry is USER-origin (UI ingredient
+// edit). Freeze-written overrides have scalable:false; user edits set amt only.
+// Used to gate the "⚡ Auto-adjusted" banner + Reset button so they only show
+// after a manual change, not just because freeze pinned a pkg/produce item.
+// 2026-05-04 Q2.
+function _hasUserOverrides(p,d,s){
+  const ov=getOverrides(p,d,s);
+  if(!ov||!ov.length)return false;
+  return ov.some(function(o){return o.scalable!==false;});
+}
 // Clear all freeze-written overrides (scalable:false) across every slot.
 // Called at the start of randomizeWeek to prevent stale freeze pins from
 // previous runs leaking into the new one. User-set ingredient overrides
@@ -5957,7 +6108,9 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
   // Each person gets their own calorie adjustment — same recipe ratios, different portion sizes
   const slotAdj = getSlotAdjustment(person,day,s);
   const isSkipped = !!SKIPPED[sk(person,day,s)];
-  const hasOverrides = !!getOverrides(person,day,s);
+  // 2026-05-04 Q2: gate banner on USER-origin overrides only (freeze-written
+  // overrides with scalable:false are not surface-worthy — user didn't make them).
+  const hasOverrides = _hasUserOverrides(person,day,s);
   let pm, adjBanner='', ingrHtml='';
 
   if(isSkipped){
@@ -6089,7 +6242,8 @@ function buildMealCardHtml(s, person, day, other){
   const notePill=activeMeal.note?'<div class="note-pill">⏰ '+activeMeal.note+'</div>':'';
 
   // Ingredient display with per-ingredient nutrition — EDITABLE
-  const hasOverrides = !!getOverrides(person,day,s);
+  // 2026-05-04 Q2: gate Reset button on USER-origin overrides only.
+  const hasOverrides = _hasUserOverrides(person,day,s);
   let ingrHtml='';
   // On same-day shared slots, the Shared tab owns the combined view.
   // Individual Him/Her tabs should just show per-portion amounts. Detect
@@ -6299,6 +6453,12 @@ function renderMeals(){
   // the next read, which skips the post-pipeline steps and shows users
   // sub-grid totals like 36.485 oz. Callers that mutate SEL/OVERRIDES
   // must call invalidateLeftoverCache themselves before re-rendering.
+  //
+  // 2026-05-04 Q5: validate manual link groups (drop slots whose meal
+  // changed) and rebuild transient auto-groups from the leftover detector.
+  // Both run on every render for self-healing — no drift possible.
+  _validateManualLinkGroups();
+  _buildAutoLinkGroups();
   const mealEl=document.getElementById('mealView');
   const prevHeight=mealEl.offsetHeight;
   mealEl.style.minHeight=prevHeight+'px';
@@ -6356,7 +6516,13 @@ function renderMeals(){
       // Day rows
       const slots3=['breakfast','lunch','dinner'];     // for grid cells AND day-name color
       DAYS.forEach(function(dd){
-        const dayAllShared=slots3.every(function(ss){return SHARED_SCHEDULE[dk(dd,ss)]==='shared';});
+        // 2026-05-04: include detector-found shared cells (_autoSharedCells)
+        // so day-name turns green when ALL slots are shared by either user
+        // intent (SHARED_SCHEDULE) or detected same-day-same-slot batches.
+        const dayAllShared=slots3.every(function(ss){
+          const _st=SHARED_SCHEDULE[dk(dd,ss)];
+          return _st==='shared' || ((!_st||_st==='normal') && !!_autoSharedCells[dk(dd,ss)]);
+        });
         const dayAllSkip=slots3.every(function(ss){return SHARED_SCHEDULE[dk(dd,ss)]==='skip-both';});
         const dayCol=dayAllShared?'#34D399':dayAllSkip?'#EF4444':'var(--text)';
         const dde=dd.replace(/'/g,"\\'");
@@ -6369,7 +6535,11 @@ function renderMeals(){
           const state=SHARED_SCHEDULE[dk(dd,ss)]||'normal';
           const himSkip=(state==='skip-him'||state==='skip-both');
           const herSkip=(state==='skip-her'||state==='skip-both');
-          const isShared=(state==='shared');
+          // 2026-05-04: detector-found shared cells (same-day-same-slot
+          // batches) also render green. _autoSharedCells is repopulated
+          // every render by _buildAutoLinkGroups. Doesn't mutate
+          // SHARED_SCHEDULE — preserves user-intent semantics.
+          const isShared=(state==='shared')||(state==='normal' && !!_autoSharedCells[dk(dd,ss)]);
           const grn='rgba(52,211,153,';const red='rgba(239,68,68,';const prp='rgba(167,139,250,';const yel='rgba(245,158,11,';
           const himManual=!!MANUAL_SET[sk('him',dd,ss)];
           const herManual=!!MANUAL_SET[sk('her',dd,ss)];
@@ -6503,15 +6673,20 @@ function renderMeals(){
         [{v:'breakfast',l:'Bkfst'},{v:'main',l:'Main'}].forEach(function(o){
           html+='<option value="'+o.v+'"'+(ss1===o.v?' selected':'')+'>'+o.l+'</option>';
         });
-        if(LEFTOVER_LINKS.length){
-          LEFTOVER_LINKS.forEach(function(g){
-            const colorName=LEFTOVER_LINK_COLORS[g.colorIdx].name;
-            const meal=getMeal(g.meal);
-            const label=(meal?meal.label:g.meal);
-            const optVal='group:'+g.meal;
-            html+='<option value="'+optVal+'"'+(ss1===optVal?' selected':'')+'>↻ '+label+' ('+colorName+')</option>';
-          });
-        }
+        // 2026-05-04 Q5: list both manual + auto groups in the picker.
+        // Manual first (sticky); auto next (transient — picking one and
+        // hitting Assign materializes it via paintAccept's normal path).
+        // Dedupe by mealId — manual wins if both exist for same meal.
+        var _pickerSeen={};
+        [].concat(LEFTOVER_LINKS||[], _autoLinkGroups||[]).forEach(function(g){
+          if(_pickerSeen[g.meal]) return;
+          _pickerSeen[g.meal]=true;
+          const colorName=LEFTOVER_LINK_COLORS[g.colorIdx].name;
+          const meal=getMeal(g.meal);
+          const label=(meal?meal.label:g.meal);
+          const optVal='group:'+g.meal;
+          html+='<option value="'+optVal+'"'+(ss1===optVal?' selected':'')+'>↻ '+label+' ('+colorName+')</option>';
+        });
         html+='</select>';
         // Build meal options. For category: filtered meal list. For
         // group:<meal>: just that meal, locked. Otherwise: empty.
