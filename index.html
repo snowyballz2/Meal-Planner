@@ -6398,11 +6398,30 @@ function renderMeals(){
           const rIsAnchor=rGroup?isLinkAnchor(rGroup,'her',dd,ss):false;
           const lIsLeftover=lGroup&&!lIsAnchor;
           const rIsLeftover=rGroup&&!rIsAnchor;
-          // Background: manual+normal=purple, shared=green, eat-out=red, link-leftover=yellow
+          // Background priority (highest first):
+          //   1. In a link group:
+          //      - leftover → yellow (links state — "this is a leftover")
+          //      - anchor   → transparent (just the group-color outline shows; no
+          //        shared-green even if cell is marked shared, because the link
+          //        state implies sharedness already — "if they match they're shared")
+          //   2. Manual + normal → purple
+          //   3. Shared → green
+          //   4. Eat-out → red
+          //   5. Otherwise transparent
           const lNormal=!isShared&&!himSkip;
           const rNormal=!isShared&&!herSkip;
-          let lBg=lIsLeftover?yel+'.25)':(himManual&&lNormal)?prp+'.2)':isShared?grn+'.25)':himSkip?red+'.2)':'transparent';
-          let rBg=rIsLeftover?yel+'.25)':(herManual&&rNormal)?prp+'.2)':isShared?grn+'.25)':herSkip?red+'.2)':'transparent';
+          let lBg = lGroup
+                  ? (lIsLeftover ? yel+'.25)' : 'transparent')
+                  : (himManual&&lNormal) ? prp+'.2)'
+                  : isShared ? grn+'.25)'
+                  : himSkip ? red+'.2)'
+                  : 'transparent';
+          let rBg = rGroup
+                  ? (rIsLeftover ? yel+'.25)' : 'transparent')
+                  : (herManual&&rNormal) ? prp+'.2)'
+                  : isShared ? grn+'.25)'
+                  : herSkip ? red+'.2)'
+                  : 'transparent';
           // Border: link group color overrides Manual purple. Group outline = 2px.
           const lGroupRgb=lGroup?LEFTOVER_LINK_COLORS[lGroup.colorIdx].rgb:null;
           const rGroupRgb=rGroup?LEFTOVER_LINK_COLORS[rGroup.colorIdx].rgb:null;
