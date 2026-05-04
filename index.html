@@ -6410,14 +6410,17 @@ function renderMeals(){
           //   5. Otherwise transparent
           const lNormal=!isShared&&!himSkip;
           const rNormal=!isShared&&!herSkip;
+          // 2026-05-03: bumped leftover bg alpha .25 → .45 so amber actually
+          // reads as amber on the dark navy bg. Matches the visual weight of
+          // .leftover-badge and the Leftovers pill on meal cards.
           let lBg = lGroup
-                  ? (lIsLeftover ? yel+'.25)' : 'transparent')
+                  ? (lIsLeftover ? yel+'.45)' : 'transparent')
                   : (himManual&&lNormal) ? prp+'.2)'
                   : isShared ? grn+'.25)'
                   : himSkip ? red+'.2)'
                   : 'transparent';
           let rBg = rGroup
-                  ? (rIsLeftover ? yel+'.25)' : 'transparent')
+                  ? (rIsLeftover ? yel+'.45)' : 'transparent')
                   : (herManual&&rNormal) ? prp+'.2)'
                   : isShared ? grn+'.25)'
                   : herSkip ? red+'.2)'
