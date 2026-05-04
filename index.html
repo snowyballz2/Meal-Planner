@@ -7961,7 +7961,15 @@ function paintAccept(){
   for(var gi=LEFTOVER_LINKS.length-1; gi>=0; gi--){
     if(LEFTOVER_LINKS[gi].meal===_paintMealId) LEFTOVER_LINKS.splice(gi,1);
   }
-  if(queuedSlots.length>=2){
+  // 2026-05-03 (revised): only form a link group when queued cells span 2+
+  // unique (day, slot) pairs. A single cell — whether solo (just Him) or
+  // shared (both Him + Her at same day+slot, 2 queued slots) — is NOT a
+  // group. It's just a Manual-set assignment, which renders as the normal
+  // Manual purple border (+ shared-green bg if shared). Avoids hijacking
+  // single shared assignments with the link-group cyan/orange visual.
+  var uniqueCells={};
+  queuedSlots.forEach(function(q){uniqueCells[q.d+'_'+q.s]=true;});
+  if(Object.keys(uniqueCells).length>=2){
     LEFTOVER_LINKS.push({
       id:'lg_'+Date.now()+'_'+Math.floor(Math.random()*1000),
       meal:_paintMealId,
