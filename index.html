@@ -7004,9 +7004,21 @@ function onIngrSwap(p,d,s,idx,newKey){
   invalidateLeftoverCache();renderMeals();autoSaveWeek();
 }
 function onIngrReset(p,d,s){
-  clearOverrides(p,d,s);
-  delete MANUAL_SET[sk(p,d,s)];
-  renderMeals();autoSaveWeek();
+  // 2026-05-04: strict reset — only clear USER-origin overrides (no scalable
+  // field). Preserve freeze pins (scalable:false) so trip totals stay on
+  // perPkg/perWhole boundaries. Preserve MANUAL_SET, SHARED_SCHEDULE, and
+  // every other meta-state. Restores ingredient amounts to exactly the
+  // post-randomize state, nothing else changed.
+  const key = sk(p,d,s);
+  const ov = OVERRIDES[key];
+  if(!ov || !ov.length) return;
+  const filtered = ov.filter(function(o){return o.scalable === false;});
+  if(filtered.length === ov.length) return; // nothing user-origin to clear
+  if(filtered.length === 0) delete OVERRIDES[key];
+  else OVERRIDES[key] = filtered;
+  invalidateLeftoverCache();
+  renderMeals();
+  autoSaveWeek();
 }
 // ── PACKAGE WASTE UTILITIES ─────────────────────────────────
 // Check if a meal uses any large-package ingredients
