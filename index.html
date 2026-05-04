@@ -2640,21 +2640,12 @@ function schedEndPress(d,s,side){
   else schedTapRight(d,s);
 }
 function schedTapLeft(d,s){
-  // 2026-05-03: if this slot is a leftover in a link group, tap removes it from
-  // the group (un-MANUAL_SETs + clears SEL). If anchor: do nothing (Manual lock).
-  // If non-link Manual: existing lock (do nothing).
+  // 2026-05-03 (revised): linked cells (anchor OR leftover) are LOCKED from
+  // tap-cycle. To modify, user must enter edit mode via the picker (select
+  // the group from the Category dropdown → Select). The MANUAL_SET check
+  // below catches both link AND non-link Manual cases.
   const himKey=sk('him',d,s);
-  const himGroup=getLinkGroupForSlot('him',d,s);
-  if(himGroup){
-    if(isLinkAnchor(himGroup,'him',d,s)) return; // anchor — locked
-    removeFromLinkGroup('him',d,s);
-    delete MANUAL_SET[himKey];
-    delete SEL[himKey];
-    invalidateLeftoverCache();
-    updateSchedule();
-    return;
-  }
-  if(MANUAL_SET[himKey]) return; // locked by manual set (non-link)
+  if(MANUAL_SET[himKey]) return; // locked by manual set (link or otherwise)
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
@@ -2671,19 +2662,10 @@ function schedTapLeft(d,s){
   updateSchedule();
 }
 function schedTapRight(d,s){
-  // 2026-05-03: link-group leftover removal — see schedTapLeft for symmetry.
+  // 2026-05-03 (revised): see schedTapLeft — linked cells are locked from
+  // tap-cycle. Edit via the picker (Category dropdown → group → Select).
   const herKey=sk('her',d,s);
-  const herGroup=getLinkGroupForSlot('her',d,s);
-  if(herGroup){
-    if(isLinkAnchor(herGroup,'her',d,s)) return; // anchor — locked
-    removeFromLinkGroup('her',d,s);
-    delete MANUAL_SET[herKey];
-    delete SEL[herKey];
-    invalidateLeftoverCache();
-    updateSchedule();
-    return;
-  }
-  if(MANUAL_SET[herKey]) return; // locked by manual set (non-link)
+  if(MANUAL_SET[herKey]) return; // locked by manual set (link or otherwise)
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
@@ -6495,27 +6477,49 @@ function renderMeals(){
       html+='<div class="paint-bar">';
       if(_paintMode){
         const paintMeal=getMeal(_paintMealId);
+        const editingExisting=!!getLinkGroupForMeal(_paintMealId);
         // 2026-05-03: paint mode now cross-column (any cell paintable). The
-        // info line just identifies the meal being assigned.
-        html+='<div class="paint-info">Assigning: '+((paintMeal||{}).label||'?')+'</div>';
-        html+='<div class="paint-hint">Tap any cell to queue (any column / either side / center for shared). Hit Assign to form a leftover-link group.</div>';
+        // info line identifies the meal AND whether this is an edit.
+        html+='<div class="paint-info">'+(editingExisting?'Editing':'Assigning')+': '+((paintMeal||{}).label||'?')+'</div>';
+        html+='<div class="paint-hint">Tap any cell to queue (any column / either side / center for shared). Hit Assign to '+(editingExisting?'update':'form')+' the leftover-link group.</div>';
         html+='<div style="display:flex;gap:6px">';
         html+='<div class="sched-btn" onclick="event.stopPropagation();togglePaintMode()">Cancel</div>';
+        if(editingExisting){
+          html+='<div class="sched-btn" style="border-color:rgba(239,68,68,.5);color:#EF4444" onclick="event.stopPropagation();deleteCurrentGroup()">Delete</div>';
+        }
         html+='<div class="sched-btn" style="background:var(--shop);color:#000;font-weight:700;border-color:var(--shop)" onclick="event.stopPropagation();paintAccept()">Assign</div>';
         html+='</div>';
       } else {
         html+='<div style="display:flex;gap:4px;align-items:center">';
         const ss1=_paintSavedSlot;
-        // 2026-05-03: 3 categories — Bkfst | Main (lunch+dinner combined) | Snack.
+        // 2026-05-03: categories + existing groups for edit. Bkfst/Main/Snack
+        // for new. Existing groups appended as "↻ <meal> (<color>)" so user
+        // can pick one to edit (pre-loads the group's cells in paint mode).
         html+='<select id="paintSlotSel" class="paint-select" style="flex-shrink:0" onchange="onPaintSlotChange()">';
         html+='<option value="">Category</option>';
         [{v:'breakfast',l:'Bkfst'},{v:'main',l:'Main'},{v:'snack',l:'Snack'}].forEach(function(o){
           html+='<option value="'+o.v+'"'+(ss1===o.v?' selected':'')+'>'+o.l+'</option>';
         });
+        if(LEFTOVER_LINKS.length){
+          LEFTOVER_LINKS.forEach(function(g){
+            const colorName=LEFTOVER_LINK_COLORS[g.colorIdx].name;
+            const meal=getMeal(g.meal);
+            const label=(meal?meal.label:g.meal);
+            const optVal='group:'+g.meal;
+            html+='<option value="'+optVal+'"'+(ss1===optVal?' selected':'')+'>↻ '+label+' ('+colorName+')</option>';
+          });
+        }
         html+='</select>';
-        // Build meal options for category. 'main' = union of lunch + dinner meals.
+        // Build meal options. For category: filtered meal list. For
+        // group:<meal>: just that meal, locked. Otherwise: empty.
         let mealOpts='<option value="">— Meal —</option>';
-        if(ss1){
+        if(ss1 && ss1.indexOf('group:')===0){
+          const groupMealId=ss1.substring(6);
+          const meal=getMeal(groupMealId);
+          if(meal){
+            mealOpts='<option value="'+groupMealId+'" selected>'+meal.label+'</option>';
+          }
+        } else if(ss1){
           let catMeals=[];
           if(ss1==='main'){
             const lunchM=getMealsForSlot('lunch');
@@ -7974,6 +7978,19 @@ function onPaintSlotChange(){
   if(!slotSel||!mealSel) return;
   const cat=slotSel.value;
   _paintSavedSlot=cat;
+  // 2026-05-03: handle "group:<mealId>" — pre-select the group's meal so the
+  // user can immediately Select to enter edit mode for that group.
+  if(cat && cat.indexOf('group:')===0){
+    const groupMealId=cat.substring(6);
+    const meal=getMeal(groupMealId);
+    if(meal){
+      _paintSavedMeal=groupMealId;
+      mealSel.innerHTML='<option value="'+groupMealId+'" selected>'+meal.label+'</option>';
+      const btn=document.getElementById('paintSelectBtn');
+      if(btn) btn.style.color='var(--text)';
+      return;
+    }
+  }
   _paintSavedMeal='';
   // Build meal pool by category. 'main' = lunch ∪ dinner.
   let meals=[];
@@ -7994,6 +8011,33 @@ function onPaintSlotChange(){
   mealSel.innerHTML=html;
   const btn=document.getElementById('paintSelectBtn');
   if(btn) btn.style.color='var(--gray)';
+}
+// 2026-05-03: explicit deletion path for an existing link group during edit.
+// Wipes MANUAL_SET + SEL on every linked slot, removes the group itself.
+// User intent: cleanly clear a group rather than tap-untoggling each cell.
+function deleteCurrentGroup(){
+  if(!_paintMode || !_paintMealId) return;
+  const group=getLinkGroupForMeal(_paintMealId);
+  if(!group){
+    // Already not a group — just exit paint mode
+    _paintMode=false;_paintSlot='';_paintMealId='';_paintQueued={};
+    renderMeals();
+    return;
+  }
+  group.slots.forEach(function(sl){
+    const k=sk(sl.p, sl.d, sl.s);
+    delete MANUAL_SET[k];
+    delete SEL[k];
+    clearOverrides(sl.p, sl.d, sl.s);
+  });
+  for(var i=LEFTOVER_LINKS.length-1; i>=0; i--){
+    if(LEFTOVER_LINKS[i].meal===_paintMealId) LEFTOVER_LINKS.splice(i,1);
+  }
+  _paintMode=false;_paintSlot='';_paintMealId='';_paintQueued={};
+  invalidateLeftoverCache();
+  autoSaveWeek();
+  renderMeals();
+  if(topTab==='shop')renderShop();
 }
 
 function paintToggleAll(){
