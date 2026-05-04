@@ -437,8 +437,8 @@ var NUTRI_DB = {
   // Non-aromatic veg: minAmt 0.25 (respects recipe bases that intend "a sprinkle"
   // like 0.25c bell pepper in hummus_wrap). Solo cooks use same 0.25 floor
   // (no minAmtSolo override needed — _effMin falls back to minAmt).
-  'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, maxAmt:2.5},
-  'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, maxAmt:2.5},
+  'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, maxAmt:2.5, dampScale:0.5},
+  'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, maxAmt:2.5, dampScale:0.5},
   'broccoli':              {kcal:31,  pro:2.6,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'head broccoli'}, minAmt:0.25, maxAmt:2.0},
   'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, maxAmt:2.0},
   'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.25, maxAmt:2.0},
@@ -974,8 +974,16 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
 
   // Apply uniform scale with per-role constraints
   scalable.forEach(function(item) {
-    let newAmt = item.ing.amt * uniformScale;
     const db = NUTRI_DB[item.ing.dbKey];
+    // 2026-05-04: per-ingredient scale damping. Items flagged db.dampScale
+    // (currently leafy: baby spinach, kale @ 0.5) scale at half the relative
+    // change of the uniform factor, both up and down. Prevents recipe baseline
+    // 0.75 cup leafy from swelling to 1.5+ cup on Him's high-budget slots.
+    var ingScale = uniformScale;
+    if (db && typeof db.dampScale === 'number') {
+      ingScale = 1 + (uniformScale - 1) * db.dampScale;
+    }
+    let newAmt = item.ing.amt * ingScale;
 
     // No fat freeze — uniform scaling preserves ratios (fat% stays same)
     // The fat drop in step 2 handles cases where fat% is too high after scaling down
@@ -1300,7 +1308,7 @@ const MEALS=[
   ingredients:[
     I('egg white',0.75,'protein'),
     I('egg whole',1,'protein'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('bell pepper',0.25,'veg'),
     I('whole wheat toast',2,'carb'),
     I('garlic powder',0.5,'fixed',false),
@@ -1351,7 +1359,7 @@ const MEALS=[
     I('egg white',0.375,'protein'),
     I('egg whole',1,'protein'),
     I('bell pepper',0.25,'veg'),
-    I('kale',1,'veg'),
+    I('kale',0.75,'veg'),
     I('whole wheat toast',2,'carb'),
     I('avocado oil',0.5,'fat'),
     I('garlic powder',0.5,'fixed',false),
@@ -1364,7 +1372,7 @@ const MEALS=[
   ingredients:[
     I('egg whole',2,'protein'),
     I('egg white',0.375,'protein'),
-    I('kale',1,'veg'),
+    I('kale',0.75,'veg'),
     I('bell pepper',0.25,'veg'),
     I('whole wheat toast',2,'carb'),
     I('garlic powder',0.5,'fixed',false),
@@ -1377,7 +1385,7 @@ const MEALS=[
   ingredients:[
     I('egg whole',2,'protein'),
     I('egg white',0.25,'protein'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('carrots',0.25,'veg'),
     I('white rice cooked',0.5,'carb'),
     I('soy sauce',0.33,'condiment',false),
@@ -1392,7 +1400,7 @@ const MEALS=[
   him:{},her:{},
   ingredients:[
     I('tofu firm',7,'protein'),
-    I('baby spinach',1.5,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('whole wheat toast',2,'carb'),
     I('soy sauce',0.5,'condiment',false)
@@ -1404,7 +1412,7 @@ const MEALS=[
   ingredients:[
     I('egg whole',2,'protein',false),
     I('rice vermicelli cooked',1.25,'carb'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('soy sauce',1,'condiment',false),
     I('rice vinegar',1,'condiment',false)
@@ -1418,7 +1426,7 @@ const MEALS=[
     I('water',2,'liquid'),
     I('egg whole',1,'protein'),
     I('egg white',0.5,'protein'),
-    I('kale',1,'veg'),
+    I('kale',0.75,'veg'),
     I('soy sauce',0.33,'condiment',false),
     I('sesame oil',0.125,'fat'),
     I('sesame seeds',0.25,'fixed',false)
@@ -1434,7 +1442,7 @@ const MEALS=[
     I('egg whole',1,'protein'),
     I('egg white',0.25,'protein'),
     I('whole wheat tortilla',1,'carb'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('bell pepper',0.25,'veg'),
     I('salsa',2,'condiment',false),
     I('garlic powder',0.5,'fixed',false),
@@ -1449,7 +1457,7 @@ const MEALS=[
     I('egg white',0.5,'protein'),
     I('sweet potato',0.75,'carb'),
     I('bell pepper',1,'veg'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('whole wheat toast',1,'carb'),
     I('garlic powder',0.5,'fixed',false),
     I('black pepper',0.5,'fixed',false)
@@ -1471,7 +1479,7 @@ const MEALS=[
   ingredients:[
     I('ground turkey 93',4,'protein'),
     I('egg white',0.5,'protein'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('bell pepper',0.25,'veg'),
     I('whole wheat toast',2,'carb'),
     I('garlic powder',0.5,'fixed',false),
@@ -1497,7 +1505,7 @@ const MEALS=[
     I('quinoa cooked',0.75,'carb'),
     I('egg white',0.5,'protein'),
     I('egg whole',1,'protein'),
-    I('kale',1,'veg'),
+    I('kale',0.75,'veg'),
     I('bell pepper',0.25,'veg'),
     I('salt',0.5,'fixed',false),
     I('black pepper',0.5,'fixed',false)
@@ -1512,7 +1520,7 @@ const MEALS=[
     I('egg whole',1,'protein'),
     I('black beans cooked',0.5,'protein'),
     I('bell pepper',0.5,'veg'),
-    I('baby spinach',0.5,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('salsa',2,'condiment',false),
     I('black pepper',0.5,'fixed',false)
   ]},
@@ -1525,7 +1533,7 @@ const MEALS=[
     I('egg white',0.5,'protein'),
     I('marinara',1,'condiment'),
     I('bell pepper',0.5,'veg'),
-    I('baby spinach',0.5,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('whole wheat toast',2,'carb'),
     I('black pepper',0.5,'fixed',false)
   ]},
@@ -1549,7 +1557,7 @@ const MEALS=[
     I('cannellini beans cooked',1,'protein'),
     I('egg whole',1,'protein'),
     I('egg white',0.5,'protein'),
-    I('baby spinach',2,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('whole wheat toast',1,'carb'),
     I('avocado oil',0.25,'fat',false),
     I('garlic',1,'condiment',false),
@@ -1578,7 +1586,7 @@ const MEALS=[
     I('egg white',0.25,'protein'),
     I('scallion',2,'veg'),
     I('ginger',1,'condiment',false),
-    I('baby spinach',0.5,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('black pepper',0.5,'fixed',false)
   ]},
 
@@ -1591,7 +1599,7 @@ const MEALS=[
     I('jasmine rice cooked',1,'carb'),
     I('red curry paste',1.5,'condiment'),
     I('bell pepper',0.5,'veg'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('ginger',1,'condiment',false),
     I('lime',0.5,'condiment',false),
     I('garlic',2,'condiment',false)
@@ -1617,7 +1625,7 @@ const MEALS=[
     I('egg white',1,'protein'),
     I('sweet potato',0.75,'carb'),
     I('bell pepper',0.5,'veg'),
-    I('baby spinach',0.5,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('black pepper',0.5,'fixed',false)
   ]},
 
@@ -1654,7 +1662,7 @@ const MEALS=[
     I('chicken breast',8,'protein'),
     I('whole wheat tortilla',2,'carb'),
     I('hummus',3,'fat'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('bell pepper',0.25,'veg'),
     I('carrots',0.25,'veg')
   ]},
@@ -1697,7 +1705,7 @@ const MEALS=[
     I('chicken breast',6,'protein'),
     I('black beans cooked',0.5,'carb'),
     I('brown rice cooked',0.75,'carb'),
-    I('kale',1,'veg'),
+    I('kale',0.75,'veg'),
     I('salsa',4,'condiment',false),
     I('greek yogurt 0%',0.125,'protein'),
     I('avocado',0.5,'fat'),
@@ -1711,7 +1719,7 @@ const MEALS=[
   ingredients:[
     I('chicken breast',8,'protein'),
     I('rice vermicelli cooked',1,'carb'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('bell pepper',0.25,'veg'),
     I('peanuts',1,'fat',false),
@@ -1744,7 +1752,7 @@ const MEALS=[
   ingredients:[
     I('chicken breast',5,'protein'),
     I('udon noodles cooked',1,'carb'),
-    I('kale',1,'veg'),
+    I('kale',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('peanut butter',1,'fat'),
     I('soy sauce',1,'condiment',false),
@@ -1776,7 +1784,7 @@ const MEALS=[
   ingredients:[
     I('chicken breast',5,'protein'),
     I('white rice cooked',0.75,'carb'),
-    I('kale',1,'veg'),
+    I('kale',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('zucchini',0.25,'veg'),
     I('egg whole',1,'protein'),
@@ -1806,7 +1814,7 @@ const MEALS=[
     I('tofu firm',8,'protein'),
     I('egg white',0.5,'protein'),
     I('rice vermicelli cooked',1.5,'carb'),
-    I('baby spinach',1.5,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('zucchini',0.5,'veg'),
     I('soy sauce',1,'condiment',false),
@@ -1891,7 +1899,7 @@ const MEALS=[
   ingredients:[
     I('salmon',6,'protein'),
     I('lentils cooked',0.5,'carb'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('brown rice cooked',0.75,'carb'),
     I('lemon',0.5,'condiment',false),
     I('dill',0.5,'fixed',false),
@@ -1960,7 +1968,7 @@ const MEALS=[
     I('whole wheat pasta cooked',0.75,'carb'),
     I('zucchini',1.5,'veg'),
     I('marinara',1,'condiment'),
-    I('kale',1,'veg'),
+    I('kale',0.75,'veg'),
     I('egg white',0.125,'protein'),
     I('oat flour',0.125,'carb'),
     I('italian seasoning',0.5,'fixed',false),
@@ -2081,7 +2089,7 @@ const MEALS=[
   him:{},her:{},
   ingredients:[
     I('chickpeas cooked',0.5,'protein'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('cumin',0.25,'fixed',false),
     I('lemon',0.5,'fixed',false),
     I('black pepper',0.25,'fixed',false)
@@ -2184,7 +2192,7 @@ const MEALS=[
     I('zucchini',1,'veg'),
     I('bell pepper',0.5,'veg'),
     I('shallot',1,'veg'),
-    I('baby spinach',0.5,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('coconut milk',0.25,'liquid'),
     I('jasmine rice cooked',1,'carb'),
     I('red curry paste',1,'condiment',false),
@@ -2262,7 +2270,7 @@ const MEALS=[
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
-    I('baby spinach',1.5,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('bell pepper',0.5,'veg'),
     I('carrots',0.5,'veg'),
     I('brown rice cooked',0.75,'carb'),
@@ -2280,7 +2288,7 @@ const MEALS=[
     I('chicken breast',9,'protein'),
     I('sweet potato',1.25,'carb'),
     I('lentils cooked',0.5,'carb'),
-    I('baby spinach',1,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('salsa',3,'condiment',false),
     I('garlic powder',0.5,'fixed',false),
     I('cumin',0.5,'fixed',false),
@@ -2295,7 +2303,7 @@ const MEALS=[
     I('chicken breast',8,'protein'),
     I('lentils cooked',1,'carb'),
     I('avocado oil',0.5,'fat',false),
-    I('kale',1,'veg'),
+    I('kale',0.75,'veg'),
     I('garlic',1,'fixed',false),
     I('lemon',0.5,'condiment',false),
     I('garlic powder',0.5,'fixed',false),
@@ -2310,7 +2318,7 @@ const MEALS=[
     I('black beans cooked',1,'protein'),
     I('brown rice cooked',1,'carb'),
     I('bell pepper',0.75,'veg'),
-    I('kale',1,'veg'),
+    I('kale',0.75,'veg'),
     I('salsa',3,'condiment',false),
     I('cumin',0.5,'fixed',false),
     I('garlic powder',0.5,'fixed',false),
@@ -2324,7 +2332,7 @@ const MEALS=[
     I('chickpeas cooked',0.75,'protein'),
     I('edamame',0.75,'protein'),
     I('brown rice cooked',0.5,'carb'),
-    I('baby spinach',1.5,'veg'),
+    I('baby spinach',0.75,'veg'),
     I('coconut milk',0.25,'liquid'),
     I('red curry paste',1,'condiment',false)
   ]},
@@ -2381,7 +2389,7 @@ const MEALS=[
     I('lentils cooked',1.25,'protein'),
     I('chicken breast',4,'protein'),
     I('egg white',0.5,'protein'),
-    I('kale',1,'veg'),
+    I('kale',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('celery',0.5,'veg'),
     I('chicken broth',2,'liquid'),
@@ -2411,7 +2419,7 @@ const MEALS=[
     I('cannellini beans cooked',1.5,'protein'),
     I('chicken breast',4,'protein'),
     I('egg white',0.25,'protein'),
-    I('kale',1.5,'veg'),
+    I('kale',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('celery',0.5,'veg'),
     I('chicken broth',2.5,'liquid'),
