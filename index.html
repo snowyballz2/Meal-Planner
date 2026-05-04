@@ -6171,7 +6171,11 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
           if(!_ov || !_ov.length) return {};
           const set = {};
           _ov.forEach(function(o){
-            if(o.scalable !== false) set[o.idx] = true;
+            // 2026-05-04: require explicit amt field — dbKey-only swaps don't
+            // count for the banner because the amt didn't change (the slot
+            // adjuster's diff vs recipe-base shouldn't be attributed to the
+            // user just because they swapped the ingredient identity).
+            if(o.scalable !== false && o.amt !== undefined) set[o.idx] = true;
           });
           return set;
         })();
@@ -6304,11 +6308,8 @@ function buildMealCardHtml(s, person, day, other){
     }).join('');
     ingrHtml='<div class="ingr-edit-grid">'+ingrHtml+'</div>';
 
-    // Add reset button if there are overrides
-    if(hasOverrides){
-      const slotEsc2 = s.replace(/'/g,"\\'");
-      ingrHtml += '<button class="ingr-reset-btn" onclick="onIngrReset(\''+person+'\',\''+day+'\',\''+slotEsc2+'\')">↺ Reset to original</button>';
-    }
+    // 2026-05-04: reset button moved to ingredient header (next to + add).
+    // See line ~6434 in the section title HTML. Old below-list button removed.
   } else {
     ingrHtml=(port.ingredients||[]).map(function(i){return'<li>'+(typeof i==='string'?i:i.displayText)+'</li>'}).join('');
     ingrHtml='<ul class="ingr-list">'+ingrHtml+'</ul>';
@@ -6431,7 +6432,10 @@ function buildMealCardHtml(s, person, day, other){
     +notePill
     +'<div class="mc-body">'
     +adjBanner
-    +'<div class="bsec"><div class="bsec-title ingr" style="display:flex;align-items:center;justify-content:space-between">'+ingrSectionTitle+'<button style="border:none;background:var(--shop);color:#000;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button></div>'+ingrHtml+'</div>'
+    +'<div class="bsec"><div class="bsec-title ingr" style="display:flex;align-items:center;justify-content:space-between">'+ingrSectionTitle+'<div style="display:flex;gap:6px;align-items:center">'
+      +(hasOverrides ? '<button title="Reset to post-randomize amounts" style="border:1.5px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:700;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();onIngrReset(\''+person+'\',\''+day+'\',\''+s+'\')">↺</button>' : '')
+      +'<button title="Add ingredient" style="border:none;background:var(--shop);color:#000;font-size:13px;font-weight:700;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button>'
+    +'</div></div>'+ingrHtml+'</div>'
     +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'
     +'</div></div>';
 }
