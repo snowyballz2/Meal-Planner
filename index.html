@@ -637,7 +637,7 @@ function computeMacros(ingredients) {
 
 
 // Build quantity dropdown options based on unit type
-function buildQtyOptions(unit, currentAmt, wholeOnly) {
+function buildQtyOptions(unit, currentAmt, wholeOnly, minAmt) {
   let opts = [];
   const u = (unit||'').toLowerCase();
 
@@ -673,11 +673,14 @@ function buildQtyOptions(unit, currentAmt, wholeOnly) {
       // Whole numbers only: 1, 2, 3 ... 10
       for (let i = 1; i <= 10; i++) opts.push({val:i, label:String(i)});
     } else {
-      // Quarter-step grid: ¼, ½, ¾, 1, 1¼, 1½, 1¾, 2, ... 10. Was half-step
-      // before 2026-05-04 — avocado/lemon/garlic-cloves at 0.75 fell through
-      // to the custom-amount path which displayed "0.75" instead of "¾".
-      for (let i = 1; i <= 40; i++) {
-        const v = i * 0.25;
+      // Grid step derived from minAmt. Items with minAmt:0.5 (banana, orange,
+      // garlic-cloves) get half-step grid (½/1/1½/2/...). Items with minAmt:
+      // 0.25 (avocado, lemon, lime) get quarter-step (¼/½/¾/1/1¼/...).
+      // Default quarter when minAmt unknown.
+      const step = (minAmt === 0.5) ? 0.5 : 0.25;
+      const count = Math.round(10 / step);
+      for (let i = 1; i <= count; i++) {
+        const v = i * step;
         opts.push({val:v, label:fmtFrac(v)});
       }
     }
@@ -5685,7 +5688,7 @@ function buildIngrEditRow(ing, amt, person, day, s, idx){
   }).join('');
   const slotEsc = s.replace(/'/g,"\\'");
   const amtId = 'amt_'+person+'_'+day+'_'+s+'_'+idx;
-  const qtyOpts = buildQtyOptions(unitLabel, amt, db && db.wholeOnly);
+  const qtyOpts = buildQtyOptions(unitLabel, amt, db && db.wholeOnly, db && db.minAmt);
   let qtyHtml = qtyOpts.map(function(q){
     const sel = (Math.abs(q.val - amt) < 0.02) ? ' selected' : '';
     return '<option value="'+q.val+'"'+sel+'>'+q.label+'</option>';
@@ -12226,7 +12229,7 @@ function renderRecipesView(){
             const unit=db?db.unit:'';
             const kcal=db?Math.round(db.kcal*ing.amt):0;
             if(_editMode){
-              const qtyOpts=buildQtyOptions(unit,ing.amt,db&&db.wholeOnly);
+              const qtyOpts=buildQtyOptions(unit,ing.amt,db&&db.wholeOnly,db&&db.minAmt);
               const qtyHtml=qtyOpts.map(function(q){return '<option value="'+q.val+'"'+(Math.abs(q.val-ing.amt)<0.02?' selected':'')+'>'+q.label+'</option>';}).join('');
               html+='<div style="display:flex;align-items:center;gap:4px;padding:3px 0;border-bottom:1px solid var(--border);font-size:11px">'
                 +'<select style="width:40px;padding:2px;border:1.5px solid var(--border);border-radius:4px;font-size:11px;background:var(--bg);color:var(--text)" onchange="_editChanges['+idx+']={amt:parseFloat(this.value)}">'
