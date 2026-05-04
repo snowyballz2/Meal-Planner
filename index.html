@@ -6530,10 +6530,9 @@ function renderMeals(){
           } else {
             catMeals=getMealsForSlot(ss1);
           }
-          catMeals.sort(function(a,b){return a.label<b.label?-1:1;});
-          catMeals.forEach(function(m){
-            mealOpts+='<option value="'+m.id+'"'+(_paintSavedMeal===m.id?' selected':'')+'>'+m.label+'</option>';
-          });
+          // 2026-05-03: group by primary protein (Chicken / Salmon / Turkey /
+          // Vegetarian / etc.), same as the normal slot meal selectors.
+          mealOpts+=buildMealSelectOpts(catMeals, _paintSavedMeal);
         }
         html+='<select id="paintMealSel" class="paint-select" style="flex:1;min-width:0;text-overflow:ellipsis" onchange="onPaintMealChange()">';
         html+=mealOpts+'</select>';
@@ -8011,11 +8010,9 @@ function onPaintSlotChange(){
   } else if(cat){
     meals=getMealsForSlot(cat);
   }
-  let html='<option value="">— Meal —</option>';
-  meals.sort(function(a,b){return a.label<b.label?-1:1;});
-  meals.forEach(function(m){
-    html+='<option value="'+m.id+'">'+m.label+'</option>';
-  });
+  // 2026-05-03: group by primary protein (Chicken / Salmon / etc.), same as
+  // the normal slot meal selectors via buildMealSelectOpts.
+  let html='<option value="">— Meal —</option>'+buildMealSelectOpts(meals, '');
   mealSel.innerHTML=html;
   const btn=document.getElementById('paintSelectBtn');
   if(btn) btn.style.color='var(--gray)';
