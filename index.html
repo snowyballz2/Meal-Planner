@@ -303,7 +303,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sched-panel{background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border);padding:10px 12px;margin-bottom:10px;box-shadow:var(--shadow)}
 .sched-hdr{display:flex;align-items:center;justify-content:space-between;cursor:pointer}
 .sched-title{font-size:13px;font-weight:700;color:var(--text)}
-.sched-grid{display:grid;grid-template-columns:36px 1fr 1fr 1fr;gap:4px;margin-top:8px}
+.sched-grid{display:grid;grid-template-columns:36px 1fr 1fr 1fr 1fr;gap:4px;margin-top:8px}
 .sched-btn{padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:var(--bg);border:1.5px solid var(--border);color:var(--gray)}
 .sched-btn-set{border-color:rgba(167,139,250,.5);color:#A78BFA}
 .sched-day{font-size:11px;font-weight:700;display:flex;align-items:center}
@@ -316,6 +316,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sched-pill-wrap{display:flex;border-radius:6px;overflow:hidden;cursor:pointer;height:28px;width:92px;margin:0 auto;-webkit-touch-callout:none}
 .sched-pill-half{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 .sched-pill-l{border-radius:6px 0 0 6px}.sched-pill-r{border-radius:0 6px 6px 0}
+/* 2026-05-03: 3-zone pill — center zone toggles shared on tap. ~10px wide so
+   pill stays at 92px total. Visible only when active (shared etc); otherwise
+   transparent so existing 2-zone visuals are preserved. */
+.sched-pill-mid{flex:0 0 10px;display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 /* Paint mode */
 .paint-bar{margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
 .paint-info{font-size:11px;color:var(--shop);font-weight:600;margin-bottom:6px}
@@ -2496,6 +2500,113 @@ function initSharedSchedule(){
     if(SHARED_SCHEDULE[k]===true) SHARED_SCHEDULE[k]='shared';
   });
 }
+
+// ── LEFTOVER LINKS (manual paint groups, 2026-05-03) ────────────────────────
+// User selects a meal in the Slot/Meal picker, paints multiple cells (any
+// person, day, slot — solo or shared, mixed allowed), hits Assign. Backend
+// records the group: { id, meal, slots:[{p,d,s}], colorIdx }. All linked
+// slots get MANUAL_SET=true so randomize leaves them alone (Phase 1's
+// isLockedForRandomize check skips them).
+//
+// Anchor (visual: outline only, no yellow bg): the slot at the earliest
+// (day-index, slot-order) — possibly multiple slots if shared (same day+slot,
+// different person). Slot-order: breakfast=0, lunch=1, snack=2, dinner=3.
+//
+// Leftover (visual: yellow bg + outline): all slots after the anchor.
+//
+// Each group gets a colorIdx (0..5) for its outline. Colors cycled from a
+// fixed palette; lowest unused index assigned on creation. When all 6 in
+// use, indices reuse from 0.
+//
+// Lives on weekData[w].leftoverLinks (array). Migrated to empty array on
+// load if missing.
+var LEFTOVER_LINKS = []; // alias to weekData[activeWeek].leftoverLinks
+var LEFTOVER_LINK_COLORS = [
+  // Visually distinct from existing palette (Him blue, Her pink, shared green,
+  // eat-out red, Manual purple, leftover-yellow).
+  { name:'cyan',    rgb:'6,182,212' },
+  { name:'orange',  rgb:'249,115,22' },
+  { name:'lime',    rgb:'132,204,22' },
+  { name:'rose',    rgb:'244,63,94' },
+  { name:'amber',   rgb:'217,119,6' },
+  { name:'fuchsia', rgb:'217,70,239' }
+];
+// Slot-ordering for anchor identification. Matches the existing leftover
+// detector's cookSlots ordering (breakfast=0, lunch=1, snack=2, dinner=3).
+var _LO_SLOT_ORDER = {breakfast:0, lunch:1, snack:2, dinner:3};
+function _dayslotKey(d, s){
+  return DAYS.indexOf(d)*100 + (_LO_SLOT_ORDER[s]||0);
+}
+// Find which group (if any) contains this slot.
+function getLinkGroupForSlot(p, d, s){
+  if(!LEFTOVER_LINKS || !LEFTOVER_LINKS.length) return null;
+  for(var i=0; i<LEFTOVER_LINKS.length; i++){
+    var g = LEFTOVER_LINKS[i];
+    for(var j=0; j<g.slots.length; j++){
+      var sl = g.slots[j];
+      if(sl.p===p && sl.d===d && sl.s===s) return g;
+    }
+  }
+  return null;
+}
+// Find the group (if any) that's currently using this meal.
+function getLinkGroupForMeal(mealId){
+  if(!LEFTOVER_LINKS || !LEFTOVER_LINKS.length) return null;
+  for(var i=0; i<LEFTOVER_LINKS.length; i++){
+    if(LEFTOVER_LINKS[i].meal === mealId) return LEFTOVER_LINKS[i];
+  }
+  return null;
+}
+// Is this slot the anchor (or one of the shared anchors) for the group?
+// Anchor = slot(s) at the earliest (day, slot) in the group, regardless of person.
+function isLinkAnchor(group, p, d, s){
+  if(!group || !group.slots || !group.slots.length) return false;
+  var myKey = _dayslotKey(d, s);
+  var minKey = Infinity;
+  group.slots.forEach(function(sl){
+    var k = _dayslotKey(sl.d, sl.s);
+    if(k < minKey) minKey = k;
+  });
+  return myKey === minKey;
+}
+// Allocate the lowest unused colorIdx in the current week's groups. If all
+// 6 are used, cycle from 0 (allow duplicates — visually rare and acceptable).
+function _allocateLinkColor(){
+  var used = {};
+  LEFTOVER_LINKS.forEach(function(g){ used[g.colorIdx] = true; });
+  for(var i=0; i<LEFTOVER_LINK_COLORS.length; i++){
+    if(!used[i]) return i;
+  }
+  return 0;
+}
+// Remove a slot from its group. If the group drops to 1 slot, dissolve it
+// (the remaining slot keeps its MANUAL_SET — single slots aren't groups).
+// Returns true if a group was modified.
+function removeFromLinkGroup(p, d, s){
+  if(!LEFTOVER_LINKS || !LEFTOVER_LINKS.length) return false;
+  for(var i=LEFTOVER_LINKS.length-1; i>=0; i--){
+    var g = LEFTOVER_LINKS[i];
+    var idx = -1;
+    for(var j=0; j<g.slots.length; j++){
+      var sl = g.slots[j];
+      if(sl.p===p && sl.d===d && sl.s===s){ idx = j; break; }
+    }
+    if(idx < 0) continue;
+    g.slots.splice(idx, 1);
+    if(g.slots.length <= 1){
+      // Dissolve: anchor's MANUAL_SET stays (user explicitly set it via paint).
+      LEFTOVER_LINKS.splice(i, 1);
+    }
+    return true;
+  }
+  return false;
+}
+// Re-bind LEFTOVER_LINKS alias to the active week's array. Called after
+// week switches and at init.
+function rebindLeftoverLinks(){
+  if(!weekData[activeWeek].leftoverLinks) weekData[activeWeek].leftoverLinks = [];
+  LEFTOVER_LINKS = weekData[activeWeek].leftoverLinks;
+}
 // Split pill: tap toggles skip, long press toggles shared
 // Left tap: normal ↔ skip-him. Right tap: normal ↔ skip-her.
 // Long press either side: toggle shared for the whole cell.
@@ -2526,7 +2637,21 @@ function schedEndPress(d,s,side){
   else schedTapRight(d,s);
 }
 function schedTapLeft(d,s){
-  if(MANUAL_SET[sk('him',d,s)]) return; // locked by manual set
+  // 2026-05-03: if this slot is a leftover in a link group, tap removes it from
+  // the group (un-MANUAL_SETs + clears SEL). If anchor: do nothing (Manual lock).
+  // If non-link Manual: existing lock (do nothing).
+  const himKey=sk('him',d,s);
+  const himGroup=getLinkGroupForSlot('him',d,s);
+  if(himGroup){
+    if(isLinkAnchor(himGroup,'him',d,s)) return; // anchor — locked
+    removeFromLinkGroup('him',d,s);
+    delete MANUAL_SET[himKey];
+    delete SEL[himKey];
+    invalidateLeftoverCache();
+    updateSchedule();
+    return;
+  }
+  if(MANUAL_SET[himKey]) return; // locked by manual set (non-link)
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
@@ -2543,7 +2668,19 @@ function schedTapLeft(d,s){
   updateSchedule();
 }
 function schedTapRight(d,s){
-  if(MANUAL_SET[sk('her',d,s)]) return; // locked by manual set
+  // 2026-05-03: link-group leftover removal — see schedTapLeft for symmetry.
+  const herKey=sk('her',d,s);
+  const herGroup=getLinkGroupForSlot('her',d,s);
+  if(herGroup){
+    if(isLinkAnchor(herGroup,'her',d,s)) return; // anchor — locked
+    removeFromLinkGroup('her',d,s);
+    delete MANUAL_SET[herKey];
+    delete SEL[herKey];
+    invalidateLeftoverCache();
+    updateSchedule();
+    return;
+  }
+  if(MANUAL_SET[herKey]) return; // locked by manual set (non-link)
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
@@ -2557,6 +2694,16 @@ function schedTapRight(d,s){
   } else {
     SHARED_SCHEDULE[k]='skip-her'; // her eats out
   }
+  updateSchedule();
+}
+// 2026-05-03 (Item 1): center-zone tap toggles shared. Same logic as the
+// existing schedLongPress, just exposed as an explicit click target.
+function schedTapCenter(d,s){
+  if(MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)]) return; // locked
+  const k=dk(d,s);
+  const cur=SHARED_SCHEDULE[k]||'';
+  if(cur==='shared') delete SHARED_SCHEDULE[k];
+  else SHARED_SCHEDULE[k]='shared';
   updateSchedule();
 }
 function schedTapDay(d){
@@ -6202,21 +6349,15 @@ function renderMeals(){
     if(sharedSchedOpen){
       // Spacer between header buttons and grid
       html+='<div style="height:5px"></div>';
-      // Grid header: Day + Breakfast + Lunch + Dinner
+      // Grid header: Day + Breakfast + Lunch + Dinner + Snack (snack added 2026-05-03)
       html+='<div class="sched-grid">';
       html+='<div></div>';
-      ['breakfast','lunch','dinner'].forEach(function(ss){
-        const _prId=ss==='breakfast'?'breakfasts':ss==='lunch'?'lunches':'dinners';
-        const _paintMatch=_paintMode&&ss===_paintSlot;
-        const _paintDim=_paintMode&&ss!==_paintSlot;
-        if(_paintMatch){
-          html+='<div class="sched-slot-hdr active">'
-            +'<div class="sched-zone sched-zone-l" onclick="event.stopPropagation();paintToggleHim()"></div>'
-            +'<div class="sched-zone sched-zone-c" onclick="event.stopPropagation();paintToggleAll()"></div>'
-            +'<div class="sched-zone sched-zone-r" onclick="event.stopPropagation();paintToggleHer()"></div>'
-            +SLOT_LABEL[ss]+'</div>';
-        } else if(_paintDim){
-          html+='<div class="sched-slot-hdr inactive">'+SLOT_LABEL[ss]+'</div>';
+      ['breakfast','lunch','dinner','snack'].forEach(function(ss){
+        const _prId=ss==='breakfast'?'breakfasts':ss==='lunch'?'lunches':ss==='dinner'?'dinners':'snacks';
+        // 2026-05-03: paint mode is now CROSS-COLUMN — all columns are equally
+        // paintable, no dimming. Header still shows shared-preset zones.
+        if(_paintMode){
+          html+='<div class="sched-slot-hdr" style="color:var(--gray)">'+SLOT_LABEL[ss]+'</div>';
         } else {
           html+='<div class="sched-slot-hdr" style="color:var(--gray);cursor:pointer">'
             +'<div class="sched-zone sched-zone-l" onclick="event.stopPropagation();setSharedPresetSide(\''+_prId+'\',\'him\')"></div>'
@@ -6226,7 +6367,8 @@ function renderMeals(){
         }
       });
       // Day rows
-      const slots3=['breakfast','lunch','dinner'];
+      const slots3=['breakfast','lunch','dinner'];     // for day-name color (B/L/D)
+      const slots4=['breakfast','lunch','dinner','snack']; // for grid cells (snack added 2026-05-03)
       DAYS.forEach(function(dd){
         const dayAllShared=slots3.every(function(ss){return SHARED_SCHEDULE[dk(dd,ss)]==='shared';});
         const dayAllSkip=slots3.every(function(ss){return SHARED_SCHEDULE[dk(dd,ss)]==='skip-both';});
@@ -6237,33 +6379,45 @@ function renderMeals(){
         } else {
           html+='<div class="sched-day" style="color:'+dayCol+';cursor:pointer" onclick="event.stopPropagation();schedTapDay(\''+dde+'\')">'+dd.slice(0,3)+'</div>';
         }
-        ['breakfast','lunch','dinner'].forEach(function(ss){
+        slots4.forEach(function(ss){
           const state=SHARED_SCHEDULE[dk(dd,ss)]||'normal';
           const himSkip=(state==='skip-him'||state==='skip-both');
           const herSkip=(state==='skip-her'||state==='skip-both');
           const isShared=(state==='shared');
-          const grn='rgba(52,211,153,';const red='rgba(239,68,68,';const prp='rgba(167,139,250,';
+          const grn='rgba(52,211,153,';const red='rgba(239,68,68,';const prp='rgba(167,139,250,';const yel='rgba(245,158,11,';
           const himManual=!!MANUAL_SET[sk('him',dd,ss)];
           const herManual=!!MANUAL_SET[sk('her',dd,ss)];
-          // Background: manual+normal=purple, shared=green, eat-out=red
+          // 2026-05-03: link group lookup for this cell. Anchor = same (day,slot)
+          // as group's earliest member (regardless of person). Leftover = otherwise.
+          const lGroup=getLinkGroupForSlot('him',dd,ss);
+          const rGroup=getLinkGroupForSlot('her',dd,ss);
+          const lIsAnchor=lGroup?isLinkAnchor(lGroup,'him',dd,ss):false;
+          const rIsAnchor=rGroup?isLinkAnchor(rGroup,'her',dd,ss):false;
+          const lIsLeftover=lGroup&&!lIsAnchor;
+          const rIsLeftover=rGroup&&!rIsAnchor;
+          // Background: manual+normal=purple, shared=green, eat-out=red, link-leftover=yellow
           const lNormal=!isShared&&!himSkip;
           const rNormal=!isShared&&!herSkip;
-          let lBg=(himManual&&lNormal)?prp+'.2)':isShared?grn+'.25)':himSkip?red+'.2)':'transparent';
-          let rBg=(herManual&&rNormal)?prp+'.2)':isShared?grn+'.25)':herSkip?red+'.2)':'transparent';
-          // Border: purple if manual set on normal, otherwise state color
-          let lBdr=himManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':himSkip?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
-          let rBdr=herManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':herSkip?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
-          let lCol=(himManual&&lNormal)?'#fff':isShared||himSkip?'#fff':'var(--gray)';
-          let rCol=(herManual&&rNormal)?'#fff':isShared||herSkip?'#fff':'var(--gray)';
+          let lBg=lIsLeftover?yel+'.25)':(himManual&&lNormal)?prp+'.2)':isShared?grn+'.25)':himSkip?red+'.2)':'transparent';
+          let rBg=rIsLeftover?yel+'.25)':(herManual&&rNormal)?prp+'.2)':isShared?grn+'.25)':herSkip?red+'.2)':'transparent';
+          // Border: link group color overrides Manual purple. Group outline = 2px.
+          const lGroupRgb=lGroup?LEFTOVER_LINK_COLORS[lGroup.colorIdx].rgb:null;
+          const rGroupRgb=rGroup?LEFTOVER_LINK_COLORS[rGroup.colorIdx].rgb:null;
+          let lBdr=lGroup?'2px solid rgba('+lGroupRgb+',.85)':himManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':himSkip?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
+          let rBdr=rGroup?'2px solid rgba('+rGroupRgb+',.85)':herManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':herSkip?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
+          let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared||himSkip?'#fff':'var(--gray)';
+          let rCol=rIsLeftover?'#fff':(herManual&&rNormal)?'#fff':isShared||herSkip?'#fff':'var(--gray)';
           const lLabel='Him';
           const rLabel='Her';
-          const midCol=(himManual||herManual||isShared||himSkip||herSkip)?((himManual&&lNormal)||(herManual&&rNormal)?prp+'.4)':(isShared)?grn+'.5)':red+'.4)'):'transparent';
+          // midCol = group color if either side linked, else existing logic
+          const midColLink=lGroupRgb||rGroupRgb;
+          const midCol=midColLink?'rgba('+midColLink+',.85)':(himManual||herManual||isShared||himSkip||herSkip)?((himManual&&lNormal)||(herManual&&rNormal)?prp+'.4)':(isShared)?grn+'.5)':red+'.4)'):'transparent';
           const de=dd.replace(/'/g,"\\'");const se=ss.replace(/'/g,"\\'");
-          // Paint mode: override colors and clicks for the target slot column
-          const isPaintCol=_paintMode&&ss===_paintSlot;
-          const isPaintDim=_paintMode&&ss!==_paintSlot;
-          const himQueued=_paintQueued[pk('him',dd)];
-          const herQueued=_paintQueued[pk('her',dd)];
+          // 2026-05-03: cross-column paint mode — every cell paintable, queued
+          // tracked by full slot key (sk) instead of just (p,d).
+          const isPaintCol=_paintMode;
+          const himQueued=_paintMode&&_paintQueued[sk('him',dd,ss)];
+          const herQueued=_paintMode&&_paintQueued[sk('her',dd,ss)];
           if(isPaintCol){
             lBg=himQueued?'rgba(245,158,11,.3)':lBg;
             rBg=herQueued?'rgba(245,158,11,.3)':rBg;
@@ -6272,23 +6426,31 @@ function renderMeals(){
             lCol=himQueued?'#fff':lCol;
             rCol=herQueued?'#fff':rCol;
           }
-          const dimStyle=isPaintDim?'opacity:0.3;pointer-events:none;':'';
-          const lClick=isPaintCol?'onclick="event.stopPropagation();paintTap(\''+de+'\',\'left\')"':'onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchstart="event.stopPropagation();event.preventDefault();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchcancel="clearTimeout(_schedLongPress);_schedLongPress=null"';
-          const rClick=isPaintCol?'onclick="event.stopPropagation();paintTap(\''+de+'\',\'right\')"':'onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchstart="event.stopPropagation();event.preventDefault();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchcancel="clearTimeout(_schedLongPress);_schedLongPress=null"';
-          // 2026-05-03: when ONLY one side is highlighted (eat-out alone, manual
-          // alone, queued alone), give the highlighted side its own divider via
-          // its own border (lBdr/rBdr) so width + opacity match the other 3 sides.
-          // Previously the divider used midCol (1.5px .4), which mismatched Manual's
-          // 2px .6 borders → the highlighted side looked 3-sided / "open" on the
-          // divider corner. Symmetric fix for both Her-only and Him-only cases.
-          const lSelfHi=isShared||himSkip||(himManual&&lNormal)||(isPaintCol&&himQueued);
-          const rSelfHi=isShared||herSkip||(herManual&&rNormal)||(isPaintCol&&herQueued);
+          const dimStyle='';
+          const lClick=isPaintCol
+            ?'onclick="event.stopPropagation();paintTap(\''+de+'\',\'left\',\''+se+'\')"'
+            :'onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchstart="event.stopPropagation();event.preventDefault();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchcancel="clearTimeout(_schedLongPress);_schedLongPress=null"';
+          const rClick=isPaintCol
+            ?'onclick="event.stopPropagation();paintTap(\''+de+'\',\'right\',\''+se+'\')"'
+            :'onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchstart="event.stopPropagation();event.preventDefault();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchcancel="clearTimeout(_schedLongPress);_schedLongPress=null"';
+          const cClick=isPaintCol?''
+            :'onclick="event.stopPropagation();schedTapCenter(\''+de+'\',\''+se+'\')"';
+          // 2026-05-03: full 4-side highlight when only ONE side is highlighted
+          // (eat-out alone, manual alone, queued alone, link-only-side alone).
+          const lSelfHi=isShared||himSkip||(himManual&&lNormal)||!!lGroup||(isPaintCol&&himQueued);
+          const rSelfHi=isShared||herSkip||(herManual&&rNormal)||!!rGroup||(isPaintCol&&herQueued);
           const lOnlyHi=lSelfHi&&!rSelfHi;
           const rOnlyHi=rSelfHi&&!lSelfHi;
           const lBdrRightFinal=lOnlyHi?lBdr:(rOnlyHi?'none':(lBg!==rBg?'1.5px solid '+midCol:'none'));
           const rBdrLeftFinal=rOnlyHi?rBdr:'none';
+          // Center zone: tap toggles shared (Item 1, 2026-05-03). Visible fill
+          // when shared (green); transparent otherwise.
+          const cBg=isShared?grn+'.25)':'transparent';
+          const cBdrTop=isShared?'1.5px solid '+grn+'.5)':'1.5px solid transparent';
+          const cBdrBot=cBdrTop;
           html+='<div class="sched-pill-wrap" style="'+dimStyle+'">'
             +'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+';border-right:'+lBdrRightFinal+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>'
+            +'<div class="sched-pill-mid" style="background:'+cBg+';border-top:'+cBdrTop+';border-bottom:'+cBdrBot+'" '+cClick+'></div>'
             +'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+';border-left:'+rBdrLeftFinal+';color:'+rCol+'" '+rClick+'>'+rLabel+'</div>'
             +'</div>';
         });
@@ -6298,8 +6460,10 @@ function renderMeals(){
       html+='<div class="paint-bar">';
       if(_paintMode){
         const paintMeal=getMeal(_paintMealId);
-        html+='<div class="paint-info">Assigning: '+((paintMeal||{}).label||'?')+' → '+SLOT_LABEL[_paintSlot]+'</div>';
-        html+='<div class="paint-hint">Tap Him/Her cells above to queue, then Assign</div>';
+        // 2026-05-03: paint mode now cross-column (any cell paintable). The
+        // info line just identifies the meal being assigned.
+        html+='<div class="paint-info">Assigning: '+((paintMeal||{}).label||'?')+'</div>';
+        html+='<div class="paint-hint">Tap any cell to queue (any column / either side / center for shared). Hit Assign to form a leftover-link group.</div>';
         html+='<div style="display:flex;gap:6px">';
         html+='<div class="sched-btn" onclick="event.stopPropagation();togglePaintMode()">Cancel</div>';
         html+='<div class="sched-btn" style="background:var(--shop);color:#000;font-weight:700;border-color:var(--shop)" onclick="event.stopPropagation();paintAccept()">Assign</div>';
@@ -6307,18 +6471,28 @@ function renderMeals(){
       } else {
         html+='<div style="display:flex;gap:4px;align-items:center">';
         const ss1=_paintSavedSlot;
+        // 2026-05-03: 3 categories — Bkfst | Main (lunch+dinner combined) | Snack.
         html+='<select id="paintSlotSel" class="paint-select" style="flex-shrink:0" onchange="onPaintSlotChange()">';
-        html+='<option value="">Slot</option>';
-        [{v:'breakfast',l:'Bkfst'},{v:'lunch',l:'Lunch'},{v:'dinner',l:'Dinner'}].forEach(function(o){
+        html+='<option value="">Category</option>';
+        [{v:'breakfast',l:'Bkfst'},{v:'main',l:'Main'},{v:'snack',l:'Snack'}].forEach(function(o){
           html+='<option value="'+o.v+'"'+(ss1===o.v?' selected':'')+'>'+o.l+'</option>';
         });
         html+='</select>';
-        // Build meal options for saved slot
+        // Build meal options for category. 'main' = union of lunch + dinner meals.
         let mealOpts='<option value="">— Meal —</option>';
         if(ss1){
-          const slotMeals=getMealsForSlot(ss1);
-          slotMeals.sort(function(a,b){return a.label<b.label?-1:1;});
-          slotMeals.forEach(function(m){
+          let catMeals=[];
+          if(ss1==='main'){
+            const lunchM=getMealsForSlot('lunch');
+            const dinM=getMealsForSlot('dinner');
+            const seen={};
+            lunchM.forEach(function(m){if(!seen[m.id]){seen[m.id]=true;catMeals.push(m);}});
+            dinM.forEach(function(m){if(!seen[m.id]){seen[m.id]=true;catMeals.push(m);}});
+          } else {
+            catMeals=getMealsForSlot(ss1);
+          }
+          catMeals.sort(function(a,b){return a.label<b.label?-1:1;});
+          catMeals.forEach(function(m){
             mealOpts+='<option value="'+m.id+'"'+(_paintSavedMeal===m.id?' selected':'')+'>'+m.label+'</option>';
           });
         }
@@ -7622,11 +7796,16 @@ function isBatchLeftoverEligible(d, s, mealId) {
 }
 
 // ── MEAL PAINTING MODE ──────────────────────────────────────
+// 2026-05-03: cross-column paint. Each cell paintable; queued state tracked
+// by full slot key (sk = person_day_slot). On Assign, all queued slots get
+// the meal + MANUAL_SET. If 2+ slots → form/update LEFTOVER_LINKS group with
+// the meal as identifier. Anchor (visual) = chronologically earliest cell;
+// rest are leftovers (yellow background + group color outline).
 var _paintMode=false;
-var _paintSlot='';      // 'breakfast','lunch','dinner'
-var _paintMealId='';    // selected meal ID
-var _paintQueued={};    // key: 'person_day', true if queued
-var _paintSavedSlot=''; // persisted slot selection across re-renders
+var _paintSlot='';      // legacy — kept for any external refs (unused in new flow)
+var _paintMealId='';    // selected meal ID (active in paint mode)
+var _paintQueued={};    // key: 'person_day_slot', true if queued (sk format)
+var _paintSavedSlot=''; // 'breakfast' | 'main' | 'snack' — picker category
 var _paintSavedMeal=''; // persisted meal selection across re-renders
 
 function togglePaintMode(){
@@ -7637,17 +7816,26 @@ function togglePaintMode(){
     const slotSel=document.getElementById('paintSlotSel');
     const mealSel=document.getElementById('paintMealSel');
     if(!slotSel||!mealSel||!slotSel.value||!mealSel.value) return;
-    _paintSlot=slotSel.value;
+    _paintSlot=slotSel.value;  // category, not slot — kept for back-compat
     _paintMealId=mealSel.value;
     _paintMode=true;
     _paintQueued={};
+    // 2026-05-03: if this meal is already in a link group, pre-load that
+    // group's slots as queued so the user can edit (add/remove cells).
+    const existingGroup=getLinkGroupForMeal(_paintMealId);
+    if(existingGroup){
+      existingGroup.slots.forEach(function(sl){
+        _paintQueued[sk(sl.p,sl.d,sl.s)]=true;
+      });
+    }
   }
   renderMeals();
 }
-function paintTap(d,side){
+// 2026-05-03: paintTap now takes (d, side, slot) — slot = which column was tapped.
+function paintTap(d,side,slot){
   if(!_paintMode) return;
   const p=(side==='left')?'him':'her';
-  const k=pk(p,d);
+  const k=sk(p,d,slot);
   if(_paintQueued[k]) delete _paintQueued[k];
   else _paintQueued[k]=true;
   renderMeals();
@@ -7656,33 +7844,55 @@ function paintAccept(){
   if(!_paintMode) return;
   const now=Date.now();
   if(!weekData[activeWeek].ts) weekData[activeWeek].ts={};
+  // Collect queued slots as (p,d,s) tuples
+  const queuedSlots=[];
   Object.keys(_paintQueued).forEach(function(k){
+    if(!_paintQueued[k]) return;
+    // Parse sk format: person_day_slot. Day can have spaces? No — DAYS are single
+    // words like 'Monday'. So split by '_' yields [p, d, s].
     const parts=k.split('_');
-    const p=parts[0],d=parts[1];
-    const selKey=sk(p,d,_paintSlot);
-    SEL[selKey]=_paintMealId;
-    MANUAL_SET[selKey]=true;
-    weekData[activeWeek].ts[selKey]=now;
-    clearOverrides(p,d,_paintSlot);
+    if(parts.length<3) return;
+    queuedSlots.push({p:parts[0], d:parts[1], s:parts[2], key:k});
   });
-  // Update schedule: if both him+her got painted on same day, set shared
-  // Otherwise clear any conflicting schedule state
-  const slot=_paintSlot;
-  DAYS.forEach(function(d){
-    const himQ=_paintQueued[pk('him',d)], herQ=_paintQueued[pk('her',d)];
-    const schedKey=dk(d,slot);
-    if(himQ&&herQ){
-      SHARED_SCHEDULE[schedKey]='shared';
-    } else if(himQ||herQ){
-      const schedState=SHARED_SCHEDULE[schedKey];
-      if(schedState==='shared') delete SHARED_SCHEDULE[schedKey];
-      else if(himQ&&schedState==='skip-him') delete SHARED_SCHEDULE[schedKey];
-      else if(herQ&&schedState==='skip-her') delete SHARED_SCHEDULE[schedKey];
-      else if(himQ&&schedState==='skip-both') SHARED_SCHEDULE[schedKey]='skip-her';
-      else if(herQ&&schedState==='skip-both') SHARED_SCHEDULE[schedKey]='skip-him';
+  // Apply meal + MANUAL_SET to all queued slots, clear stale overrides
+  queuedSlots.forEach(function(q){
+    SEL[q.key]=_paintMealId;
+    MANUAL_SET[q.key]=true;
+    weekData[activeWeek].ts[q.key]=now;
+    clearOverrides(q.p,q.d,q.s);
+  });
+  // Schedule: if a single (d,s) cell has both him+her queued, mark that cell
+  // as 'shared' in SHARED_SCHEDULE so the shared visual + downstream sharing
+  // logic kicks in. Otherwise leave the schedule alone (mixed leftovers can
+  // be solo on different sides).
+  const cellSidesPainted={}; // 'd_s' → {him:bool, her:bool}
+  queuedSlots.forEach(function(q){
+    const ck=q.d+'_'+q.s;
+    if(!cellSidesPainted[ck]) cellSidesPainted[ck]={};
+    cellSidesPainted[ck][q.p]=true;
+  });
+  Object.keys(cellSidesPainted).forEach(function(ck){
+    const sides=cellSidesPainted[ck];
+    if(sides.him && sides.her){
+      SHARED_SCHEDULE[ck]='shared';
     }
   });
   saveSharedSchedule();
+  // 2026-05-03: form or update the link group for this meal.
+  // - First, remove any existing group for this meal (we'll rebuild from queued).
+  // - If 2+ queued slots → create a new group with the queued slots.
+  // - If <2 queued slots → no group (single Manual Set is fine alone).
+  for(var gi=LEFTOVER_LINKS.length-1; gi>=0; gi--){
+    if(LEFTOVER_LINKS[gi].meal===_paintMealId) LEFTOVER_LINKS.splice(gi,1);
+  }
+  if(queuedSlots.length>=2){
+    LEFTOVER_LINKS.push({
+      id:'lg_'+Date.now()+'_'+Math.floor(Math.random()*1000),
+      meal:_paintMealId,
+      slots:queuedSlots.map(function(q){return {p:q.p, d:q.d, s:q.s};}),
+      colorIdx:_allocateLinkColor()
+    });
+  }
   _paintMode=false;_paintSlot='';_paintMealId='';_paintQueued={};
   invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
 }
@@ -7690,10 +7900,20 @@ function onPaintSlotChange(){
   const slotSel=document.getElementById('paintSlotSel');
   const mealSel=document.getElementById('paintMealSel');
   if(!slotSel||!mealSel) return;
-  const slot=slotSel.value;
-  _paintSavedSlot=slot;
+  const cat=slotSel.value;
+  _paintSavedSlot=cat;
   _paintSavedMeal='';
-  const meals=getMealsForSlot(slot);
+  // Build meal pool by category. 'main' = lunch ∪ dinner.
+  let meals=[];
+  if(cat==='main'){
+    const lunchM=getMealsForSlot('lunch');
+    const dinM=getMealsForSlot('dinner');
+    const seen={};
+    lunchM.forEach(function(m){if(!seen[m.id]){seen[m.id]=true;meals.push(m);}});
+    dinM.forEach(function(m){if(!seen[m.id]){seen[m.id]=true;meals.push(m);}});
+  } else if(cat){
+    meals=getMealsForSlot(cat);
+  }
   let html='<option value="">— Meal —</option>';
   meals.sort(function(a,b){return a.label<b.label?-1:1;});
   meals.forEach(function(m){
@@ -10754,6 +10974,9 @@ function saveWeeks(){
   w.lateSnack=JSON.parse(JSON.stringify(LATE_SNACK));
   w.manualSet=JSON.parse(JSON.stringify(MANUAL_SET));
   w.sharedSchedule=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
+  // 2026-05-03: leftoverLinks is the LEFTOVER_LINKS alias; mutations already
+  // persist via this reference. Just ensure the field is present.
+  if(!w.leftoverLinks) w.leftoverLinks = LEFTOVER_LINKS;
   weekData['last'].monday=lastMonday();
   weekData['this'].monday=todayMonday();
   weekData['next'].monday=nextMonday();
@@ -10771,6 +10994,7 @@ function loadWeekState(w){
   loadInto(MANUAL_SET,wd.manualSet);
   loadInto(SHARED_SCHEDULE,wd.sharedSchedule);
   initSharedSchedule(); // ensure defaults if empty
+  rebindLeftoverLinks(); // 2026-05-03: bind LEFTOVER_LINKS to wd.leftoverLinks
 }
 function switchWeek(w){
   saveWeeks();
