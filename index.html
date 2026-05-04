@@ -509,7 +509,7 @@ var NUTRI_DB = {
   'cilantro':              {kcal:1,   pro:0.1,fat:0,   carb:0.1, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'chili flake':           {kcal:6,   pro:0.3,fat:0.3, carb:0.9, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'red pepper flake':      {kcal:6,   pro:0.3,fat:0.3, carb:0.9, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
-  'garlic':{kcal:4,pro:0.2,fat:0,carb:1,unit:'cloves',minAmt:0.5,minAmtSolo:1,maxAmt:4},
+  'garlic':{kcal:4,pro:0.2,fat:0,carb:1,unit:'cloves',wholeOnly:true,minAmt:1,maxAmt:4},
   'lemon':                 {kcal:12,  pro:0.5,fat:0.1, carb:4,   unit:'each', minAmt:0.25, maxAmt:1},
   'grapefruit juice':      {kcal:6,   pro:0.07,fat:0,  carb:1.4, unit:'tbsp', halfSnap:true, minAmt:0.5, maxAmt:3},
   'ginger':                {kcal:6,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
@@ -1931,7 +1931,7 @@ const MEALS=[
     I('sesame oil',0.0625,'fat'),
     I('rice vinegar',0.25,'condiment',false),
     I('sesame seeds',0.25,'fixed',false),
-    I('garlic',1.25,'fixed',false),
+    I('garlic',1,'fixed',false),
     I('ginger',0.25,'fixed',false)
   ]},
 
@@ -2190,7 +2190,7 @@ const MEALS=[
     I('red curry paste',1,'condiment',false),
     I('avocado oil',0.125,'fat',false),
     I('ginger',0.125,'fixed',false),
-    I('garlic',0.5,'fixed',false),
+    I('garlic',1,'fixed',false),
     I('cilantro',0.125,'fixed',false),
     I('red pepper flake',0.125,'fixed',false),
     I('lime',0.25,'fixed',false)
