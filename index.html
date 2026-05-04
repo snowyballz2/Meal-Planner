@@ -2951,7 +2951,10 @@ function clearOverrides(p,d,s){delete OVERRIDES[sk(p,d,s)];}
 function _hasUserOverrides(p,d,s){
   const ov=getOverrides(p,d,s);
   if(!ov||!ov.length)return false;
-  return ov.some(function(o){return o.scalable!==false;});
+  // 2026-05-04: rely on explicit _userSet flag. User-driven overrides
+  // (onIngrAmt / onIngrSwap) tag entries with _userSet:true. Freeze pins
+  // never set this flag.
+  return ov.some(function(o){return o._userSet===true;});
 }
 // Clear all freeze-written overrides (scalable:false) across every slot.
 // Called at the start of randomizeWeek to prevent stale freeze pins from
@@ -2968,7 +2971,14 @@ function _clearFreezeOverrides(){
   Object.keys(OVERRIDES).forEach(function(k){
     var ov = OVERRIDES[k];
     if(!ov || !ov.length) return;
-    var filtered = ov.filter(function(o){return o.scalable !== false;});
+    // 2026-05-04: clear FREEZE-origin entries only (scalable:false AND no
+    // _userSet). User pins (also scalable:false but with _userSet:true) are
+    // preserved across randomize cycles.
+    var filtered = ov.filter(function(o){
+      if(o.scalable !== false) return true; // not freeze-marked
+      if(o._userSet === true) return true; // user pin, keep
+      return false; // freeze-only, drop
+    });
     if(filtered.length === 0) delete OVERRIDES[k];
     else if(filtered.length !== ov.length) OVERRIDES[k] = filtered;
   });
@@ -6176,7 +6186,9 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
           if(!_ov || !_ov.length) return {};
           const map = {};
           _ov.forEach(function(o){
-            if(o.scalable === false) return; // freeze — not user
+            // 2026-05-04: include only entries explicitly tagged _userSet.
+            // User pins use scalable:false too — only the flag distinguishes.
+            if(o._userSet !== true) return;
             if(!map[o.idx]) map[o.idx] = {};
             if(o.amt !== undefined) map[o.idx].userAmt = o.amt;
             if(o.dbKey !== undefined) map[o.idx].userDbKey = o.dbKey;
@@ -6449,8 +6461,8 @@ function buildMealCardHtml(s, person, day, other){
     +'<div class="mc-body">'
     +adjBanner
     +'<div class="bsec"><div class="bsec-title ingr" style="display:flex;align-items:center;justify-content:space-between">'+ingrSectionTitle+'<div style="display:flex;gap:6px;align-items:center">'
-      +(hasOverrides ? '<button title="Reset to post-randomize amounts" style="border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;font-weight:400;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer;text-decoration:none" onclick="event.stopPropagation();onIngrReset(\''+person+'\',\''+day+'\',\''+s+'\')">↺</button>' : '')
-      +'<button title="Add ingredient" style="border:none;background:var(--shop);color:#000;font-size:13px;font-weight:700;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer;text-decoration:none" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button>'
+      +(hasOverrides ? '<button title="Reset to post-randomize amounts" style="display:inline-block;border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;font-weight:400;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer;text-decoration:none" onclick="event.stopPropagation();onIngrReset(\''+person+'\',\''+day+'\',\''+s+'\')">↺</button>' : '')
+      +'<button title="Add ingredient" style="display:inline-block;border:none;background:var(--shop);color:#000;font-size:13px;font-weight:700;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer;text-decoration:none" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button>'
     +'</div></div>'+ingrHtml+'</div>'
     +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'
     +'</div></div>';
@@ -7044,27 +7056,24 @@ function onIngrAmt(p,d,s,idx,val){
   const amt=parseFloat(val);
   if(isNaN(amt)||amt<0)return;
   setOverride(p,d,s,idx,'amt',amt);
-  // 2026-05-04: clear any freeze-origin scalable:false on this entry — user
-  // explicitly set amt, so the entry is now user-driven (not freeze-pinned).
-  // Banner filter relies on scalable !== false to identify user amt edits.
-  const ov = OVERRIDES[sk(p,d,s)];
-  if(ov){
-    const entry = ov.find(function(o){return o.idx===idx;});
-    if(entry) delete entry.scalable;
-  }
+  // 2026-05-04: pin user's amt so the slot adjuster can't re-scale it
+  // (scalable:false). Tag with _userSet so the banner + _clearFreezeOverrides
+  // can distinguish a user pin from a freeze pin (both use scalable:false).
+  setOverride(p,d,s,idx,'scalable',false);
+  setOverride(p,d,s,idx,'_userSet',true);
   MANUAL_SET[sk(p,d,s)]=true;
   invalidateLeftoverCache();renderMeals();autoSaveWeek();
 }
 function onIngrSwap(p,d,s,idx,newKey){
-  setOverride(p,d,s,idx,'dbKey',newKey);
-  // 2026-05-04: clear any prior freeze sizing on this entry. The freeze amt
-  // was sized for the OLD ingredient; the new one starts at recipe-base.
-  // Also clears scalable:false so the entry is user-origin (banner-visible).
+  // Clear any prior amt/scalable on this entry. Old freeze amt was sized
+  // for the OLD ingredient; new one starts at recipe-base.
   const ov = OVERRIDES[sk(p,d,s)];
   if(ov){
     const entry = ov.find(function(o){return o.idx===idx;});
-    if(entry){ delete entry.amt; delete entry.scalable; }
+    if(entry){ delete entry.amt; delete entry.scalable; delete entry._userSet; }
   }
+  setOverride(p,d,s,idx,'dbKey',newKey);
+  setOverride(p,d,s,idx,'_userSet',true);
   MANUAL_SET[sk(p,d,s)]=true;
   invalidateLeftoverCache();renderMeals();autoSaveWeek();
 }
