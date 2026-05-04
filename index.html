@@ -6433,7 +6433,10 @@ function renderMeals(){
           const rClick=isPaintCol
             ?'onclick="event.stopPropagation();paintTap(\''+de+'\',\'right\',\''+se+'\')"'
             :'onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchstart="event.stopPropagation();event.preventDefault();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchcancel="clearTimeout(_schedLongPress);_schedLongPress=null"';
-          const cClick=isPaintCol?''
+          // 2026-05-03 (revised): center zone is paintable too. In paint mode
+          // tapping it toggles BOTH Him and Her queued at once.
+          const cClick=isPaintCol
+            ?'onclick="event.stopPropagation();paintTapCenter(\''+de+'\',\''+se+'\')"'
             :'onclick="event.stopPropagation();schedTapCenter(\''+de+'\',\''+se+'\')"';
           // 2026-05-03: full 4-side highlight when only ONE side is highlighted
           // (eat-out alone, manual alone, queued alone, link-only-side alone).
@@ -6443,14 +6446,45 @@ function renderMeals(){
           const rOnlyHi=rSelfHi&&!lSelfHi;
           const lBdrRightFinal=lOnlyHi?lBdr:(rOnlyHi?'none':(lBg!==rBg?'1.5px solid '+midCol:'none'));
           const rBdrLeftFinal=rOnlyHi?rBdr:'none';
-          // Center zone: tap toggles shared (Item 1, 2026-05-03). Visible fill
-          // when shared (green); transparent otherwise.
-          const cBg=isShared?grn+'.25)':'transparent';
-          const cBdrTop=isShared?'1.5px solid '+grn+'.5)':'1.5px solid transparent';
-          const cBdrBot=cBdrTop;
+          // 2026-05-03 (revised): center zone bg + top/bottom borders. Always
+          // SOLID (not transparent) so the pill looks continuous — fixes the
+          // "gap with no top/bottom lines" complaint. Color priority:
+          //   1. Both halves in SAME link group (link state wins over shared green):
+          //      both leftovers → yellow bg + group outline; both anchors → transparent
+          //      bg + group outline.
+          //   2. Both Him+Her queued in paint mode → orange (matches halves).
+          //   3. Shared → green.
+          //   4. Both eat-out → red.
+          //   5. Both Manual (non-link) → purple.
+          //   6. Otherwise → gray border, transparent bg (continuous with halves).
+          let cBg, cBdrTopBot;
+          const bothSameGroup = lGroup && lGroup === rGroup;
+          const bothPaintQueued = isPaintCol && himQueued && herQueued;
+          if(bothSameGroup && lIsLeftover && rIsLeftover){
+            cBg = yel+'.25)';
+            cBdrTopBot = '2px solid rgba('+lGroupRgb+',.85)';
+          } else if(bothSameGroup && lIsAnchor && rIsAnchor){
+            cBg = 'transparent';
+            cBdrTopBot = '2px solid rgba('+lGroupRgb+',.85)';
+          } else if(bothPaintQueued){
+            cBg = 'rgba(245,158,11,.3)';
+            cBdrTopBot = '2px solid rgba(245,158,11,.6)';
+          } else if(isShared){
+            cBg = grn+'.25)';
+            cBdrTopBot = '1.5px solid '+grn+'.5)';
+          } else if(himSkip && herSkip){
+            cBg = red+'.2)';
+            cBdrTopBot = '1.5px solid '+red+'.4)';
+          } else if(himManual && herManual && lNormal && rNormal){
+            cBg = prp+'.2)';
+            cBdrTopBot = '2px solid '+prp+'.6)';
+          } else {
+            cBg = 'transparent';
+            cBdrTopBot = '1.5px solid var(--border)';
+          }
           html+='<div class="sched-pill-wrap" style="'+dimStyle+'">'
             +'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+';border-right:'+lBdrRightFinal+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>'
-            +'<div class="sched-pill-mid" style="background:'+cBg+';border-top:'+cBdrTop+';border-bottom:'+cBdrBot+'" '+cClick+'></div>'
+            +'<div class="sched-pill-mid" style="background:'+cBg+';border-top:'+cBdrTopBot+';border-bottom:'+cBdrTopBot+'" '+cClick+'></div>'
             +'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+';border-left:'+rBdrLeftFinal+';color:'+rCol+'" '+rClick+'>'+rLabel+'</div>'
             +'</div>';
         });
@@ -7838,6 +7872,23 @@ function paintTap(d,side,slot){
   const k=sk(p,d,slot);
   if(_paintQueued[k]) delete _paintQueued[k];
   else _paintQueued[k]=true;
+  renderMeals();
+}
+// 2026-05-03 (revised): center-zone tap in paint mode = toggle BOTH Him + Her
+// queued for that cell at once (whole-cell shared paint). If both already
+// queued, unqueue both. Otherwise queue both.
+function paintTapCenter(d, slot){
+  if(!_paintMode) return;
+  const himK = sk('him', d, slot);
+  const herK = sk('her', d, slot);
+  const bothQueued = _paintQueued[himK] && _paintQueued[herK];
+  if(bothQueued){
+    delete _paintQueued[himK];
+    delete _paintQueued[herK];
+  } else {
+    _paintQueued[himK] = true;
+    _paintQueued[herK] = true;
+  }
   renderMeals();
 }
 function paintAccept(){
