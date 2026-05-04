@@ -313,13 +313,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sched-slot-hdr.inactive{color:var(--gray);opacity:0.3}
 .sched-zone{position:absolute;top:0;bottom:0}
 .sched-zone-l{left:0;width:33%}.sched-zone-c{left:33%;width:34%}.sched-zone-r{right:0;width:33%}
-.sched-pill-wrap{display:flex;border-radius:6px;overflow:hidden;cursor:pointer;height:28px;width:92px;margin:0 auto;-webkit-touch-callout:none}
+.sched-pill-wrap{display:flex;border-radius:6px;overflow:visible;cursor:pointer;height:28px;width:92px;margin:0 auto;-webkit-touch-callout:none;position:relative}
 .sched-pill-half{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 .sched-pill-l{border-radius:6px 0 0 6px}.sched-pill-r{border-radius:0 6px 6px 0}
-/* 2026-05-03: 3-zone pill — center zone toggles shared on tap. ~10px wide so
-   pill stays at 92px total. Visible only when active (shared etc); otherwise
-   transparent so existing 2-zone visuals are preserved. */
-.sched-pill-mid{flex:0 0 10px;display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+/* 2026-05-03 (revised): center zone is an INVISIBLE absolute-positioned click
+   target overlaying the halves' boundary. Halves abut directly (50/50 flex)
+   with no gap; their own borders handle all the visual. The center has no
+   bg, no borders — it's just a 14px tap area for "toggle shared" / "queue
+   both for paint", matching the invisible click-zone pattern used by the
+   B/L/D slot header. */
+.sched-pill-mid{position:absolute;left:calc(50% - 7px);top:0;bottom:0;width:14px;cursor:pointer;z-index:5;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 /* Paint mode */
 .paint-bar{margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
 .paint-info{font-size:11px;color:var(--shop);font-weight:600;margin-bottom:6px}
@@ -6446,46 +6449,15 @@ function renderMeals(){
           const rOnlyHi=rSelfHi&&!lSelfHi;
           const lBdrRightFinal=lOnlyHi?lBdr:(rOnlyHi?'none':(lBg!==rBg?'1.5px solid '+midCol:'none'));
           const rBdrLeftFinal=rOnlyHi?rBdr:'none';
-          // 2026-05-03 (revised): center zone bg + top/bottom borders. Always
-          // SOLID (not transparent) so the pill looks continuous — fixes the
-          // "gap with no top/bottom lines" complaint. Color priority:
-          //   1. Both halves in SAME link group (link state wins over shared green):
-          //      both leftovers → yellow bg + group outline; both anchors → transparent
-          //      bg + group outline.
-          //   2. Both Him+Her queued in paint mode → orange (matches halves).
-          //   3. Shared → green.
-          //   4. Both eat-out → red.
-          //   5. Both Manual (non-link) → purple.
-          //   6. Otherwise → gray border, transparent bg (continuous with halves).
-          let cBg, cBdrTopBot;
-          const bothSameGroup = lGroup && lGroup === rGroup;
-          const bothPaintQueued = isPaintCol && himQueued && herQueued;
-          if(bothSameGroup && lIsLeftover && rIsLeftover){
-            cBg = yel+'.25)';
-            cBdrTopBot = '2px solid rgba('+lGroupRgb+',.85)';
-          } else if(bothSameGroup && lIsAnchor && rIsAnchor){
-            cBg = 'transparent';
-            cBdrTopBot = '2px solid rgba('+lGroupRgb+',.85)';
-          } else if(bothPaintQueued){
-            cBg = 'rgba(245,158,11,.3)';
-            cBdrTopBot = '2px solid rgba(245,158,11,.6)';
-          } else if(isShared){
-            cBg = grn+'.25)';
-            cBdrTopBot = '1.5px solid '+grn+'.5)';
-          } else if(himSkip && herSkip){
-            cBg = red+'.2)';
-            cBdrTopBot = '1.5px solid '+red+'.4)';
-          } else if(himManual && herManual && lNormal && rNormal){
-            cBg = prp+'.2)';
-            cBdrTopBot = '2px solid '+prp+'.6)';
-          } else {
-            cBg = 'transparent';
-            cBdrTopBot = '1.5px solid var(--border)';
-          }
+          // 2026-05-03 (revised v2): center is INVISIBLE absolute-positioned
+          // click overlay. Halves abut directly (50/50 flex) — their own
+          // borders handle all visuals (continuous when bgs match, divider
+          // via lBdrRightFinal when they differ). No bg/border on center =
+          // no extra vertical lines, no horizontal "gap" — just a tap target.
           html+='<div class="sched-pill-wrap" style="'+dimStyle+'">'
             +'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+';border-right:'+lBdrRightFinal+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>'
-            +'<div class="sched-pill-mid" style="background:'+cBg+';border-top:'+cBdrTopBot+';border-bottom:'+cBdrTopBot+'" '+cClick+'></div>'
             +'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+';border-left:'+rBdrLeftFinal+';color:'+rCol+'" '+rClick+'>'+rLabel+'</div>'
+            +'<div class="sched-pill-mid" '+cClick+'></div>'
             +'</div>';
         });
       });
