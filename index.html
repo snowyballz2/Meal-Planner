@@ -4762,15 +4762,62 @@ function verifyInvariants(){
         if(!ingr2||!ingr2.length||ingr2[0].dbKey===undefined)return;
         // Card macros
         const card=computeCardMacros(port2,p,d,s2,1,false,1);
-        // Balanced macros (what calcTotals uses)
+        // Balanced macros (what calcTotals uses). 2026-05-04: sum per-row
+        // rounded values to match the sum-of-rounded approach computeCardMacros
+        // now uses (so card.pm.kcal = sum of round(db.kcal*i.amt) per
+        // ingredient) — keeps INV5 reconstruction algebraically identical
+        // even though INV2 uses raw-summed-then-rounded for slot kcal totals.
         const bal=getBalancedSlotIngredients(p,d,s2);
         if(!bal)return;
         let balKcal=0;
-        bal.forEach(function(i){const db=NUTRI_DB[i.dbKey];if(db)balKcal+=db.kcal*i.amt;});
-        balKcal=Math.round(balKcal);
+        bal.forEach(function(i){const db=NUTRI_DB[i.dbKey];if(db)balKcal+=Math.round(db.kcal*i.amt);});
         if(Math.abs(card.pm.kcal-balKcal)>1){
           violations.push('INV5 card-vs-balanced: '+p+' '+d+'/'+s2
             +' card='+card.pm.kcal+' balanced='+balKcal);
+        }
+
+        // ── Invariant 23: Per-row displayed macros (× cookServings as
+        // shown in batch combined view) sum to card header per-serving × N.
+        // Catches compound-rounding divergence between buildIngrEditRow's
+        // per-row Math.round and computeCardMacros' header-level rounding.
+        // All 4 macros checked. Hard. 2026-05-04.
+        const lo23 = (typeof computeLeftovers==='function') ? computeLeftovers()[key2] : null;
+        const showCombined23 = !!(lo23 && !lo23.isLeftover && lo23.crossPersonCook
+                                && !(lo23.shared || lo23.sameDayShared));
+        const cookServings23 = showCombined23 ? (lo23.totalServings || lo23.servings || 1) : 1;
+        // For batch combined view, card pm is computed with the same
+        // cookServings the render uses — not 1. Use a fresh call so
+        // header reflects the rendered display.
+        const card23 = (cookServings23 === 1) ? card
+                     : computeCardMacros(port2, p, d, s2, cookServings23, false, 1);
+        let rowKcal=0, rowPro=0, rowFat=0, rowCarb=0;
+        bal.forEach(function(i){
+          const db=NUTRI_DB[i.dbKey]; if(!db) return;
+          const displayAmt = i.amt * cookServings23;
+          rowKcal += Math.round(db.kcal * displayAmt);
+          rowPro  += Math.round(db.pro  * displayAmt);
+          rowFat  += Math.round(db.fat  * displayAmt);
+          rowCarb += Math.round(db.carb * displayAmt);
+        });
+        // Compare row sum (batch totals shown) to header per-serving × N.
+        // Both should equal each other by construction since header is now
+        // computed as round(sum-of-rounded-rows / N).
+        const headerBatchKcal = card23.pm.kcal * cookServings23;
+        const headerBatchPro  = card23.pm.pro  * cookServings23;
+        const headerBatchFat  = card23.pm.fat  * cookServings23;
+        const headerBatchCarb = card23.pm.carb * cookServings23;
+        // Tolerance scales with cookServings: re-rounding header to integer
+        // per-serving and multiplying back by N drops up to Math.ceil(N/2)
+        // units per macro. For solo (N=1) tolerance 1 allows ±0 drift after
+        // exact match. For batch (N=4) tolerance 2; (N=5) tolerance 3, etc.
+        const tol23 = Math.ceil(cookServings23 / 2);
+        if(Math.abs(rowKcal-headerBatchKcal) > tol23
+           || Math.abs(rowPro-headerBatchPro) > tol23
+           || Math.abs(rowFat-headerBatchFat) > tol23
+           || Math.abs(rowCarb-headerBatchCarb) > tol23){
+          violations.push('INV23 row-vs-header: '+p+' '+d+'/'+s2
+            +' (×'+cookServings23+') rowSum=('+rowKcal+'k/'+rowPro+'p/'+rowFat+'f/'+rowCarb
+            +'c) header×N=('+headerBatchKcal+'k/'+headerBatchPro+'p/'+headerBatchFat+'f/'+headerBatchCarb+'c)');
         }
       });
     });
@@ -6156,16 +6203,20 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
       adjResult.forEach(function(a){
         const db = NUTRI_DB[a.ing.dbKey];
         if(!db)return;
-        // Sum raw, round once at end — keeps INV5 reconstruction matching
-        // computeCardMacros without the ~5 kcal slack from per-ingredient
-        // rounding (10 ingredients × ±0.5 = up to ±5 kcal).
-        pm.kcal+=db.kcal*a.newAmt;
-        pm.pro+=db.pro*a.newAmt;
-        pm.fat+=db.fat*a.newAmt;
-        pm.carb+=db.carb*a.newAmt;
+        // 2026-05-04 INV23: header = sum of per-row rounded values so the
+        // displayed kcal/p/f/c at the top equals the sum of the per-row
+        // displayed values. Per-row uses round(db.X * displayAmt) where
+        // displayAmt = a.newAmt × cookServings; we mirror that here, then
+        // divide by cookServings to keep the header per-serving.
+        pm.kcal += Math.round(db.kcal * a.newAmt * cookServings);
+        pm.pro  += Math.round(db.pro  * a.newAmt * cookServings);
+        pm.fat  += Math.round(db.fat  * a.newAmt * cookServings);
+        pm.carb += Math.round(db.carb * a.newAmt * cookServings);
       });
-      pm.kcal=Math.round(pm.kcal); pm.pro=Math.round(pm.pro);
-      pm.fat=Math.round(pm.fat);   pm.carb=Math.round(pm.carb);
+      pm.kcal = Math.round(pm.kcal / cookServings);
+      pm.pro  = Math.round(pm.pro  / cookServings);
+      pm.fat  = Math.round(pm.fat  / cookServings);
+      pm.carb = Math.round(pm.carb / cookServings);
       ingrHtml = adjResult.map(function(a, idx) {
         return buildIngrEditRow(a.ing, a.newAmt*cookServings, person, day, s, idx);
       }).join('');
@@ -6243,12 +6294,17 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
       pm = {kcal:0,pro:0,fat:0,carb:0};
       balanced0.forEach(function(i){
         const db=NUTRI_DB[i.dbKey]; if(!db)return;
-        // Sum raw, round once at end (see same-pattern note above).
-        pm.kcal+=db.kcal*i.amt; pm.pro+=db.pro*i.amt;
-        pm.fat+=db.fat*i.amt;   pm.carb+=db.carb*i.amt;
+        // 2026-05-04 INV23: sum-of-rounded-rows / cookServings (see same-
+        // pattern note in slotAdj!==0 branch above).
+        pm.kcal += Math.round(db.kcal * i.amt * cookServings);
+        pm.pro  += Math.round(db.pro  * i.amt * cookServings);
+        pm.fat  += Math.round(db.fat  * i.amt * cookServings);
+        pm.carb += Math.round(db.carb * i.amt * cookServings);
       });
-      pm.kcal=Math.round(pm.kcal); pm.pro=Math.round(pm.pro);
-      pm.fat=Math.round(pm.fat);   pm.carb=Math.round(pm.carb);
+      pm.kcal = Math.round(pm.kcal / cookServings);
+      pm.pro  = Math.round(pm.pro  / cookServings);
+      pm.fat  = Math.round(pm.fat  / cookServings);
+      pm.carb = Math.round(pm.carb / cookServings);
       ingrHtml = balanced0.map(function(i, idx) {
         var origIng = adjIngr0[idx]||{dbKey:i.dbKey,amt:i.origAmt||i.amt,role:i.role,scalable:i.scalable};
         return buildIngrEditRow(origIng, i.amt*cookServings, person, day, s, idx);
@@ -12540,7 +12596,7 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0};
     violations.forEach(function(v){
       // Match INV20Soft first (longer suffix); fall back to INV<digits>.
       var ms=v.match(/^(INV20Soft)\b/);
@@ -12712,7 +12768,7 @@ window.MPStress=(function(){
     var kcalBins={'<-150':0,'-150..-120':0,'-120..-100':0,'+100..+120':0,'+120..+150':0,'>+150':0};
     var fatBins={'30.0-30.2':0,'30.2-30.5':0,'30.5-31.0':0,'31.0-32.0':0,'>32.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
@@ -13571,7 +13627,7 @@ window.MPStress=(function(){
     lines.push('');
 
     // ── HARD INVARIANTS ─────────────────────────────────────────
-    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20'];
+    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20','INV23'];
     // INV20 hard-count subtracts soft-waste fires (marinara, chicken broth)
     // so the "Hard Invariants" line reflects only items that actually need
     // attention.
@@ -13683,7 +13739,7 @@ window.MPStress=(function(){
     // INVs (6,14,15,16,18) get their own delta rows.
     if(baseline && baseline.invTotals){
       var changedInvs=[];
-      ['INV1','INV2','INV3','INV4','INV5','INV6','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV14','INV15','INV16','INV17','INV18','INV19','INV20','INV21','INV22'].forEach(function(k){
+      ['INV1','INV2','INV3','INV4','INV5','INV6','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV14','INV15','INV16','INV17','INV18','INV19','INV20','INV21','INV22','INV23'].forEach(function(k){
         var bv=baseline.invTotals[k]||0;
         var cv=a.invTotals[k]||0;
         if(bv!==cv){
