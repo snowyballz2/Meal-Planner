@@ -6166,32 +6166,48 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
         // base amount so the banner shows what the user changed FROM the
         // original recipe. Header phrased as manual-edit (not auto-adjust)
         // since by definition the listed changes are user-driven.
-        const userOverrideIdxs = (function(){
+        // 2026-05-04: track BOTH dbKey swaps and amt edits per idx. Slot-
+        // adjuster's amt drift is excluded — only USER-set amt changes are
+        // counted (override entry must have explicit amt field). dbKey swaps
+        // shown as "was X" line; amt edits as "X → Y" line; both shown when
+        // both happened on same idx.
+        const userOverrides = (function(){
           const _ov = getOverrides(person, day, s);
           if(!_ov || !_ov.length) return {};
-          const set = {};
+          const map = {};
           _ov.forEach(function(o){
-            // 2026-05-04: require explicit amt field — dbKey-only swaps don't
-            // count for the banner because the amt didn't change (the slot
-            // adjuster's diff vs recipe-base shouldn't be attributed to the
-            // user just because they swapped the ingredient identity).
-            if(o.scalable !== false && o.amt !== undefined) set[o.idx] = true;
+            if(o.scalable === false) return; // freeze — not user
+            if(!map[o.idx]) map[o.idx] = {};
+            if(o.amt !== undefined) map[o.idx].userAmt = o.amt;
+            if(o.dbKey !== undefined) map[o.idx].userDbKey = o.dbKey;
           });
-          return set;
+          return map;
         })();
         const changeLines = [];
         adjResult.forEach(function(a, ix){
-          if(!userOverrideIdxs[ix]) return;
+          const flags = userOverrides[ix];
+          if(!flags) return;
           const recipeAmt = (port.ingredients[ix] && port.ingredients[ix].amt !== undefined)
             ? port.ingredients[ix].amt : 0;
-          if(Math.abs(a.newAmt - recipeAmt) <= 0.02) return;
-          const db = NUTRI_DB[a.ing.dbKey];
-          const unit = db ? db.unit : '';
-          const fmtAmt = fmtFrac;
-          const dir = a.newAmt > recipeAmt ? '↑' : '↓';
-          const kcalDiff = Math.round((a.newAmt - recipeAmt) * (db?db.kcal:0));
-          const diffSign = kcalDiff > 0 ? '+' : '';
-          changeLines.push(dir+' <b>'+a.ing.dbKey+'</b>: '+fmtAmt(recipeAmt)+' → '+fmtAmt(a.newAmt)+' '+unit+' ('+diffSign+kcalDiff+' kcal)');
+          const recipeDbKey = (port.ingredients[ix] && port.ingredients[ix].dbKey) || '';
+          const currentDbKey = a.ing.dbKey;
+          const parts = [];
+          // Amt change: only emit if user explicitly set amt (flags.userAmt
+          // present) AND the resulting balanced amt differs from recipe base.
+          if(flags.userAmt !== undefined && Math.abs(a.newAmt - recipeAmt) > 0.02){
+            const db = NUTRI_DB[currentDbKey];
+            const unit = db ? db.unit : '';
+            const dir = a.newAmt > recipeAmt ? '↑' : '↓';
+            const kcalDiff = Math.round((a.newAmt - recipeAmt) * (db?db.kcal:0));
+            const diffSign = kcalDiff > 0 ? '+' : '';
+            parts.push(dir+' '+fmtFrac(recipeAmt)+' → '+fmtFrac(a.newAmt)+' '+unit+' ('+diffSign+kcalDiff+' kcal)');
+          }
+          // dbKey swap: emit if user-overridden dbKey differs from recipe.
+          if(flags.userDbKey !== undefined && currentDbKey !== recipeDbKey){
+            parts.push('🔄 was <i>'+recipeDbKey+'</i>');
+          }
+          if(parts.length === 0) return;
+          changeLines.push('<b>'+currentDbKey+'</b>: '+parts.join(' · '));
         });
         if(changeLines.length){
           adjBanner='<div class="adj-info">✏️ Manual edits to this slot:<br>'
@@ -6433,8 +6449,8 @@ function buildMealCardHtml(s, person, day, other){
     +'<div class="mc-body">'
     +adjBanner
     +'<div class="bsec"><div class="bsec-title ingr" style="display:flex;align-items:center;justify-content:space-between">'+ingrSectionTitle+'<div style="display:flex;gap:6px;align-items:center">'
-      +(hasOverrides ? '<button title="Reset to post-randomize amounts" style="border:1.5px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:700;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();onIngrReset(\''+person+'\',\''+day+'\',\''+s+'\')">↺</button>' : '')
-      +'<button title="Add ingredient" style="border:none;background:var(--shop);color:#000;font-size:13px;font-weight:700;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button>'
+      +(hasOverrides ? '<button title="Reset to post-randomize amounts" style="border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;font-weight:400;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer;text-decoration:none" onclick="event.stopPropagation();onIngrReset(\''+person+'\',\''+day+'\',\''+s+'\')">↺</button>' : '')
+      +'<button title="Add ingredient" style="border:none;background:var(--shop);color:#000;font-size:13px;font-weight:700;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer;text-decoration:none" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button>'
     +'</div></div>'+ingrHtml+'</div>'
     +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'
     +'</div></div>';
@@ -7028,11 +7044,27 @@ function onIngrAmt(p,d,s,idx,val){
   const amt=parseFloat(val);
   if(isNaN(amt)||amt<0)return;
   setOverride(p,d,s,idx,'amt',amt);
+  // 2026-05-04: clear any freeze-origin scalable:false on this entry — user
+  // explicitly set amt, so the entry is now user-driven (not freeze-pinned).
+  // Banner filter relies on scalable !== false to identify user amt edits.
+  const ov = OVERRIDES[sk(p,d,s)];
+  if(ov){
+    const entry = ov.find(function(o){return o.idx===idx;});
+    if(entry) delete entry.scalable;
+  }
   MANUAL_SET[sk(p,d,s)]=true;
   invalidateLeftoverCache();renderMeals();autoSaveWeek();
 }
 function onIngrSwap(p,d,s,idx,newKey){
   setOverride(p,d,s,idx,'dbKey',newKey);
+  // 2026-05-04: clear any prior freeze sizing on this entry. The freeze amt
+  // was sized for the OLD ingredient; the new one starts at recipe-base.
+  // Also clears scalable:false so the entry is user-origin (banner-visible).
+  const ov = OVERRIDES[sk(p,d,s)];
+  if(ov){
+    const entry = ov.find(function(o){return o.idx===idx;});
+    if(entry){ delete entry.amt; delete entry.scalable; }
+  }
   MANUAL_SET[sk(p,d,s)]=true;
   invalidateLeftoverCache();renderMeals();autoSaveWeek();
 }
