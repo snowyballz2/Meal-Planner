@@ -6797,7 +6797,7 @@ function renderMeals(){
         // snack here had no column to paint to). Existing groups appended
         // as "↻ <meal> (<color>)" so user can pick one to edit (pre-loads
         // the group's cells in paint mode).
-        html+='<select id="paintSlotSel" class="paint-select" style="flex-shrink:0" onchange="onPaintSlotChange()">';
+        html+='<select id="paintSlotSel" class="paint-select" style="flex:0 0 110px;max-width:110px" onchange="onPaintSlotChange()">';
         html+='<option value="">Category</option>';
         [{v:'breakfast',l:'Bkfst'},{v:'main',l:'Main'}].forEach(function(o){
           html+='<option value="'+o.v+'"'+(ss1===o.v?' selected':'')+'>'+o.l+'</option>';
