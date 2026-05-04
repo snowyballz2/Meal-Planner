@@ -6398,6 +6398,11 @@ function renderMeals(){
           const rIsAnchor=rGroup?isLinkAnchor(rGroup,'her',dd,ss):false;
           const lIsLeftover=lGroup&&!lIsAnchor;
           const rIsLeftover=rGroup&&!rIsAnchor;
+          // Group color RGB lookups — needed by lBg/rBg (leftover bg tinted
+          // in group color) AND by lBdr/rBdr (group color outline). Defined
+          // here, BEFORE bg/border calculations, to avoid TDZ errors.
+          const lGroupRgb=lGroup?LEFTOVER_LINK_COLORS[lGroup.colorIdx].rgb:null;
+          const rGroupRgb=rGroup?LEFTOVER_LINK_COLORS[rGroup.colorIdx].rgb:null;
           // Background priority (highest first):
           //   1. In a link group:
           //      - leftover → yellow (links state — "this is a leftover")
@@ -6410,24 +6415,26 @@ function renderMeals(){
           //   5. Otherwise transparent
           const lNormal=!isShared&&!himSkip;
           const rNormal=!isShared&&!herSkip;
-          // 2026-05-03: bumped leftover bg alpha .25 → .45 so amber actually
-          // reads as amber on the dark navy bg. Matches the visual weight of
-          // .leftover-badge and the Leftovers pill on meal cards.
+          // 2026-05-03 (revised): leftover bg = group color tint (matches the
+          // anchor's outline color). Anchor stays transparent (outlined-only).
+          // The whole linked group reads as one color family; you can tell
+          // anchor from leftover by fill (filled = leftover, outline-only =
+          // anchor). Mixed groups (Him in cyan group, Her in orange group)
+          // tint each half in its own group color.
           let lBg = lGroup
-                  ? (lIsLeftover ? yel+'.45)' : 'transparent')
+                  ? (lIsLeftover ? 'rgba('+lGroupRgb+',.45)' : 'transparent')
                   : (himManual&&lNormal) ? prp+'.2)'
                   : isShared ? grn+'.25)'
                   : himSkip ? red+'.2)'
                   : 'transparent';
           let rBg = rGroup
-                  ? (rIsLeftover ? yel+'.45)' : 'transparent')
+                  ? (rIsLeftover ? 'rgba('+rGroupRgb+',.45)' : 'transparent')
                   : (herManual&&rNormal) ? prp+'.2)'
                   : isShared ? grn+'.25)'
                   : herSkip ? red+'.2)'
                   : 'transparent';
           // Border: link group color overrides Manual purple. Group outline = 2px.
-          const lGroupRgb=lGroup?LEFTOVER_LINK_COLORS[lGroup.colorIdx].rgb:null;
-          const rGroupRgb=rGroup?LEFTOVER_LINK_COLORS[rGroup.colorIdx].rgb:null;
+          // (lGroupRgb/rGroupRgb already declared above the bg block.)
           let lBdr=lGroup?'2px solid rgba('+lGroupRgb+',.85)':himManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':himSkip?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
           let rBdr=rGroup?'2px solid rgba('+rGroupRgb+',.85)':herManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':herSkip?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
           let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared||himSkip?'#fff':'var(--gray)';
