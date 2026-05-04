@@ -5672,20 +5672,10 @@ function buildIngrEditRow(ing, amt, person, day, s, idx){
     const sel = (Math.abs(q.val - amt) < 0.02) ? ' selected' : '';
     return '<option value="'+q.val+'"'+sel+'>'+q.label+'</option>';
   }).join('');
-  // Big Cook redistribution produces off-grid per-serving amounts (e.g.
-  // 7.701 oz when an 11 oz batch splits 2:1). For batch members ONLY,
-  // display the custom-amount option label rounded to 1 decimal. The
-  // stored amount stays at full precision. Non-batch slots keep the
-  // existing 3-decimal display — if those go fractional it's a bug we
-  // want visible, not hidden by rounding.
-  const batchLo = computeLeftovers()[sk(person,day,s)];
-  const isBatchMember = !!(batchLo && (batchLo.isLeftover || (batchLo.totalServings && batchLo.totalServings > 1)));
-  if (isBatchMember && amt > 0) {
-    qtyHtml = qtyHtml.replace(/(<option value="[\d.]+" selected>)(\d+\.\d{2,})(<\/option>)/, function(m, pre, num, post){
-      const rounded = Math.round(parseFloat(num) * 10) / 10;
-      return pre + rounded + post;
-    });
-  }
+  // 2026-05-04: batch totals shown at full precision. Earlier this code
+  // rounded batch-member custom labels to 1 decimal (6.25 → "6.3") to hide
+  // 3-decimal kcal-prop split artifacts (e.g. 7.701 oz). User prefers
+  // honest precision — 6.25 shows as 6.25, 4.543 shows as 4.543.
   const displayCal=db?Math.round(db.kcal*amt):0;
   const displayPro=db?Math.round(db.pro*amt):0;
   return '<div class="ingr-edit-row">'
