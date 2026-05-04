@@ -573,8 +573,15 @@ function fmtFrac(n) {
     [1+1/8,'1⅛'],[1+3/8,'1⅜'],[1+5/8,'1⅝'],[1+7/8,'1⅞'],
     [0,'0'],[1/4,'¼'],[1/2,'½'],[3/4,'¾'],
     [1,'1'],[1.25,'1¼'],[1.5,'1½'],[1.75,'1¾'],
-    [2,'2'],[2.25,'2¼'],[2.5,'2½'],[2.75,'2¾'],[3,'3'],[3.5,'3½'],
-    [4,'4'],[5,'5'],[6,'6'],[7,'7'],[8,'8'],[9,'9'],[10,'10']
+    [2,'2'],[2.25,'2¼'],[2.5,'2½'],[2.75,'2¾'],
+    [3,'3'],[3.25,'3¼'],[3.5,'3½'],[3.75,'3¾'],
+    [4,'4'],[4.25,'4¼'],[4.5,'4½'],[4.75,'4¾'],
+    [5,'5'],[5.25,'5¼'],[5.5,'5½'],[5.75,'5¾'],
+    [6,'6'],[6.25,'6¼'],[6.5,'6½'],[6.75,'6¾'],
+    [7,'7'],[7.25,'7¼'],[7.5,'7½'],[7.75,'7¾'],
+    [8,'8'],[8.25,'8¼'],[8.5,'8½'],[8.75,'8¾'],
+    [9,'9'],[9.25,'9¼'],[9.5,'9½'],[9.75,'9¾'],
+    [10,'10']
   ];
   let best=0, bestDist=Math.abs(n - snaps[0][0]);
   for(let i=1;i<snaps.length;i++){
@@ -666,10 +673,12 @@ function buildQtyOptions(unit, currentAmt, wholeOnly) {
       // Whole numbers only: 1, 2, 3 ... 10
       for (let i = 1; i <= 10; i++) opts.push({val:i, label:String(i)});
     } else {
-      // Whole and half: 1, 1.5, 2 ... 10
-      for (let i = 1; i <= 20; i++) {
-        const v = i * 0.5;
-        opts.push({val:v, label: v === Math.floor(v) ? String(v) : Math.floor(v) > 0 ? Math.floor(v) + '½' : '½'});
+      // Quarter-step grid: ¼, ½, ¾, 1, 1¼, 1½, 1¾, 2, ... 10. Was half-step
+      // before 2026-05-04 — avocado/lemon/garlic-cloves at 0.75 fell through
+      // to the custom-amount path which displayed "0.75" instead of "¾".
+      for (let i = 1; i <= 40; i++) {
+        const v = i * 0.25;
+        opts.push({val:v, label:fmtFrac(v)});
       }
     }
   } else if (u === 'slice') {
@@ -690,8 +699,17 @@ function buildQtyOptions(unit, currentAmt, wholeOnly) {
   // Make sure current amount is included even if it doesn't match the grid
   const found = opts.some(function(o){return Math.abs(o.val - currentAmt) < 0.02;});
   if (!found && currentAmt > 0) {
-    // Format the current amount nicely
-    const label = String(Math.round(currentAmt * 1000) / 1000);
+    // 2026-05-04: use fmtFrac when amount is exactly on a clean fraction grid
+    // (¼/⅓/⅛). Off-grid amounts (e.g. kcal-prop split 4.543) keep 3-decimal
+    // raw so precision isn't lost — fmtFrac's 0.0601 tolerance would round
+    // those to nearby fractions like "4½", which the user explicitly doesn't
+    // want for batch totals.
+    const onQuarter = Math.abs(currentAmt * 4 - Math.round(currentAmt * 4)) < 0.001;
+    const onThird   = Math.abs(currentAmt * 3 - Math.round(currentAmt * 3)) < 0.001;
+    const onEighth  = Math.abs(currentAmt * 8 - Math.round(currentAmt * 8)) < 0.001;
+    const label = (onQuarter || onThird || onEighth)
+      ? fmtFrac(currentAmt)
+      : String(Math.round(currentAmt * 1000) / 1000);
     opts.push({val:currentAmt, label:label});
     opts.sort(function(a,b){return a.val - b.val;});
   }
