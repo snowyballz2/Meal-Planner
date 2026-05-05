@@ -907,13 +907,14 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
   }
   function _clampThresh(ings){
     return ings.map(function(i){
-      // 2026-05-03: skip FREEZE-pinned items only (scalable:false AND in
-      // ROUND_PKG_ITEMS / ROUND_PRODUCE_ITEMS). Clamping these can silently
-      // violate the freeze contract on early-return rebuilds — e.g., a
-      // batch-only maxAmt of 12.5oz silently clamped to maxAmtSolo=12 when
-      // the cook anchor's mts==1 evaluates as solo. Other scalable:false
-      // items (recipe-fixed oils/sauces/spices) STILL get clamped — they
-      // rely on this path to keep them within minAmt/maxAmt bounds.
+      // 2026-05-05: skip USER pins (_userSet:true) — user explicitly typed
+      // any value, so they bypass min/max clamps. Pipeline shouldn't
+      // override what the user picked.
+      if(i._userSet === true) return {ing:i,newAmt:i.amt};
+      // Skip FREEZE-pinned items only (scalable:false AND in ROUND_PKG_ITEMS
+      // / ROUND_PRODUCE_ITEMS). Clamping these can silently violate the
+      // freeze contract on early-return rebuilds. Other scalable:false items
+      // (recipe-fixed oils/sauces/spices) STILL get clamped.
       if(i.scalable===false &&
          (typeof ROUND_PKG_ITEMS!=='undefined' && ROUND_PKG_ITEMS.indexOf(i.dbKey)>=0 ||
           typeof ROUND_PRODUCE_ITEMS!=='undefined' && ROUND_PRODUCE_ITEMS.indexOf(i.dbKey)>=0)){
@@ -1249,9 +1250,11 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
   // Final minAmt/maxAmt sweep — catches non-scalable items (never touched by
   // the scalable loop) so INV13 holds even for fixed/condiment ingredients
   // whose base amt is below minAmt. Uses _effMin/_effMax so solo slots pick
-  // up minAmtSolo/maxAmtSolo overrides.
+  // up minAmtSolo/maxAmtSolo overrides. 2026-05-05: skip USER pins so user
+  // can pick arbitrary values without pipeline overrides.
   return ingredients.map(function(ing, idx) {
     var amt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
+    if(ing._userSet === true) return { ing:ing, newAmt:amt };
     var db = NUTRI_DB[ing.dbKey];
     if (db) {
       var mn = _effMin(db);
@@ -3006,6 +3009,10 @@ function applyOverrides(port,p,d,s){
     // at perUnit-multiple values; the day balancer compensates via non-frozen
     // ingredients. (Added 2026-04-28.)
     if(o.scalable!==undefined)newIng.scalable=o.scalable;
+    // 2026-05-05: forward _userSet so downstream code (clamp, INV13) can
+    // distinguish user-pinned amounts from freeze-pinned ones. User pins
+    // bypass min/max clamps so users can set arbitrary values.
+    if(o._userSet===true)newIng._userSet=true;
     return newIng;
   });
 }
@@ -5140,10 +5147,17 @@ function verifyInvariants(){
         if(!bal)return;
         var slotLo=leftovers[sk(p,d,s)];
         var isSoloSlot=!slotLo;
-        bal.forEach(function(bi){
+        // 2026-05-05: detect USER pins on this slot — user-set overrides
+        // bypass min/max checks so users can pick arbitrary values.
+        const _slotOv = OVERRIDES[sk(p,d,s)] || [];
+        const _userIdxs = {};
+        _slotOv.forEach(function(o){if(o._userSet===true)_userIdxs[o.idx]=true;});
+        bal.forEach(function(bi,_ix){
           var db=NUTRI_DB[bi.dbKey];if(!db)return;
           // Skip zero / near-zero amounts (ingredient effectively absent).
           if(bi.amt<0.001)return;
+          // Skip user pins — they're allowed any value.
+          if(_userIdxs[_ix])return;
           var effMinCheck=(isSoloSlot && typeof db.minAmtSolo==='number')
             ? db.minAmtSolo
             : (db.minAmt!=null ? db.minAmt : null);
