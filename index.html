@@ -6758,16 +6758,44 @@ function renderMeals(){
           const rSelfHi=isShared||herSkip||(herManual&&rNormal)||!!rGroup||(isPaintCol&&herQueued);
           const lOnlyHi=lSelfHi&&!rSelfHi;
           const rOnlyHi=rSelfHi&&!lSelfHi;
-          const lBdrRightFinal=lOnlyHi?lBdr:(rOnlyHi?'none':(lBg!==rBg?'1.5px solid '+midCol:'none'));
-          const rBdrLeftFinal=rOnlyHi?rBdr:'none';
-          // 2026-05-03 (revised v2): center is INVISIBLE absolute-positioned
-          // click overlay. Halves abut directly (50/50 flex) — their own
-          // borders handle all visuals (continuous when bgs match, divider
-          // via lBdrRightFinal when they differ). No bg/border on center =
-          // no extra vertical lines, no horizontal "gap" — just a tap target.
+          // 2026-05-05: when BOTH halves are highlighted with different
+          // colors, draw the centerline as a vertical gradient (top half
+          // Him's color, bottom half Her's color) so each side "owns" half
+          // of the shared divider. Per-half center borders are suppressed
+          // and the gradient overlay handles the divider visually.
+          const bothHi = lSelfHi && rSelfHi;
+          // Pick each half's "primary" color for the gradient. Order mirrors
+          // the lBdr/rBdr cascade (group → manual → shared → skip → border).
+          let lCenterCol = lGroup ? 'rgba('+lGroupRgb+',.85)'
+                         : (himManual&&lNormal) ? prp+'.6)'
+                         : isShared ? grn+'.5)'
+                         : himSkip ? red+'.4)'
+                         : '';
+          let rCenterCol = rGroup ? 'rgba('+rGroupRgb+',.85)'
+                         : (herManual&&rNormal) ? prp+'.6)'
+                         : isShared ? grn+'.5)'
+                         : herSkip ? red+'.4)'
+                         : '';
+          // 2026-05-05: split center fires whenever both halves are highlighted
+          // with different "center colors" — backgrounds are typically
+          // transparent so we compare lCenterCol/rCenterCol directly. Same
+          // color → no split (continuous visual). Different → gradient overlay.
+          const useSplitCenter = bothHi && lCenterCol && rCenterCol && lCenterCol!==rCenterCol;
+          const lBdrRightFinal = useSplitCenter ? 'none'
+                               : (lOnlyHi?lBdr:(rOnlyHi?'none':(lBg!==rBg?'1.5px solid '+midCol:'none')));
+          const rBdrLeftFinal = useSplitCenter ? 'none' : (rOnlyHi?rBdr:'none');
+          // Split-center overlay: 1.5px wide vertical bar at center, top
+          // half lCenterCol / bottom half rCenterCol via linear-gradient.
+          const splitCenter = useSplitCenter
+            ? '<div style="position:absolute;left:calc(50% - 0.75px);top:0;bottom:0;width:1.5px;background:linear-gradient(to bottom,'+lCenterCol+' 50%,'+rCenterCol+' 50%);pointer-events:none;z-index:1"></div>'
+            : '';
+          // Center is INVISIBLE absolute-positioned click overlay (above the
+          // split-center bar, z-index:5). Halves abut directly (50/50 flex)
+          // — their borders + the gradient overlay handle visuals.
           html+='<div class="sched-pill-wrap" style="'+dimStyle+'">'
             +'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+';border-right:'+lBdrRightFinal+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>'
             +'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+';border-left:'+rBdrLeftFinal+';color:'+rCol+'" '+rClick+'>'+rLabel+'</div>'
+            +splitCenter
             +'<div class="sched-pill-mid" '+cClick+'></div>'
             +'</div>';
         });
