@@ -6784,10 +6784,11 @@ function renderMeals(){
           const lBdrRightFinal = useSplitCenter ? 'none'
                                : (lOnlyHi?lBdr:(rOnlyHi?'none':(lBg!==rBg?'1.5px solid '+midCol:'none')));
           const rBdrLeftFinal = useSplitCenter ? 'none' : (rOnlyHi?rBdr:'none');
-          // Split-center overlay: 1.5px wide vertical bar at center, top
-          // half lCenterCol / bottom half rCenterCol via linear-gradient.
+          // Split-center overlay: vertical bar at center, split horizontally
+          // into left half (Him's color) and right half (Her's color) via
+          // linear-gradient(to right). 3px total so each side gets 1.5px.
           const splitCenter = useSplitCenter
-            ? '<div style="position:absolute;left:calc(50% - 0.75px);top:0;bottom:0;width:1.5px;background:linear-gradient(to bottom,'+lCenterCol+' 50%,'+rCenterCol+' 50%);pointer-events:none;z-index:1"></div>'
+            ? '<div style="position:absolute;left:calc(50% - 1.5px);top:0;bottom:0;width:3px;background:linear-gradient(to right,'+lCenterCol+' 50%,'+rCenterCol+' 50%);pointer-events:none;z-index:1"></div>'
             : '';
           // Center is INVISIBLE absolute-positioned click overlay (above the
           // split-center bar, z-index:5). Halves abut directly (50/50 flex)
