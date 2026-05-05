@@ -6189,6 +6189,52 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
   const hasOverrides = _hasUserOverrides(person,day,s);
   let pm, adjBanner='', ingrHtml='';
 
+  // 2026-05-05: extracted banner builder so both slotAdj!==0 and slotAdj===0
+  // branches (e.g., shake) can render the manual-edit banner. Takes the
+  // resolved-with-overrides ingredient list (matching ix order in port).
+  function _buildManualBanner(adjResult){
+    const userOverrides = (function(){
+      const _ov = getOverrides(person, day, s);
+      if(!_ov || !_ov.length) return {};
+      const map = {};
+      _ov.forEach(function(o){
+        if(o._userSet !== true) return;
+        if(!map[o.idx]) map[o.idx] = {};
+        if(o.amt !== undefined) map[o.idx].userAmt = o.amt;
+        if(o.dbKey !== undefined) map[o.idx].userDbKey = o.dbKey;
+        if(o._priorAmt !== undefined) map[o.idx].priorAmt = o._priorAmt;
+      });
+      return map;
+    })();
+    const changeLines = [];
+    adjResult.forEach(function(a, ix){
+      const flags = userOverrides[ix];
+      if(!flags) return;
+      const recipeAmt = (port.ingredients[ix] && port.ingredients[ix].amt !== undefined)
+        ? port.ingredients[ix].amt : 0;
+      const recipeDbKey = (port.ingredients[ix] && port.ingredients[ix].dbKey) || '';
+      const currentDbKey = a.ing.dbKey;
+      const parts = [];
+      const fromAmt = (flags.priorAmt !== undefined) ? flags.priorAmt : recipeAmt;
+      if(flags.userAmt !== undefined && Math.abs(a.newAmt - fromAmt) > 0.02){
+        const db = NUTRI_DB[currentDbKey];
+        const unit = db ? db.unit : '';
+        const dir = a.newAmt > fromAmt ? '↑' : '↓';
+        const kcalDiff = Math.round((a.newAmt - fromAmt) * (db?db.kcal:0));
+        const diffSign = kcalDiff > 0 ? '+' : '';
+        parts.push(dir+' '+fmtFrac(fromAmt)+' → '+fmtFrac(a.newAmt)+' '+unit+' ('+diffSign+kcalDiff+' kcal)');
+      }
+      if(flags.userDbKey !== undefined && currentDbKey !== recipeDbKey){
+        parts.push('🔄 was <i>'+recipeDbKey+'</i>');
+      }
+      if(parts.length === 0) return;
+      changeLines.push('<b>'+currentDbKey+'</b>: '+parts.join(' · '));
+    });
+    return changeLines.length
+      ? '<div class="adj-info">✏️ Manual edits to this slot:<br>'+changeLines.join('<br>')+'</div>'
+      : '';
+  }
+
   if(isSkipped){
     pm={kcal:0,pro:0,fat:0,carb:0};
   } else if(slotAdj!==0){
@@ -6221,66 +6267,7 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
         return buildIngrEditRow(a.ing, a.newAmt*cookServings, person, day, s, idx);
       }).join('');
       ingrHtml='<div class="ingr-edit-grid">'+ingrHtml+'</div>';
-      if(showBanner){
-        // 2026-05-04 Q2 polish: list ONLY user-edited ingredients (not
-        // slot-adjuster scalings, not freeze pins). Compare against recipe
-        // base amount so the banner shows what the user changed FROM the
-        // original recipe. Header phrased as manual-edit (not auto-adjust)
-        // since by definition the listed changes are user-driven.
-        // 2026-05-04: track BOTH dbKey swaps and amt edits per idx. Slot-
-        // adjuster's amt drift is excluded — only USER-set amt changes are
-        // counted (override entry must have explicit amt field). dbKey swaps
-        // shown as "was X" line; amt edits as "X → Y" line; both shown when
-        // both happened on same idx.
-        const userOverrides = (function(){
-          const _ov = getOverrides(person, day, s);
-          if(!_ov || !_ov.length) return {};
-          const map = {};
-          _ov.forEach(function(o){
-            // 2026-05-04: include only entries explicitly tagged _userSet.
-            // User pins use scalable:false too — only the flag distinguishes.
-            if(o._userSet !== true) return;
-            if(!map[o.idx]) map[o.idx] = {};
-            if(o.amt !== undefined) map[o.idx].userAmt = o.amt;
-            if(o.dbKey !== undefined) map[o.idx].userDbKey = o.dbKey;
-            if(o._priorAmt !== undefined) map[o.idx].priorAmt = o._priorAmt;
-          });
-          return map;
-        })();
-        const changeLines = [];
-        adjResult.forEach(function(a, ix){
-          const flags = userOverrides[ix];
-          if(!flags) return;
-          const recipeAmt = (port.ingredients[ix] && port.ingredients[ix].amt !== undefined)
-            ? port.ingredients[ix].amt : 0;
-          const recipeDbKey = (port.ingredients[ix] && port.ingredients[ix].dbKey) || '';
-          const currentDbKey = a.ing.dbKey;
-          const parts = [];
-          // 2026-05-04: use _priorAmt (pre-edit displayed value) as the "from"
-          // when available. Falls back to recipe-base. Avoids confusing diff
-          // when slot adjuster had already scaled the displayed amount before
-          // the user's edit (user sees ¾, picks 1 → banner says "¾ → 1").
-          const fromAmt = (flags.priorAmt !== undefined) ? flags.priorAmt : recipeAmt;
-          if(flags.userAmt !== undefined && Math.abs(a.newAmt - fromAmt) > 0.02){
-            const db = NUTRI_DB[currentDbKey];
-            const unit = db ? db.unit : '';
-            const dir = a.newAmt > fromAmt ? '↑' : '↓';
-            const kcalDiff = Math.round((a.newAmt - fromAmt) * (db?db.kcal:0));
-            const diffSign = kcalDiff > 0 ? '+' : '';
-            parts.push(dir+' '+fmtFrac(fromAmt)+' → '+fmtFrac(a.newAmt)+' '+unit+' ('+diffSign+kcalDiff+' kcal)');
-          }
-          // dbKey swap: emit if user-overridden dbKey differs from recipe.
-          if(flags.userDbKey !== undefined && currentDbKey !== recipeDbKey){
-            parts.push('🔄 was <i>'+recipeDbKey+'</i>');
-          }
-          if(parts.length === 0) return;
-          changeLines.push('<b>'+currentDbKey+'</b>: '+parts.join(' · '));
-        });
-        if(changeLines.length){
-          adjBanner='<div class="adj-info">✏️ Manual edits to this slot:<br>'
-            +changeLines.join('<br>')+'</div>';
-        }
-      }
+      if(showBanner) adjBanner = _buildManualBanner(adjResult);
     } else {
       pm = ovrMacros;
     }
@@ -6310,6 +6297,17 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
         return buildIngrEditRow(origIng, i.amt*cookServings, person, day, s, idx);
       }).join('');
       ingrHtml='<div class="ingr-edit-grid">'+ingrHtml+'</div>';
+      // 2026-05-05: also render manual-edit banner here (covers shake +
+      // any slot where slot adjuster didn't run). Build adjResult shape
+      // matching slotAdj!==0 branch ({ing, newAmt}) so _buildManualBanner
+      // can iterate it the same way.
+      if(showBanner){
+        const adjResult0 = balanced0.map(function(i, idx){
+          var ing0 = adjIngr0[idx]||{dbKey:i.dbKey,amt:i.origAmt||i.amt,role:i.role,scalable:i.scalable};
+          return {ing:ing0, newAmt:i.amt};
+        });
+        adjBanner = _buildManualBanner(adjResult0);
+      }
     } else {
       pm = ovrMacros;
     }
@@ -7187,15 +7185,17 @@ function onIngrSwap(p,d,s,idx,newKey){
   invalidateLeftoverCache();renderMeals();autoSaveWeek();
 }
 function onIngrReset(p,d,s){
-  // 2026-05-04: strict reset — only clear USER-origin overrides (no scalable
-  // field). Preserve freeze pins (scalable:false) so trip totals stay on
-  // perPkg/perWhole boundaries. Preserve MANUAL_SET, SHARED_SCHEDULE, and
-  // every other meta-state. Restores ingredient amounts to exactly the
-  // post-randomize state, nothing else changed.
+  // 2026-05-05: strict reset — clear USER-origin overrides only. Preserve
+  // freeze pins (scalable:false but no _userSet) so trip totals stay on
+  // perPkg/perWhole boundaries. Preserve MANUAL_SET, SHARED_SCHEDULE, etc.
+  // User pins ALSO have scalable:false now (set by onIngrAmt for pinning),
+  // so the discriminator is the _userSet flag.
   const key = sk(p,d,s);
   const ov = OVERRIDES[key];
   if(!ov || !ov.length) return;
-  const filtered = ov.filter(function(o){return o.scalable === false;});
+  const filtered = ov.filter(function(o){
+    return o.scalable === false && o._userSet !== true;
+  });
   if(filtered.length === ov.length) return; // nothing user-origin to clear
   if(filtered.length === 0) delete OVERRIDES[key];
   else OVERRIDES[key] = filtered;
