@@ -4126,19 +4126,6 @@ function getDayBalancedIngredients(p,d){
     }
   });
 
-  // 2026-05-05: freeze any slot containing user pins so balanceDayMacros
-  // doesn't rebalance other items in that slot to absorb the user's edit.
-  // Without this, adding an egg in breakfast → balancer trims protein/fat
-  // sources elsewhere in the slot to maintain macro targets, masking the
-  // user's edit in the slot total.
-  SLOTS.forEach(function(_s){
-    if(frozenSlots[_s]) return;
-    var _ov = OVERRIDES[sk(p,d,_s)];
-    if(_ov && _ov.some(function(o){return o._userSet === true;})){
-      frozenSlots[_s] = true;
-    }
-  });
-
   // Day-level macro balancing. sameDayCookServings tells the balancer to
   // count same-day cook slots × total servings (the leftover tracks the
   // cook slot live, so the balancer always has the true daily picture).
@@ -6615,6 +6602,7 @@ function buildMealCardHtml(s, person, day, other){
       +'<span style="text-decoration:underline;text-underline-offset:3px">'+ingrSectionTitle+'</span>'
       +'<div style="display:flex;gap:6px;align-items:center">'
         +(hasOverrides ? '<button title="Reset to post-randomize amounts" style="border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;font-weight:400;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();onIngrReset(\''+person+'\',\''+day+'\',\''+s+'\')">↺</button>' : '')
+        +(hasOverrides ? '<button title="Re-balance slot keeping your edits frozen" style="border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:400;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();onIngrRebalance(\''+person+'\',\''+day+'\',\''+s+'\')">⚖</button>' : '')
         +'<button title="Add ingredient" style="border:none;background:var(--shop);color:#000;font-size:13px;font-weight:700;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button>'
       +'</div>'
     +'</div>'+ingrHtml+'</div>'
@@ -7238,32 +7226,40 @@ function confirmTempIngredient(p,d,s){
 function onIngrAmt(p,d,s,idx,val){
   const amt=parseFloat(val);
   if(isNaN(amt)||amt<0)return;
-  // 2026-05-04: capture pre-edit displayed amt as the banner's "from" value.
-  // Without this the banner shows recipe-base → user-pick which is wrong
-  // when slot adjuster had already scaled the displayed amount (e.g., user
-  // sees ¾ in dropdown, picks 1, banner should say "¾ → 1" not "½ → 1").
-  // Only record on FIRST edit at this idx — subsequent edits keep the
-  // original pre-edit value so the banner shows total user delta.
+  // 2026-05-05: SURGICAL cache mutation. Edit only this ingredient's
+  // entry in the balanced cache; no pipeline run, no other items move.
+  // Capture pre-edit displayed amt for the banner's "from" value.
+  const cache = (typeof _dayBalancedCache!=='undefined') ? _dayBalancedCache[pk(p,d)] : null;
+  const slotCache = cache ? cache[s] : null;
   const ov = OVERRIDES[sk(p,d,s)];
   const existing = ov ? ov.find(function(o){return o.idx===idx;}) : null;
   if(!existing || existing._priorAmt === undefined){
-    const preBal = getBalancedSlotIngredients(p,d,s);
-    if(preBal && preBal[idx] && preBal[idx].amt !== undefined){
-      setOverride(p,d,s,idx,'_priorAmt', preBal[idx].amt);
+    if(slotCache && slotCache[idx] && slotCache[idx].amt !== undefined){
+      setOverride(p,d,s,idx,'_priorAmt', slotCache[idx].amt);
     }
   }
   setOverride(p,d,s,idx,'amt',amt);
-  // Pin user's amt so the slot adjuster can't re-scale it (scalable:false).
-  // Tag with _userSet so the banner + _clearFreezeOverrides can distinguish
-  // a user pin from a freeze pin (both use scalable:false).
   setOverride(p,d,s,idx,'scalable',false);
   setOverride(p,d,s,idx,'_userSet',true);
   MANUAL_SET[sk(p,d,s)]=true;
-  invalidateLeftoverCache();renderMeals();autoSaveWeek();
+  if(slotCache && slotCache[idx]){
+    // Surgical: mutate the cached entry. Other items left alone.
+    slotCache[idx].amt = amt;
+    slotCache[idx].scalable = false;
+    renderMeals();
+    autoSaveWeek();
+  } else {
+    // No cache populated yet (first edit before any render) — fall back to
+    // full rebuild so the override + cache become consistent.
+    invalidateLeftoverCache();
+    renderMeals();
+    autoSaveWeek();
+  }
 }
 function onIngrSwap(p,d,s,idx,newKey){
-  // Clear all prior fields on this entry. Old freeze amt was sized for the
-  // OLD ingredient; new one starts at recipe-base.
+  // 2026-05-05: SURGICAL cache mutation. Replace dbKey on this one entry;
+  // amt resets to recipe-base for the new ingredient. Other items unchanged.
+  // Clear all prior fields on this override entry first.
   const ov = OVERRIDES[sk(p,d,s)];
   if(ov){
     const entry = ov.find(function(o){return o.idx===idx;});
@@ -7275,14 +7271,40 @@ function onIngrSwap(p,d,s,idx,newKey){
   setOverride(p,d,s,idx,'dbKey',newKey);
   setOverride(p,d,s,idx,'_userSet',true);
   MANUAL_SET[sk(p,d,s)]=true;
-  invalidateLeftoverCache();renderMeals();autoSaveWeek();
+  // Surgical cache update.
+  const cache = (typeof _dayBalancedCache!=='undefined') ? _dayBalancedCache[pk(p,d)] : null;
+  const slotCache = cache ? cache[s] : null;
+  const port = getPort(p,d,s);
+  const recipeAmt = (port && port.ingredients[idx] && port.ingredients[idx].amt!==undefined)
+    ? port.ingredients[idx].amt : 0;
+  const newDb = NUTRI_DB[newKey];
+  if(slotCache && slotCache[idx]){
+    slotCache[idx].dbKey = newKey;
+    slotCache[idx].amt = recipeAmt;
+    slotCache[idx].role = newDb ? (slotCache[idx].role || 'fixed') : slotCache[idx].role;
+    // Preserve scalable false/true based on recipe ingredient default.
+    renderMeals();
+    autoSaveWeek();
+  } else {
+    invalidateLeftoverCache();
+    renderMeals();
+    autoSaveWeek();
+  }
+}
+function onIngrRebalance(p,d,s){
+  // 2026-05-05: Re-balance — runs the full pipeline keeping user pins
+  // frozen (scalable:false stays). Slot adjuster scales OTHER items in the
+  // slot to fit the budget given the user pins. balanceDayMacros also
+  // runs across the day. Equivalent to invalidating the surgically-edited
+  // slot's cache and letting the standard pipeline rebuild.
+  invalidateLeftoverCache();
+  renderMeals();
+  autoSaveWeek();
 }
 function onIngrReset(p,d,s){
-  // 2026-05-05: strict reset — clear USER-origin overrides only. Preserve
-  // freeze pins (scalable:false but no _userSet) so trip totals stay on
-  // perPkg/perWhole boundaries. Preserve MANUAL_SET, SHARED_SCHEDULE, etc.
-  // User pins ALSO have scalable:false now (set by onIngrAmt for pinning),
-  // so the discriminator is the _userSet flag.
+  // 2026-05-05: strict reset — clear USER overrides only. Preserve FREEZE
+  // pins (scalable:false, no _userSet) so trip totals stay on perPkg/perWhole
+  // boundaries. Preserve MANUAL_SET, SHARED_SCHEDULE, etc.
   const key = sk(p,d,s);
   const ov = OVERRIDES[key];
   if(!ov || !ov.length) return;
@@ -7292,6 +7314,8 @@ function onIngrReset(p,d,s){
   if(filtered.length === ov.length) return; // nothing user-origin to clear
   if(filtered.length === 0) delete OVERRIDES[key];
   else OVERRIDES[key] = filtered;
+  // Reset always invalidates so the pipeline rebuilds the slot from the
+  // post-randomize state (recipe + freeze pins, no user pins).
   invalidateLeftoverCache();
   renderMeals();
   autoSaveWeek();
