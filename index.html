@@ -591,6 +591,20 @@ function fmtFrac(n) {
   // 0.0601 (not exactly 0.06) absorbs IEEE 754 imprecision: e.g.,
   // 0.81 - 0.75 = 0.06000000000000005 in float, which would fail strict 0.06.
   if(bestDist<=0.0601) return snaps[best][1];
+  // 2026-05-06: For values beyond the explicit snap table (>10) OR within
+  // the table but missing a 1/8-grid entry (e.g., 5.625 only has 5½/5¾
+  // quarters), snap to nearest 1/8 programmatically. Catches kcal-prop
+  // batch totals like 11.878→"11⅞" where the table fell back to "11.88".
+  const eighth = Math.round(n * 8) / 8;
+  if(Math.abs(n - eighth) <= 0.0601){
+    const whole = Math.floor(eighth + 1e-9);
+    const glyphIdx = Math.round((eighth - whole) * 8);
+    const glyphs = ['','⅛','¼','⅜','½','⅝','¾','⅞'];
+    const glyph = glyphs[glyphIdx];
+    if(whole === 0) return glyph || '0';
+    if(!glyph) return String(whole);
+    return whole + glyph;
+  }
   return String(Math.round(n*100)/100);
 }
 
@@ -708,18 +722,15 @@ function buildQtyOptions(unit, currentAmt, wholeOnly, minAmt, cookServings) {
   // Make sure current amount is included even if it doesn't match the grid
   const found = opts.some(function(o){return Math.abs(o.val - currentAmt) < 0.02;});
   if (!found && currentAmt > 0) {
-    // 2026-05-04: use fmtFrac when amount is exactly on a clean fraction grid
-    // (¼/⅓/⅛). Off-grid amounts (e.g. kcal-prop split 4.543) keep 3-decimal
-    // raw so precision isn't lost — fmtFrac's 0.0601 tolerance would round
-    // those to nearby fractions like "4½", which the user explicitly doesn't
-    // want for batch totals.
-    const onQuarter = Math.abs(currentAmt * 4 - Math.round(currentAmt * 4)) < 0.001;
-    const onThird   = Math.abs(currentAmt * 3 - Math.round(currentAmt * 3)) < 0.001;
-    const onEighth  = Math.abs(currentAmt * 8 - Math.round(currentAmt * 8)) < 0.001;
-    const label = (onQuarter || onThird || onEighth)
-      ? fmtFrac(currentAmt)
-      : String(Math.round(currentAmt * 1000) / 1000);
-    opts.push({val:currentAmt, label:label});
+    // 2026-05-06: snap LABEL to nearest 1/8 grid via fmtFrac for at-a-glance
+    // readability (e.g., kcal-prop split 9.746 oz displays as "9¾"). The
+    // underlying `val` keeps the actual stored amount so user re-selecting
+    // the same option is a no-op (no precision loss). fmtFrac's ~0.06
+    // tolerance covers typical kcal-prop fractional values; values further
+    // off-grid fall back to 2-decimal — never raw 3-decimal "9.746".
+    // Earlier (2026-05-04) this code preserved 3-decimal precision for
+    // batch totals; reversed by user 2026-05-06 in favor of cleaner display.
+    opts.push({val:currentAmt, label:fmtFrac(currentAmt)});
     opts.sort(function(a,b){return a.val - b.val;});
   }
 
@@ -2482,6 +2493,11 @@ var CUSTOM_PLAN_SEL={};   // key: 'mealId', true if selected from THIS WEEK's pl
 var csGridOpen=false, csRecipesOpen=false, csPlanMealsOpen=false;
 
 var SEL={},CHECKS={},openCards={};
+// 2026-05-06: per-card "show per-serving" toggle for Big Cook anchors.
+// When true for a slot, the card displays per-portion amounts instead of
+// the combined batch view. Card header (kcal/p/f/c) is unchanged — already
+// per-serving. Persisted in sessionStorage with openCards.
+var perServingMode={};
 var OVERRIDES={}; // key: 'person_day_slot', value: [{idx, dbKey, amt},...] - per-ingredient overrides
 var MANUAL_SET={}; // key: 'person_day_slot', true if user manually touched this slot
 var SKIPPED={}; // key: 'person_day_slot', true if skipped — calories shift to dinner
@@ -6497,14 +6513,25 @@ function buildMealCardHtml(s, person, day, other){
   // SHARED_SCHEDULE which isn't always populated by the randomizer.
   const isSameDayShared = !!(loInfo && (loInfo.shared || loInfo.sameDayShared));
   const isBigCookHere = !!(loInfo && !loInfo.isLeftover && (loInfo.servings > 1 || loInfo.crossPersonCook));
-  const showCombinedOnThisTab = cardShowsCombinedHeader(loInfo);
+  const showCombinedHeader = cardShowsCombinedHeader(loInfo);
+  // 2026-05-06: per-serving toggle. User can flip a Big Cook anchor card
+  // between combined view (default, shows batch totals × N) and per-serving
+  // view (shows per-portion amounts). Pure render decision — no data change.
+  const wantsPerServing = !!perServingMode[k];
+  const showCombinedOnThisTab = showCombinedHeader && !wantsPerServing;
+  const batchN = (loInfo && (loInfo.totalServings||loInfo.servings)) || 1;
   // cookServings = portion multiplier applied to ingredient amounts.
   //   - Shared slot: 1 (show per-portion; Shared tab combines)
-  //   - Non-shared Big Cook (solo leftovers or cross-person cook): total batch size
+  //   - Non-shared Big Cook combined view: total batch size
+  //   - Per-serving toggled on: 1 (single portion shown)
   //   - Otherwise: 1
-  const cookServings = showCombinedOnThisTab ? (loInfo.totalServings||loInfo.servings||1) : 1;
+  const cookServings = showCombinedOnThisTab ? batchN : 1;
   let displayServings = cookServings;
-  let ingrSectionTitle=displayServings>1?'🥗 Combined ingredients (serves '+displayServings+')':'🥗 Ingredients';
+  let ingrSectionTitle = displayServings>1
+    ? '🥗 Combined ingredients (serves '+displayServings+')'
+    : (showCombinedHeader && wantsPerServing
+       ? '🥗 Ingredients (per serving · cooks '+batchN+')'
+       : '🥗 Ingredients');
   if (port.ingredients && port.ingredients.length && port.ingredients[0].dbKey !== undefined) {
     // Get ingredients with overrides applied
     const ovrIngr = applyOverrides(port,person,day,s);
@@ -6552,7 +6579,7 @@ function buildMealCardHtml(s, person, day, other){
   // portions differ. Rebuild with the real amounts.
   // Skip for same-day shared batches — the Shared tab owns the combined
   // view; individual tabs render per-serving.
-  if(loInfo&&loInfo.crossPersonCook&&cardShowsCombinedHeader(loInfo)){
+  if(loInfo&&loInfo.crossPersonCook&&cardShowsCombinedHeader(loInfo)&&!wantsPerServing){
     var cookBal=getBalancedSlotIngredients(person,day,s);
     // Iterate loInfo.portions for the full combined batch. Each portion
     // contributes its own per-serving balance × 1; totalServings = portions
@@ -6642,6 +6669,7 @@ function buildMealCardHtml(s, person, day, other){
     +'<div class="bsec"><div class="bsec-title ingr" style="display:flex;align-items:center;justify-content:space-between;text-decoration:none">'
       +'<span style="text-decoration:underline;text-underline-offset:3px">'+ingrSectionTitle+'</span>'
       +'<div style="display:flex;gap:6px;align-items:center">'
+        +(showCombinedHeader ? '<button title="'+(wantsPerServing?'Show combined batch':'Show per serving')+'" style="border:1px solid var(--border);background:'+(wantsPerServing?'var(--shop)':'transparent')+';color:'+(wantsPerServing?'#000':'var(--text)')+';font-size:11px;font-weight:600;line-height:1;padding:3px 8px;border-radius:10px;cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();togglePerServing(\''+person+'\',\''+day+'\',\''+s+'\')">'+(wantsPerServing?'Combined':'Per serving')+'</button>' : '')
         +(hasOverrides ? '<button title="Reset to post-randomize amounts" style="border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;font-weight:400;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();onIngrReset(\''+person+'\',\''+day+'\',\''+s+'\')">↺</button>' : '')
         +(hasOverrides ? '<button title="Re-balance slot keeping your edits frozen" style="border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:400;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();onIngrRebalance(\''+person+'\',\''+day+'\',\''+s+'\')">⚖</button>' : '')
         +'<button title="Add ingredient" style="border:none;background:var(--shop);color:#000;font-size:13px;font-weight:700;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button>'
@@ -7023,6 +7051,14 @@ function renderMeals(){
   requestAnimationFrame(function(){window.scrollTo(0,scrollY);mealEl.style.minHeight='';});
 }
 
+function togglePerServing(p,d,s){
+  // 2026-05-06: flip Big Cook anchor card between combined batch view and
+  // per-serving view. Pure render decision — no data mutation, no pipeline.
+  const k=sk(p,d,s);
+  perServingMode[k]=!perServingMode[k];
+  if(!perServingMode[k]) delete perServingMode[k];
+  renderMeals();
+}
 function toggleCard(k){
   openCards[k]=!openCards[k];
   const card=document.getElementById('mc_'+k);
@@ -12766,6 +12802,7 @@ function renderRecipesView(){
       if(s.day)day=s.day;
       if(s.activeWeek)activeWeek=s.activeWeek;
       if(s.openCards)openCards=s.openCards;
+      if(s.perServingMode)perServingMode=s.perServingMode;
       if(s.sharedSchedOpen!==undefined)sharedSchedOpen=s.sharedSchedOpen;
     }catch(e){}
   }
@@ -12775,6 +12812,7 @@ window.addEventListener('beforeunload',function(){
   sessionStorage.setItem('mealPlannerPageState',JSON.stringify({
     topTab:topTab,person:person,day:day,activeWeek:activeWeek,scrollY:window.scrollY,
     openCards:JSON.parse(JSON.stringify(openCards)),
+    perServingMode:JSON.parse(JSON.stringify(perServingMode)),
     sharedSchedOpen:sharedSchedOpen
   }));
 });
