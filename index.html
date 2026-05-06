@@ -4974,6 +4974,11 @@ function verifyInvariants(){
           // ratios don't follow the batch's kcal-proportional split by design.
           // Exempt from INV7 so the per-portion rounding doesn't report drift.
           if(db.wholeOnly)return;
+          // 2026-05-06: user-pinned items (`_userSet:true`) are exempt — user
+          // explicitly chose the amount per portion (e.g., "1 banana on each
+          // serving"). The kcal-prop ratio doesn't apply to user pins per
+          // the surgical-edit architecture (see system_user_edit_architecture.md).
+          if(ci._userSet===true)return;
           var oi=null;
           for(var k=0;k<otherBal.length;k++){
             if(otherBal[k].dbKey===ci.dbKey){oi=otherBal[k];break;}
@@ -7299,33 +7304,47 @@ function confirmTempIngredient(p,d,s){
   ovr.forEach(function(o){if(o.idx>=nextIdx)nextIdx=o.idx+1;});
   // Default amount per unit type
   const defaultAmt=db.unit==='cup'?0.5:db.unit==='tbsp'?1:db.unit==='oz'?4:1;
-  // 2026-05-05+: stamp as user pin so `+ ingredient` triggers banner,
-  // is recognized by `_hasUserOverrides`, bypasses min/max clamps + INV13,
-  // and survives `_clearFreezeOverrides` at next randomize.
-  setOverride(p,d,s,nextIdx,'dbKey',dbKey);
-  setOverride(p,d,s,nextIdx,'amt',defaultAmt);
-  setOverride(p,d,s,nextIdx,'scalable',false);
-  setOverride(p,d,s,nextIdx,'_userSet',true);
-  setOverride(p,d,s,nextIdx,'_priorAmt',0); // pre-add value was "doesn't exist" → 0
-  MANUAL_SET[sk(p,d,s)]=true;
+  // 2026-05-06+: BATCH-AWARE append. For multi-portion batches (cook
+  // anchors, leftovers, same-day shared), the new ingredient must appear
+  // on EVERY portion in the batch — otherwise INV1 fires (cook has X,
+  // leftover MISSING). Walk lo.portions and append to each slot.
+  // For solo slots, just the one slot.
+  const _portionsForAdd = (typeof _getBatchPortions === 'function')
+    ? _getBatchPortions(p,d,s) : [{p:p,d:d,s:s}];
+  _portionsForAdd.forEach(function(pt){
+    // 2026-05-05+: stamp as user pin so `+ ingredient` triggers banner,
+    // is recognized by `_hasUserOverrides`, bypasses min/max clamps +
+    // INV13, and survives `_clearFreezeOverrides` at next randomize.
+    setOverride(pt.p,pt.d,pt.s,nextIdx,'dbKey',dbKey);
+    setOverride(pt.p,pt.d,pt.s,nextIdx,'amt',defaultAmt);
+    setOverride(pt.p,pt.d,pt.s,nextIdx,'scalable',false);
+    setOverride(pt.p,pt.d,pt.s,nextIdx,'_userSet',true);
+    setOverride(pt.p,pt.d,pt.s,nextIdx,'_priorAmt',0);
+    MANUAL_SET[sk(pt.p,pt.d,pt.s)]=true;
+  });
   document.getElementById('calPopupOverlay').style.display='none';
   // 2026-05-05+: SURGICAL append. Push the new ingredient entry directly
-  // into the existing cache slot — no pipeline run, no balancer compensation
-  // (per surgical-edit architecture). Adding banana means slot kcal goes up
-  // by exactly banana's kcal; user can hit ⚖ Re-balance if they want the
-  // pipeline to redistribute across the slot.
-  const cache=(typeof _dayBalancedCache!=='undefined')?_dayBalancedCache[pk(p,d)]:null;
-  const slotCache=cache?cache[s]:null;
-  if(slotCache){
-    slotCache.push({
-      dbKey: dbKey,
-      amt: defaultAmt,
-      role: 'fixed',
-      scalable: false,
-      origAmt: defaultAmt,
-      recipeAmt: defaultAmt,
-      _userSet: true
-    });
+  // into the existing cache slot for each batch portion — no pipeline,
+  // no balancer compensation (per surgical-edit architecture).
+  let _allPortionsHadCache = true;
+  _portionsForAdd.forEach(function(pt){
+    const c=(typeof _dayBalancedCache!=='undefined')?_dayBalancedCache[pk(pt.p,pt.d)]:null;
+    const sc=c?c[pt.s]:null;
+    if(sc){
+      sc.push({
+        dbKey: dbKey,
+        amt: defaultAmt,
+        role: 'fixed',
+        scalable: false,
+        origAmt: defaultAmt,
+        recipeAmt: defaultAmt,
+        _userSet: true
+      });
+    } else {
+      _allPortionsHadCache = false;
+    }
+  });
+  if(_allPortionsHadCache){
     renderMeals();
     autoSaveWeek();
   } else {
@@ -7485,9 +7504,13 @@ function onIngrRebalance(p,d,s){
   // 2026-05-05: Re-balance — runs the full pipeline keeping user pins
   // frozen (scalable:false stays). Slot adjuster scales OTHER items in the
   // slot to fit the budget given the user pins. balanceDayMacros also
-  // runs across the day. Equivalent to invalidating the surgically-edited
-  // slot's cache and letting the standard pipeline rebuild.
+  // runs across the day. Cross-person ratios re-established via the
+  // convergence loop (runBalanceAdjusters) — without this, an invalidate-
+  // and-rebuild loses unified ratios on every cross-person batch in the
+  // week and INV7 fires across unrelated meals (caught by Slot Mod test
+  // 2026-05-06).
   invalidateLeftoverCache();
+  if(typeof runBalanceAdjusters === 'function') runBalanceAdjusters();
   renderMeals();
   autoSaveWeek();
 }
@@ -14713,7 +14736,557 @@ window.MPStress=(function(){
     return lines.join('\n');
   }
 
-  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runStandard3:runStandard3,runStandard4:runStandard4,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline};
+  // ── Slot Mod Test (2026-05-06) ────────────────────────────────────────
+  // Programmatic audit of surgical cache mutation paths. See
+  // ~/.claude/projects/-Users-chris-Desktop-Meal-Planner/memory/reference_slot_mod_test.md
+  // for full spec. 5 geometries × 5 ops × 12 assertions per scenario.
+
+  var _SM_HARD_KEYS=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20','INV23'];
+  function _smHardCount(){
+    var inv=verifyInvariants();
+    return inv.filter(function(v){return _SM_HARD_KEYS.some(function(k){return v.indexOf(k+' ')===0||v.indexOf(k+':')===0;});}).length;
+  }
+
+  function _smHarvestSlots(){
+    var found={solo:null, anchorBatch:null, leftoverDiff:null, sharedSameDay:null, shake:null};
+    ['him','her'].forEach(function(p){
+      DAYS.forEach(function(d){
+        ['shake','breakfast','lunch','snack','dinner'].forEach(function(s){
+          if(SKIPPED[sk(p,d,s)]||EAT_OUT[sk(p,d,s)]) return;
+          var lo=computeLeftovers()[sk(p,d,s)];
+          if(s==='shake' && !found.shake){
+            // shake slot — no leftover, slotAdj=0 path
+            found.shake={p:p,d:d,s:s,lo:lo||null,geometry:'shake'};
+            return;
+          }
+          if(!lo){
+            if(!found.solo) found.solo={p:p,d:d,s:s,lo:null,geometry:'solo'};
+            return;
+          }
+          if(lo.shared||lo.sameDayShared){
+            if(!found.sharedSameDay) found.sharedSameDay={p:p,d:d,s:s,lo:lo,geometry:'sharedSameDay'};
+            return;
+          }
+          if(!lo.isLeftover && cardShowsCombinedHeader(lo)){
+            if(!found.anchorBatch) found.anchorBatch={p:p,d:d,s:s,lo:lo,geometry:'anchorBatch'};
+            return;
+          }
+          if(lo.isLeftover && lo.cookDay !== d){
+            if(!found.leftoverDiff) found.leftoverDiff={p:p,d:d,s:s,lo:lo,geometry:'leftoverDiff'};
+            return;
+          }
+          if(!lo.isLeftover && lo.portions && lo.portions.length===1 && !found.solo){
+            found.solo={p:p,d:d,s:s,lo:lo,geometry:'solo'};
+          }
+        });
+      });
+    });
+    return found;
+  }
+
+  // Pick an editable scalable ingredient idx from bal. Prefer protein for
+  // dense kcal math. Returns -1 if none usable.
+  function _smPickIdx(bal, opts){
+    opts=opts||{};
+    var preferRole=opts.role||'protein';
+    var firstScalable=-1, firstAny=-1;
+    for(var i=0;i<bal.length;i++){
+      var b=bal[i]; if(!b||!b.dbKey) continue;
+      if(firstAny<0) firstAny=i;
+      if(b.scalable!==false && firstScalable<0) firstScalable=i;
+      if(b.role===preferRole && b.scalable!==false) return i;
+    }
+    return firstScalable>=0 ? firstScalable : firstAny;
+  }
+
+  // Pick a same-role swap target from NUTRI_DB, distinct from currentDbKey
+  // and distinct kcal class. Skips items with `pkg` or `produce` flags so
+  // the swap doesn't introduce new trip-level package waste (which would
+  // fire INV20 — a real downstream consequence, not a surgical-edit bug).
+  // Falls back to 'chicken thigh' (no pkg, no produce) as a known-good
+  // cross-protein swap.
+  function _smPickSwap(currentDbKey){
+    var current=NUTRI_DB[currentDbKey]; if(!current) return 'chicken thigh';
+    var keys=Object.keys(NUTRI_DB);
+    for(var i=0;i<keys.length;i++){
+      var k=keys[i]; if(k===currentDbKey) continue;
+      var db=NUTRI_DB[k]; if(!db||db.unit!==current.unit) continue;
+      if(db.pkg) continue;        // skip pkg — introduces waste fires
+      if(db.produce) continue;    // skip produce — introduces waste fires
+      if((db.kcal||0) > 0 && (current.kcal||0) > 0 && Math.abs(db.kcal - current.kcal) > 5) return k;
+    }
+    return 'chicken thigh';
+  }
+
+  function _smRowSums(p, d, s, cookServings){
+    var bal=getBalancedSlotIngredients(p,d,s); if(!bal) return null;
+    var port=getPort(p,d,s);
+    var adjIngr=port?applyOverrides(port,p,d,s):null;
+    var sums={kcal:0,pro:0,fat:0,carb:0};
+    bal.forEach(function(b,i){
+      var ing=(adjIngr&&adjIngr[i])||b;
+      var db=NUTRI_DB[ing.dbKey]; if(!db) return;
+      var amt=b.amt*cookServings;
+      sums.kcal+=Math.round(db.kcal*amt);
+      sums.pro +=Math.round(db.pro *amt);
+      sums.fat +=Math.round(db.fat *amt);
+      sums.carb+=Math.round(db.carb*amt);
+    });
+    return sums;
+  }
+
+  // Compute expected waste for a dbKey across cook1+cook2 trips. Mirrors
+  // _wasteHint logic in computeCardMacros. Returns 0 for excluded items.
+  function _smExpectedWaste(dbKey){
+    var db=NUTRI_DB[dbKey]; if(!db) return 0;
+    var perUnit=0;
+    if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+      perUnit=(db.pkg.drained && (db.unit==='cup'||db.unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
+    } else if(db.produce && !db.produce.acceptableWaste){
+      perUnit=db.produce.perWhole;
+    } else return 0;
+    if(!(perUnit>0)) return 0;
+    var total=0;
+    ['cook1','cook2'].forEach(function(trip){
+      var days=TRIP_DAYS_STATIC[trip]||[];
+      var tripTotal=0;
+      days.forEach(function(_d){
+        ['him','her'].forEach(function(_p){
+          ['breakfast','lunch','snack','dinner'].forEach(function(_s){
+            var bal=getBalancedSlotIngredients(_p,_d,_s); if(!bal) return;
+            bal.forEach(function(_i){if(_i.dbKey===dbKey) tripTotal+=_i.amt;});
+          });
+        });
+      });
+      if(tripTotal>0){
+        var pkgs=Math.ceil(tripTotal/perUnit - 1e-9);
+        total += pkgs*perUnit - tripTotal;
+      }
+    });
+    return total;
+  }
+
+  // Parse the rendered banner (.adj-info) for a slot. Returns array of
+  // parsed rows or [] if banner missing.
+  function _smParseBanner(p,d,s){
+    var card=document.getElementById('mc_'+sk(p,d,s)); if(!card) return [];
+    var banner=card.querySelector('.adj-info'); if(!banner) return [];
+    var html=banner.innerHTML;
+    // Each row: "<b>{dbKey}</b>: {parts}" separated by <br>
+    return html.split(/<br\s*\/?>/i).map(function(line){
+      var m=line.match(/<b>([^<]+)<\/b>:\s*(.*)/);
+      if(!m) return null;
+      var dbKey=m[1], rest=m[2];
+      var hasArrow=/[↑↓]/.test(rest);
+      var hasSwap=/🔄 was/.test(rest);
+      var hasWaste=/⚠/.test(rest);
+      var arrowMatch=rest.match(/[↑↓]\s+([^→]+)→\s+([^\s]+)\s+(\w+)\s*\(([+-]?\d+)\s*kcal\)/);
+      var wasteMatch=rest.match(/⚠\s+([^\s]+)\s+(\w+)\s+([\w\s]+?)\s+waste/);
+      return {
+        dbKey:dbKey, raw:rest,
+        hasArrow:hasArrow, hasSwap:hasSwap, hasWaste:hasWaste,
+        arrow:arrowMatch?{from:arrowMatch[1].trim(),to:arrowMatch[2].trim(),unit:arrowMatch[3],kcalDiff:parseInt(arrowMatch[4],10)}:null,
+        waste:wasteMatch?{value:wasteMatch[1],unit:wasteMatch[2],label:wasteMatch[3].trim()}:null
+      };
+    }).filter(function(x){return x;});
+  }
+
+  function _smMockTempIngrPopup(dbKey){
+    var existing1=document.getElementById('tempIngrSelect'); if(existing1) existing1.remove();
+    var existing2=document.getElementById('calPopupOverlay'); if(existing2) existing2.remove();
+    document.body.insertAdjacentHTML('beforeend','<select id="tempIngrSelect"><option value="'+dbKey+'" selected>'+dbKey+'</option></select>');
+    document.body.insertAdjacentHTML('beforeend','<div id="calPopupOverlay" style="display:block"></div>');
+  }
+  function _smUnmockTempIngrPopup(){
+    var s1=document.getElementById('tempIngrSelect'); if(s1) s1.remove();
+    var s2=document.getElementById('calPopupOverlay'); if(s2) s2.remove();
+  }
+
+  // Per-op runner. Returns null on pass, {issue, expected, actual, op,
+  // assertion} on first failure.
+  function _smRunOp(op, slot, baseline){
+    var p=slot.p, d=slot.d, s=slot.s;
+    var preBal=JSON.parse(JSON.stringify(getBalancedSlotIngredients(p,d,s)||[]));
+    if(!preBal.length && op!=='addIngr') return {assertion:'setup', issue:'no balanced cache for slot'};
+    var preCard=op==='addIngr'?null:computeCardMacros(getPort(p,d,s), p, d, s, baseline.cookServings, false, 1);
+    var preDay=calcTotals(p,d);
+    var preFV=computeDailyFV(p,d);
+    var idx=op==='addIngr'?-1:_smPickIdx(preBal);
+
+    function checkInv(){
+      var n=_smHardCount();
+      if(n>baseline.hardCount) return {assertion:'hardInv', issue:'op introduced '+(n-baseline.hardCount)+' hard INV fires', expected:baseline.hardCount, actual:n};
+      return null;
+    }
+    function checkRowSum(){
+      var sums=_smRowSums(p,d,s, baseline.cookServings);
+      if(!sums) return {assertion:'rowSumHdr', issue:'no row sums available'};
+      var card=computeCardMacros(getPort(p,d,s), p, d, s, baseline.cookServings, false, 1);
+      var hKcal=card.pm.kcal*baseline.cookServings;
+      var tol=Math.ceil(baseline.cookServings/2);
+      if(Math.abs(sums.kcal - hKcal) > tol) return {assertion:'rowSumHdr', issue:'kcal row≠header', expected:hKcal, actual:sums.kcal};
+      if(Math.abs(sums.pro - card.pm.pro*baseline.cookServings) > tol) return {assertion:'rowSumHdr', issue:'pro row≠header'};
+      if(Math.abs(sums.fat - card.pm.fat*baseline.cookServings) > tol) return {assertion:'rowSumHdr', issue:'fat row≠header'};
+      if(Math.abs(sums.carb - card.pm.carb*baseline.cookServings) > tol) return {assertion:'rowSumHdr', issue:'carb row≠header'};
+      return null;
+    }
+    function checkBatchProp(targetIdx){
+      if(!slot.lo || !slot.lo.portions || slot.lo.portions.length<2) return null;
+      var portions=slot.lo.portions;
+      // Anchor's ratio (post / pre) is the reference; all other portions must match.
+      var refPre=preBal[targetIdx]&&preBal[targetIdx].amt; if(!(refPre>0.0001)) return null;
+      var refPostBal=getBalancedSlotIngredients(p,d,s);
+      var refPost=refPostBal&&refPostBal[targetIdx]&&refPostBal[targetIdx].amt; if(!(refPost>=0)) return null;
+      var refRatio=refPost/refPre;
+      for(var i=0;i<portions.length;i++){
+        var pt=portions[i];
+        if(pt.p===p&&pt.d===d&&pt.s===s) continue;
+        var ptPre=null, ptPost=null;
+        // pre = baseline cache snapshot. We need it captured before the op.
+        // baseline.preBatchAmts[ptKey] holds that.
+        var preAmts=baseline.preBatchAmts && baseline.preBatchAmts[sk(pt.p,pt.d,pt.s)];
+        if(!preAmts || preAmts[targetIdx]===undefined) continue;
+        ptPre=preAmts[targetIdx];
+        var ptBal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
+        if(!ptBal||!ptBal[targetIdx]) continue;
+        ptPost=ptBal[targetIdx].amt;
+        if(!(ptPre>0.0001)) continue;
+        var ptRatio=ptPost/ptPre;
+        if(Math.abs(ptRatio - refRatio) > 0.005){
+          return {assertion:'batchProp', issue:'portion '+sk(pt.p,pt.d,pt.s)+' ratio '+ptRatio.toFixed(3)+' ≠ anchor ratio '+refRatio.toFixed(3)};
+        }
+      }
+      return null;
+    }
+    function checkVegFruitDelta(targetDbKey, dRole, predictedAmtDelta){
+      var postFV=computeDailyFV(p,d);
+      var isVeg=dRole==='veg' || (NUTRI_DB[targetDbKey]&&NUTRI_DB[targetDbKey].produce);
+      var isFruit=dRole==='fruit';
+      var predictedVeg=0, predictedFruit=0;
+      if(isVeg){
+        var db=NUTRI_DB[targetDbKey];
+        var perCup=db&&db.cupsEach?db.cupsEach:1;
+        if(db&&db.unit==='cup') predictedVeg=predictedAmtDelta;
+        else if(db&&db.cupsEach) predictedVeg=predictedAmtDelta*db.cupsEach;
+      } else if(isFruit){
+        predictedFruit=predictedAmtDelta;
+      }
+      var vegDiff=postFV.veg - preFV.veg;
+      var fruitDiff=postFV.fruit - preFV.fruit;
+      // For batch ops, day FV reflects only THIS slot's per-portion contribution
+      // since lo.portions span multiple days. Tolerance widened to absorb
+      // rounding (computeDailyFV rounds to 2 decimals).
+      var tol=0.06;
+      if(Math.abs(vegDiff - predictedVeg) > tol)
+        return {assertion:'vegDelta', issue:'veg total Δ off', expected:predictedVeg, actual:vegDiff};
+      if(Math.abs(fruitDiff - predictedFruit) > tol)
+        return {assertion:'fruitDelta', issue:'fruit total Δ off', expected:predictedFruit, actual:fruitDiff};
+      return null;
+    }
+
+    if(op==='edit'){
+      if(idx<0) return {assertion:'setup', issue:'no editable ingredient'};
+      var preIng=preBal[idx];
+      var preAmt=preIng.amt;
+      var db=NUTRI_DB[preIng.dbKey];
+      // For combined view (showCombined=true), the dropdown shows batch
+      // total = sum across portions (NOT anchor*N). pickedVal is interpreted
+      // as new batch total → onIngrAmt scales all portions by
+      // pickedVal/currentCombined. To predict THIS slot's kcal delta, we
+      // need to know the actual currentCombined and the resulting scale.
+      var currentCombined=0;
+      if(baseline.showCombined && slot.lo && slot.lo.portions){
+        slot.lo.portions.forEach(function(pt){
+          var b=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
+          if(b && b[idx]) currentCombined += b[idx].amt;
+        });
+      }
+      var pickedVal, newAmt;
+      if(baseline.showCombined && currentCombined > 0.0001){
+        // Scale batch by 1.5: pickedVal = currentCombined * 1.5
+        // → scale = 1.5, this slot's per-portion = preAmt * 1.5
+        pickedVal = currentCombined * 1.5;
+        newAmt = preAmt * 1.5;
+      } else {
+        // Per-portion view: pickedVal = newAmt directly
+        newAmt = Math.max(0.001, preAmt*1.5);
+        pickedVal = newAmt;
+      }
+      var predictedKcalPerPortion=Math.round(db.kcal*(newAmt - preAmt));
+      onIngrAmt(p, d, s, idx, pickedVal);
+      // Verify
+      var postCard=computeCardMacros(getPort(p,d,s), p, d, s, baseline.cookServings, false, 1);
+      var slotKcalDelta=(postCard.pm.kcal - preCard.pm.kcal);
+      // Tolerance for kcal-prop batch portions: more rounding noise
+      var tol=Math.max(2, Math.ceil(baseline.cookServings/2));
+      if(Math.abs(slotKcalDelta - predictedKcalPerPortion) > tol)
+        return {assertion:'slotDelta', issue:'slot kcal Δ off', expected:predictedKcalPerPortion, actual:slotKcalDelta};
+      var dayKcalDelta=calcTotals(p,d).kcal - preDay.kcal;
+      // For batch leftoverDiff geometry, edit propagates to other days too,
+      // so dayKcalDelta only reflects THIS day's portion of the change.
+      // Skip this assertion for non-solo geometries.
+      if(slot.geometry==='solo' && Math.abs(dayKcalDelta - slotKcalDelta) > tol)
+        return {assertion:'dayDelta', issue:'day Δ ≠ slot Δ', expected:slotKcalDelta, actual:dayKcalDelta};
+      var rs=checkRowSum(); if(rs) return rs;
+      var bp=checkBatchProp(idx); if(bp) return bp;
+      var vf=checkVegFruitDelta(preIng.dbKey, preIng.role, newAmt - preAmt); if(vf) return vf;
+      var inv=checkInv(); if(inv) return inv;
+      return null;
+    }
+
+    if(op==='swap'){
+      if(idx<0) return {assertion:'setup', issue:'no swappable ingredient'};
+      var preIng2=preBal[idx];
+      var newKey=_smPickSwap(preIng2.dbKey);
+      var oldDb=NUTRI_DB[preIng2.dbKey], newDb=NUTRI_DB[newKey];
+      var predictedKcalDelta=Math.round((newDb.kcal - oldDb.kcal)*preIng2.amt);
+      onIngrSwap(p,d,s,idx,newKey);
+      var postBal=getBalancedSlotIngredients(p,d,s);
+      // dbKey changed?
+      if(postBal[idx].dbKey !== newKey)
+        return {assertion:'dbKeyProp', issue:'anchor dbKey not changed', expected:newKey, actual:postBal[idx].dbKey};
+      // amt preserved?
+      if(Math.abs(postBal[idx].amt - preIng2.amt) > 0.0001)
+        return {assertion:'swap', issue:'amt should be preserved', expected:preIng2.amt, actual:postBal[idx].amt};
+      // dbKey propagated to all batch portions?
+      if(slot.lo && slot.lo.portions && slot.lo.portions.length>1){
+        for(var k=0;k<slot.lo.portions.length;k++){
+          var pt=slot.lo.portions[k];
+          var ptBal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
+          if(!ptBal||!ptBal[idx]) continue;
+          if(ptBal[idx].dbKey !== newKey)
+            return {assertion:'dbKeyProp', issue:'leftover '+sk(pt.p,pt.d,pt.s)+' dbKey not propagated', expected:newKey, actual:ptBal[idx].dbKey};
+        }
+      }
+      var rs2=checkRowSum(); if(rs2) return rs2;
+      var inv2=checkInv(); if(inv2) return inv2;
+      return null;
+    }
+
+    if(op==='addIngr'){
+      var dbKey='banana';
+      var preLen=(getBalancedSlotIngredients(p,d,s)||[]).length;
+      var preSlotKcal=preCard?preCard.pm.kcal:0;
+      // Have to call computeCardMacros even for addIngr to get pre-state
+      if(!preCard){
+        preCard=computeCardMacros(getPort(p,d,s), p, d, s, baseline.cookServings, false, 1);
+        preSlotKcal=preCard.pm.kcal;
+      }
+      _smMockTempIngrPopup(dbKey);
+      try {
+        confirmTempIngredient(p,d,s);
+      } finally { _smUnmockTempIngrPopup(); }
+      var postLen=(getBalancedSlotIngredients(p,d,s)||[]).length;
+      if(postLen !== preLen+1)
+        return {assertion:'addIngr', issue:'cache len didn\'t grow', expected:preLen+1, actual:postLen};
+      var addedIng=getBalancedSlotIngredients(p,d,s)[postLen-1];
+      if(addedIng.dbKey !== dbKey)
+        return {assertion:'addIngr', issue:'added dbKey wrong', expected:dbKey, actual:addedIng.dbKey};
+      if(addedIng._userSet !== true)
+        return {assertion:'addIngr', issue:'added ingredient missing _userSet flag'};
+      var bdb=NUTRI_DB[dbKey];
+      var defaultAmt=bdb.unit==='cup'?0.5:bdb.unit==='tbsp'?1:bdb.unit==='oz'?4:1;
+      var predicted=Math.round(bdb.kcal*defaultAmt);
+      var postCard3=computeCardMacros(getPort(p,d,s), p, d, s, baseline.cookServings, false, 1);
+      var slotDelta3=postCard3.pm.kcal - preSlotKcal;
+      if(Math.abs(slotDelta3 - predicted) > 2)
+        return {assertion:'slotDelta', issue:'slot kcal Δ off prediction', expected:predicted, actual:slotDelta3};
+      var rs3=checkRowSum(); if(rs3) return rs3;
+      var inv3=checkInv(); if(inv3) return inv3;
+      return null;
+    }
+
+    if(op==='reset'){
+      // Dirty first
+      if(idx<0) return {assertion:'setup', issue:'no editable for reset'};
+      var preIng4=preBal[idx];
+      var preAmt4=preIng4.amt;
+      onIngrAmt(p, d, s, idx, preAmt4*1.5);
+      onIngrReset(p, d, s);
+      // Compare against post-randomize snapshot in _postRandomizeCache
+      var snap=_postRandomizeCache[pk(p,d)] && _postRandomizeCache[pk(p,d)][s];
+      if(!snap) return {assertion:'resetExact', issue:'no postRandomize snapshot available'};
+      var postBal4=getBalancedSlotIngredients(p,d,s);
+      if(snap.length !== postBal4.length)
+        return {assertion:'resetExact', issue:'len mismatch', expected:snap.length, actual:postBal4.length};
+      for(var i4=0;i4<snap.length;i4++){
+        if(snap[i4].dbKey !== postBal4[i4].dbKey)
+          return {assertion:'resetExact', issue:'dbKey mismatch at '+i4, expected:snap[i4].dbKey, actual:postBal4[i4].dbKey};
+        if(Math.abs(snap[i4].amt - postBal4[i4].amt) > 0.0001)
+          return {assertion:'resetExact', issue:'amt mismatch at '+i4, expected:snap[i4].amt, actual:postBal4[i4].amt};
+      }
+      var inv4=checkInv(); if(inv4) return inv4;
+      return null;
+    }
+
+    if(op==='rebalance'){
+      if(idx<0) return {assertion:'setup', issue:'no editable for rebalance'};
+      var preIng5=preBal[idx];
+      var preAmt5=preIng5.amt;
+      // Same combined-view-aware pickedVal logic as edit op.
+      var currentCombined5=0;
+      if(baseline.showCombined && slot.lo && slot.lo.portions){
+        slot.lo.portions.forEach(function(pt){
+          var b=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
+          if(b && b[idx]) currentCombined5 += b[idx].amt;
+        });
+      }
+      var pickedVal5, expectedPinAmt5;
+      if(baseline.showCombined && currentCombined5 > 0.0001){
+        pickedVal5 = currentCombined5 * 1.5;
+        expectedPinAmt5 = preAmt5 * 1.5;
+      } else {
+        pickedVal5 = preAmt5 * 1.5;
+        expectedPinAmt5 = preAmt5 * 1.5;
+      }
+      onIngrAmt(p, d, s, idx, pickedVal5);
+      onIngrRebalance(p, d, s);
+      var ov=OVERRIDES[sk(p,d,s)]||[];
+      var pin=ov.find(function(o){return o.idx===idx;});
+      if(!pin || pin._userSet !== true)
+        return {assertion:'rebalPin', issue:'user pin missing/lost _userSet'};
+      // Rebalance runs full pipeline; user pin amt should survive within
+      // rounding. Tolerance 0.01 absorbs final-snap grid alignment.
+      if(Math.abs(pin.amt - expectedPinAmt5) > 0.01)
+        return {assertion:'rebalPin', issue:'pin amt drifted', expected:expectedPinAmt5, actual:pin.amt};
+      if(pin.scalable !== false)
+        return {assertion:'rebalPin', issue:'pin scalable not false'};
+      var inv5=checkInv(); if(inv5) return inv5;
+      return null;
+    }
+
+    return {assertion:'setup', issue:'unknown op '+op};
+  }
+
+  function runSlotMod(opts){
+    opts=opts||{};
+    var nSeeds=opts.nSeeds||5;
+    var baseSeed=opts.baseSeed||12345;
+    var verbose=!!opts.verbose;
+    var saved=snapshot();
+    var agg={
+      scenarios:0,passed:0,failed:0,
+      byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0}},
+      byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
+      byAssertion:{},
+      failures:[],
+      timings:[]
+    };
+    // Deep-clone restore: MPStress.restore assigns OVERRIDES values by ref,
+    // so live setOverride mutations leak back into the snapshot. For slot
+    // mod scenarios we restore many times — each must be from a clean copy.
+    function freshRestore(snap){
+      restore(JSON.parse(JSON.stringify(snap)));
+    }
+    // Wipe user state (pins + MANUAL_SET) so each seed starts from a clean
+    // randomize. Without this, user pins from a prior seed's scenarios
+    // survive _clearFreezeOverrides (which intentionally preserves _userSet)
+    // and accumulate as ghost overrides (bug found 2026-05-06).
+    function _smWipeUserState(){
+      Object.keys(OVERRIDES).forEach(function(k){
+        var ov=OVERRIDES[k]; if(!ov) return;
+        var filtered=ov.filter(function(o){return o._userSet!==true;});
+        if(filtered.length===0) delete OVERRIDES[k];
+        else if(filtered.length!==ov.length) OVERRIDES[k]=filtered;
+      });
+      Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+    }
+    for(var i=0;i<nSeeds;i++){
+      var seed=baseSeed+i;
+      _smWipeUserState();
+      // Explicit cache invalidate so prior seed's pipeline-mutated cache
+      // doesn't leak into this seed's randomize. randomizeWeek's internal
+      // pipeline rebuilds caches on demand but starting from a clean slate
+      // gives deterministic per-seed behavior matching the manual repro.
+      invalidateLeftoverCache();
+      randomizeWeek('shared', seed);
+      var slots=_smHarvestSlots();
+      var hardBaseline=_smHardCount();
+      var perSeedSnap=snapshot();
+      ['solo','anchorBatch','leftoverDiff','sharedSameDay','shake'].forEach(function(geo){
+        var slot=slots[geo]; if(!slot) return;
+        ['edit','swap','addIngr','reset','rebalance'].forEach(function(op){
+          // shake doesn't support all ops cleanly (no batch, slotAdj=0)
+          if(geo==='shake' && (op==='swap'||op==='rebalance')) return;
+          // Reset to per-seed clean state — fresh deep-clone per scenario
+          // to break reference-share with the snapshot's OVERRIDES arrays.
+          freshRestore(perSeedSnap);
+          var t0=Date.now();
+          // Compute baseline context for this scenario
+          var lo=slot.lo;
+          var showCombined=!!(lo&&!lo.isLeftover&&(lo.servings>1||lo.crossPersonCook)&&!(lo.shared||lo.sameDayShared));
+          var cookServings=showCombined?(lo.totalServings||lo.servings||1):1;
+          // Capture pre-batch-amts for batch propagation check
+          var preBatchAmts={};
+          if(lo&&lo.portions){
+            lo.portions.forEach(function(pt){
+              var b=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
+              if(b) preBatchAmts[sk(pt.p,pt.d,pt.s)]=b.map(function(i){return i.amt;});
+            });
+          }
+          var baseline={hardCount:hardBaseline,cookServings:cookServings,showCombined:showCombined,preBatchAmts:preBatchAmts};
+          var failure=null;
+          try { failure=_smRunOp(op, slot, baseline); }
+          catch(e){ failure={assertion:'exception', issue:e.message, stack:(e.stack||'').split('\n').slice(0,3).join(' | ')}; }
+          var dt=Date.now()-t0;
+          agg.timings.push(dt);
+          agg.scenarios++;
+          if(failure){
+            agg.failed++;
+            agg.byOp[op].f++;
+            agg.byGeometry[geo].f++;
+            agg.byAssertion[failure.assertion]=agg.byAssertion[failure.assertion]||{p:0,f:0};
+            agg.byAssertion[failure.assertion].f++;
+            agg.failures.push({seed:seed,geometry:geo,op:op,slot:slot.p+'/'+slot.d+'/'+slot.s,assertion:failure.assertion,issue:failure.issue,expected:failure.expected,actual:failure.actual});
+            if(verbose) console.log('FAIL',seed,geo,op,failure);
+          } else {
+            agg.passed++;
+            agg.byOp[op].p++;
+            agg.byGeometry[geo].p++;
+          }
+        });
+      });
+    }
+    restore(saved);
+    return agg;
+  }
+
+  function formatSlotModReport(agg){
+    var lines=[];
+    lines.push('### Slot Mod Test — '+agg.scenarios+' scenarios, '+agg.passed+' passed, '+agg.failed+' failed');
+    lines.push('');
+    lines.push('| Op | Pass | Fail |');
+    lines.push('|---|---|---|');
+    Object.keys(agg.byOp).forEach(function(o){lines.push('| '+o+' | '+agg.byOp[o].p+' | '+agg.byOp[o].f+' |');});
+    lines.push('');
+    lines.push('| Geometry | Pass | Fail |');
+    lines.push('|---|---|---|');
+    Object.keys(agg.byGeometry).forEach(function(g){lines.push('| '+g+' | '+agg.byGeometry[g].p+' | '+agg.byGeometry[g].f+' |');});
+    lines.push('');
+    if(Object.keys(agg.byAssertion).length){
+      lines.push('| Failed assertion | Count |');
+      lines.push('|---|---|');
+      Object.keys(agg.byAssertion).forEach(function(a){lines.push('| '+a+' | '+agg.byAssertion[a].f+' |');});
+      lines.push('');
+    }
+    if(agg.failures.length){
+      lines.push('### First '+Math.min(10,agg.failures.length)+' failures');
+      lines.push('| Seed | Geom | Op | Slot | Assertion | Issue | Expected | Actual |');
+      lines.push('|---|---|---|---|---|---|---|---|');
+      agg.failures.slice(0,10).forEach(function(f){
+        lines.push('| '+f.seed+' | '+f.geometry+' | '+f.op+' | '+f.slot+' | '+f.assertion+' | '+f.issue+' | '+(f.expected===undefined?'':f.expected)+' | '+(f.actual===undefined?'':f.actual)+' |');
+      });
+      lines.push('');
+    }
+    if(agg.timings.length){
+      var avg=agg.timings.reduce(function(a,b){return a+b;},0)/agg.timings.length;
+      var max=Math.max.apply(null,agg.timings);
+      lines.push('Timing: avg '+avg.toFixed(0)+'ms, max '+max+'ms');
+    }
+    return lines.join('\n');
+  }
+
+  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runStandard3:runStandard3,runStandard4:runStandard4,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline,runSlotMod:runSlotMod,formatSlotModReport:formatSlotModReport};
 })();
 
 </script>
