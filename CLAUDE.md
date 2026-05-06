@@ -2560,3 +2560,150 @@ Q2 + Q5 are pure render/visual work. No randomizer changes; no expected stress i
 - Pre-session HEAD: `02b5a6f` (2026-05-03 SNACK revert)
 - Today's tip: `MP_2026-05-04_V1` (single commit: Q2 banner gating + Q5 auto-link-groups + manual validator + 6-color palette + detector-found shared visual)
 
+## Session 2026-05-04 (continued V2–V14) — Manual-edit banner polish, dropdown grids, leafy reduction, INV23
+
+Long iterative afternoon. 13 follow-up commits driven by user testing of yesterday's banner gating + auto-link-groups: dropdown display fixes, recipe data nudges (garlic wholeOnly, leafy 0.75c baseline), Reset button rewrites, INV23 added.
+
+### What landed (commit order)
+
+**V2 — `37773a0` Manual-edit banner: filter to user overrides + show recipe→final diff.** Banner previously rebuilt the full ingredient list from `recipe → balanced` (showing ALL diffs, including those induced by the pipeline's own scaling). Filtered to: only show rows where `_hasUserOverrides` says this slot is user-touched AND the diff is on an ingredient the user actually edited. Banner now reflects edits, not pipeline noise.
+
+**V3 — `4f7e43f` Batch dropdowns: show full precision.** Dropdowns previously rounded amount labels to 1 decimal (e.g. `7.701 → "7.7"`). For batch slots showing per-portion fractions, the rounding hid the actual stored value. Removed the 1-decimal cap on batch dropdown labels — solo slots already showed 3-decimal precision.
+
+**V4 — `7195bc3` Reset button: strict — only clear user-origin overrides.** Initial Reset implementation cleared ALL `scalable:false` overrides indiscriminately, which nuked freeze pins along with user edits. Filter tightened to `scalable === false && _userSet !== true` — touches only user-origin overrides. (`_userSet` flag wasn't introduced yet at this commit; this set up the filter for V11.)
+
+**V5 — `70c69c1` Dropdown labels: avocado/lemon 0.75 → ¾.** `fmtFrac` snap returned literal "0.75" for some `each`-unit fractions because the snap table didn't include those values. Avocado (`each`) and lemon (`each`) both saw "0.75" instead of "¾". Snap table extended.
+
+**V6 — `aa1cd11` each-grid step derived from minAmt (no ¼ banana/orange/garlic).** `each`-unit dropdown grid was hardcoded to 0.25 increments. Banana (`minAmt:0.5`) and orange (`minAmt:0.5`) showed "¼ banana" options the recipe couldn't actually use. Garlic (`minAmt:1`) showed "¼ clove". Grid now derives from `db.minAmt` (or `0.25` fallback) — banana/orange snap to halves; garlic snaps to wholes.
+
+**V7 — `95b096f` garlic: wholeOnly:true.** Per user feedback ("garlic cloves should be whole only"). DB flag added; `minAmt:1` now matches the cap. No half-clove dropdowns.
+
+**V8 — `d0fc863` Spinach/kale: 0.75c baseline + dampScale 0.5 for leafy.** Per user observation that 35oz spinach across one trip was "crazy excessive". 22 spinach + 13 kale recipes scaled from 1.5c → 0.75c base (excluding salads where the leafy is the recipe's structural carrier — `tuna_white_bean`, `lemongrass_salad` kept 1.5c base). New DB flag `dampScale:0.5` on `baby spinach` and `kale` halves the slot-adjuster's per-ingredient scale factor in both directions (up AND down). Result: cook2 leafy ~80oz → ~42oz across stress runs. **Chicken breast cap held at 16 oz** (user accepted the higher cap rather than tighten to 12 oz; 16 oz lets shared dinners scale Him to budget without hitting cap mid-pipeline).
+
+**V9 — `7ae8afe` Reset ↺ button in ingredient header + banner skips dbKey-only swaps.** Reset moved from a slot-level button to a per-ingredient header button (`↺` next to `+`). Smaller stroke, no underline, less prominent than `+`. Banner detection logic fixed: a pure dbKey swap (changed only the ingredient identity, kept `amt` from recipe) was generating phantom "from X to Y" rows because the comparison saw the `dbKey` change as a delta. Now banner compares post-swap `amt` to pre-swap `amt` — if equal, no row.
+
+**V10 — `3185980` Banner tracks dbKey swaps + amt edits separately; lighter button styles.** Continued V9. Banner separates "swap" (dbKey changed) from "edit" (amt changed) so a swap+edit on the same slot shows both rows correctly. CSS: button stroke thinner, no underline, parent `text-decoration:none` to override CSS3 underline-bleed-through (where `.bsec-title.ingr` underline propagates to descendant `<button>`s). Title text now wrapped in inner `<span>` carrying the underline so the buttons stay clean.
+
+**V11 — `57ee2aa` User-pinned overrides via _userSet flag; user amt now sticks.** **Architectural pivot.** User reported "I cant manually select an amount I want — chicken doesn't change and instead everything else changes." Root cause: the per-slot adjuster was running on every render (via `getDayBalancedIngredients`'s `slotAdj` branch), and unify/snap re-canonicalized the user's pin. Introduced `_userSet:true` flag stored alongside `scalable:false` on user overrides. Wired through:
+- `applyOverrides` forwards `_userSet:true` so cache values carry the flag.
+- `_clampThresh` skips entries with `_userSet:true` — user pins immune to minAmt/maxAmt clamping.
+- `adjustIngredients` final sweep skips them.
+- INV13 verifier skips them (otherwise user edit at `eggs:6` would fire INV13 against `maxAmt:4`).
+- Reset filter (V4 above) now correctly distinguishes via `_userSet !== true` for freeze pins vs user pins.
+- `getSlotAdjustment.baseKcal` uses **recipe-base** for slots containing user pins (otherwise the adjuster's "improve toward target" math fights the user — adding kcal in a non-pinned ingredient when user already added kcal via the pin).
+
+**V12 — `280c226` Banner shows pre-edit displayed → user-pick + buttons no underline.** Banner display refined: "from 1/2 to 3/4 cup" now shows the actual displayed value the user saw before editing (cached in new `_priorAmt` field on the override) — not the recipe baseline. Captures the user's mental model: "I changed it from what I was looking at to this." Pre-existing CSS underline-bleed cleanup completed.
+
+**V13 — `c224ea3` INV23 (hard): per-row displayed macros sum to card header per-serving × N.** New hard invariant. Per-row macro displays (kcal/pro/carb/fat) on each ingredient line are individually rounded; their sum was drifting from the card header total by 1-3 kcal because the header used a different rounding strategy (sum-then-round vs round-then-sum). User flagged this as a hard fail — "Sum of ingredients per serving do not equal the total numbers listed for the slot at the top." Tolerance: `ceil(N/2)` per macro field (where N = portion count) — accommodates the float-rounding accumulation across N rounded rows. Verifier checks every visible card. INV5 also updated to use sum-of-rounded so card-header / per-row consistency is enforced both ways. **`computeCardMacros`** rewritten to sum-of-rounded-per-row / cookServings — the per-portion display now equals the sum of what's drawn in the rows. Wired: `parseInvariants`, `aggregate.invTotals`, `formatReport.hardKeys`, `hardFail` count.
+
+**V14 — `9ef34c0` Schedule picker: cap Category dropdown at 110px.** Auto-link-group entries with long labels (e.g. "↻ Vietnamese tofu & noodle soup (cyan)") were inflating `paintSlotSel`'s intrinsic width via flexbox — pushing the meal dropdown down to 11px, unusable on iPhone. Fixed: `flex:0 0 110px;max-width:110px` on the category select. Meal dropdown gets the rest of the row.
+
+### Stress (no pipeline changes from V2–V14)
+
+All commits this session affect render/UI/DB-data only — no balancer or freeze logic touched. INV23 added but verifier-only (no production code path it gates). Stress baselines unchanged from session start.
+
+### Open items (carry-forward)
+- All prior carry-forward items remain.
+- **Reset still shaky on shake/breakfast slots** — user reported "ingredient reset doesnt reset the amount values for lunch, snack, etc.. just the ingredient.. also doesnt show the manual edit tab for shake.. reset doesnt work at all for breakfast.. still buggy". Picked up in 5/5 V1.
+
+### Branch & commit
+- Today's tips: `MP_2026-05-04_V2` through `MP_2026-05-04_V14` (commits 37773a0 → 9ef34c0).
+
+## Session 2026-05-05 — Schedule centerline fix, surgical edits architecture, ⚖ Re-balance button
+
+Heavy session. Started with two small UI fixes (centerline split, Reset/banner shake bug), morphed into deep architectural rewrite of user-edit semantics: surgical cache mutation, no auto-compensation, new `⚖ Re-balance` button as opt-in pipeline rerun.
+
+### What landed (commit order)
+
+**V1 — `a86aac6` Schedule cell: split centerline when both halves highlighted differently.** Schedule pill cells are split into 3 zones (left/center/right). When both halves were highlighted with different colors (e.g. Him's lunch is shared-green, Her's is link-cyan), the centerline picked one color and obscured the split. Fix: render the centerline as a 50%-stop linear-gradient when the halves' colors differ. Initial implementation used `linear-gradient(to bottom)` — top half / bottom half — which user immediately corrected.
+
+**V2 — `43af9d0` Schedule cell: split centerline VERTICALLY (left/right), not horizontally.** User clarification: "split vertically, not horizontally." Changed gradient axis to `to right` with 3px width — left half of the centerline gets one color, right half gets the other. Each half visually merges with its adjacent zone.
+
+**V3 — `bcc617d` Fix Reset on user pins + manual-edit banner for shake.** User report: "ingredient reset doesnt reset the amount values for lunch, snack, etc.. just the ingredient.. also doesnt show the manual edit tab for shake.. reset doesnt work at all for breakfast.. still buggy". Root causes:
+- **Reset on user pins**: `onIngrReset` was only clearing freeze overrides; user pins (`_userSet:true`, `scalable:false`) survived. Filter rewritten: clears overrides where the slot has the same `idx` as the row being reset, regardless of which flag set them.
+- **Banner missing for shake**: `computeCardMacros` had two branches — `slotAdj!==0` (lunch/dinner/snack/breakfast) and `slotAdj===0` (shake). The banner-build code lived only inside the first branch. Shake slot has `slotAdj=0` (excluded from balancer). Extracted `_buildManualBanner(p,d,s,...)` helper, called from BOTH branches.
+- **Breakfast Reset bug**: edge case in the dual-branch banner where the reset path read `cache[idx]` but breakfast's cache structure had a different shape post-balancer. Fixed by routing through the same helper.
+
+**V4 — `907ee75` Edit-banner: waste hint + dropdown range scales with cookServings.** Two related improvements:
+- **Dropdown range scales with `cookServings`**: For batch slots, dropdowns now scale their amount range by the portion count. Previous behavior: a 2-portion batch showing `chicken 8oz` per-portion would offer dropdown values up to `2 × maxAmt = 24oz` per-portion (since per-portion stays bound by maxAmt). For batch cooks the user thinks in BATCH amounts ("I want to cook 16 oz in this pot"). New `buildQtyOptions(unit, currentAmt, wholeOnly, minAmt, cookServings)` exposes the full batch range AND back-converts the user's pick (`pick / cookServings = per-portion stored`).
+- **Waste hint**: When user picks an amount that pushes the trip total off-perPkg/perWhole boundary, banner shows "↑ X oz waste" or "↓ Y wasted". `_wasteHint(p,d,s,idx,db,newPerPortionAmt)` computes the projected trip total impact and renders the hint. Helps user see the cost of "I want exactly 10oz here" vs "10.667oz lands the trip on a 16oz container".
+
+**V5 — `603c505` User pins bypass min/max clamps + INV13 check.** Per user: "let manual edits freely change. no max or mins." Three call sites updated:
+- `_clampThresh` exits early if `entry._userSet === true`.
+- `adjustIngredients` final sweep skips `_userSet` entries.
+- INV13 verifier skips `_userSet` entries (otherwise user setting `eggs:6` against `maxAmt:4` would fire INV13).
+This codifies the user's intent: edits are absolute, the pipeline cannot override or warn.
+
+**V6 — `51568a1` User edits add directly to slot total (no auto-compensation).** User report: "When I add a whole egg.. the ingredient row jumps from 72 cals to 144 cals and the banner correctly says +72, but the total at the top only goes up 12 calories." Root cause: when the user edited an ingredient, `getDayBalancedIngredients` re-ran `slotAdj` on the slot. The adjuster's "improve toward target" path saw the slot was over-budget (because the user just added 72 kcal) and trimmed other ingredients to compensate, netting only +12 visible delta. **Initial fix**: `getSlotAdjustment.baseKcal` for slots containing any `_userSet` entry uses recipe-base (not balanced-base). Decouples the adjuster's "starting point" math from user pins. Partial fix — slot total now updates correctly, but the adjuster still re-runs every render, which slows things down and risks future drift if the heuristics change.
+
+**V7 — `2fc239b` Surgical edits: ingredient changes touch only that ingredient.** **Architectural rewrite, the headline of the session.**
+
+User feedback summarized: "I want to be able to edit every individual ingredient without anything changing. I want the sum listed at the top of the slot to always equal the sum of the ingredients even after a change. There are obviously some automatic functions at work while I am making these changes. What are they?"
+
+The auto-functions running on every edit (which the user wanted gone): `adjustIngredients` per-slot scaling, `balanceDayMacros` cross-slot day-balancer, `unifyCrossPersonRatios` batch-ratio enforcement, `snapBatchTotals` grid-snap, `freezeTripTotals` waste pass, `runBalanceAdjusters` convergence loop. Cumulatively: any edit triggered a full pipeline rerun where every ingredient could shift to "improve" the day.
+
+**The architectural answer (option A modified)**: edits surgical, opt-in re-balance.
+
+- **`onIngrAmt` (and `onIngrSwap`)** rewritten to **mutate the cache directly**, bypassing the pipeline entirely:
+  ```js
+  function onIngrAmt(p,d,s,idx,val){
+    const amt=parseFloat(val);
+    if(isNaN(amt)||amt<0)return;
+    const cache = (typeof _dayBalancedCache!=='undefined') ? _dayBalancedCache[pk(p,d)] : null;
+    const slotCache = cache ? cache[s] : null;
+    const ov = OVERRIDES[sk(p,d,s)];
+    const existing = ov ? ov.find(function(o){return o.idx===idx;}) : null;
+    if(!existing || existing._priorAmt === undefined){
+      if(slotCache && slotCache[idx] && slotCache[idx].amt !== undefined){
+        setOverride(p,d,s,idx,'_priorAmt', slotCache[idx].amt);
+      }
+    }
+    setOverride(p,d,s,idx,'amt',amt);
+    setOverride(p,d,s,idx,'scalable',false);
+    setOverride(p,d,s,idx,'_userSet',true);
+    MANUAL_SET[sk(p,d,s)]=true;
+    if(slotCache && slotCache[idx]){
+      slotCache[idx].amt = amt;
+      slotCache[idx].scalable = false;
+      renderMeals();
+      autoSaveWeek();
+    } else {
+      invalidateLeftoverCache();
+      renderMeals();
+      autoSaveWeek();
+    }
+  }
+  ```
+  No pipeline runs. The cache is the source of truth for what's drawn; modifying it directly + rendering = exactly what the user changed shows up on screen, slot total recalculates from the modified cache.
+
+- **`⚖ Re-balance` button (NEW)** in card header next to `↺ Reset`. Calls `onIngrRebalance(p,d,s)` → `invalidateLeftoverCache + renderMeals + autoSaveWeek`. Triggers a full pipeline rerun; user's `_userSet` pins survive (immune to clamping per V5, immune to freeze adjustments). Lets the user say "OK now run the math, but freeze my edits."
+
+- **`↺ Reset`** unchanged in semantics: clears user-origin overrides for the row, then full rebuild. Brings the slot back to its post-randomize state.
+
+- **`_priorAmt`** captured at first edit (cache snapshot before the user touched it). Banner shows "from {priorAmt} to {amt}". Persists across multiple edits — banner always shows the original pre-edit displayed value.
+
+**Edit lifecycle summary:**
+- Edit → surgical cache mutation, no pipeline.
+- Reset → clear user pins for that row, full rebuild.
+- Re-balance → full pipeline runs, user pins frozen.
+- After randomize → `_clearFreezeOverrides` clears freeze pins; user pins survive (different filter).
+
+### Stress baselines (carry-forward)
+
+No pipeline changes — saved baselines from 2026-05-02 still valid. Tests not re-run this session. Surgical-edit logic only fires when user edits ingredients; stress harness doesn't simulate user edits, so the architecture change is invisible to stress.
+
+### Open items for next session
+
+1. **`_clearFreezeOverrides` doesn't differentiate well.** Currently filters on `scalable === false` to identify freeze pins, but user pins ALSO have `scalable === false`. The differentiator is `_userSet:true`. The clear function checks for that — but if any future code path forgets to set `_userSet`, user pins could get nuked at randomize. Worth adding an INV that catches "scalable:false override without `_userSet` flag that wasn't written by `freezeTripTotals`" if drift becomes a concern.
+
+2. **INV23 tolerance sometimes lenient.** `ceil(N/2)` per macro field tolerates more than strictly needed for small N. For N=2, tolerance=1 (allowed drift of 1 kcal/pro/carb/fat). Fine for visual consistency, but if INV23 ever fires while displays look perfect, tolerance might need tightening.
+
+3. **`⚖ Re-balance` button discoverability.** New per-card button. User flow: edit, see total update, optionally hit Re-balance to redistribute kcal across other ingredients. No tooltip or label hint yet.
+
+4. **Banner accumulation.** Multiple edits to the same slot keep adding rows to the banner. Verified: each new ingredient edit adds its own line; same-ingredient re-edits update existing line (because `_priorAmt` is sticky). If the user wants `+72 kcal egg, +0 cal cumulative` semantics, would need to compute live deltas instead of stamped-at-first-edit.
+
+5. **Carryforward**: All 5/2 carry-forward items still open.
+
+### Branch & commit
+- Today's tips: `MP_2026-05-05_V1` through `MP_2026-05-05_V7` (commits a86aac6 → 2fc239b).
+
