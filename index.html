@@ -4126,6 +4126,19 @@ function getDayBalancedIngredients(p,d){
     }
   });
 
+  // 2026-05-05: freeze any slot containing user pins so balanceDayMacros
+  // doesn't rebalance other items in that slot to absorb the user's edit.
+  // Without this, adding an egg in breakfast → balancer trims protein/fat
+  // sources elsewhere in the slot to maintain macro targets, masking the
+  // user's edit in the slot total.
+  SLOTS.forEach(function(_s){
+    if(frozenSlots[_s]) return;
+    var _ov = OVERRIDES[sk(p,d,_s)];
+    if(_ov && _ov.some(function(o){return o._userSet === true;})){
+      frozenSlots[_s] = true;
+    }
+  });
+
   // Day-level macro balancing. sameDayCookServings tells the balancer to
   // count same-day cook slots × total servings (the leftover tracks the
   // cook slot live, so the balancer always has the true daily picture).
@@ -5709,7 +5722,22 @@ function getSlotAdjustment(p,d,s){
   const ingr=applyOverrides(port,p,d,s);
   if(!ingr||!ingr.length||!ingr[0].dbKey)return 0;
 
-  const baseKcal=computeMacros(ingr).kcal;
+  // 2026-05-05: for user-pinned existing ingredients, compute baseKcal with
+  // RECIPE-BASE amounts. User edits should add ON TOP of the slot budget,
+  // not shift the budget so other items scale to compensate. Without this:
+  // user adds 72 kcal egg → baseKcal up 72 → slotAdj down 72 → scalables
+  // scale down 72 → slot total unchanged (user's edit "absorbed").
+  const baseKcal = ingr.reduce(function(sum, ing, idx){
+    var db = NUTRI_DB[ing.dbKey];
+    if(!db) return sum;
+    var amt;
+    if(ing._userSet === true && port.ingredients[idx] && port.ingredients[idx].amt !== undefined){
+      amt = port.ingredients[idx].amt;  // recipe base
+    } else {
+      amt = ing.amt;
+    }
+    return sum + db.kcal * amt;
+  }, 0);
   const budget=getSlotBudget(p,d,s);
 
   // DAY-LEVEL CORRECTION: dinner absorbs the day's residual so the daily
