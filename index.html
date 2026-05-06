@@ -2812,7 +2812,7 @@ var _schedLongPress=null;
 var _schedLongFired=false;
 var _schedLongFiredTimer=null;
 function schedLongPress(d,s){
-  if(MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)]) return;
+  if(!_scheduleEditMode && (MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)])) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared') delete SHARED_SCHEDULE[k];
@@ -2839,8 +2839,10 @@ function schedTapLeft(d,s){
   // tap-cycle. To modify, user must enter edit mode via the picker (select
   // the group from the Category dropdown → Select). The MANUAL_SET check
   // below catches both link AND non-link Manual cases.
+  // 2026-05-06+: Schedule edit mode bypasses the lock so users can re-paint
+  // any cell (eat-outs, link groups, etc.) when restructuring the week.
   const himKey=sk('him',d,s);
-  if(MANUAL_SET[himKey]) return; // locked by manual set (link or otherwise)
+  if(!_scheduleEditMode && MANUAL_SET[himKey]) return; // locked by manual set (link or otherwise)
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
@@ -2859,8 +2861,9 @@ function schedTapLeft(d,s){
 function schedTapRight(d,s){
   // 2026-05-03 (revised): see schedTapLeft — linked cells are locked from
   // tap-cycle. Edit via the picker (Category dropdown → group → Select).
+  // 2026-05-06+: Schedule edit mode bypasses the lock.
   const herKey=sk('her',d,s);
-  if(MANUAL_SET[herKey]) return; // locked by manual set (link or otherwise)
+  if(!_scheduleEditMode && MANUAL_SET[herKey]) return; // locked by manual set (link or otherwise)
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
@@ -2879,7 +2882,7 @@ function schedTapRight(d,s){
 // 2026-05-03 (Item 1): center-zone tap toggles shared. Same logic as the
 // existing schedLongPress, just exposed as an explicit click target.
 function schedTapCenter(d,s){
-  if(MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)]) return; // locked
+  if(!_scheduleEditMode && (MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)])) return; // locked
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared') delete SHARED_SCHEDULE[k];
@@ -2891,7 +2894,7 @@ function schedTapDay(d){
   const allShared=slots.every(function(s){return SHARED_SCHEDULE[dk(d,s)]==='shared';});
   const allEO=slots.every(function(s){return SHARED_SCHEDULE[dk(d,s)]==='skip-both';});
   slots.forEach(function(s){
-    if(MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)]) return;
+    if(!_scheduleEditMode && (MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)])) return;
     const k=dk(d,s);
     if(allShared) SHARED_SCHEDULE[k]='skip-both'; // shared → eat out
     else if(allEO) delete SHARED_SCHEDULE[k];      // eat out → normal
@@ -3811,7 +3814,14 @@ function _syncEatOutsToSharedSchedule(){
     });
   });
 }
-function updateSchedule(){_syncEatOutsToSharedSchedule();saveSharedSchedule();renderMeals();}
+function updateSchedule(){
+  // 2026-05-06+: In schedule edit mode, defer the V10 EAT_OUT sync until
+  // Apply (so taps don't materialize EAT_OUTs the user might Undo). Outside
+  // edit mode (default), sync runs live as in V10.
+  if(!_scheduleEditMode) _syncEatOutsToSharedSchedule();
+  saveSharedSchedule();
+  renderMeals();
+}
 
 function safeId(s){return s.replace(/[^a-zA-Z0-9_-]/g,'_')}
 
@@ -6894,16 +6904,34 @@ function renderMeals(){
     html+='<div class="sched-hdr" onclick="sharedSchedOpen=!sharedSchedOpen;renderMeals()">';
     html+='<div class="sched-title">'+ssIcon+' Schedule Meals</div>';
     if(sharedSchedOpen){
-      html+='<div style="display:flex;gap:6px">'
-        +'<div class="sched-btn" onclick="event.stopPropagation();if(confirm(\'Clear all manually set meals?\')){clearWeek();}">Clear</div>'
-        +'<div class="sched-btn sched-btn-set" onclick="event.stopPropagation();setSchedule()">Set</div>'
-        +'<div class="sched-btn" style="border-color:'+(person==='her'?'rgba(244,114,182,.5)':person==='shared'?'rgba(52,211,153,.5)':'rgba(96,165,250,.5)')+';color:'+(person==='her'?'var(--her)':person==='shared'?'#34D399':'var(--his)')+'" onclick="event.stopPropagation();showRandomizePopup()">Create Plan</div>'
-        +'</div>';
+      if(_scheduleEditMode){
+        // Edit mode: show Undo (revert) + Apply (commit). Hide Clear/Create
+        // Plan to keep the user focused on editing the schedule.
+        html+='<div style="display:flex;gap:6px">'
+          +'<div class="sched-btn" onclick="event.stopPropagation();undoScheduleEdit()">Undo</div>'
+          +'<div class="sched-btn sched-btn-set" onclick="event.stopPropagation();applyScheduleEdit()">Apply</div>'
+          +'</div>';
+      } else {
+        html+='<div style="display:flex;gap:6px">'
+          +'<div class="sched-btn" onclick="event.stopPropagation();if(confirm(\'Clear all manually set meals?\')){clearWeek();}">Clear</div>'
+          +'<div class="sched-btn sched-btn-set" onclick="event.stopPropagation();enterScheduleEditMode()">Edit</div>'
+          +'<div class="sched-btn" style="border-color:'+(person==='her'?'rgba(244,114,182,.5)':person==='shared'?'rgba(52,211,153,.5)':'rgba(96,165,250,.5)')+';color:'+(person==='her'?'var(--her)':person==='shared'?'#34D399':'var(--his)')+'" onclick="event.stopPropagation();showRandomizePopup()">Create Plan</div>'
+          +'</div>';
+      }
     }
     html+='</div>';
     if(sharedSchedOpen){
-      // Spacer between header buttons and grid
-      html+='<div style="height:5px"></div>';
+      // 2026-05-06+: Edit mode banner. Surfaces that taps are sandboxed
+      // and explains the Apply/Undo flow.
+      if(_scheduleEditMode){
+        html+='<div style="margin:6px 0;padding:8px 10px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.5);border-radius:8px;color:#A78BFA;font-size:12px;line-height:1.4">'
+          +'<b>Edit Mode</b> — locked cells can be re-painted. Per-card pills also work. '
+          +'Click <b>Apply</b> to commit, or <b>Undo</b> to revert.'
+          +'</div>';
+      } else {
+        // Spacer between header buttons and grid
+        html+='<div style="height:5px"></div>';
+      }
       // Grid header: Day + Breakfast + Lunch + Dinner. Snack column was
       // added briefly 2026-05-03 then removed — too wide for iPhone screens.
       // Snacks are still picked via the meal cards directly.
@@ -9015,6 +9043,73 @@ function runRandomizeFromPopup(){
   renderMeals();
   requestAnimationFrame(function(){window.scrollTo(0,0);});
 }
+// 2026-05-06+: Schedule edit mode — opt-in sandbox for restructuring the
+// schedule. Outside edit mode, grid taps work as V10 (live, auto-create
+// EAT_OUTs from skip-*, no MANUAL_SET locking — the latter requires Apply).
+// Inside edit mode:
+//   - Grid taps bypass MANUAL_SET early-return (locked cells re-paintable).
+//   - V10 EAT_OUT sync is deferred until Apply.
+//   - Per-card pills (toggleSkip/EatOut/Shared) and meal swaps work live but
+//     are reverted by Undo via the snapshot.
+//   - Apply runs setSchedule (locks MANUAL_SET + stamps her=him for shared).
+//   - Undo restores the snapshot.
+var _scheduleEditMode = false;
+var _scheduleEditSnapshot = null;
+function _cloneScheduleState(){
+  return {
+    SHARED_SCHEDULE: JSON.parse(JSON.stringify(SHARED_SCHEDULE)),
+    EAT_OUT: JSON.parse(JSON.stringify(EAT_OUT)),
+    SKIPPED: JSON.parse(JSON.stringify(SKIPPED)),
+    MANUAL_SET: JSON.parse(JSON.stringify(MANUAL_SET)),
+    SEL: JSON.parse(JSON.stringify(SEL)),
+    OVERRIDES: JSON.parse(JSON.stringify(OVERRIDES)),
+    LATE_SNACK: JSON.parse(JSON.stringify(LATE_SNACK)),
+    leftoverLinks: weekData[activeWeek] && weekData[activeWeek].leftoverLinks
+      ? JSON.parse(JSON.stringify(weekData[activeWeek].leftoverLinks)) : []
+  };
+}
+function _restoreScheduleState(s){
+  function replaceObj(g, v){Object.keys(g).forEach(function(k){delete g[k];});Object.keys(v).forEach(function(k){g[k]=v[k];});}
+  replaceObj(SHARED_SCHEDULE, s.SHARED_SCHEDULE);
+  replaceObj(EAT_OUT, s.EAT_OUT);
+  replaceObj(SKIPPED, s.SKIPPED);
+  replaceObj(MANUAL_SET, s.MANUAL_SET);
+  replaceObj(SEL, s.SEL);
+  replaceObj(OVERRIDES, s.OVERRIDES);
+  replaceObj(LATE_SNACK, s.LATE_SNACK);
+  if(weekData[activeWeek]){
+    if(!weekData[activeWeek].leftoverLinks) weekData[activeWeek].leftoverLinks = [];
+    weekData[activeWeek].leftoverLinks.length = 0;
+    s.leftoverLinks.forEach(function(g){weekData[activeWeek].leftoverLinks.push(g);});
+    if(typeof rebindLeftoverLinks === 'function') rebindLeftoverLinks();
+  }
+}
+function enterScheduleEditMode(){
+  _scheduleEditMode = true;
+  _scheduleEditSnapshot = _cloneScheduleState();
+  renderMeals();
+}
+function applyScheduleEdit(){
+  // Run V10 sync first (creates EAT_OUTs that were deferred), then setSchedule
+  // (locks MANUAL_SET + stamps her=him for shared cells).
+  if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSchedule();
+  setSchedule();
+  _scheduleEditMode = false;
+  _scheduleEditSnapshot = null;
+  // setSchedule already calls renderMeals + autoSaveWeek
+}
+function undoScheduleEdit(){
+  if(_scheduleEditSnapshot){
+    _restoreScheduleState(_scheduleEditSnapshot);
+  }
+  _scheduleEditMode = false;
+  _scheduleEditSnapshot = null;
+  invalidateLeftoverCache();
+  renderMeals();
+  if(topTab==='shop') renderShop();
+  autoSaveWeek();
+}
+
 function setSchedule(){
   // Apply schedule immediately: shared meals get matched, eat-outs applied, all marked manual
   DAYS.forEach(function(d){
