@@ -16302,16 +16302,19 @@ window.MPStress=(function(){
       // produces non-deterministic meals (mirrors runStandard/runOne pattern).
       freshRestore(saved);
       _smWipeUserState();
-      // Pre-populate sharing so the `sharedSameDay` geometry is reachable.
-      // Without this, randomize-from-clean-state never produces same-day
-      // shared batches (variety filter blocks household same-meal repeats);
-      // sharedSameDay was reaching only ~1.7% of seeds. Pre-set 3 shared
-      // dinner cells: this makes Friday/Sunday/Wednesday-lunch sharing
-      // deterministic per seed, and at least one of those will yield a
-      // shared cook anchor most of the time.
-      SHARED_SCHEDULE['Friday_dinner']='shared';
-      SHARED_SCHEDULE['Sunday_dinner']='shared';
-      SHARED_SCHEDULE['Wednesday_lunch']='shared';
+      if(opts.prepopShared !== false){
+        // Pre-populate sharing so the `sharedSameDay` geometry is reachable.
+        // Without this, randomize-from-clean-state never produces same-day
+        // shared batches (variety filter blocks household same-meal repeats);
+        // sharedSameDay was reaching only ~1.7% of seeds. Pre-set 3 shared
+        // dinner cells: this makes Friday/Sunday/Wednesday-lunch sharing
+        // deterministic per seed, and at least one of those will yield a
+        // shared cook anchor most of the time. Set opts.prepopShared=false
+        // to skip and test on the page's default state (all dinners shared).
+        SHARED_SCHEDULE['Friday_dinner']='shared';
+        SHARED_SCHEDULE['Sunday_dinner']='shared';
+        SHARED_SCHEDULE['Wednesday_lunch']='shared';
+      }
       invalidateLeftoverCache();
       randomizeWeek('shared', seed);
       var slots=_smHarvestSlots();
