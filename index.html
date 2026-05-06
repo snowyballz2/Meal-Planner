@@ -10266,6 +10266,14 @@ function randomizeWeek(target, seed){
   // 2026-05-05+: Capture pristine snapshot of post-pipeline cache + MANUAL_SET
   // for onIngrReset to restore EXACT pre-edit state without rerunning the
   // pipeline. See _capturePostRandomizeSnapshot.
+  // 2026-05-06+: Force-populate cache for every person-day BEFORE the
+  // snapshot. runBalanceAdjusters only processes affected days, leaving
+  // some person-days uncached if they have no batches/overrides — which
+  // would make onIngrReset silently fail on slots from those days.
+  // The snapshot must be COMPLETE for Reset to work on any slot.
+  ['him','her'].forEach(function(_p){
+    DAYS.forEach(function(_d){ getDayBalancedIngredients(_p, _d); });
+  });
   _capturePostRandomizeSnapshot();
   // Runtime invariant check — alert on any data inconsistency
   var inv=verifyInvariants();
@@ -15796,6 +15804,16 @@ window.MPStress=(function(){
       // produces non-deterministic meals (mirrors runStandard/runOne pattern).
       freshRestore(saved);
       _smWipeUserState();
+      // Pre-populate sharing so the `sharedSameDay` geometry is reachable.
+      // Without this, randomize-from-clean-state never produces same-day
+      // shared batches (variety filter blocks household same-meal repeats);
+      // sharedSameDay was reaching only ~1.7% of seeds. Pre-set 3 shared
+      // dinner cells: this makes Friday/Sunday/Wednesday-lunch sharing
+      // deterministic per seed, and at least one of those will yield a
+      // shared cook anchor most of the time.
+      SHARED_SCHEDULE['Friday_dinner']='shared';
+      SHARED_SCHEDULE['Sunday_dinner']='shared';
+      SHARED_SCHEDULE['Wednesday_lunch']='shared';
       invalidateLeftoverCache();
       randomizeWeek('shared', seed);
       var slots=_smHarvestSlots();
