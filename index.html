@@ -12952,7 +12952,11 @@ window.MPStress=(function(){
     // showed totals that didn't match what runOne measured. Bug fix.
     var dayBal = (typeof _dayBalancedCache==='object' && _dayBalancedCache) ? clone(_dayBalancedCache) : {};
     var leftover = (typeof _leftoverCache==='object' && _leftoverCache) ? clone(_leftoverCache) : null;
-    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),_lastSel:lastSel,_dayBalancedCache:dayBal,_leftoverCache:leftover};
+    // Capture _postRandomizeCache (used by onIngrReset for literal restore).
+    // Without this, calling randomizeWeek() inside a scenario rewrites the
+    // global _postRandomizeCache, contaminating subsequent reset assertions.
+    var postRand = (typeof _postRandomizeCache==='object' && _postRandomizeCache) ? clone(_postRandomizeCache) : {};
+    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),_lastSel:lastSel,_dayBalancedCache:dayBal,_leftoverCache:leftover,_postRandomizeCache:postRand};
   }
   function replace(g,v){Object.keys(g).forEach(function(k){delete g[k];});Object.keys(v).forEach(function(k){g[k]=v[k];});}
   function restore(s){
@@ -12975,6 +12979,10 @@ window.MPStress=(function(){
       _leftoverCache = s._leftoverCache ? clone(s._leftoverCache) : null;
     } else {
       _leftoverCache = null;
+    }
+    if (s._postRandomizeCache) {
+      Object.keys(_postRandomizeCache).forEach(function(k){delete _postRandomizeCache[k];});
+      Object.keys(s._postRandomizeCache).forEach(function(k){_postRandomizeCache[k]=JSON.parse(JSON.stringify(s._postRandomizeCache[k]));});
     }
   }
 
@@ -14814,6 +14822,27 @@ window.MPStress=(function(){
     var inv=verifyInvariants();
     return inv.filter(function(v){return _SM_HARD_KEYS.some(function(k){return v.indexOf(k+' ')===0||v.indexOf(k+':')===0;});}).length;
   }
+  // Cross-cutting invariant: every SHARED_SCHEDULE skip-* cell must have a
+  // corresponding EAT_OUT populated. V10 syncs grid taps to EAT_OUTs; this
+  // validates the data stays in sync after any user/automatic action.
+  // (Reverse direction not checked — EAT_OUT can exist without
+  // SHARED_SCHEDULE if set via per-card pill on a normal cell.)
+  function _smCheckSchedEatOutConsistency(){
+    var problems=[];
+    DAYS.forEach(function(d){
+      ['breakfast','lunch','dinner'].forEach(function(s){
+        var state=SHARED_SCHEDULE[dk(d,s)]||'';
+        var himK=sk('him',d,s), herK=sk('her',d,s);
+        if((state==='skip-him'||state==='skip-both') && !EAT_OUT[himK]){
+          problems.push(himK+' SHARED='+state+' but EAT_OUT missing');
+        }
+        if((state==='skip-her'||state==='skip-both') && !EAT_OUT[herK]){
+          problems.push(herK+' SHARED='+state+' but EAT_OUT missing');
+        }
+      });
+    });
+    return {ok:problems.length===0, msg:problems.length?problems[0]+(problems.length>1?' (+'+(problems.length-1)+' more)':''):''};
+  }
 
   function _smHarvestSlots(){
     var found={solo:null, anchorBatch:null, leftoverDiff:null, sharedSameDay:null, shake:null};
@@ -15028,6 +15057,10 @@ window.MPStress=(function(){
       var n=_smHardCount();
       add('hardInv', n<=baseline.hardCount,
         'op introduced '+(n-baseline.hardCount)+' hard INV fires', baseline.hardCount, n);
+    }
+    function checkSchedEatOut(){
+      var r=_smCheckSchedEatOutConsistency();
+      add('schedEatOutConsistency', r.ok, r.msg);
     }
     function checkRowSum(){
       var sums=_smRowSums(p,d,s, baseline.cookServings);
@@ -15246,6 +15279,7 @@ window.MPStress=(function(){
       checkBatchProp(idx, 'edit');
       checkVegFruitDelta(preIng.dbKey, preIng.role, newAmt - preAmt);
       checkInv();
+      checkSchedEatOut();
       checkBanner('edit', {dbKey:preIng.dbKey, kcalDiff:predictedKcalPerPortion});
       checkWasteHint(preIng.dbKey, 'edit');
     }
@@ -15266,6 +15300,7 @@ window.MPStress=(function(){
       checkDbKeyProp(idx, newKey);
       checkRowSum();
       checkInv();
+      checkSchedEatOut();
       checkBanner('swap', {newDbKey:newKey});
       checkWasteHint(newKey, 'swap');
     }
@@ -15320,6 +15355,7 @@ window.MPStress=(function(){
         add('addIngr_batchProp', true, '', null, 'n/a (single-slot)');
       }
       checkInv();
+      checkSchedEatOut();
       checkBanner('addIngr', {dbKey:dbKey});
     }
 
@@ -15370,6 +15406,7 @@ window.MPStress=(function(){
       }
       add('resetManualSet', manualSetMatch, msMsg||'');
       checkInv();
+      checkSchedEatOut();
       checkBanner('reset');
     }
 
@@ -15402,7 +15439,241 @@ window.MPStress=(function(){
         expectedPinAmt5, pin&&pin.amt);
       add('rebalPin_scalable', pin && pin.scalable===false, 'pin scalable not false');
       checkInv();
+      checkSchedEatOut();
       checkBanner('rebalance', {dbKey:preIng5.dbKey});
+    }
+
+    // ───── slot-level ops (added 2026-05-06+) ─────
+    // These exercise the per-slot user-state machinery (Skip/Eat Out pills,
+    // schedule-grid taps, meal swaps, randomize-persist) and verify the
+    // state-sync invariants land cleanly.
+
+    else if(op==='skipPill'){
+      // Toggle Skip pill ON, verify state, OFF, verify cleanup.
+      // Note: hardInv is NOT checked here. toggleSkip only runs
+      // invalidateLeftoverCache + renderMeals (per-day balance via cache
+      // rebuild) — NOT the cross-person unify/snap pipeline. So INV7
+      // (cross-person ratio) can fire transiently. Production: settles on
+      // next randomize. Test: focus on state-transition correctness.
+      var spK=sk(p,d,s);
+      var preEatOut=!!EAT_OUT[spK];
+      // Toggle ON
+      toggleSkip(p,d,s);
+      add('skipOn_set', !!SKIPPED[spK], 'SKIPPED not set after toggleSkip ON');
+      add('skipOn_manualSet', !!MANUAL_SET[spK], 'MANUAL_SET not set after toggleSkip ON');
+      add('skipOn_eatOutCleared', !EAT_OUT[spK],
+        preEatOut ? 'EAT_OUT should be cleared by toggleSkip ON' : 'EAT_OUT erroneously created');
+      checkSchedEatOut();
+      // Toggle OFF
+      toggleSkip(p,d,s);
+      add('skipOff_cleared', !SKIPPED[spK], 'SKIPPED not cleared after toggleSkip OFF');
+      add('skipOff_manualSetCleared', !MANUAL_SET[spK], 'MANUAL_SET should be cleared after toggleSkip OFF');
+      checkSchedEatOut();
+    }
+
+    else if(op==='eatOutPill'){
+      // Toggle Eat Out pill ON, customize, verify, OFF, verify.
+      // Note: hardInv NOT checked — same reason as skipPill (pipeline not settled).
+      var eoK=sk(p,d,s);
+      var preSkipped=!!SKIPPED[eoK];
+      // Toggle ON
+      toggleEatOut(p,d,s);
+      add('eoOn_set', !!EAT_OUT[eoK], 'EAT_OUT not set after toggleEatOut ON');
+      add('eoOn_manualSet', !!MANUAL_SET[eoK], 'MANUAL_SET not set after toggleEatOut ON');
+      add('eoOn_skippedCleared', !SKIPPED[eoK],
+        preSkipped ? 'SKIPPED should be cleared by toggleEatOut ON' : '');
+      // Customize macros
+      EAT_OUT[eoK].name='Test Restaurant';
+      EAT_OUT[eoK].restaurant='Test Place';
+      EAT_OUT[eoK].kcal=600;
+      EAT_OUT[eoK].pro=30;
+      EAT_OUT[eoK].fat=20;
+      EAT_OUT[eoK].carb=50;
+      add('eoCustomized', EAT_OUT[eoK].name==='Test Restaurant' && EAT_OUT[eoK].kcal===600,
+        'EAT_OUT customization not stored');
+      checkSchedEatOut();
+      // Toggle OFF (this clears customized data — intentional, user
+      // explicitly removed the eat-out)
+      toggleEatOut(p,d,s);
+      add('eoOff_cleared', !EAT_OUT[eoK], 'EAT_OUT not cleared after toggleEatOut OFF');
+      add('eoOff_manualSetCleared', !MANUAL_SET[eoK], 'MANUAL_SET should be cleared after toggleEatOut OFF');
+      checkSchedEatOut();
+    }
+
+    else if(op==='scheduleTapCycle'){
+      // Cycle a cell through SHARED_SCHEDULE states via schedTapLeft/Right.
+      // Verify EAT_OUT auto-creates on entering skip-* and auto-deletes
+      // (placeholders only) on leaving. Customized EAT_OUTs survive.
+      var stHimK=sk('him',d,s), stHerK=sk('her',d,s);
+      // Skip if cell isn't paintable (shake/snack/late_snack not in grid).
+      if(s!=='breakfast' && s!=='lunch' && s!=='dinner'){
+        add('setup', true, '', null, 'cell not in grid (slot='+s+')');
+        return {checks:checks};
+      }
+      // Skip if cell already locked (MANUAL_SET) — schedTap early-returns.
+      if(MANUAL_SET[stHimK] || MANUAL_SET[stHerK]){
+        add('setup', true, '', null, 'cell already MANUAL_SET, tap-cycle would no-op');
+        return {checks:checks};
+      }
+      // Skip if cell already has SHARED_SCHEDULE state — we want a clean cycle from normal.
+      if(SHARED_SCHEDULE[dk(d,s)]){
+        add('setup', true, '', null, 'cell already has SHARED_SCHEDULE state, skipping tap-cycle');
+        return {checks:checks};
+      }
+      // Tap 1: normal → skip-him
+      schedTapLeft(d, s);
+      add('tap1_state', SHARED_SCHEDULE[dk(d,s)]==='skip-him',
+        'expected skip-him, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
+      add('tap1_eatOutHim', !!EAT_OUT[stHimK], 'tap to skip-him should auto-create EAT_OUT[him]');
+      add('tap1_eatOutHerNot', !EAT_OUT[stHerK], 'EAT_OUT[her] should not exist');
+      checkSchedEatOut();
+      // Tap 2: skip-him → skip-both (right tap)
+      schedTapRight(d, s);
+      add('tap2_state', SHARED_SCHEDULE[dk(d,s)]==='skip-both',
+        'expected skip-both, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
+      add('tap2_bothEatOut', !!EAT_OUT[stHimK] && !!EAT_OUT[stHerK], 'both EAT_OUTs should exist');
+      checkSchedEatOut();
+      // Customize her's eat-out
+      EAT_OUT[stHerK].name='Custom Place';
+      EAT_OUT[stHerK].kcal=500;
+      // Tap 3: skip-both → skip-her (left tap clears him's side)
+      schedTapLeft(d, s);
+      add('tap3_state', SHARED_SCHEDULE[dk(d,s)]==='skip-her',
+        'expected skip-her, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
+      add('tap3_himCleared', !EAT_OUT[stHimK], 'EAT_OUT[him] (placeholder) should be cleared');
+      add('tap3_herPreserved',
+        !!EAT_OUT[stHerK] && EAT_OUT[stHerK].name==='Custom Place',
+        'EAT_OUT[her] customized data should remain');
+      checkSchedEatOut();
+      // Tap 4: skip-her → normal (right tap)
+      schedTapRight(d, s);
+      add('tap4_stateCleared', !SHARED_SCHEDULE[dk(d,s)],
+        'expected (empty), got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
+      add('tap4_herCustomizedSurvives',
+        !!EAT_OUT[stHerK] && EAT_OUT[stHerK].name==='Custom Place' && EAT_OUT[stHerK].kcal===500,
+        'EAT_OUT[her] customized must survive transition out of skip-*');
+      // hardInv NOT checked — schedTap mutations don't run unify/snap pipeline.
+      checkSchedEatOut();
+    }
+
+    else if(op==='changeMealOp'){
+      // changeMeal swaps meal ID. Verify SEL + MANUAL_SET set, no batch
+      // propagation (per-slot only).
+      // changeMeal uses globals `person` and `day` (not args) — temporarily
+      // set them so the call targets the right slot.
+      var cmK=sk(p,d,s);
+      var origMeal=getMealId(p,d,s);
+      // Pick a different meal valid for this slot
+      var altMeals=MEALS.filter(function(m){
+        return m.slots && m.slots.indexOf(s)>=0 && m.id!==origMeal && !m.noRandomize;
+      });
+      if(altMeals.length===0){
+        add('setup', true, '', null, 'no alt meal for slot type '+s);
+        return {checks:checks};
+      }
+      var newMealId=altMeals[0].id;
+      // Capture other batch portions' meal IDs (should remain unchanged)
+      var otherPortionMeals={};
+      if(slot.lo && slot.lo.portions){
+        slot.lo.portions.forEach(function(pt){
+          if(pt.p===p && pt.d===d && pt.s===s) return;
+          otherPortionMeals[sk(pt.p,pt.d,pt.s)]=getMealId(pt.p,pt.d,pt.s);
+        });
+      }
+      var prevPerson=person, prevDay=day;
+      person=p; day=d;
+      try { changeMeal(s, newMealId); }
+      finally { person=prevPerson; day=prevDay; }
+      add('cm_sel', SEL[cmK]===newMealId,
+        'SEL not updated to '+newMealId+' (got '+SEL[cmK]+')');
+      add('cm_manualSet', !!MANUAL_SET[cmK], 'changeMeal should set MANUAL_SET');
+      // Verify no propagation to other batch portions
+      var noPropagation=true, propProblem=null;
+      Object.keys(otherPortionMeals).forEach(function(otherK){
+        var parts=otherK.split('_');
+        var otherId=getMealId(parts[0], parts[1], parts[2]);
+        if(otherId !== otherPortionMeals[otherK]){
+          noPropagation=false;
+          propProblem='portion '+otherK+' meal changed: '+otherPortionMeals[otherK]+' → '+otherId;
+        }
+      });
+      add('cm_noPropagation', noPropagation,
+        propProblem || '', null, Object.keys(otherPortionMeals).length===0 ? 'n/a (single-slot)' : 'ok');
+      // hardInv NOT checked — changeMeal doesn't run full pipeline.
+      checkSchedEatOut();
+    }
+
+    else if(op==='randomizePersist'){
+      // Set up user state across multiple slots, run randomize, verify
+      // nothing was wiped or auto-created.
+      // (a) Skip pill on the given slot.
+      // (b) Eat Out pill on a different scratch slot, customized.
+      // (c) Schedule grid tap on a different scratch cell.
+      var rpK=sk(p,d,s);
+      // (a) Skip
+      toggleSkip(p,d,s);
+      var skipOK_pre = SKIPPED[rpK] && MANUAL_SET[rpK];
+      // (b) Find a different non-locked, non-shake slot for eat-out
+      var eoSetup=null;
+      ['him','her'].forEach(function(_p){
+        if(eoSetup) return;
+        DAYS.forEach(function(_d){
+          if(eoSetup) return;
+          ['breakfast','lunch','snack','dinner'].forEach(function(_s){
+            if(eoSetup) return;
+            var k2=sk(_p,_d,_s);
+            if(k2===rpK) return;
+            if(MANUAL_SET[k2]||SKIPPED[k2]||EAT_OUT[k2]) return;
+            eoSetup={p:_p,d:_d,s:_s,k:k2};
+          });
+        });
+      });
+      if(eoSetup){
+        toggleEatOut(eoSetup.p, eoSetup.d, eoSetup.s);
+        EAT_OUT[eoSetup.k].name='Persist Test';
+        EAT_OUT[eoSetup.k].kcal=700;
+        EAT_OUT[eoSetup.k].pro=40;
+      }
+      // (c) Find a different schedule-paintable cell (must be empty SHARED_SCHEDULE + non-MANUAL_SET on both sides)
+      var schSetup=null;
+      DAYS.forEach(function(_d){
+        if(schSetup) return;
+        ['breakfast','lunch','dinner'].forEach(function(_s){
+          if(schSetup) return;
+          if(SHARED_SCHEDULE[dk(_d,_s)]) return;
+          var hk=sk('him',_d,_s), hk2=sk('her',_d,_s);
+          if(MANUAL_SET[hk]||MANUAL_SET[hk2]||SKIPPED[hk]||SKIPPED[hk2]||EAT_OUT[hk]||EAT_OUT[hk2]) return;
+          schSetup={d:_d, s:_s, himK:hk};
+        });
+      });
+      if(schSetup){
+        schedTapLeft(schSetup.d, schSetup.s);
+      }
+      // RUN RANDOMIZE
+      randomizeWeek('shared');
+      // VERIFY all state preserved
+      add('rp_skipPersisted', !!SKIPPED[rpK], 'SKIPPED wiped by randomize');
+      add('rp_skipManualSet', !!MANUAL_SET[rpK], 'MANUAL_SET on skip slot wiped');
+      if(eoSetup){
+        add('rp_eatOutPresent', !!EAT_OUT[eoSetup.k], 'customized EAT_OUT was wiped by randomize');
+        add('rp_eatOutName',
+          EAT_OUT[eoSetup.k] && EAT_OUT[eoSetup.k].name==='Persist Test',
+          'EAT_OUT name lost: '+(EAT_OUT[eoSetup.k] && EAT_OUT[eoSetup.k].name));
+        add('rp_eatOutKcal',
+          EAT_OUT[eoSetup.k] && EAT_OUT[eoSetup.k].kcal===700,
+          'EAT_OUT kcal lost: '+(EAT_OUT[eoSetup.k] && EAT_OUT[eoSetup.k].kcal));
+        add('rp_eatOutManualSet', !!MANUAL_SET[eoSetup.k], 'MANUAL_SET on eat-out wiped');
+      }
+      if(schSetup){
+        add('rp_schedPersisted',
+          SHARED_SCHEDULE[dk(schSetup.d,schSetup.s)]==='skip-him',
+          'SHARED_SCHEDULE wiped: '+(SHARED_SCHEDULE[dk(schSetup.d,schSetup.s)]||'(empty)'));
+        add('rp_schedEatOutPersisted',
+          !!EAT_OUT[schSetup.himK],
+          'grid-painted EAT_OUT wiped by randomize');
+      }
+      checkInv();
+      checkSchedEatOut();
     }
 
     else {
@@ -15420,10 +15691,16 @@ window.MPStress=(function(){
     var verbose=!!opts.verbose;
     var saved=snapshot();
     var GEOMETRIES=['solo','anchorBatch','leftoverDiff','sharedSameDay','shake'];
-    var OPS=['edit','swap','addIngr','reset','rebalance'];
+    // Ingredient-level ops (existing) + slot-level ops (added 2026-05-06+).
+    // Slot ops exercise per-card pills (Skip/Eat Out), schedule-grid taps,
+    // meal swaps, and randomize-persist behavior. All ops also run the
+    // cross-cutting schedEatOutConsistency invariant.
+    var OPS=['edit','swap','addIngr','reset','rebalance',
+             'skipPill','eatOutPill','scheduleTapCycle','changeMealOp','randomizePersist'];
     var agg={
       scenarios:0,passed:0,failed:0,
-      byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0}},
+      byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
+            skipPill:{p:0,f:0},eatOutPill:{p:0,f:0},scheduleTapCycle:{p:0,f:0},changeMealOp:{p:0,f:0},randomizePersist:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
