@@ -2900,7 +2900,7 @@ function schedTapDay(d){
   updateSchedule();
 }
 function setSharedPreset(preset){
-  if(preset==='clear'){SHARED_SCHEDULE={};saveSharedSchedule();renderMeals();return;}
+  if(preset==='clear'){SHARED_SCHEDULE={};_syncEatOutsToSharedSchedule();saveSharedSchedule();renderMeals();return;}
   // Toggle: if all days for this slot are already shared, remove them. Otherwise add them.
   const slot=preset==='breakfasts'?'breakfast':preset==='lunches'?'lunch':preset==='dinners'?'dinner':null;
   if(slot){
@@ -2913,6 +2913,7 @@ function setSharedPreset(preset){
       else SHARED_SCHEDULE[k]='shared';
     });
   }
+  _syncEatOutsToSharedSchedule();
   saveSharedSchedule();
   renderMeals();
 }
@@ -3778,7 +3779,39 @@ function stampSel(key,mealId){
   if(!weekData[activeWeek].ts)weekData[activeWeek].ts={};
   weekData[activeWeek].ts[key]=Date.now();
 }
-function updateSchedule(){saveSharedSchedule();renderMeals();}
+function _isEatOutCustomized(k){
+  // True iff the user has filled in any eat-out detail (not just a blank
+  // placeholder). Customized entries survive transitions out of skip-*.
+  var eo=EAT_OUT[k];
+  return !!(eo && (eo.name || eo.restaurant || eo.kcal!=null || eo.pro!=null || eo.fat!=null || eo.carb!=null));
+}
+function _syncEatOutsToSharedSchedule(){
+  // Reconcile EAT_OUT against SHARED_SCHEDULE for every grid cell. Skip-*
+  // states ensure a placeholder EAT_OUT exists; non-skip states delete the
+  // placeholder (preserving any user-customized entry). Doesn't touch
+  // MANUAL_SET — the schedule grid's tap handlers early-return on
+  // MANUAL_SET, so locking would prevent re-painting. Locking from
+  // randomize is already covered by EAT_OUT[k] in isLockedForRandomize.
+  // Called from updateSchedule and setSharedPreset on every grid edit.
+  DAYS.forEach(function(d){
+    ['breakfast','lunch','dinner'].forEach(function(s){
+      var state=SHARED_SCHEDULE[dk(d,s)]||'';
+      var himK=sk('him',d,s);
+      var herK=sk('her',d,s);
+      if(state==='skip-him'||state==='skip-both'){
+        if(!EAT_OUT[himK]) EAT_OUT[himK]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+      } else if(EAT_OUT[himK] && !_isEatOutCustomized(himK)){
+        delete EAT_OUT[himK];
+      }
+      if(state==='skip-her'||state==='skip-both'){
+        if(!EAT_OUT[herK]) EAT_OUT[herK]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+      } else if(EAT_OUT[herK] && !_isEatOutCustomized(herK)){
+        delete EAT_OUT[herK];
+      }
+    });
+  });
+}
+function updateSchedule(){_syncEatOutsToSharedSchedule();saveSharedSchedule();renderMeals();}
 
 function safeId(s){return s.replace(/[^a-zA-Z0-9_-]/g,'_')}
 
