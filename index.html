@@ -3987,6 +3987,72 @@ function _capturePostRandomizeSnapshot(){
   });
 }
 
+// 2026-05-06+: Equalize per-person batch portions. INV1 invariant:
+// same-person leftover amounts = cook-day amounts (1 pot, N portions —
+// each of THAT person's portions gets the same per-portion size).
+//
+// Why this is needed: getDayBalancedIngredients copies cook→leftover via
+// .map() (snapshot at line ~4207). If pipeline passes later mutate the
+// cook's amounts (e.g. Monday's day balancer scaling cook up to absorb
+// a skipped breakfast), the leftover's snapshot never sees the new
+// scale. snapBatchTotals's per-portion proportional-redistribute then
+// preserves whatever split was there (each portion gets `total*share`).
+// unifyCrossPersonRatios for cross-person batches splits per-portion by
+// each PORTION's slot kcal budget — but two of him's portions in the
+// batch can have different slot budgets (e.g. his Monday lunch with
+// breakfast skipped vs his Wednesday lunch normal). INV1 then fires.
+//
+// Approach: group portions by person; for each person with ≥2 portions
+// in the batch, average those portions' amounts (per ingredient) and
+// write back. Cross-person batches still get per-person split via
+// unifyCrossPersonRatios; this just enforces equality within each
+// person's portions.
+function _syncSamePersonBatchPortions(){
+  var leftovers=computeLeftovers();
+  var processed={};
+  Object.keys(leftovers).forEach(function(k){
+    var lo=leftovers[k];
+    // Only process anchors (cook entries) with ≥2 portions.
+    if(!lo || lo.isLeftover) return;
+    if(!lo.portions || lo.portions.length<2) return;
+    var first=lo.portions[0];
+    var anchorKey=sk(first.p, first.d, first.s);
+    if(processed[anchorKey]) return;
+    processed[anchorKey]=true;
+    // Group portions by person
+    var byPerson={};
+    lo.portions.forEach(function(pt){
+      (byPerson[pt.p]=byPerson[pt.p]||[]).push(pt);
+    });
+    var anchorCache=_dayBalancedCache[pk(first.p, first.d)];
+    if(!anchorCache || !anchorCache[first.s]) return;
+    var anchorIngrs=anchorCache[first.s];
+    // Equalize each person's portions independently
+    Object.keys(byPerson).forEach(function(p){
+      var ports=byPerson[p];
+      if(ports.length<2) return; // single portion for this person — nothing to equalize
+      anchorIngrs.forEach(function(ingr, idx){
+        var totalAmt=0, valid=0;
+        ports.forEach(function(pt){
+          var c=_dayBalancedCache[pk(pt.p, pt.d)];
+          if(c && c[pt.s] && c[pt.s][idx] && c[pt.s][idx].dbKey===ingr.dbKey){
+            totalAmt += c[pt.s][idx].amt;
+            valid++;
+          }
+        });
+        if(valid !== ports.length) return;
+        var avg=totalAmt / ports.length;
+        ports.forEach(function(pt){
+          var c=_dayBalancedCache[pk(pt.p, pt.d)];
+          if(c && c[pt.s] && c[pt.s][idx] && c[pt.s][idx].dbKey===ingr.dbKey){
+            c[pt.s][idx].amt = avg;
+          }
+        });
+      });
+    });
+  });
+}
+
 function getDayBalancedIngredients(p,d){
   const key=pk(p,d);
   if(_dayBalancedCache[key])return _dayBalancedCache[key];
@@ -10053,6 +10119,11 @@ function runBalanceAdjusters(){
     // off perWhole boundaries set by freezeTripTotals. Will re-enable after
     // it's taught to skip frozen items (or moved to run BEFORE freeze).
     var b=false; // var b=boostBatchVegForDailyTarget(); if(b)changed=true;
+    // 2026-05-06+: Equalize per-person batch portions (1 pot, N portions
+    // for each person). Runs INSIDE the convergence loop so subsequent
+    // snap/unify iterations see equal portions and stabilize. NOT tracked
+    // for `changed` exit (asymptotic convergence, similar to unify).
+    _syncSamePersonBatchPortions();
     if(_rec)_rec.iters.push({u:u,s:s,w:w,g:g,b:b});
   }
   // Hit safety cap: still `changed` after exhausting iterations.
