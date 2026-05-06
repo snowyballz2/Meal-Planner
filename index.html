@@ -16214,6 +16214,16 @@ window.MPStress=(function(){
         else if(filtered.length!==ov.length) OVERRIDES[k]=filtered;
       });
       Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+      // 2026-05-06+: Test determinism — also wipe skip/eat-out and any
+      // SHARED_SCHEDULE skip-* states. These can leak through localStorage
+      // (weekData) from prior interactive sessions or eval calls,
+      // contaminating perSeedSnap. Preserve 'shared' states (the test's
+      // intentional baseline; the page default is Mon-Sun dinners shared).
+      Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
+      Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
+      Object.keys(SHARED_SCHEDULE).forEach(function(k){
+        if(/^skip-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
+      });
     }
     function recordCheck(c){
       agg.byAssertion[c.assertion]=agg.byAssertion[c.assertion]||{p:0,f:0};
@@ -16346,6 +16356,13 @@ window.MPStress=(function(){
         else if(f.length!==ov.length) OVERRIDES[k]=f;
       });
       Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+      // 2026-05-06+: Same test-determinism wipe as runSlotMod's. Prevents
+      // localStorage state-leak from contaminating perSeedSnap.
+      Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
+      Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
+      Object.keys(SHARED_SCHEDULE).forEach(function(k){
+        if(/^skip-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
+      });
     }
 
     var CHAINS=[
