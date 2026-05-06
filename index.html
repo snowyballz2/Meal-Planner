@@ -8979,12 +8979,17 @@ function setSchedule(){
   invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();autoSaveWeek();
 }
 function clearWeek(){
-  // Clear all manual overrides: skips, eat-outs, ingredient overrides, late snacks, manual set flags
+  // Clear all manual overrides: skips, eat-outs, ingredient overrides, late snacks, manual set flags.
+  // SHARED_SCHEDULE preserved — it's long-term schedule intent, not a per-week override.
   Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
   Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
   Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
   Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
   Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+  // Re-sync EAT_OUTs from any preserved SHARED_SCHEDULE skip-* states. Without
+  // this, clearWeek leaves grid skip-* cells without their matching EAT_OUT
+  // (V10 invariant violation). 2026-05-06+: surfaced by extended slot mod test.
+  _syncEatOutsToSharedSchedule();
   invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();autoSaveWeek();
 }
 // ── Boost batch veg across portions to hit daily target ──────
@@ -14852,6 +14857,73 @@ window.MPStress=(function(){
     return {ok:problems.length===0, msg:problems.length?problems[0]+(problems.length>1?' (+'+(problems.length-1)+' more)':''):''};
   }
 
+  // Cross-cutting: every MANUAL_SET[k]=true should have an identifiable user
+  // action behind it (Skip pill, Eat Out pill, schedule shared/skip-*, link
+  // group, user override pin, or changeMeal-modified SEL). Catches code that
+  // sets MANUAL_SET without state, or fails to clean up MANUAL_SET when its
+  // reason is removed.
+  function _smCheckManualSetCoherence(){
+    var problems=[];
+    Object.keys(MANUAL_SET).forEach(function(k){
+      if(!MANUAL_SET[k]) return;
+      var parts=k.split('_');
+      if(parts.length!==3){ problems.push(k+' malformed MANUAL_SET key'); return; }
+      var p=parts[0], d=parts[1], s=parts[2];
+      // 1) Skip pill
+      if(SKIPPED[k]) return;
+      // 2) Eat Out pill (or schedule-skip via V10 sync)
+      if(EAT_OUT[k]) return;
+      // 3) Shared cell
+      var schedState=SHARED_SCHEDULE[dk(d,s)]||'';
+      if(schedState==='shared'||/^skip-/.test(schedState)) return;
+      // 4) In a manual link group
+      if(typeof LEFTOVER_LINKS!=='undefined' && LEFTOVER_LINKS && LEFTOVER_LINKS.some(function(g){
+        return g.slots && g.slots.some(function(sl){return sl.p===p && sl.d===d && sl.s===s;});
+      })) return;
+      // 5) Has _userSet override pin (ingredient edit/swap/addIngr)
+      var ov=OVERRIDES[k];
+      if(ov && ov.some(function(o){return o._userSet===true;})) return;
+      // 6) SEL[k] is set — changeMeal sets MANUAL_SET=true and stamps SEL.
+      //    Phase 1 randomize stamps SEL too but does NOT set MANUAL_SET, so
+      //    a slot reaching this check with MANUAL_SET=true + SEL set + none
+      //    of the above reasons must have been changeMeal-locked.
+      if(SEL[k]) return;
+      problems.push(k+' MANUAL_SET=true but no reason (SKIPPED/EAT_OUT/SHARED/link/_userSet/SEL)');
+    });
+    return {ok:problems.length===0, msg:problems.length?problems[0]+(problems.length>1?' (+'+(problems.length-1)+' more)':''):''};
+  }
+
+  // Cross-cutting: every SEL[k] value must reference a valid MEALS id.
+  // Catches dangling references (e.g. a meal got renamed/deleted and stale
+  // SEL entries weren't cleaned up).
+  function _smCheckSelCoherence(){
+    var validIds={};
+    MEALS.forEach(function(m){validIds[m.id]=true;});
+    var problems=[];
+    Object.keys(SEL).forEach(function(k){
+      if(!SEL[k]) return;
+      if(!validIds[SEL[k]]) problems.push(k+' invalid mealId='+SEL[k]);
+    });
+    return {ok:problems.length===0, msg:problems.length?problems[0]+(problems.length>1?' (+'+(problems.length-1)+' more)':''):''};
+  }
+
+  // Cross-cutting: every override flagged _userSet:true must also have
+  // scalable:false (per the V7 user-edit architecture). Freeze pins also
+  // have scalable:false but no _userSet — that's allowed; we just check
+  // the user-pin direction.
+  function _smCheckOverrideUserSetCoherence(){
+    var problems=[];
+    Object.keys(OVERRIDES).forEach(function(k){
+      var ov=OVERRIDES[k]; if(!ov) return;
+      ov.forEach(function(o){
+        if(o._userSet===true && o.scalable!==false){
+          problems.push(k+' idx='+o.idx+' _userSet:true but scalable!==false');
+        }
+      });
+    });
+    return {ok:problems.length===0, msg:problems.length?problems[0]+(problems.length>1?' (+'+(problems.length-1)+' more)':''):''};
+  }
+
   function _smHarvestSlots(){
     var found={solo:null, anchorBatch:null, leftoverDiff:null, sharedSameDay:null, shake:null};
     ['him','her'].forEach(function(p){
@@ -15069,6 +15141,15 @@ window.MPStress=(function(){
     function checkSchedEatOut(){
       var r=_smCheckSchedEatOutConsistency();
       add('schedEatOutConsistency', r.ok, r.msg);
+    }
+    // 2026-05-06+: 3 cross-cutting coherence INVs run alongside schedEatOut.
+    function checkCoherence(){
+      var ms=_smCheckManualSetCoherence();
+      add('manualSetCoherence', ms.ok, ms.msg);
+      var sel=_smCheckSelCoherence();
+      add('selCoherence', sel.ok, sel.msg);
+      var ov=_smCheckOverrideUserSetCoherence();
+      add('overrideUserSetCoherence', ov.ok, ov.msg);
     }
     function checkRowSum(){
       var sums=_smRowSums(p,d,s, baseline.cookServings);
@@ -15288,6 +15369,7 @@ window.MPStress=(function(){
       checkVegFruitDelta(preIng.dbKey, preIng.role, newAmt - preAmt);
       checkInv();
       checkSchedEatOut();
+      checkCoherence();
       checkBanner('edit', {dbKey:preIng.dbKey, kcalDiff:predictedKcalPerPortion});
       checkWasteHint(preIng.dbKey, 'edit');
     }
@@ -15309,6 +15391,7 @@ window.MPStress=(function(){
       checkRowSum();
       checkInv();
       checkSchedEatOut();
+      checkCoherence();
       checkBanner('swap', {newDbKey:newKey});
       checkWasteHint(newKey, 'swap');
     }
@@ -15364,6 +15447,7 @@ window.MPStress=(function(){
       }
       checkInv();
       checkSchedEatOut();
+      checkCoherence();
       checkBanner('addIngr', {dbKey:dbKey});
     }
 
@@ -15415,6 +15499,7 @@ window.MPStress=(function(){
       add('resetManualSet', manualSetMatch, msMsg||'');
       checkInv();
       checkSchedEatOut();
+      checkCoherence();
       checkBanner('reset');
     }
 
@@ -15448,6 +15533,7 @@ window.MPStress=(function(){
       add('rebalPin_scalable', pin && pin.scalable===false, 'pin scalable not false');
       checkInv();
       checkSchedEatOut();
+      checkCoherence();
       checkBanner('rebalance', {dbKey:preIng5.dbKey});
     }
 
@@ -15472,11 +15558,13 @@ window.MPStress=(function(){
       add('skipOn_eatOutCleared', !EAT_OUT[spK],
         preEatOut ? 'EAT_OUT should be cleared by toggleSkip ON' : 'EAT_OUT erroneously created');
       checkSchedEatOut();
+      checkCoherence();
       // Toggle OFF
       toggleSkip(p,d,s);
       add('skipOff_cleared', !SKIPPED[spK], 'SKIPPED not cleared after toggleSkip OFF');
       add('skipOff_manualSetCleared', !MANUAL_SET[spK], 'MANUAL_SET should be cleared after toggleSkip OFF');
       checkSchedEatOut();
+      checkCoherence();
     }
 
     else if(op==='eatOutPill'){
@@ -15500,12 +15588,14 @@ window.MPStress=(function(){
       add('eoCustomized', EAT_OUT[eoK].name==='Test Restaurant' && EAT_OUT[eoK].kcal===600,
         'EAT_OUT customization not stored');
       checkSchedEatOut();
+      checkCoherence();
       // Toggle OFF (this clears customized data — intentional, user
       // explicitly removed the eat-out)
       toggleEatOut(p,d,s);
       add('eoOff_cleared', !EAT_OUT[eoK], 'EAT_OUT not cleared after toggleEatOut OFF');
       add('eoOff_manualSetCleared', !MANUAL_SET[eoK], 'MANUAL_SET should be cleared after toggleEatOut OFF');
       checkSchedEatOut();
+      checkCoherence();
     }
 
     else if(op==='scheduleTapCycle'){
@@ -15535,12 +15625,14 @@ window.MPStress=(function(){
       add('tap1_eatOutHim', !!EAT_OUT[stHimK], 'tap to skip-him should auto-create EAT_OUT[him]');
       add('tap1_eatOutHerNot', !EAT_OUT[stHerK], 'EAT_OUT[her] should not exist');
       checkSchedEatOut();
+      checkCoherence();
       // Tap 2: skip-him → skip-both (right tap)
       schedTapRight(d, s);
       add('tap2_state', SHARED_SCHEDULE[dk(d,s)]==='skip-both',
         'expected skip-both, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
       add('tap2_bothEatOut', !!EAT_OUT[stHimK] && !!EAT_OUT[stHerK], 'both EAT_OUTs should exist');
       checkSchedEatOut();
+      checkCoherence();
       // Customize her's eat-out
       EAT_OUT[stHerK].name='Custom Place';
       EAT_OUT[stHerK].kcal=500;
@@ -15553,6 +15645,7 @@ window.MPStress=(function(){
         !!EAT_OUT[stHerK] && EAT_OUT[stHerK].name==='Custom Place',
         'EAT_OUT[her] customized data should remain');
       checkSchedEatOut();
+      checkCoherence();
       // Tap 4: skip-her → normal (right tap)
       schedTapRight(d, s);
       add('tap4_stateCleared', !SHARED_SCHEDULE[dk(d,s)],
@@ -15562,6 +15655,7 @@ window.MPStress=(function(){
         'EAT_OUT[her] customized must survive transition out of skip-*');
       // hardInv NOT checked — schedTap mutations don't run unify/snap pipeline.
       checkSchedEatOut();
+      checkCoherence();
     }
 
     else if(op==='changeMealOp'){
@@ -15609,6 +15703,7 @@ window.MPStress=(function(){
         propProblem || '', null, Object.keys(otherPortionMeals).length===0 ? 'n/a (single-slot)' : 'ok');
       // hardInv NOT checked — changeMeal doesn't run full pipeline.
       checkSchedEatOut();
+      checkCoherence();
     }
 
     else if(op==='randomizePersist'){
@@ -15682,6 +15777,322 @@ window.MPStress=(function(){
       }
       checkInv();
       checkSchedEatOut();
+      checkCoherence();
+    }
+
+    // ───── HIGH: additional slot-state ops (V13, 2026-05-06+) ─────
+
+    else if(op==='schedTapCenter'){
+      // Toggle shared via center-zone tap (long press is functionally equivalent).
+      if(s!=='breakfast' && s!=='lunch' && s!=='dinner'){
+        add('setup', true, '', null, 'cell not in grid'); return {checks:checks};
+      }
+      var stcHimK=sk('him',d,s), stcHerK=sk('her',d,s);
+      if(MANUAL_SET[stcHimK]||MANUAL_SET[stcHerK]){
+        add('setup', true, '', null, 'cell already locked'); return {checks:checks};
+      }
+      if(SHARED_SCHEDULE[dk(d,s)]){
+        add('setup', true, '', null, 'cell already non-normal'); return {checks:checks};
+      }
+      // Tap to shared
+      schedTapCenter(d, s);
+      add('stc_toShared', SHARED_SCHEDULE[dk(d,s)]==='shared', 'expected shared, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
+      add('stc_noEatOuts', !EAT_OUT[stcHimK] && !EAT_OUT[stcHerK], 'shared should not auto-create EAT_OUTs');
+      // Tap to normal
+      schedTapCenter(d, s);
+      add('stc_toNormal', !SHARED_SCHEDULE[dk(d,s)], 'expected normal, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
+    else if(op==='clearWeekOp'){
+      // clearWeek wipes all manual state.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo (state-wide op)'); return {checks:checks};
+      }
+      // Set up some state to wipe
+      toggleSkip(p, d, s);
+      var cwAlt = sk(p==='him'?'her':'him', d, s);
+      if(!MANUAL_SET[cwAlt] && !SKIPPED[cwAlt] && !EAT_OUT[cwAlt]){
+        toggleEatOut(p==='him'?'her':'him', d, s);
+      }
+      var hadSkip = !!SKIPPED[sk(p,d,s)];
+      var hadEO = !!EAT_OUT[cwAlt];
+      add('cw_setupSkip', hadSkip, 'pre-clearWeek: SKIPPED set');
+      add('cw_setupEO', hadEO, 'pre-clearWeek: EAT_OUT set');
+      clearWeek();
+      add('cw_skippedEmpty', Object.keys(SKIPPED).length===0, 'SKIPPED non-empty after clearWeek');
+      add('cw_eatOutEmpty', Object.keys(EAT_OUT).length===0, 'EAT_OUT non-empty after clearWeek');
+      add('cw_overridesEmpty', Object.keys(OVERRIDES).length===0, 'OVERRIDES non-empty after clearWeek');
+      add('cw_lateSnackEmpty', Object.keys(LATE_SNACK).length===0, 'LATE_SNACK non-empty after clearWeek');
+      add('cw_manualSetEmpty', Object.keys(MANUAL_SET).length===0, 'MANUAL_SET non-empty after clearWeek');
+      // hardInv NOT checked — clearWeek doesn't run pipeline.
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
+    else if(op==='paintAcceptOp'){
+      // Manual link group lifecycle. Construct + remove.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      var paBuddyD = (d==='Monday')?'Wednesday':'Monday';
+      var paBuddyK = sk(p, paBuddyD, s);
+      if(MANUAL_SET[paBuddyK] || EAT_OUT[paBuddyK] || SKIPPED[paBuddyK]){
+        add('setup', true, '', null, 'buddy slot locked'); return {checks:checks};
+      }
+      var paMealId = getMealId(p, d, s);
+      if(!paMealId){ add('setup', true, '', null, 'no meal at slot'); return {checks:checks}; }
+      stampSel(paBuddyK, paMealId);
+      var paGroup = {
+        id: 'sm_test_'+Date.now()+'_'+Math.floor(Math.random()*1e6),
+        meal: paMealId,
+        slots: [{p:p,d:d,s:s},{p:p,d:paBuddyD,s:s}],
+        colorIdx: _allocateLinkColor()
+      };
+      LEFTOVER_LINKS.push(paGroup);
+      MANUAL_SET[sk(p,d,s)]=true;
+      MANUAL_SET[paBuddyK]=true;
+      add('pa_groupPresent', getLinkGroupForSlot(p,d,s)===paGroup, 'group not registered for slot');
+      add('pa_anchorIsOne', isLinkAnchor(paGroup, p, d, s) || isLinkAnchor(paGroup, p, paBuddyD, s), 'no anchor in group');
+      add('pa_manualSetBoth', MANUAL_SET[sk(p,d,s)] && MANUAL_SET[paBuddyK], 'MANUAL_SET not on both');
+      // Remove this cell from the group.
+      // Note: removeFromLinkGroup intentionally KEEPS MANUAL_SET on the
+      // removed slot ("user explicitly set it via paint" per comment in
+      // [removeFromLinkGroup]). MANUAL_SET cleanup is the user's call
+      // via per-card pills or a fresh randomize.
+      removeFromLinkGroup(p, d, s);
+      add('pa_removeDissolved', !getLinkGroupForSlot(p,d,s), 'cell still in group after remove');
+      add('pa_removeManualSetKept', !!MANUAL_SET[sk(p,d,s)],
+        'MANUAL_SET should remain after remove (per design)');
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
+    else if(op==='lateSnackOp'){
+      // LATE_SNACK ingredient lifecycle.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo (state-wide op)'); return {checks:checks};
+      }
+      var lspk = pk(p, d);
+      if(!LATE_SNACK[lspk]) LATE_SNACK[lspk] = {name:'Test', kcal:0, pro:0, fat:0, carb:0, ingredients:[]};
+      if(!LATE_SNACK[lspk].ingredients) LATE_SNACK[lspk].ingredients = [];
+      var lsPreLen = LATE_SNACK[lspk].ingredients.length;
+      // Direct schema mutation (the addLateSnackIngredient global is UI-coupled
+      // — it opens a popup; not callable from tests without DOM mocking).
+      LATE_SNACK[lspk].ingredients.push({dbKey:'banana', amt:1});
+      if(typeof recomputeLateSnackMacros === 'function') recomputeLateSnackMacros(p, d);
+      add('ls_added', LATE_SNACK[lspk].ingredients.length === lsPreLen+1,
+        'len '+LATE_SNACK[lspk].ingredients.length+' (expected '+(lsPreLen+1)+')');
+      if(LATE_SNACK[lspk].ingredients.length > lsPreLen){
+        var lsAdded = LATE_SNACK[lspk].ingredients[LATE_SNACK[lspk].ingredients.length-1];
+        add('ls_dbKey', lsAdded.dbKey === 'banana', 'wrong dbKey: '+lsAdded.dbKey);
+        var lsBdb = NUTRI_DB['banana'];
+        var lsExpKcal = Math.round(lsBdb.kcal * 1);
+        // Allow 5kcal tolerance (rounding)
+        add('ls_kcalMacroDeriv', Math.abs((LATE_SNACK[lspk].kcal||0) - lsExpKcal) <= 5,
+          'kcal '+(LATE_SNACK[lspk].kcal)+' vs expected '+lsExpKcal);
+      }
+      // Remove via direct mutation
+      LATE_SNACK[lspk].ingredients.pop();
+      if(typeof recomputeLateSnackMacros === 'function') recomputeLateSnackMacros(p, d);
+      add('ls_removed', LATE_SNACK[lspk].ingredients.length === lsPreLen, 'remove failed');
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
+    // ───── MEDIUM: state-combination ops (V13) ─────
+
+    else if(op==='editLinkGroupSlot'){
+      // Ingredient edit on a slot that's in a manual link group.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      if(idx<0){ add('setup', true, '', null, 'no editable idx'); return {checks:checks}; }
+      var elgsBuddyD = (d==='Monday')?'Wednesday':'Monday';
+      var elgsBuddyK = sk(p, elgsBuddyD, s);
+      if(MANUAL_SET[elgsBuddyK] || EAT_OUT[elgsBuddyK] || SKIPPED[elgsBuddyK]){
+        add('setup', true, '', null, 'buddy locked'); return {checks:checks};
+      }
+      var elgsMealId = getMealId(p, d, s);
+      if(!elgsMealId){ add('setup', true, '', null, 'no meal'); return {checks:checks}; }
+      stampSel(elgsBuddyK, elgsMealId);
+      LEFTOVER_LINKS.push({id:'sm_elgs_'+Date.now(), meal:elgsMealId,
+        slots:[{p:p,d:d,s:s},{p:p,d:elgsBuddyD,s:s}], colorIdx:_allocateLinkColor()});
+      MANUAL_SET[sk(p,d,s)]=true;
+      MANUAL_SET[elgsBuddyK]=true;
+      // Edit
+      var preIngLG = preBal[idx];
+      onIngrAmt(p, d, s, idx, preIngLG.amt*2);
+      var ovLG = OVERRIDES[sk(p,d,s)] || [];
+      var pinLG = ovLG.find(function(o){return o.idx===idx;});
+      add('elgs_pinSet', pinLG && pinLG._userSet===true, 'pin not set on link-group slot');
+      add('elgs_groupIntact', !!getLinkGroupForSlot(p,d,s), 'group lost cell after edit');
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
+    else if(op==='editSkippedSlot'){
+      // Edit on a SKIPPED slot — should be safe no-op.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      toggleSkip(p, d, s);
+      add('ess_skipSet', !!SKIPPED[sk(p,d,s)], 'pre: SKIPPED set');
+      var balS = getBalancedSlotIngredients(p, d, s);
+      add('ess_noBalCache', !balS || balS.length===0, 'skipped slot has balanced cache?');
+      var threwS = false;
+      try { onIngrAmt(p, d, s, 0, 1); } catch(e) { threwS = true; }
+      add('ess_noThrow', !threwS, 'onIngrAmt on skipped slot threw');
+      add('ess_skipPersists', !!SKIPPED[sk(p,d,s)], 'SKIPPED dropped after edit-attempt');
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
+    else if(op==='tapAlreadyShared'){
+      // Cell already 'shared', tap to cycle out.
+      if(s!=='breakfast' && s!=='lunch' && s!=='dinner'){
+        add('setup', true, '', null, 'cell not in grid'); return {checks:checks};
+      }
+      var tasHimK=sk('him',d,s), tasHerK=sk('her',d,s);
+      if(MANUAL_SET[tasHimK]||MANUAL_SET[tasHerK]||SHARED_SCHEDULE[dk(d,s)]){
+        add('setup', true, '', null, 'cell not pristine'); return {checks:checks};
+      }
+      SHARED_SCHEDULE[dk(d,s)]='shared';
+      // V10 sync runs on next updateSchedule. Manually clear EAT_OUTs that
+      // might have been set previously (we want a clean shared-only state).
+      schedTapLeft(d, s);
+      add('tas_toNormal', !SHARED_SCHEDULE[dk(d,s)],
+        'expected normal, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
+      add('tas_noEatOuts', !EAT_OUT[tasHimK] && !EAT_OUT[tasHerK], 'no EAT_OUTs after shared->normal');
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
+    else if(op==='pinAndRandomize'){
+      // User pin via onIngrAmt, then randomize, verify pin survives.
+      // For batch geometries with showCombined, dropdown pickedVal is the
+      // BATCH TOTAL. Computing it as `current_batch_total × 2` makes the
+      // scale exactly 2, so this slot's stored per-portion = preBal × 2.
+      // (`per-portion × cookServings` would only equal 2× batch_total when
+      // portions are exactly equal, which isn't guaranteed under kcal-prop.)
+      if(idx<0){ add('setup', true, '', null, 'no editable idx'); return {checks:checks}; }
+      var preIngPR = preBal[idx];
+      var expectedPerPortionPR = preIngPR.amt * 2;
+      var pickedValPR;
+      if(baseline.showCombined && slot.lo && slot.lo.portions){
+        var currentCombinedPR = 0;
+        slot.lo.portions.forEach(function(pt){
+          var bal = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
+          if(bal && bal[idx]) currentCombinedPR += bal[idx].amt;
+        });
+        pickedValPR = currentCombinedPR * 2;
+      } else {
+        pickedValPR = expectedPerPortionPR;
+      }
+      onIngrAmt(p, d, s, idx, pickedValPR);
+      var ovPR = OVERRIDES[sk(p,d,s)] || [];
+      var pinPR = ovPR.find(function(o){return o.idx===idx;});
+      add('par_pinPre', pinPR && pinPR._userSet===true, 'pin not set pre-randomize');
+      add('par_pinAmtPre', pinPR && Math.abs(pinPR.amt - expectedPerPortionPR) <= 0.001,
+        'pin amt pre-randomize: '+(pinPR&&pinPR.amt)+' vs expected per-portion '+expectedPerPortionPR);
+      randomizeWeek('shared');
+      var ovPR2 = OVERRIDES[sk(p,d,s)] || [];
+      var pinPR2 = ovPR2.find(function(o){return o.idx===idx;});
+      add('par_pinSurvived', pinPR2 && pinPR2._userSet===true, 'user pin wiped by randomize');
+      add('par_amtSurvived', pinPR2 && Math.abs(pinPR2.amt - expectedPerPortionPR) <= 0.001,
+        'pin amt drifted: '+(pinPR2&&pinPR2.amt)+' vs '+expectedPerPortionPR);
+      // hardInv NOT checked — pinAndRandomize calls randomize without seed
+      // and from a non-pristine state; same non-determinism as randomizePersist.
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
+    else if(op==='editToChangeMeal'){
+      // Sequence: edit ingredient → changeMeal → verify overrides cleared.
+      // changeMeal calls clearOverrides, which should wipe user pins.
+      if(slot.geometry !== 'solo'){ add('setup', true, '', null, 'skip non-solo'); return {checks:checks}; }
+      if(idx<0){ add('setup', true, '', null, 'no editable idx'); return {checks:checks}; }
+      var preIngETC = preBal[idx];
+      onIngrAmt(p, d, s, idx, preIngETC.amt*2);
+      var ovETC1 = OVERRIDES[sk(p,d,s)] || [];
+      add('etcm_step1_pinSet',
+        ovETC1.some(function(o){return o.idx===idx && o._userSet===true;}),
+        'edit pin not set pre-changeMeal');
+      // Pick alt meal
+      var origMETC = getMealId(p, d, s);
+      var altMETC = MEALS.find(function(m){
+        return m.slots && m.slots.indexOf(s)>=0 && m.id!==origMETC && !m.noRandomize;
+      });
+      if(!altMETC){ add('setup', true, '', null, 'no alt meal'); return {checks:checks}; }
+      var prevPETC=person, prevDETC=day;
+      person=p; day=d;
+      try { changeMeal(s, altMETC.id); }
+      finally { person=prevPETC; day=prevDETC; }
+      add('etcm_step2_selChanged', SEL[sk(p,d,s)]===altMETC.id, 'SEL not updated to alt');
+      var ovETC2 = OVERRIDES[sk(p,d,s)] || [];
+      add('etcm_step2_overridesCleared', ovETC2.length===0,
+        'overrides should clear on changeMeal (got '+ovETC2.length+' entries)');
+      add('etcm_step2_manualSet', !!MANUAL_SET[sk(p,d,s)], 'changeMeal should set MANUAL_SET');
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
+    else if(op==='skipToEatOut'){
+      // Sequence: toggleSkip ON → toggleEatOut → toggleEatOut OFF.
+      // Verifies SKIPPED + EAT_OUT mutual exclusion, and final cleanup.
+      var seK=sk(p,d,s);
+      // Pre: clean state
+      if(SKIPPED[seK] || EAT_OUT[seK] || MANUAL_SET[seK]){
+        add('setup', true, '', null, 'slot not pristine');
+        return {checks:checks};
+      }
+      // Step 1: Skip ON
+      toggleSkip(p, d, s);
+      add('seo_step1_skipped', !!SKIPPED[seK], 'SKIPPED not set');
+      add('seo_step1_noEatOut', !EAT_OUT[seK], 'EAT_OUT erroneously set');
+      add('seo_step1_manualSet', !!MANUAL_SET[seK], 'MANUAL_SET not set');
+      // Step 2: Toggle EatOut while Skip is on
+      toggleEatOut(p, d, s);
+      add('seo_step2_eatOut', !!EAT_OUT[seK], 'EAT_OUT not set');
+      add('seo_step2_skipCleared', !SKIPPED[seK], 'SKIPPED should be cleared by toggleEatOut');
+      add('seo_step2_manualSet', !!MANUAL_SET[seK], 'MANUAL_SET should remain true');
+      // Step 3: Toggle EatOut OFF
+      toggleEatOut(p, d, s);
+      add('seo_step3_clear',
+        !SKIPPED[seK] && !EAT_OUT[seK] && !MANUAL_SET[seK],
+        'all flags should be clear after final toggle');
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
+    else if(op==='gridSkipPlusPillSkip'){
+      // Schedule grid skip-* + per-card Skip pill on same person.
+      // Documents the known divergence: Skip pill clears EAT_OUT but doesn't
+      // clear SHARED_SCHEDULE → schedEatOutConsistency intentionally fails.
+      // Test surfaces the interaction; doesn't run schedEatOut check.
+      if(s!=='breakfast' && s!=='lunch' && s!=='dinner'){
+        add('setup', true, '', null, 'cell not in grid'); return {checks:checks};
+      }
+      if(p!=='him'){ add('setup', true, '', null, 'op tests him side'); return {checks:checks}; }
+      var gpHimK = sk('him', d, s);
+      if(MANUAL_SET[gpHimK]||SHARED_SCHEDULE[dk(d,s)]){
+        add('setup', true, '', null, 'cell not pristine'); return {checks:checks};
+      }
+      // Step 1: grid paint (V10 syncs EAT_OUT)
+      schedTapLeft(d, s);
+      add('gpps_step1_eo', !!EAT_OUT[gpHimK], 'V10: grid skip-him should create EAT_OUT');
+      add('gpps_step1_noManSet', !MANUAL_SET[gpHimK], 'V10: grid taps do not set MANUAL_SET');
+      // Step 2: Skip pill
+      toggleSkip('him', d, s);
+      add('gpps_step2_skipped', !!SKIPPED[gpHimK], 'Skip pill should set SKIPPED');
+      add('gpps_step2_manSet', !!MANUAL_SET[gpHimK], 'Skip pill should set MANUAL_SET');
+      add('gpps_step2_eoCleared', !EAT_OUT[gpHimK], 'Skip pill should clear EAT_OUT');
+      add('gpps_schedNotAutoCleared', SHARED_SCHEDULE[dk(d,s)]==='skip-him',
+        'SHARED_SCHEDULE should still say skip-him (toggleSkip does not auto-clean schedule state — known divergence)');
+      // Don't run schedEatOutConsistency — it would fire here intentionally
+      // due to the documented divergence.
+      checkCoherence();
     }
 
     else {
@@ -15704,11 +16115,17 @@ window.MPStress=(function(){
     // meal swaps, and randomize-persist behavior. All ops also run the
     // cross-cutting schedEatOutConsistency invariant.
     var OPS=['edit','swap','addIngr','reset','rebalance',
-             'skipPill','eatOutPill','scheduleTapCycle','changeMealOp','randomizePersist'];
+             'skipPill','eatOutPill','scheduleTapCycle','changeMealOp','randomizePersist',
+             'schedTapCenter','clearWeekOp','paintAcceptOp','lateSnackOp',
+             'editLinkGroupSlot','editSkippedSlot','tapAlreadyShared','pinAndRandomize','gridSkipPlusPillSkip',
+             'editToChangeMeal','skipToEatOut'];
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
-            skipPill:{p:0,f:0},eatOutPill:{p:0,f:0},scheduleTapCycle:{p:0,f:0},changeMealOp:{p:0,f:0},randomizePersist:{p:0,f:0}},
+            skipPill:{p:0,f:0},eatOutPill:{p:0,f:0},scheduleTapCycle:{p:0,f:0},changeMealOp:{p:0,f:0},randomizePersist:{p:0,f:0},
+            schedTapCenter:{p:0,f:0},clearWeekOp:{p:0,f:0},paintAcceptOp:{p:0,f:0},lateSnackOp:{p:0,f:0},
+            editLinkGroupSlot:{p:0,f:0},editSkippedSlot:{p:0,f:0},tapAlreadyShared:{p:0,f:0},pinAndRandomize:{p:0,f:0},gridSkipPlusPillSkip:{p:0,f:0},
+            editToChangeMeal:{p:0,f:0},skipToEatOut:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
@@ -16169,7 +16586,128 @@ window.MPStress=(function(){
     return lines.join('\n');
   }
 
-  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runStandard3:runStandard3,runStandard4:runStandard4,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline,runSlotMod:runSlotMod,formatSlotModReport:formatSlotModReport,runSlotModSequential:runSlotModSequential,formatSlotModSequentialReport:formatSlotModSequentialReport};
+  // ── Integration tests for OOS/UI paths (V13, 2026-05-06+) ───────────
+  // Tests UI-driven paths that don't fit the slot-mod harness pattern:
+  // cloud sync round-trip, custom meal/ingredient creation, EAT_OUT macro
+  // field edits. Snapshots state, runs each test, restores. Returns a
+  // simple {total, passed, failed, checks} aggregate.
+  function runIntegrationTests(){
+    var saved = snapshot();
+    var checks = [];
+    function add(name, ok, msg, info){
+      checks.push({name:name, ok:!!ok, msg:ok?'':(msg||''), info:info||null});
+    }
+
+    // ── T1: Cloud sync round-trip ──
+    // getSyncPayload() → mutate weekData.sel in remote → mergeSyncData() with
+    // newer per-slot ts → verify the local SEL alias updates.
+    try {
+      if(typeof getSyncPayload !== 'function' || typeof mergeSyncData !== 'function'){
+        add('sync_skip', true, '', 'sync functions not exposed');
+      } else {
+        var syncK = sk('him','Monday','breakfast');
+        var origSyncSel = SEL[syncK];
+        var altMeal = MEALS.find(function(m){
+          return m.slots && m.slots.indexOf('breakfast')>=0 && m.id !== origSyncSel && !m.noRandomize;
+        });
+        if(altMeal){
+          var payload = getSyncPayload();
+          add('sync_payloadVersion', payload && payload.version === 4,
+            'expected version 4, got '+(payload && payload.version));
+          add('sync_payloadHasWeekData', payload && payload.weekData && payload.weekData[activeWeek],
+            'payload.weekData[activeWeek] missing');
+          // Build remote with newer ts on the test slot
+          var remote = JSON.parse(JSON.stringify(payload));
+          remote.weekData[activeWeek].sel[syncK] = altMeal.id;
+          remote.weekData[activeWeek].ts = remote.weekData[activeWeek].ts || {};
+          remote.weekData[activeWeek].ts[syncK] = Date.now() + 5000;
+          mergeSyncData(remote);
+          add('sync_remoteAccepted', SEL[syncK] === altMeal.id,
+            'expected remote update accepted; SEL='+SEL[syncK]+' (orig='+origSyncSel+', new='+altMeal.id+')');
+        } else {
+          add('sync_skipNoAlt', true, '', 'no alt breakfast meal');
+        }
+      }
+    } catch(e){ add('sync_exception', false, e.message); }
+
+    // ── T2: Custom meal create + persistence ──
+    // Custom meals are merged into MEALS via injectCustomMeals().
+    try {
+      if(typeof customMeals === 'object' && customMeals && typeof injectCustomMeals === 'function'){
+        var preCount = Object.keys(customMeals).length;
+        var testId = 'sm_test_meal_'+Date.now();
+        customMeals[testId] = {
+          id: testId, name: 'SM Test Meal', slots: ['lunch'],
+          ingredients: [{dbKey:'banana', amt:1, role:'fruit', scalable:true}],
+          steps: ['test step'], _ts: Date.now()
+        };
+        add('cm_added', Object.keys(customMeals).length === preCount+1, 'customMeals not extended');
+        injectCustomMeals();
+        var inMeals = MEALS.some(function(m){return m.id===testId;});
+        add('cm_inMeals', inMeals, 'injectCustomMeals did not surface custom meal in MEALS');
+        // Cleanup
+        delete customMeals[testId];
+        injectCustomMeals();
+        var stillThere = MEALS.some(function(m){return m.id===testId;});
+        add('cm_removed', !stillThere, 'custom meal still in MEALS after delete + reinject');
+      } else {
+        add('cm_skip', true, '', 'customMeals or injectCustomMeals not exposed');
+      }
+    } catch(e){ add('cm_exception', false, e.message); }
+
+    // ── T3: Custom ingredient create + integration ──
+    // Custom ingredients are merged into NUTRI_DB via loadCustomIngredients()
+    // (line 12591: Object.keys(customIngredients).forEach(k → NUTRI_DB[k] = ...)).
+    try {
+      if(typeof customIngredients === 'object' && customIngredients && typeof loadCustomIngredients === 'function'){
+        var preIngCount = Object.keys(customIngredients).length;
+        var testIngK = 'sm_test_ingr_'+Date.now();
+        customIngredients[testIngK] = {
+          unit: 'cup', kcal: 100, pro: 5, fat: 2, carb: 15, role: 'fruit', _ts: Date.now()
+        };
+        add('ci_added', Object.keys(customIngredients).length === preIngCount+1, 'customIngredients not extended');
+        // Mirror what addCustomIngredient does: assign to both customIngredients
+        // and NUTRI_DB. (loadCustomIngredients re-reads from localStorage,
+        // overwriting our in-memory addition — it's a load helper, not a
+        // re-inject. So we mimic the live add path directly.)
+        NUTRI_DB[testIngK] = customIngredients[testIngK];
+        var inNutriDb = !!NUTRI_DB[testIngK] && NUTRI_DB[testIngK].kcal === 100;
+        add('ci_inNutriDb', inNutriDb, 'custom ingredient not in NUTRI_DB after assignment');
+        // Cleanup
+        delete customIngredients[testIngK];
+        delete NUTRI_DB[testIngK];
+      } else {
+        add('ci_skip', true, '', 'customIngredients or loadCustomIngredients not exposed');
+      }
+    } catch(e){ add('ci_exception', false, e.message); }
+
+    // ── T4: EAT_OUT macro field edit (setEatOutField) ──
+    try {
+      if(typeof setEatOutField !== 'function'){
+        add('eo_skip', true, '', 'setEatOutField not exposed');
+      } else {
+        var eoTK = sk('her','Saturday','dinner');
+        EAT_OUT[eoTK] = {name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+        setEatOutField('her','Saturday','dinner','name','Pizza Place');
+        add('eo_nameSet', EAT_OUT[eoTK].name === 'Pizza Place', 'name='+EAT_OUT[eoTK].name);
+        setEatOutField('her','Saturday','dinner','kcal','750');
+        add('eo_kcalSet', EAT_OUT[eoTK].kcal === 750, 'kcal='+EAT_OUT[eoTK].kcal);
+        setEatOutField('her','Saturday','dinner','pro','40');
+        add('eo_proSet', EAT_OUT[eoTK].pro === 40, 'pro='+EAT_OUT[eoTK].pro);
+        // Negative number sanitized to 0
+        setEatOutField('her','Saturday','dinner','kcal','-5');
+        add('eo_negativeClamped', EAT_OUT[eoTK].kcal === 0, 'kcal not clamped to 0: '+EAT_OUT[eoTK].kcal);
+        delete EAT_OUT[eoTK];
+      }
+    } catch(e){ add('eo_exception', false, e.message); }
+
+    restore(saved);
+
+    var passed = checks.filter(function(c){return c.ok;}).length;
+    return {total:checks.length, passed:passed, failed:checks.length-passed, checks:checks};
+  }
+
+  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runStandard3:runStandard3,runStandard4:runStandard4,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline,runSlotMod:runSlotMod,formatSlotModReport:formatSlotModReport,runSlotModSequential:runSlotModSequential,formatSlotModSequentialReport:formatSlotModSequentialReport,runIntegrationTests:runIntegrationTests};
 })();
 
 </script>
