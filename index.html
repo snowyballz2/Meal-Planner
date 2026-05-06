@@ -3946,16 +3946,12 @@ function invalidateDayBalancedCache(){for(const k in _dayBalancedCache)delete _d
 // "Reset should put it back to what it was exactly before manually edited
 // and before manually running the pipeline.. nothing needs to be run or
 // calculated.. just put back exact values."
-// Mirrors MANUAL_SET at capture time so Reset can restore the lock state too.
 var _postRandomizeCache={};
-var _postRandomizeManualSet={};
 function _capturePostRandomizeSnapshot(){
   _postRandomizeCache={};
   Object.keys(_dayBalancedCache).forEach(function(k){
     _postRandomizeCache[k]=JSON.parse(JSON.stringify(_dayBalancedCache[k]));
   });
-  _postRandomizeManualSet={};
-  Object.keys(MANUAL_SET).forEach(function(k){_postRandomizeManualSet[k]=MANUAL_SET[k];});
 }
 
 function getDayBalancedIngredients(p,d){
@@ -7610,10 +7606,14 @@ function onIngrReset(p,d,s){
       if(!_dayBalancedCache[pkkey]) _dayBalancedCache[pkkey] = {};
       _dayBalancedCache[pkkey][pt.s] = JSON.parse(JSON.stringify(_postRandomizeCache[pkkey][pt.s]));
     }
-    // 3. Restore MANUAL_SET to its post-randomize value (was the slot Set
-    //    BEFORE the user edited? If so keep Set; else clear).
-    if(_postRandomizeManualSet[k]) MANUAL_SET[k] = true;
-    else delete MANUAL_SET[k];
+    // 3. Always clear MANUAL_SET. Reset undoes ALL the user's changes
+    //    on this slot (and its batch portions); if every change is undone,
+    //    the slot is no longer "manually set" by definition. (Per user
+    //    2026-05-06: "if we reset all the changes ... it is not manually
+    //    set either.") Earlier the code restored MANUAL_SET to a captured
+    //    post-randomize value, but that's overcomplicated — Reset should
+    //    just be a clean wipe of user state on the affected slots.
+    delete MANUAL_SET[k];
   });
 
   renderMeals();
@@ -15339,18 +15339,17 @@ window.MPStress=(function(){
         }
       }
       add('resetExact', match, msg||'');
-      // 2026-05-06+: also verify MANUAL_SET restored to post-randomize state.
-      // Reset on an edited slot must clear MANUAL_SET (which the edit set);
-      // if pre-randomize state already had MANUAL_SET (Set pill), keep it.
+      // 2026-05-06+: Reset always CLEARS MANUAL_SET on the affected slots.
+      // If Reset undoes all the user's changes, the slot is by definition no
+      // longer "manually set." Verify post-Reset MANUAL_SET[k] is falsy on
+      // every batch portion.
       var manualSetMatch=true, msMsg=null;
       for(var mi=0; mi<slotsToVerify.length && manualSetMatch; mi++){
         var mpt=slotsToVerify[mi];
         var mk=sk(mpt.p,mpt.d,mpt.s);
-        var expected=!!_postRandomizeManualSet[mk];
-        var actual=!!MANUAL_SET[mk];
-        if(expected !== actual){
+        if(MANUAL_SET[mk]){
           manualSetMatch=false;
-          msMsg=mk+' MANUAL_SET expected='+expected+' actual='+actual;
+          msMsg=mk+' MANUAL_SET still true after Reset';
         }
       }
       add('resetManualSet', manualSetMatch, msMsg||'');
