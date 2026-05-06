@@ -6905,9 +6905,9 @@ function renderMeals(){
     html+='<div class="sched-title">'+ssIcon+' Schedule Meals</div>';
     if(sharedSchedOpen){
       if(_scheduleEditMode){
-        // Edit mode: show Undo (revert) + Apply (commit). Hide Clear/Create
-        // Plan to keep the user focused on editing the schedule.
+        // Edit mode: show Clear (wipe painting), Undo (revert), Apply (commit).
         html+='<div style="display:flex;gap:6px">'
+          +'<div class="sched-btn" onclick="event.stopPropagation();if(confirm(\'Clear all schedule painting? You can still Undo afterwards.\')){clearScheduleEdit();}">Clear</div>'
           +'<div class="sched-btn" onclick="event.stopPropagation();undoScheduleEdit()">Undo</div>'
           +'<div class="sched-btn sched-btn-set" onclick="event.stopPropagation();applyScheduleEdit()">Apply</div>'
           +'</div>';
@@ -6926,7 +6926,7 @@ function renderMeals(){
       if(_scheduleEditMode){
         html+='<div style="margin:6px 0;padding:8px 10px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.5);border-radius:8px;color:#A78BFA;font-size:12px;line-height:1.4">'
           +'<b>Edit Mode</b> — locked cells can be re-painted. Per-card pills also work. '
-          +'Click <b>Apply</b> to commit, or <b>Undo</b> to revert.'
+          +'<b>Clear</b> wipes painting · <b>Apply</b> commits + creates plan · <b>Undo</b> reverts.'
           +'</div>';
       } else {
         // Spacer between header buttons and grid
@@ -9091,12 +9091,39 @@ function enterScheduleEditMode(){
 }
 function applyScheduleEdit(){
   // Run V10 sync first (creates EAT_OUTs that were deferred), then setSchedule
-  // (locks MANUAL_SET + stamps her=him for shared cells).
+  // (locks MANUAL_SET + stamps her=him for shared cells), then randomize so
+  // the resulting plan reflects the new schedule layout end-to-end.
   if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSchedule();
   setSchedule();
   _scheduleEditMode = false;
   _scheduleEditSnapshot = null;
-  // setSchedule already calls renderMeals + autoSaveWeek
+  // 2026-05-06+: Auto-randomize after Apply. Without this, restructured
+  // schedule cells leave the meal grid in a mismatched state (old SEL
+  // values, stale ingredient amounts). Run for both persons so the whole
+  // week regenerates against the new schedule.
+  randomizeWeek('shared');
+  // randomizeWeek closes the schedule panel — re-open so the user sees the
+  // result without an extra tap.
+  sharedSchedOpen = true;
+  renderMeals();
+}
+function clearScheduleEdit(){
+  // Clear all painting / highlights / per-cell state inside edit mode.
+  // Wipes SHARED_SCHEDULE, EAT_OUT, SKIPPED, MANUAL_SET, LATE_SNACK, and
+  // link groups. OVERRIDES preserved (ingredient pins are user data, not
+  // schedule painting). User can then paint a fresh schedule and Apply.
+  Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
+  Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
+  Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
+  Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+  Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
+  if(weekData[activeWeek] && weekData[activeWeek].leftoverLinks){
+    weekData[activeWeek].leftoverLinks.length = 0;
+    if(typeof rebindLeftoverLinks === 'function') rebindLeftoverLinks();
+  }
+  // Stay in edit mode — user is mid-restructure.
+  invalidateLeftoverCache();
+  renderMeals();
 }
 function undoScheduleEdit(){
   if(_scheduleEditSnapshot){
