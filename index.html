@@ -15339,6 +15339,21 @@ window.MPStress=(function(){
         }
       }
       add('resetExact', match, msg||'');
+      // 2026-05-06+: also verify MANUAL_SET restored to post-randomize state.
+      // Reset on an edited slot must clear MANUAL_SET (which the edit set);
+      // if pre-randomize state already had MANUAL_SET (Set pill), keep it.
+      var manualSetMatch=true, msMsg=null;
+      for(var mi=0; mi<slotsToVerify.length && manualSetMatch; mi++){
+        var mpt=slotsToVerify[mi];
+        var mk=sk(mpt.p,mpt.d,mpt.s);
+        var expected=!!_postRandomizeManualSet[mk];
+        var actual=!!MANUAL_SET[mk];
+        if(expected !== actual){
+          manualSetMatch=false;
+          msMsg=mk+' MANUAL_SET expected='+expected+' actual='+actual;
+        }
+      }
+      add('resetManualSet', manualSetMatch, msMsg||'');
       checkInv();
       checkBanner('reset');
     }
