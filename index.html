@@ -9045,16 +9045,22 @@ function setSchedule(){
   invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();autoSaveWeek();
 }
 function clearWeek(){
-  // Clear all manual overrides: skips, eat-outs, ingredient overrides, late snacks, manual set flags.
-  // SHARED_SCHEDULE preserved — it's long-term schedule intent, not a per-week override.
+  // Clear all manual overrides: skips, eat-outs, ingredient overrides, late
+  // snacks, manual set flags. Also wipes SHARED_SCHEDULE skip-* states (they
+  // create eat-outs via V10 sync, so leaving them would re-create the
+  // EAT_OUTs we just cleared). 'shared' SHARED_SCHEDULE entries preserved —
+  // those are long-term schedule intent, not per-week overrides.
   Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
   Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
   Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
   Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
   Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
-  // Re-sync EAT_OUTs from any preserved SHARED_SCHEDULE skip-* states. Without
-  // this, clearWeek leaves grid skip-* cells without their matching EAT_OUT
-  // (V10 invariant violation). 2026-05-06+: surfaced by extended slot mod test.
+  Object.keys(SHARED_SCHEDULE).forEach(function(k){
+    if(/^skip-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
+  });
+  // V10 sync no-op now (no skip-* states left), but call it to honor the
+  // invariant contract — if any user-customized EAT_OUTs survive on cells
+  // that had been skip-*, this lines up the data with current state.
   _syncEatOutsToSharedSchedule();
   invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();autoSaveWeek();
 }
