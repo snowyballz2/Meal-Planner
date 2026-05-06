@@ -6577,28 +6577,36 @@ function buildMealCardHtml(s, person, day, other){
   }
 
   // Compute macros: base from overridden ingredients, then with calorie adjustment
-  // Leftover days: use the COOK DAY's adjusted amounts (not re-adjust for this day's budget)
+  // Leftover days: the cache for (person, leftoverDay, s) already holds the
+  // cook anchor's adjusted amounts (getDayBalancedIngredients's diff-day-
+  // leftover handling at ~line 4167 walks back to cook day + cook slot to
+  // pull the right amounts, including for SLOT-SHIFTED leftovers — cook on
+  // lunch, eaten on dinner — where cookDay + leftover's `s` is the wrong
+  // slot entirely). Just pass `day` to computeCardMacros; the cache
+  // lookup is canonical. (Pre-2026-05-06 we passed cookDay which read the
+  // wrong slot's cache for slot-shifted leftovers — caught by Slot Mod.)
   const isLeftoverDay=!!(loInfo&&loInfo.isLeftover);
   const isSkipped = !!SKIPPED[sk(person,day,s)];
   const hasSkips = SLOTS.some(function(sl){return !!SKIPPED[sk(person,day,sl)];});
   const hasAnyEatOut = SLOTS.some(function(sl){const eo=EAT_OUT[sk(person,day,sl)];return eo&&eo.kcal>0;});
   const showBanner = !isLeftoverDay && (hasSkips || hasAnyEatOut || hasOverrides);
-  // For leftovers, compute macros using the cook day's adjustment instead of this day's
-  const cookDay=isLeftoverDay?loInfo.cookDay:day;
-  // Compute the total cook batch size for snapping purposes.
-  // On a leftover day, look up the cook day's entry (which carries totalServings).
-  let cookLoInfo = loInfo;
+  // mealTotalServings: walk to the actual cook anchor (which may be at a
+  // different slot than the leftover's `s` for slot-shifted batches) so the
+  // snap/clamp logic inside adjustIngredients uses the real batch size.
+  let mealTotalServings = 1;
   if (isLeftoverDay && loInfo) {
-    const cookKey = sk(person, loInfo.cookDay, s);
-    cookLoInfo = leftovers[cookKey] || loInfo;
+    Object.keys(leftovers).forEach(function(ak){
+      var ae = leftovers[ak];
+      if(ae.isLeftover) return;
+      if(!ae.portions) return;
+      if(ae.portions.some(function(pt){return pt.p===person && pt.d===day && pt.s===s;})){
+        mealTotalServings = ae.totalServings || ae.servings || 1;
+      }
+    });
+  } else if(loInfo && !loInfo.isLeftover){
+    mealTotalServings = loInfo.totalServings || loInfo.servings || 1;
   }
-  const mealTotalServings = (cookLoInfo && !cookLoInfo.isLeftover)
-    ? (cookLoInfo.totalServings || cookLoInfo.servings || 1)
-    : 1;
-  // 2026-05-06+: pass `day` (leftover's actual day) as bannerDay so the
-  // manual-edit banner reads overrides from the slot the user is viewing —
-  // matters for slot-shifted leftovers (cook day's slot != leftover slot).
-  const macroResult = computeCardMacros(port, person, cookDay, s, cookServings, showBanner, mealTotalServings, day);
+  const macroResult = computeCardMacros(port, person, day, s, cookServings, showBanner, mealTotalServings);
   const pm = macroResult.pm;
   const adjBanner = macroResult.adjBanner;
   if(macroResult.ingrHtml) ingrHtml = macroResult.ingrHtml;
@@ -7402,6 +7410,12 @@ function _writeUserPin(p,d,s,idx,opts){
     if(opts.amt !== undefined) slotCache[idx].amt = opts.amt;
     if(opts.dbKey !== undefined) slotCache[idx].dbKey = opts.dbKey;
     slotCache[idx].scalable = false;
+    // 2026-05-06+: also flag the cache entry so downstream consumers
+    // (INV8, INV13, unify, clamps) can skip user pins. Previously only
+    // OVERRIDES carried _userSet — cache entry was missing it, so any
+    // verifier/pipeline stage that read from cache (rather than override)
+    // wouldn't recognize the pin.
+    slotCache[idx]._userSet = true;
     return true;
   }
   return false;
@@ -9213,6 +9227,8 @@ function snapBatchTotalsToGrid(){
           if(bi.scalable===false &&
              (ROUND_PKG_ITEMS.indexOf(bi.dbKey) >= 0 ||
               ROUND_PRODUCE_ITEMS.indexOf(bi.dbKey) >= 0)) return;
+          // 2026-05-06+: skip user pins.
+          if(bi._userSet === true) return;
 
           var portions=[];
           var total=0;
@@ -9413,6 +9429,14 @@ function unifyCrossPersonRatios(){
           if(anchorItem.scalable===false &&
              (ROUND_PKG_ITEMS.indexOf(anchorItem.dbKey) >= 0 ||
               ROUND_PRODUCE_ITEMS.indexOf(anchorItem.dbKey) >= 0)) return;
+          // 2026-05-06+: Skip USER PINS too. User explicitly chose this
+          // amount; unify mustn't kcal-prop rewrite it. Without this, an
+          // edit on a shared/cross-person batch followed by Re-balance
+          // reverts the user's amount via unify (Slot Mod sharedSameDay
+          // rebalance fail). User pins survive _clampThresh / adjustIngr
+          // for the same reason. INV7 already exempts _userSet items so
+          // skipping here doesn't fire ratio drift.
+          if(anchorItem._userSet === true) return;
           // Resolve per-portion floor: db.minAmt for flagged items (PB, oils,
           // coconut), recipe base amount for veg/fruit, 0 otherwise.
           var floor=0;
@@ -9618,6 +9642,9 @@ function snapBatchTotals(){
           if(ingr.scalable===false &&
              (ROUND_PKG_ITEMS.indexOf(ingr.dbKey) >= 0 ||
               ROUND_PRODUCE_ITEMS.indexOf(ingr.dbKey) >= 0)) return;
+          // 2026-05-06+: skip user pins — user explicitly chose this amount.
+          // Snap-to-grid would override their pick.
+          if(ingr._userSet === true) return;
           var unit=db.unit||'';
           var grid=0.25;
           if(unit==='oz'||unit==='slice'||unit==='scoop'||unit==='serving')grid=1;
@@ -14904,11 +14931,23 @@ window.MPStress=(function(){
     if(lo && !lo.isLeftover && (lo.servings>1||lo.crossPersonCook) && !(lo.shared||lo.sameDayShared)){
       cookServings=lo.totalServings||lo.servings||1;
     }
-    var cookDay = (lo && lo.isLeftover) ? lo.cookDay : d;
-    var cookLo = (lo && lo.isLeftover) ? (computeLeftovers()[sk(p,lo.cookDay,s)]||lo) : lo;
-    var mealTotalServings = (cookLo && !cookLo.isLeftover) ? (cookLo.totalServings||cookLo.servings||1) : 1;
-    // Pass `d` (leftover's actual day) as bannerDay — mirrors production.
-    var card=computeCardMacros(port, p, cookDay, s, cookServings, true /* showBanner */, mealTotalServings, d);
+    // Mirror production (post-2026-05-06): pass `d` (the slot's actual day);
+    // leftover slot's cache has the right amounts via getDayBalancedIngredients's
+    // diff-day-leftover handling. mealTotalServings walks to the actual anchor.
+    var mealTotalServings = 1;
+    if(lo && lo.isLeftover){
+      var allLo=computeLeftovers();
+      Object.keys(allLo).forEach(function(ak){
+        var ae=allLo[ak];
+        if(ae.isLeftover || !ae.portions) return;
+        if(ae.portions.some(function(pt){return pt.p===p && pt.d===d && pt.s===s;})){
+          mealTotalServings = ae.totalServings || ae.servings || 1;
+        }
+      });
+    } else if(lo && !lo.isLeftover){
+      mealTotalServings = lo.totalServings || lo.servings || 1;
+    }
+    var card=computeCardMacros(port, p, d, s, cookServings, true /* showBanner */, mealTotalServings);
     var html=card.adjBanner||'';
     if(!html) return [];
     // Strip outer .adj-info wrapper
@@ -15154,12 +15193,17 @@ window.MPStress=(function(){
           if(b && b[idx]) currentCombined += b[idx].amt;
         });
       }
+      // 2026-05-06+: × 2 instead of × 1.5 so the test's edit lands on the
+      // same grid as preAmt. preAmt comes from a pipeline-clean (INV8-clean)
+      // cache, so doubling preserves grid alignment. Real users pick from a
+      // grid-aligned dropdown — INV8 must hold for any user pick the test
+      // simulates. (1.5× would produce 0.5625 from 0.375 — off the 1/8 grid.)
       var pickedVal, newAmt;
       if(baseline.showCombined && currentCombined > 0.0001){
-        pickedVal = currentCombined * 1.5;
-        newAmt = preAmt * 1.5;
+        pickedVal = currentCombined * 2;
+        newAmt = preAmt * 2;
       } else {
-        newAmt = Math.max(0.001, preAmt*1.5);
+        newAmt = Math.max(0.001, preAmt*2);
         pickedVal = newAmt;
       }
       var predictedKcalPerPortion=Math.round(db.kcal*(newAmt - preAmt));
@@ -15260,7 +15304,7 @@ window.MPStress=(function(){
     else if(op==='reset'){
       var preIng4=preBal[idx];
       var preAmt4=preIng4.amt;
-      onIngrAmt(p, d, s, idx, preAmt4*1.5);
+      onIngrAmt(p, d, s, idx, preAmt4*2);
       onIngrReset(p, d, s);
       var snap=_postRandomizeCache[pk(p,d)] && _postRandomizeCache[pk(p,d)][s];
       if(!snap){
@@ -15291,11 +15335,11 @@ window.MPStress=(function(){
       }
       var pickedVal5, expectedPinAmt5;
       if(baseline.showCombined && currentCombined5 > 0.0001){
-        pickedVal5 = currentCombined5 * 1.5;
-        expectedPinAmt5 = preAmt5 * 1.5;
+        pickedVal5 = currentCombined5 * 2;
+        expectedPinAmt5 = preAmt5 * 2;
       } else {
-        pickedVal5 = preAmt5 * 1.5;
-        expectedPinAmt5 = preAmt5 * 1.5;
+        pickedVal5 = preAmt5 * 2;
+        expectedPinAmt5 = preAmt5 * 2;
       }
       onIngrAmt(p, d, s, idx, pickedVal5);
       onIngrRebalance(p, d, s);
@@ -15517,6 +15561,12 @@ window.MPStress=(function(){
       var startCache=JSON.parse(JSON.stringify(_postRandomizeCache[pk(p,d)] && _postRandomizeCache[pk(p,d)][s] || []));
       var stepResults=[];
       var chainFailed=false;
+      // 2026-05-06+: track THE chain's primary idx across steps. Edit step
+      // sets it (= scalable protein); subsequent swap step operates on
+      // SAME idx. Without this, swap's _smPickIdx skipped the edited idx
+      // (now scalable:false from the user pin) and picked a different
+      // ingredient entirely — defeating the chain's purpose.
+      var chainIdx = -1;
       for(var sIdx=0; sIdx<chain.steps.length; sIdx++){
         var step=chain.steps[sIdx];
         var stepOp=step.op;
@@ -15528,6 +15578,7 @@ window.MPStress=(function(){
           if(stepOp==='edit'){
             var preBalE=getBalancedSlotIngredients(p,d,s)||[];
             var idxE=_smPickIdx(preBalE);
+            chainIdx = idxE;  // remember for subsequent steps
             var preIngE=preBalE[idxE];
             var preAmtE=preIngE.amt;
             var currentCombinedE=0;
@@ -15537,14 +15588,17 @@ window.MPStress=(function(){
                 if(b && b[idxE]) currentCombinedE += b[idxE].amt;
               });
             }
-            var pickedValE = (showCombined && currentCombinedE>0.0001) ? currentCombinedE*1.5 : preAmtE*1.5;
+            var pickedValE = (showCombined && currentCombinedE>0.0001) ? currentCombinedE*2 : preAmtE*2;
             onIngrAmt(p,d,s,idxE,pickedValE);
             stepAdd('editApplied', true, '');
             stepAdd('hardInv', _smHardCount()<=hardBaseline, 'edit fired INV', hardBaseline, _smHardCount());
           }
           else if(stepOp==='swap'){
             var preBalS=getBalancedSlotIngredients(p,d,s)||[];
-            var idxS=_smPickIdx(preBalS);
+            // Operate on the SAME idx the prior edit step pinned. If chainIdx
+            // is unset (chain didn't have a prior edit), fall back to picking.
+            var idxS = (chainIdx >= 0 && preBalS[chainIdx]) ? chainIdx : _smPickIdx(preBalS);
+            chainIdx = idxS;
             var preIngS=preBalS[idxS];
             var preAmtS=preIngS.amt;
             var newKey=_smPickSwap(preIngS.dbKey);
@@ -15564,7 +15618,7 @@ window.MPStress=(function(){
             if(idxE2<0){ stepAdd('setup', true, 'no second editable', null, 'skipped'); }
             else {
               var preAmtE2=preBalE2[idxE2].amt;
-              onIngrAmt(p,d,s,idxE2, preAmtE2*1.5);
+              onIngrAmt(p,d,s,idxE2, preAmtE2*2);
               stepAdd('editApplied', true, '');
               stepAdd('hardInv', _smHardCount()<=hardBaseline, 'second edit fired INV', hardBaseline, _smHardCount());
             }
