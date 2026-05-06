@@ -15284,14 +15284,20 @@ window.MPStress=(function(){
         'slot Δ '+slotDelta3+' vs predicted '+predicted,
         predicted, slotDelta3);
       checkRowSum();
-      // For batch slots, addIngr propagates to all portions — verify.
+      // For batch slots, addIngr propagates to all portions — verify
+      // both PRESENCE and AMOUNT (defaultAmt) match across portions.
       if(slot.lo && slot.lo.portions && slot.lo.portions.length>1){
         var allHave=true, problem=null;
+        var anchorAmt=null;
         slot.lo.portions.forEach(function(pt){
           if(!allHave) return;
           var ptBal=getBalancedSlotIngredients(pt.p,pt.d,pt.s)||[];
-          var has=ptBal.some(function(i){return i.dbKey===dbKey && i._userSet===true;});
-          if(!has){ allHave=false; problem='portion '+sk(pt.p,pt.d,pt.s)+' missing added ingredient'; }
+          var ptItem=ptBal.find(function(i){return i.dbKey===dbKey && i._userSet===true;});
+          if(!ptItem){ allHave=false; problem='portion '+sk(pt.p,pt.d,pt.s)+' missing added ingredient'; return; }
+          if(anchorAmt===null) anchorAmt = ptItem.amt;
+          else if(Math.abs(ptItem.amt - anchorAmt) > 0.0001){
+            allHave=false; problem='portion '+sk(pt.p,pt.d,pt.s)+' amt='+ptItem.amt+' (expected '+anchorAmt+')';
+          }
         });
         add('addIngr_batchProp', allHave, problem||'');
       } else {
@@ -15306,19 +15312,33 @@ window.MPStress=(function(){
       var preAmt4=preIng4.amt;
       onIngrAmt(p, d, s, idx, preAmt4*2);
       onIngrReset(p, d, s);
-      var snap=_postRandomizeCache[pk(p,d)] && _postRandomizeCache[pk(p,d)][s];
-      if(!snap){
-        add('resetExact', false, 'no postRandomize snapshot');
-      } else {
-        var postBal4=getBalancedSlotIngredients(p,d,s)||[];
-        var match=true, msg=null;
-        if(snap.length !== postBal4.length){ match=false; msg='len '+postBal4.length+' (expected '+snap.length+')'; }
-        else for(var i4=0;i4<snap.length;i4++){
-          if(snap[i4].dbKey !== postBal4[i4].dbKey){ match=false; msg='dbKey mismatch at '+i4; break; }
-          if(Math.abs(snap[i4].amt - postBal4[i4].amt) > 0.0001){ match=false; msg='amt mismatch at '+i4; break; }
-        }
-        add('resetExact', match, msg||'');
+      // Determine slots to verify: edited slot + all batch portions if any.
+      var slotsToVerify = [{p:p, d:d, s:s}];
+      if(slot.lo && slot.lo.portions && slot.lo.portions.length > 1){
+        slotsToVerify = slot.lo.portions.slice();
+      } else if(slot.lo && slot.lo.isLeftover){
+        // Walk to anchor's portions for slot-shifted leftovers
+        var allLo=computeLeftovers();
+        Object.keys(allLo).forEach(function(ak){
+          var ae=allLo[ak];
+          if(!ae.isLeftover && ae.portions && ae.portions.some(function(pt){return pt.p===p && pt.d===d && pt.s===s;})){
+            slotsToVerify = ae.portions.slice();
+          }
+        });
       }
+      var match=true, msg=null;
+      for(var pi=0; pi<slotsToVerify.length && match; pi++){
+        var pt=slotsToVerify[pi];
+        var snap=_postRandomizeCache[pk(pt.p,pt.d)] && _postRandomizeCache[pk(pt.p,pt.d)][pt.s];
+        if(!snap){ match=false; msg='no postRandomize snapshot for '+sk(pt.p,pt.d,pt.s); break; }
+        var postBalP=getBalancedSlotIngredients(pt.p,pt.d,pt.s)||[];
+        if(snap.length !== postBalP.length){ match=false; msg=sk(pt.p,pt.d,pt.s)+' len '+postBalP.length+' (expected '+snap.length+')'; break; }
+        for(var i4=0;i4<snap.length;i4++){
+          if(snap[i4].dbKey !== postBalP[i4].dbKey){ match=false; msg=sk(pt.p,pt.d,pt.s)+' dbKey mismatch at '+i4; break; }
+          if(Math.abs(snap[i4].amt - postBalP[i4].amt) > 0.0001){ match=false; msg=sk(pt.p,pt.d,pt.s)+' amt mismatch at '+i4; break; }
+        }
+      }
+      add('resetExact', match, msg||'');
       checkInv();
       checkBanner('reset');
     }
@@ -15618,7 +15638,16 @@ window.MPStress=(function(){
             if(idxE2<0){ stepAdd('setup', true, 'no second editable', null, 'skipped'); }
             else {
               var preAmtE2=preBalE2[idxE2].amt;
-              onIngrAmt(p,d,s,idxE2, preAmtE2*2);
+              // Combined-view aware (batch dropdown shows batch total).
+              var currentCombinedE2=0;
+              if(showCombined && lo && lo.portions){
+                lo.portions.forEach(function(pt){
+                  var b=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
+                  if(b && b[idxE2]) currentCombinedE2 += b[idxE2].amt;
+                });
+              }
+              var pickedValE2 = (showCombined && currentCombinedE2>0.0001) ? currentCombinedE2*2 : preAmtE2*2;
+              onIngrAmt(p,d,s,idxE2, pickedValE2);
               stepAdd('editApplied', true, '');
               stepAdd('hardInv', _smHardCount()<=hardBaseline, 'second edit fired INV', hardBaseline, _smHardCount());
             }
