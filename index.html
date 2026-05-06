@@ -10685,27 +10685,10 @@ function _randomizeWeekCore(randTarget){
       });
     });
   });
-  Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
-  days.forEach(function(d){
-    ['breakfast','lunch','dinner','shake','snack'].forEach(function(s){
-      const state = SHARED_SCHEDULE[dk(d,s)];
-      if(state==='skip-him'||state==='skip-both'){
-        if(!EAT_OUT[sk('him',d,s)]) EAT_OUT[sk('him',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
-      }
-      if(state==='skip-her'||state==='skip-both'){
-        if(!EAT_OUT[sk('her',d,s)]) EAT_OUT[sk('her',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
-      }
-    });
-  });
-  // Lock eat-out slots created by schedule
-  persons.forEach(function(p){
-    days.forEach(function(d){
-      SLOTS.forEach(function(s){
-        var k=sk(p,d,s);
-        if(EAT_OUT[k]) locked[k]=true;
-      });
-    });
-  });
+  // SKIPPED + EAT_OUT are user-only state. toggleSkip/toggleEatOut set
+  // MANUAL_SET=true (locked via isLockedForRandomize above), and setSchedule
+  // creates EAT_OUTs when the user paints skip-* states on the grid. Nothing
+  // here should manufacture or wipe them — randomize fills around them.
 
   // ── PHASE 1: Initial random selection (ALL slots, any meal) ──
   // For each person/day, try 60 combos and pick closest to daily calorie target.
