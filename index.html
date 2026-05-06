@@ -2737,6 +2737,11 @@ function _validateManualLinkGroups(){
 function _buildAutoLinkGroups(){
   _autoLinkGroups = [];
   _autoSharedCells = {};
+  // 2026-05-06+: In schedule edit mode, suppress auto-detection so Clear
+  // truly wipes the schedule grid visually. Default-meal matches between
+  // him and her would otherwise re-trigger auto-shared / auto-link-group
+  // visuals on cells the user just cleared.
+  if(_scheduleEditMode) return;
   var leftovers;
   try { leftovers = computeLeftovers(); } catch(e) { return; }
   if(!leftovers) return;
@@ -9109,14 +9114,18 @@ function applyScheduleEdit(){
 }
 function clearScheduleEdit(){
   // Clear all painting / highlights / per-cell state inside edit mode.
-  // Wipes SHARED_SCHEDULE, EAT_OUT, SKIPPED, MANUAL_SET, LATE_SNACK, and
-  // link groups. OVERRIDES preserved (ingredient pins are user data, not
-  // schedule painting). User can then paint a fresh schedule and Apply.
+  // Wipes SHARED_SCHEDULE, EAT_OUT, SKIPPED, MANUAL_SET, LATE_SNACK, link
+  // groups, AND SEL. SEL is cleared so V13 auto-link-groups + auto-shared
+  // detection (derived from same meal at same/across days) have nothing
+  // to match on — otherwise grouped/shared cells visually persist after
+  // Clear. OVERRIDES preserved (ingredient pins are user data, not
+  // schedule painting). Apply will re-populate SEL via randomize.
   Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
   Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
   Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
   Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
   Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
+  Object.keys(SEL).forEach(function(k){delete SEL[k];});
   if(weekData[activeWeek] && weekData[activeWeek].leftoverLinks){
     weekData[activeWeek].leftoverLinks.length = 0;
     if(typeof rebindLeftoverLinks === 'function') rebindLeftoverLinks();
