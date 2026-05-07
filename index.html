@@ -7582,6 +7582,10 @@ function toggleSkip(p,d,s){
   if(!SKIPPED[k]){
     delete SKIPPED[k];
     delete MANUAL_SET[k];
+    // V54 (2026-05-07): toggleSkip OFF un-sets the slot — clear USER_EDITED
+    // so the Set pill reflects current state ("nothing user-set on this slot
+    // anymore"), not historical interaction.
+    delete USER_EDITED[k];
   } else {
     delete EAT_OUT[k];
     MANUAL_SET[k]=true;
@@ -7605,8 +7609,9 @@ function toggleSkip(p,d,s){
   // V50 (2026-05-07): bump per-slot ts so latest-wins sync/resolver
   // sees the pill toggle as the slot's most recent mutation.
   _bumpSlotTs(k);
-  // V53: direct per-slot pill action — mark as user-edited.
-  _markUserEdited(k);
+  // V53/V54: USER_EDITED set on ON branch (above), cleared on OFF branch.
+  // Don't unconditionally mark here — it'd overwrite the OFF branch's clear.
+  if(SKIPPED[k]) _markUserEdited(k);
   invalidateLeftoverCache();autoSaveWeek();renderMeals();
 }
 function addLateSnack(p,d){LATE_SNACK[pk(p,d)]={name:'',kcal:null,pro:null,fat:null,carb:null};renderMeals();}
@@ -7748,8 +7753,9 @@ function toggleEatOut(p,d,s){
     var curOff=SHARED_SCHEDULE[dKey]||'';
     if(curOff===ourSkip) delete SHARED_SCHEDULE[dKey];
     else if(curOff==='skip-both') SHARED_SCHEDULE[dKey]=otherSkip;
-    // V53: toggling Eat Out OFF is still a direct user action on the slot.
-    _markUserEdited(k);
+    // V54 (2026-05-07): toggleEatOut OFF un-sets the slot — clear
+    // USER_EDITED. Symmetric with toggleSkip OFF.
+    delete USER_EDITED[k];
   } else {
     _applyEatOutOn(p, d, s, {name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null});
   }
@@ -7898,9 +7904,11 @@ function toggleShared(slot,checked){
     // alongside 'shared' but we only delete if it WAS 'shared' so the
     // pill OFF is precisely targeted.
     if(SHARED_SCHEDULE[dKey]==='shared') delete SHARED_SCHEDULE[dKey];
-    // V53: un-share is a deliberate user action affecting both halves.
-    _markUserEdited(meK);
-    _markUserEdited(otherKey);
+    // V54 (2026-05-07): un-share clears USER_EDITED on both halves —
+    // symmetric with toggleSkip OFF / toggleEatOut OFF. After OFF, the
+    // cell has no user-set state (other side's SEL is randomize-picked).
+    delete USER_EDITED[meK];
+    delete USER_EDITED[otherKey];
   }
   invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
 }
@@ -8227,7 +8235,9 @@ function onIngrReset(p,d,s){
     //    set either.") Earlier the code restored MANUAL_SET to a captured
     //    post-randomize value, but that's overcomplicated — Reset should
     //    just be a clean wipe of user state on the affected slots.
+    // V54: same reasoning for USER_EDITED — Reset wipes user state.
     delete MANUAL_SET[k];
+    delete USER_EDITED[k];
   });
 
   renderMeals();
@@ -9468,6 +9478,7 @@ function deleteCurrentGroup(){
   group.slots.forEach(function(sl){
     const k=sk(sl.p, sl.d, sl.s);
     delete MANUAL_SET[k];
+    delete USER_EDITED[k]; // V54
     delete SEL[k];
     clearOverrides(sl.p, sl.d, sl.s);
   });
