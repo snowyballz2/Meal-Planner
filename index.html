@@ -6962,7 +6962,11 @@ function renderMeals(){
     // Shared schedule panel
     const ssIcon=sharedSchedOpen?'&#9662;':'&#9656;';
     html+='<div class="sched-panel">';
-    html+='<div class="sched-hdr" onclick="sharedSchedOpen=!sharedSchedOpen;renderMeals()">';
+    // V29 (2026-05-07): in edit mode, header click is a no-op so the panel
+    // can't be collapsed while Apply/Undo/Reset are pending. Otherwise the
+    // user could accidentally collapse the panel mid-edit, lose access to
+    // the action buttons, and the edit-mode flag would silently linger.
+    html+='<div class="sched-hdr" onclick="if(!_scheduleEditMode){sharedSchedOpen=!sharedSchedOpen;renderMeals();}">';
     html+='<div class="sched-title">'+ssIcon+' Schedule Meals</div>';
     if(sharedSchedOpen){
       if(_scheduleEditMode){
