@@ -7768,6 +7768,12 @@ function setEatOutField(p,d,s,field,val){
   const k=sk(p,d,s);if(!EAT_OUT[k])return;
   if(field==='name'||field==='restaurant')EAT_OUT[k][field]=val;
   else{const n=Math.max(0,parseInt(val)||0);EAT_OUT[k][field]=n;}
+  // V54 (2026-05-07): user customizing eat-out details is a direct
+  // user action on this slot. If the EAT_OUT was created by a grid
+  // skip-* state (no per-slot pill toggle), USER_EDITED wasn't set
+  // by toggleEatOut — but now the user is filling in details, so the
+  // slot is genuinely user-edited.
+  _markUserEdited(k);
 }
 function eoFieldChanged(p,d,s,field,val){
   setEatOutField(p,d,s,field,val);
