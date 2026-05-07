@@ -9809,31 +9809,18 @@ function enterScheduleEditMode(){
   renderMeals();
 }
 function applyScheduleEdit(){
-  // Run V10 sync first (creates EAT_OUTs that were deferred), then setSchedule
-  // (locks MANUAL_SET + stamps her=him for shared cells), then surgical-lock
-  // every UNTOUCHED slot so randomize only re-rolls what the user changed.
-  // Lastly, randomize using the current person tab as the target.
+  // V64 (2026-05-07): reordered — diff loop runs FIRST (against the pure
+  // user-edit state captured in snap vs current), THEN _sync + setSchedule
+  // run AFTER the temp locks are placed. Pre-V64 the order was sync →
+  // setSchedule → diff, and setSchedule's broad "stamp her=him on every
+  // shared cell" SEL writes (executed for ALL shared cells — including
+  // page-default Mon-Sun shared dinners and cells from prior sessions)
+  // changed SEL on cells the user never touched. The diff then saw those
+  // SEL changes as "user-touched" → no temp lock → randomize re-rolled
+  // them → cascade across the whole week even when user only edited one
+  // cell.
   var snap = _scheduleEditSnapshot;
-  if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSchedule();
-  setSchedule();
-  // 2026-05-06+ V23: Surgical re-randomize — diff current state against the
-  // pre-edit snapshot. Slots whose state didn't change get a temporary
-  // MANUAL_SET=true lock so randomize skips them. Untouched meals stay;
-  // only edited slots re-roll. Locks restored after.
-  //
-  // V24: "Touched" diff covers ALL editable state per slot:
-  //   - SEL          (changeMeal)
-  //   - SHARED_SCHEDULE state (grid tap: shared/skip-*)
-  //   - SKIPPED      (per-card Skip pill)
-  //   - EAT_OUT      (per-card Eat Out pill OR V10 sync from skip-*)
-  //   - link group membership (paintAccept / removeFromLinkGroup)
-  // Without the link-group check, adding/removing a manual link group in
-  // edit mode would leave those slots locked out of re-randomize.
-  //
-  // (After Reset, the snapshot still holds the pre-edit state — Reset itself
-  // wipes everything. Treating that as "everything changed" relative to the
-  // pre-edit snapshot leaves randomize unconstrained, matching user
-  // expecting a fresh week.)
+  // Diff first (against pure user state, before sync/setSchedule mutate SEL)
   var tempLocked = [];
   if(snap){
     function _smGroupMap(links){
@@ -9871,6 +9858,13 @@ function applyScheduleEdit(){
       });
     });
   }
+  // V64: now that temp locks are placed on UNTOUCHED slots, run V10 sync
+  // + setSchedule. setSchedule's broad SEL stamping (her=him on shared
+  // cells) will only affect locked slots' MANUAL_SET (already locked),
+  // not the SEL of cells we're about to randomize. Locked SELs persist
+  // through randomize. Unlocked (touched) SELs get re-rolled.
+  if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSchedule();
+  setSchedule();
   _scheduleEditMode = false;
   _scheduleEditCleared = false;
   _scheduleEditTouchedCells = {};
