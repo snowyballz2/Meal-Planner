@@ -9114,31 +9114,44 @@ function applyScheduleEdit(){
   if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSchedule();
   setSchedule();
   // 2026-05-06+ V23: Surgical re-randomize — diff current state against the
-  // pre-edit snapshot. Slots whose SEL/SHARED/SKIPPED/EAT_OUT didn't change
-  // get a temporary MANUAL_SET=true lock so randomize skips them. Untouched
-  // meals stay; only edited slots re-roll. Locks restored after.
+  // pre-edit snapshot. Slots whose state didn't change get a temporary
+  // MANUAL_SET=true lock so randomize skips them. Untouched meals stay;
+  // only edited slots re-roll. Locks restored after.
+  //
+  // V24: "Touched" diff covers ALL editable state per slot:
+  //   - SEL          (changeMeal)
+  //   - SHARED_SCHEDULE state (grid tap: shared/skip-*)
+  //   - SKIPPED      (per-card Skip pill)
+  //   - EAT_OUT      (per-card Eat Out pill OR V10 sync from skip-*)
+  //   - link group membership (paintAccept / removeFromLinkGroup)
+  // Without the link-group check, adding/removing a manual link group in
+  // edit mode would leave those slots locked out of re-randomize.
+  //
   // (After Reset, the snapshot still holds the pre-edit state — Reset itself
-  // wipes everything, but we treat all slots as "changed" relative to the
-  // pre-edit snapshot, so randomize is unconstrained — matches user expecting
-  // a fresh week.)
+  // wipes everything. Treating that as "everything changed" relative to the
+  // pre-edit snapshot leaves randomize unconstrained, matching user
+  // expecting a fresh week.)
   var tempLocked = [];
   if(snap){
+    function _smGroupMap(links){
+      var m = {};
+      (links || []).forEach(function(g){
+        (g.slots || []).forEach(function(sl){m[sk(sl.p, sl.d, sl.s)] = true;});
+      });
+      return m;
+    }
+    var snapGroups = _smGroupMap(snap.leftoverLinks);
+    var nowGroups = _smGroupMap(LEFTOVER_LINKS);
     DAYS.forEach(function(d){
       ['breakfast','lunch','snack','dinner'].forEach(function(s){
         ['him','her'].forEach(function(p){
           var k = sk(p,d,s);
           if(MANUAL_SET[k]) return; // already locked legitimately — don't touch
-          var snapSel = snap.SEL[k];
-          var snapSharedState = snap.SHARED_SCHEDULE[dk(d,s)] || '';
-          var nowSharedState = SHARED_SCHEDULE[dk(d,s)] || '';
-          var snapSkipped = !!snap.SKIPPED[k];
-          var nowSkipped = !!SKIPPED[k];
-          var snapEatOut = !!snap.EAT_OUT[k];
-          var nowEatOut = !!EAT_OUT[k];
-          var touched = SEL[k] !== snapSel
-            || nowSharedState !== snapSharedState
-            || nowSkipped !== snapSkipped
-            || nowEatOut !== snapEatOut;
+          var touched = SEL[k] !== snap.SEL[k]
+            || (SHARED_SCHEDULE[dk(d,s)] || '') !== (snap.SHARED_SCHEDULE[dk(d,s)] || '')
+            || !!SKIPPED[k] !== !!snap.SKIPPED[k]
+            || !!EAT_OUT[k] !== !!snap.EAT_OUT[k]
+            || !!nowGroups[k] !== !!snapGroups[k];
           if(!touched){
             MANUAL_SET[k] = true;
             tempLocked.push(k);
