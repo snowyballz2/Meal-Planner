@@ -12368,6 +12368,15 @@ function loadWeekState(w){
   rebindLeftoverLinks(); // 2026-05-03: bind LEFTOVER_LINKS to wd.leftoverLinks
 }
 function switchWeek(w){
+  // V30 (2026-05-07): if user is in schedule edit mode, switching weeks
+  // would corrupt state — the snapshot was captured for the old week,
+  // _restoreScheduleState writes leftoverLinks into weekData[activeWeek]
+  // (the new week), and pending diffs no longer match. Confirm + auto-Undo
+  // to keep the edit-mode lifecycle consistent.
+  if(_scheduleEditMode){
+    if(!confirm('You have unsaved schedule edits. Discard them and switch weeks?')) return;
+    undoScheduleEdit();
+  }
   saveWeeks();
   activeWeek=w;
   loadWeekState(w);
