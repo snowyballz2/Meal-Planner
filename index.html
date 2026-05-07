@@ -16689,6 +16689,19 @@ window.MPStress=(function(){
       // Cleanup via Undo
       undoScheduleEdit();
       add('embl_undoExits', _scheduleEditMode === false, 'undo did not exit edit mode');
+      // V33 (2026-05-07): explicit post-Undo cleanup verification.
+      // Pre-edit state had toggleSkip applied (SKIPPED+MANUAL_SET set,
+      // SHARED_SCHEDULE empty); Undo should restore exactly that.
+      add('embl_postUndo_skipped', !!SKIPPED[emblK],
+        'post-Undo: SKIPPED should still be true (was set pre-edit)');
+      add('embl_postUndo_manSet', !!MANUAL_SET[emblK],
+        'post-Undo: MANUAL_SET should still be true (was set pre-edit)');
+      add('embl_postUndo_schedClean',
+        (SHARED_SCHEDULE[dk(d, s)] || '') === preTapState,
+        'post-Undo: SHARED_SCHEDULE should match pre-tap state '+preTapState+
+          ' (got '+(SHARED_SCHEDULE[dk(d, s)]||'(empty)')+')');
+      add('embl_postUndo_snapshotCleared', _scheduleEditSnapshot === null,
+        'post-Undo: snapshot not cleared');
     }
 
     else if(op==='editModePills'){
@@ -16718,6 +16731,169 @@ window.MPStress=(function(){
       add('emp_eatOutCountRestored', Object.keys(EAT_OUT).length === preEatOutCount,
         'EAT_OUT count not restored after Undo');
       add('emp_editModeOff', _scheduleEditMode === false, 'edit mode not off after Undo');
+    }
+
+    // ───── V18-V22 audit fix: edit-mode coverage gaps (V33, 2026-05-07) ─────
+    // Four new ops covering ingredient edit, changeMeal, paintAccept (link
+    // group creation), and the SKIPPED+EAT_OUT conflict (resolved in V31).
+
+    else if(op==='editModeIngredientEdit'){
+      // Edit ingredient in edit mode → Undo reverts the user pin.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      if(idx<0){
+        add('setup', true, '', null, 'no editable idx'); return {checks:checks};
+      }
+      var emieK = sk(p, d, s);
+      var preOverridesCount = (OVERRIDES[emieK] || []).length;
+      enterScheduleEditMode();
+      var preIngEMIE = preBal[idx];
+      onIngrAmt(p, d, s, idx, preIngEMIE.amt * 2);
+      var ovEMIE = OVERRIDES[emieK] || [];
+      var pinEMIE = ovEMIE.find(function(o){return o.idx===idx && o._userSet===true;});
+      add('emie_pinSet', !!pinEMIE, 'edit during edit mode should create user pin');
+      undoScheduleEdit();
+      var ovEMIE2 = OVERRIDES[emieK] || [];
+      var pinEMIE2 = ovEMIE2.find(function(o){return o.idx===idx && o._userSet===true;});
+      add('emie_pinReverted', !pinEMIE2, 'Undo should revert user pin');
+      add('emie_overridesRestored',
+        (OVERRIDES[emieK] || []).length === preOverridesCount,
+        'overrides count not restored: pre='+preOverridesCount+' post='+(OVERRIDES[emieK]||[]).length);
+      add('emie_editModeOff', _scheduleEditMode === false,
+        'edit mode not off after Undo');
+    }
+
+    else if(op==='editModeChangeMeal'){
+      // changeMeal during edit mode → Undo reverts SEL change.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      var emcmK = sk(p, d, s);
+      var origMealEMCM = getMealId(p, d, s);
+      if(!origMealEMCM){
+        add('setup', true, '', null, 'no current meal'); return {checks:checks};
+      }
+      var altMealEMCM = MEALS.find(function(m){
+        return m.slots && m.slots.indexOf(s)>=0 && m.id!==origMealEMCM && !m.noRandomize;
+      });
+      if(!altMealEMCM){
+        add('setup', true, '', null, 'no alt meal'); return {checks:checks};
+      }
+      var preManSetEMCM = !!MANUAL_SET[emcmK];
+      enterScheduleEditMode();
+      var prevPEMCM=person, prevDEMCM=day;
+      person=p; day=d;
+      try { changeMeal(s, altMealEMCM.id); }
+      finally { person=prevPEMCM; day=prevDEMCM; }
+      add('emcm_selChanged', SEL[emcmK]===altMealEMCM.id,
+        'SEL should change to alt during edit mode');
+      add('emcm_manSetSet', !!MANUAL_SET[emcmK],
+        'MANUAL_SET should be set by changeMeal');
+      undoScheduleEdit();
+      add('emcm_selRestored', SEL[emcmK]===origMealEMCM,
+        'Undo should restore SEL: pre='+origMealEMCM+' post='+SEL[emcmK]);
+      add('emcm_manSetRestored', !!MANUAL_SET[emcmK] === preManSetEMCM,
+        'MANUAL_SET state not restored: pre='+preManSetEMCM+' post='+!!MANUAL_SET[emcmK]);
+      add('emcm_editModeOff', _scheduleEditMode === false,
+        'edit mode not off after Undo');
+    }
+
+    else if(op==='editModePaintAccept'){
+      // paintAccept (link group creation) in edit mode → Undo reverts.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      if(s !== 'lunch' && s !== 'dinner'){
+        add('setup', true, '', null, 'paint only on main slots'); return {checks:checks};
+      }
+      var origMealEMPA = getMealId(p, d, s);
+      if(!origMealEMPA){
+        add('setup', true, '', null, 'no current meal'); return {checks:checks};
+      }
+      // Find another day for the same person+slot that's clean.
+      var otherDEMPA = null;
+      DAYS.forEach(function(dd){
+        if(otherDEMPA || dd===d) return;
+        var ok = sk(p,dd,s);
+        if(MANUAL_SET[ok] || SKIPPED[ok] || EAT_OUT[ok]) return;
+        otherDEMPA = dd;
+      });
+      if(!otherDEMPA){
+        add('setup', true, '', null, 'no other day available'); return {checks:checks};
+      }
+      var prePaintLinks = ((weekData[activeWeek] && weekData[activeWeek].leftoverLinks) || []).length;
+      enterScheduleEditMode();
+      // Set up paint-mode state directly (no DOM dependency)
+      _paintMode = true;
+      _paintMealId = origMealEMPA;
+      _paintSlot = 'main';
+      _paintQueued = {};
+      _paintQueued[sk(p, d, s)] = true;
+      _paintQueued[sk(p, otherDEMPA, s)] = true;
+      paintAccept();
+      add('empa_paintExited', _paintMode === false,
+        'paint mode should exit after paintAccept');
+      var midLinks = ((weekData[activeWeek] && weekData[activeWeek].leftoverLinks) || []).length;
+      add('empa_groupCreated', midLinks > prePaintLinks,
+        'link group should be created: pre='+prePaintLinks+' mid='+midLinks);
+      undoScheduleEdit();
+      var postLinks = ((weekData[activeWeek] && weekData[activeWeek].leftoverLinks) || []).length;
+      add('empa_groupReverted', postLinks === prePaintLinks,
+        'Undo should revert link group: pre='+prePaintLinks+' post='+postLinks);
+      add('empa_editModeOff', _scheduleEditMode === false,
+        'edit mode not off after Undo');
+    }
+
+    else if(op==='editModeConflictDetect'){
+      // V31 (2026-05-07): grid 'skip-*' clears SKIPPED when creating
+      // EAT_OUT, resolving the documented per-slot Skip + grid skip-*
+      // 3-way conflict. This op verifies the V31 fix end-to-end.
+      if(s !== 'breakfast' && s !== 'lunch' && s !== 'dinner'){
+        add('setup', true, '', null, 'cell not in grid'); return {checks:checks};
+      }
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      var ecdK = sk(p, d, s);
+      if(MANUAL_SET[ecdK] || SKIPPED[ecdK] || EAT_OUT[ecdK] || SHARED_SCHEDULE[dk(d, s)]){
+        add('setup', true, '', null, 'cell not pristine'); return {checks:checks};
+      }
+      // Step 1: per-slot Skip pill — sets SKIPPED, clears EAT_OUT
+      toggleSkip(p, d, s);
+      add('ecd_step1_skipped', !!SKIPPED[ecdK], 'Skip pill should set SKIPPED');
+      add('ecd_step1_noEatOut', !EAT_OUT[ecdK], 'Skip pill should clear EAT_OUT');
+      // Step 2: enter edit mode + grid-tap to set skip-*
+      enterScheduleEditMode();
+      var tapFn = (p === 'him') ? schedTapLeft : schedTapRight;
+      tapFn(d, s);
+      var expectedSkipState = (p === 'him') ? 'skip-him' : 'skip-her';
+      add('ecd_step2_gridSkipSet',
+        SHARED_SCHEDULE[dk(d, s)] === expectedSkipState,
+        'grid tap should set '+expectedSkipState+
+          ' (got '+(SHARED_SCHEDULE[dk(d, s)]||'(empty)')+')');
+      add('ecd_step2_skippedStillSet', !!SKIPPED[ecdK],
+        'SKIPPED should still be true mid-edit (V10 deferred)');
+      // Step 3: simulate Apply's sync path (V31 fix: clears SKIPPED).
+      // Avoid full applyScheduleEdit since it triggers randomize.
+      _syncEatOutsToSharedSchedule();
+      setSchedule();
+      add('ecd_step3_skippedCleared', !SKIPPED[ecdK],
+        'V31: SKIPPED should be cleared by sync after grid set eat-out');
+      add('ecd_step3_eatOutSet', !!EAT_OUT[ecdK],
+        'EAT_OUT should be set by sync');
+      add('ecd_step3_noConflict',
+        !SKIPPED[ecdK] && !!EAT_OUT[ecdK],
+        'V31: SKIPPED+EAT_OUT must not both be set');
+      // Cleanup: exit edit mode (Undo restores pre-edit SKIPPED), then
+      // toggle Skip off to restore pristine state.
+      undoScheduleEdit();
+      add('ecd_post_skippedRestored', !!SKIPPED[ecdK],
+        'Undo should restore pre-edit SKIPPED');
+      toggleSkip(p, d, s);
+      add('ecd_post_clean',
+        !SKIPPED[ecdK] && !MANUAL_SET[ecdK] && !EAT_OUT[ecdK],
+        'manual cleanup failed');
     }
 
     else if(op==='gridSkipPlusPillSkip'){
@@ -16773,7 +16949,9 @@ window.MPStress=(function(){
              'schedTapCenter','clearWeekOp','paintAcceptOp','lateSnackOp',
              'editLinkGroupSlot','editSkippedSlot','tapAlreadyShared','pinAndRandomize','gridSkipPlusPillSkip',
              'editToChangeMeal','skipToEatOut',
-             'editModeEnterUndo','editModeClearApply','editModeBypassLock','editModePills'];
+             'editModeEnterUndo','editModeClearApply','editModeBypassLock','editModePills',
+             // V33 (2026-05-07): V18-V22 audit coverage gaps
+             'editModeIngredientEdit','editModeChangeMeal','editModePaintAccept','editModeConflictDetect'];
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -16781,7 +16959,8 @@ window.MPStress=(function(){
             schedTapCenter:{p:0,f:0},clearWeekOp:{p:0,f:0},paintAcceptOp:{p:0,f:0},lateSnackOp:{p:0,f:0},
             editLinkGroupSlot:{p:0,f:0},editSkippedSlot:{p:0,f:0},tapAlreadyShared:{p:0,f:0},pinAndRandomize:{p:0,f:0},gridSkipPlusPillSkip:{p:0,f:0},
             editToChangeMeal:{p:0,f:0},skipToEatOut:{p:0,f:0},
-            editModeEnterUndo:{p:0,f:0},editModeClearApply:{p:0,f:0},editModeBypassLock:{p:0,f:0},editModePills:{p:0,f:0}},
+            editModeEnterUndo:{p:0,f:0},editModeClearApply:{p:0,f:0},editModeBypassLock:{p:0,f:0},editModePills:{p:0,f:0},
+            editModeIngredientEdit:{p:0,f:0},editModeChangeMeal:{p:0,f:0},editModePaintAccept:{p:0,f:0},editModeConflictDetect:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
