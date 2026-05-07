@@ -2737,11 +2737,11 @@ function _validateManualLinkGroups(){
 function _buildAutoLinkGroups(){
   _autoLinkGroups = [];
   _autoSharedCells = {};
-  // 2026-05-06+: In schedule edit mode, suppress auto-detection so Clear
-  // truly wipes the schedule grid visually. Default-meal matches between
-  // him and her would otherwise re-trigger auto-shared / auto-link-group
-  // visuals on cells the user just cleared.
-  if(_scheduleEditMode) return;
+  // 2026-05-06+ V21: suppress auto-detection ONLY after the user clicks
+  // Clear in edit mode (not on edit-mode entry). On entry, user wants to
+  // see existing schedule and build on it. After Clear, DEFAULTS' him=her
+  // matches would re-paint shared/grouped cells we just wiped.
+  if(_scheduleEditCleared) return;
   var leftovers;
   try { leftovers = computeLeftovers(); } catch(e) { return; }
   if(!leftovers) return;
@@ -9060,6 +9060,13 @@ function runRandomizeFromPopup(){
 //   - Undo restores the snapshot.
 var _scheduleEditMode = false;
 var _scheduleEditSnapshot = null;
+// 2026-05-06+ V21: post-Clear suppression flag. Set when user clicks Clear
+// inside edit mode; cleared on edit mode entry / Apply / Undo. Used to gate
+// _buildAutoLinkGroups so the grid stays visually empty after Clear (DEFAULTS
+// has him=her matches that would otherwise re-paint shared/grouped cells).
+// On edit mode entry, auto-detection runs normally so user sees existing
+// schedule and can build on it.
+var _scheduleEditCleared = false;
 function _cloneScheduleState(){
   return {
     SHARED_SCHEDULE: JSON.parse(JSON.stringify(SHARED_SCHEDULE)),
@@ -9091,6 +9098,7 @@ function _restoreScheduleState(s){
 }
 function enterScheduleEditMode(){
   _scheduleEditMode = true;
+  _scheduleEditCleared = false;
   _scheduleEditSnapshot = _cloneScheduleState();
   renderMeals();
 }
@@ -9101,6 +9109,7 @@ function applyScheduleEdit(){
   if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSchedule();
   setSchedule();
   _scheduleEditMode = false;
+  _scheduleEditCleared = false;
   _scheduleEditSnapshot = null;
   // 2026-05-06+: Auto-randomize after Apply. Without this, restructured
   // schedule cells leave the meal grid in a mismatched state (old SEL
@@ -9130,6 +9139,10 @@ function clearScheduleEdit(){
     weekData[activeWeek].leftoverLinks.length = 0;
     if(typeof rebindLeftoverLinks === 'function') rebindLeftoverLinks();
   }
+  // Mark this edit session as "cleared" so _buildAutoLinkGroups stays
+  // suppressed (DEFAULTS' him=her matches would otherwise re-paint
+  // shared/grouped cells we just wiped).
+  _scheduleEditCleared = true;
   // Stay in edit mode — user is mid-restructure.
   invalidateLeftoverCache();
   renderMeals();
@@ -9139,6 +9152,7 @@ function undoScheduleEdit(){
     _restoreScheduleState(_scheduleEditSnapshot);
   }
   _scheduleEditMode = false;
+  _scheduleEditCleared = false;
   _scheduleEditSnapshot = null;
   invalidateLeftoverCache();
   renderMeals();
