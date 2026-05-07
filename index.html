@@ -2791,6 +2791,11 @@ function _buildAutoLinkGroups(){
       return pt.d !== anchorD || pt.s !== anchorS;
     });
     if(!hasNonAnchorCell){
+      // V25 (2026-05-07): if user has explicitly tapped this cell in edit
+      // mode, respect their intent — don't auto-paint shared-green over
+      // their choice. Same-meal him/her is the AUTO trigger; user tap is
+      // the override.
+      if(_scheduleEditMode && _scheduleEditTouchedCells[dk(anchorD, anchorS)]) return;
       _autoSharedCells[dk(anchorD, anchorS)] = true;
       return;
     }
@@ -2799,6 +2804,16 @@ function _buildAutoLinkGroups(){
       return manualSlotKeys[sk(pt.p,pt.d,pt.s)];
     });
     if(anyManual) return;
+
+    // V25: same override for auto-link-groups — if any portion's cell has
+    // been user-tapped in edit mode, don't paint the group. (User's grid
+    // edit takes precedence over auto-detection of cook+leftover batches.)
+    if(_scheduleEditMode){
+      var anyTouched = validPortions.some(function(pt){
+        return _scheduleEditTouchedCells[dk(pt.d, pt.s)];
+      });
+      if(anyTouched) return;
+    }
 
     _autoLinkGroups.push({
       id: 'auto_'+k,
@@ -2813,15 +2828,32 @@ function _buildAutoLinkGroups(){
 // Split pill: tap toggles skip, long press toggles shared
 // Left tap: normal ↔ skip-him. Right tap: normal ↔ skip-her.
 // Long press either side: toggle shared for the whole cell.
+//
+// V25 (2026-05-07): schedule grid editing is now EDIT-MODE-ONLY. Outside edit
+// mode, all grid handlers (longPress, tapLeft, tapRight, tapCenter, tapDay,
+// setSharedPreset, setSharedPresetSide) early-return. Per-card pills
+// (toggleSkip / toggleEatOut / toggleShared on individual meal cards) still
+// work outside edit mode for adding states. Inside edit mode, every grid tap
+// also marks _scheduleEditTouchedCells so V13 auto-detection
+// (_autoSharedCells / _autoLinkGroups) is suppressed for tapped cells —
+// otherwise tapping a same-meal-shared cell would do nothing visible because
+// auto-detection would re-paint it shared.
 var _schedLongPress=null;
 var _schedLongFired=false;
 var _schedLongFiredTimer=null;
 function schedLongPress(d,s){
-  if(!_scheduleEditMode && (MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)])) return;
+  if(!_scheduleEditMode) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
-  if(cur==='shared') delete SHARED_SCHEDULE[k];
+  // V25: treat auto-shared (V13 _autoSharedCells, set when him+her have same
+  // meal) as "currently shared" for the toggle. Otherwise first tap on an
+  // auto-shared cell would set SHARED_SCHEDULE='shared' (explicit), keeping
+  // the visual unchanged — user has to tap twice to un-share. With this:
+  // first tap on auto-shared → empty + touched flag → visually un-shared.
+  const wasVisuallyShared = cur === 'shared' || !!_autoSharedCells[k];
+  if(wasVisuallyShared) delete SHARED_SCHEDULE[k];
   else SHARED_SCHEDULE[k]='shared';
+  _scheduleEditTouchedCells[k]=true;
   _schedLongFired=true;
   // Keep fired flag for 600ms to catch delayed touchend after DOM rebuild
   clearTimeout(_schedLongFiredTimer);
@@ -2840,14 +2872,9 @@ function schedEndPress(d,s,side){
   else schedTapRight(d,s);
 }
 function schedTapLeft(d,s){
-  // 2026-05-03 (revised): linked cells (anchor OR leftover) are LOCKED from
-  // tap-cycle. To modify, user must enter edit mode via the picker (select
-  // the group from the Category dropdown → Select). The MANUAL_SET check
-  // below catches both link AND non-link Manual cases.
-  // 2026-05-06+: Schedule edit mode bypasses the lock so users can re-paint
-  // any cell (eat-outs, link groups, etc.) when restructuring the week.
-  const himKey=sk('him',d,s);
-  if(!_scheduleEditMode && MANUAL_SET[himKey]) return; // locked by manual set (link or otherwise)
+  // V25 (2026-05-07): grid editing is edit-mode-only. Outside edit mode,
+  // per-card pills (toggleSkip / toggleEatOut / toggleShared) handle state.
+  if(!_scheduleEditMode) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
@@ -2861,14 +2888,12 @@ function schedTapLeft(d,s){
   } else {
     SHARED_SCHEDULE[k]='skip-him'; // him eats out
   }
+  _scheduleEditTouchedCells[k]=true;
   updateSchedule();
 }
 function schedTapRight(d,s){
-  // 2026-05-03 (revised): see schedTapLeft — linked cells are locked from
-  // tap-cycle. Edit via the picker (Category dropdown → group → Select).
-  // 2026-05-06+: Schedule edit mode bypasses the lock.
-  const herKey=sk('her',d,s);
-  if(!_scheduleEditMode && MANUAL_SET[herKey]) return; // locked by manual set (link or otherwise)
+  // V25 (2026-05-07): grid editing is edit-mode-only.
+  if(!_scheduleEditMode) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(cur==='shared'){
@@ -2882,32 +2907,49 @@ function schedTapRight(d,s){
   } else {
     SHARED_SCHEDULE[k]='skip-her'; // her eats out
   }
+  _scheduleEditTouchedCells[k]=true;
   updateSchedule();
 }
 // 2026-05-03 (Item 1): center-zone tap toggles shared. Same logic as the
 // existing schedLongPress, just exposed as an explicit click target.
 function schedTapCenter(d,s){
-  if(!_scheduleEditMode && (MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)])) return; // locked
+  // V25 (2026-05-07): grid editing is edit-mode-only.
+  if(!_scheduleEditMode) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
-  if(cur==='shared') delete SHARED_SCHEDULE[k];
+  // V25: treat auto-shared as "currently shared" so first tap un-shares
+  // visually (see schedLongPress for full rationale).
+  const wasVisuallyShared = cur === 'shared' || !!_autoSharedCells[k];
+  if(wasVisuallyShared) delete SHARED_SCHEDULE[k];
   else SHARED_SCHEDULE[k]='shared';
+  _scheduleEditTouchedCells[k]=true;
   updateSchedule();
 }
 function schedTapDay(d){
+  // V25 (2026-05-07): grid editing is edit-mode-only.
+  if(!_scheduleEditMode) return;
   const slots=['breakfast','lunch','dinner'];
-  const allShared=slots.every(function(s){return SHARED_SCHEDULE[dk(d,s)]==='shared';});
+  // V25: count auto-shared (V13) as "shared" for the cycle so a row of
+  // auto-shared cells advances to eat-out on first tap (rather than first
+  // becoming explicit-shared then taking another tap to advance).
+  const allShared=slots.every(function(s){
+    var k = dk(d,s);
+    return SHARED_SCHEDULE[k]==='shared' || !!_autoSharedCells[k];
+  });
   const allEO=slots.every(function(s){return SHARED_SCHEDULE[dk(d,s)]==='skip-both';});
   slots.forEach(function(s){
-    if(!_scheduleEditMode && (MANUAL_SET[sk('him',d,s)]||MANUAL_SET[sk('her',d,s)])) return;
     const k=dk(d,s);
     if(allShared) SHARED_SCHEDULE[k]='skip-both'; // shared → eat out
     else if(allEO) delete SHARED_SCHEDULE[k];      // eat out → normal
     else SHARED_SCHEDULE[k]='shared';               // normal → shared
+    _scheduleEditTouchedCells[k]=true;
   });
   updateSchedule();
 }
 function setSharedPreset(preset){
+  // V25 (2026-05-07): grid editing (incl. column zones) is edit-mode-only.
+  // Outside edit mode, per-card pills handle shared toggling.
+  if(!_scheduleEditMode) return;
   if(preset==='clear'){SHARED_SCHEDULE={};_syncEatOutsToSharedSchedule();saveSharedSchedule();renderMeals();return;}
   // Toggle: if all days for this slot are already shared, remove them. Otherwise add them.
   const slot=preset==='breakfasts'?'breakfast':preset==='lunches'?'lunch':preset==='dinners'?'dinner':null;
@@ -2915,10 +2957,9 @@ function setSharedPreset(preset){
     const allOn=DAYS.every(function(d){return SHARED_SCHEDULE[dk(d,slot)]==='shared';});
     DAYS.forEach(function(d){
       const k=dk(d,slot);
-      // Don't modify manually-set slots
-      if(MANUAL_SET[sk('him',d,slot)]||MANUAL_SET[sk('her',d,slot)]) return;
       if(allOn) delete SHARED_SCHEDULE[k];
       else SHARED_SCHEDULE[k]='shared';
+      _scheduleEditTouchedCells[k]=true;
     });
   }
   _syncEatOutsToSharedSchedule();
@@ -2926,6 +2967,8 @@ function setSharedPreset(preset){
   renderMeals();
 }
 function setSharedPresetSide(preset,side){
+  // V25 (2026-05-07): grid editing (incl. column zones) is edit-mode-only.
+  if(!_scheduleEditMode) return;
   const slot=preset==='breakfasts'?'breakfast':preset==='lunches'?'lunch':preset==='dinners'?'dinner':null;
   if(!slot) return;
   // Toggle eat-out for this person on all days for this slot
@@ -2935,7 +2978,6 @@ function setSharedPresetSide(preset,side){
     return st===skipKey||st==='skip-both';
   });
   DAYS.forEach(function(d){
-    if(MANUAL_SET[sk(side,d,slot)]) return;
     const k=dk(d,slot);
     const cur=SHARED_SCHEDULE[k]||'';
     if(allOn){
@@ -2947,6 +2989,7 @@ function setSharedPresetSide(preset,side){
       if(cur===(side==='him'?'skip-her':'skip-him')) SHARED_SCHEDULE[k]='skip-both';
       else SHARED_SCHEDULE[k]=skipKey;
     }
+    _scheduleEditTouchedCells[k]=true;
   });
   updateSchedule();
 }
@@ -9070,6 +9113,14 @@ var _scheduleEditSnapshot = null;
 // On edit mode entry, auto-detection runs normally so user sees existing
 // schedule and can build on it.
 var _scheduleEditCleared = false;
+// 2026-05-07 V25: per-cell touched tracker. Marked when user explicitly taps
+// a grid cell (or column zone) in edit mode. Once a cell is touched, V13
+// auto-detection (_buildAutoLinkGroups → _autoSharedCells / _autoLinkGroups)
+// is suppressed for that cell so the user's intent ("I just un-shared this")
+// can override the same-meal auto-shared visual. Reset on edit-mode entry,
+// Apply, Undo, Reset. Also feeds applyScheduleEdit's surgical-randomize diff
+// (touched cells unlock for re-roll even if SEL/SHARED_SCHEDULE is unchanged).
+var _scheduleEditTouchedCells = {};
 function _cloneScheduleState(){
   return {
     SHARED_SCHEDULE: JSON.parse(JSON.stringify(SHARED_SCHEDULE)),
@@ -9102,6 +9153,7 @@ function _restoreScheduleState(s){
 function enterScheduleEditMode(){
   _scheduleEditMode = true;
   _scheduleEditCleared = false;
+  _scheduleEditTouchedCells = {};
   _scheduleEditSnapshot = _cloneScheduleState();
   renderMeals();
 }
@@ -9147,11 +9199,19 @@ function applyScheduleEdit(){
         ['him','her'].forEach(function(p){
           var k = sk(p,d,s);
           if(MANUAL_SET[k]) return; // already locked legitimately — don't touch
+          // V25: explicit grid taps mark _scheduleEditTouchedCells. Include as
+          // a touched signal — covers the case where user taps a cell to
+          // "un-share" (clearing the auto-shared visual) but ends up with the
+          // same SHARED_SCHEDULE state as before (e.g., the cell was rendered
+          // shared via _autoSharedCells, never had SHARED_SCHEDULE='shared'
+          // explicitly). Without this, the diff sees no change and the cell
+          // stays locked from re-randomize.
           var touched = SEL[k] !== snap.SEL[k]
             || (SHARED_SCHEDULE[dk(d,s)] || '') !== (snap.SHARED_SCHEDULE[dk(d,s)] || '')
             || !!SKIPPED[k] !== !!snap.SKIPPED[k]
             || !!EAT_OUT[k] !== !!snap.EAT_OUT[k]
-            || !!nowGroups[k] !== !!snapGroups[k];
+            || !!nowGroups[k] !== !!snapGroups[k]
+            || !!_scheduleEditTouchedCells[dk(d,s)];
           if(!touched){
             MANUAL_SET[k] = true;
             tempLocked.push(k);
@@ -9162,6 +9222,7 @@ function applyScheduleEdit(){
   }
   _scheduleEditMode = false;
   _scheduleEditCleared = false;
+  _scheduleEditTouchedCells = {};
   _scheduleEditSnapshot = null;
   // Use current `person` tab as the randomize target. If user is on Him tab,
   // only him's unlocked slots re-roll; her's stays. Variety filter is
@@ -9200,6 +9261,11 @@ function clearScheduleEdit(){
   // suppressed (DEFAULTS' him=her matches would otherwise re-paint
   // shared/grouped cells we just wiped).
   _scheduleEditCleared = true;
+  // V25: Reset touched-cell tracker too — Reset is a fresh-slate operation,
+  // so prior taps shouldn't carry over. After Reset, _scheduleEditCleared
+  // gates auto-detection wholesale, so per-cell touched markers don't
+  // matter visually until the user starts tapping again.
+  _scheduleEditTouchedCells = {};
   // Stay in edit mode — user is mid-restructure.
   invalidateLeftoverCache();
   renderMeals();
@@ -9210,6 +9276,7 @@ function undoScheduleEdit(){
   }
   _scheduleEditMode = false;
   _scheduleEditCleared = false;
+  _scheduleEditTouchedCells = {};
   _scheduleEditSnapshot = null;
   invalidateLeftoverCache();
   renderMeals();
