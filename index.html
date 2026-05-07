@@ -3893,40 +3893,46 @@ function updateSchedule(){
   renderMeals();
 }
 
-// V49 / V50 (2026-05-07): resolve state contradictions that this
+// V49 / V50 / V51 (2026-05-07): resolve state contradictions that this
 // codebase's V31-V48 mutation paths can't produce, but cloud sync's
 // mergeSyncData and pre-V31 saved data can.
 //
-// V50: TIMESTAMP-AWARE LATEST-WINS for SHARED ↔ per-slot conflicts.
-// Compare per-slot weekData[w].ts (bumped on stampSel + V50 toggleSkip
-// /toggleEatOut) against per-(d,s) sharedScheduleTs (bumped via
-// _stampDiffTs in saveWeeks). Whichever is newer wins; the older
-// state is cleared.
+// V50/V51: TIMESTAMP-AWARE LATEST-WINS for ALL conflict types.
+//   - SKIPPED ↔ EAT_OUT (per slot): compare skippedTs vs eatOutTs (V51).
+//     Whichever is newer wins; the older flag is cleared.
+//   - SHARED ↔ per-slot SKIPPED: compare sharedScheduleTs vs skippedTs (V51).
+//   - SHARED ↔ per-slot EAT_OUT: compare sharedScheduleTs vs eatOutTs (V51).
 //
 // Fallback rules when timestamps unavailable / equal / both 0:
-//   1. SKIPPED[k] && EAT_OUT[k]: heuristic — EAT_OUT wins (matches V31's
-//      _syncEatOutsToSharedSchedule direction). No per-flag ts available
-//      to do better; both flags share the slot's weekData.ts.
-//   2. SHARED='shared' || 'skip-*' vs per-slot SKIPPED/EAT_OUT: if no ts
-//      on either side, SHARED wins (matches V36/V41/V47/V31 mutation-time
-//      defaults).
+//   - SKIPPED + EAT_OUT: EAT_OUT wins (V31 sync direction)
+//   - SHARED vs per-slot: SHARED wins (V36/V41/V47/V31 mutation defaults)
 //
 // Doesn't touch SEL or MANUAL_SET — those have their own contracts and
 // resolver scope is intentionally narrow.
 // Idempotent — running twice produces no further changes.
 function _resolveStateContradictions(){
   var w = weekData[activeWeek] || {};
-  var slotTs = w.ts || {};
   var schedTs = w.sharedScheduleTs || {};
+  var skippedTs = w.skippedTs || {};
+  var eatOutTs = w.eatOutTs || {};
 
   DAYS.forEach(function(d){
     SLOTS.forEach(function(s){
       var himK=sk('him',d,s), herK=sk('her',d,s);
       var dKey=dk(d,s);
 
-      // Per-slot SKIPPED+EAT_OUT — fallback heuristic (no per-flag ts).
-      if(SKIPPED[himK] && EAT_OUT[himK]) delete SKIPPED[himK];
-      if(SKIPPED[herK] && EAT_OUT[herK]) delete SKIPPED[herK];
+      // V51: per-slot SKIPPED+EAT_OUT, both set — compare per-flag ts.
+      // Whichever was last touched wins. Fallback when both ts=0 (or
+      // equal): EAT_OUT wins (V31 default).
+      function resolveSkipEat(k){
+        if(!SKIPPED[k] || !EAT_OUT[k]) return;
+        var skTs = skippedTs[k] || 0;
+        var eoTs = eatOutTs[k] || 0;
+        if(skTs > eoTs) delete EAT_OUT[k];
+        else delete SKIPPED[k];
+      }
+      resolveSkipEat(himK);
+      resolveSkipEat(herK);
 
       // SHARED contradictions only on grid slots
       if(['breakfast','lunch','dinner'].indexOf(s)<0) return;
@@ -3934,8 +3940,15 @@ function _resolveStateContradictions(){
       if(!st) return;
 
       var sTs = schedTs[dKey] || 0;
-      var himTs = slotTs[himK] || 0;
-      var herTs = slotTs[herK] || 0;
+      // V51: compare against the specific flag's ts (not slot ts).
+      var himSkipTs = skippedTs[himK] || 0;
+      var herSkipTs = skippedTs[herK] || 0;
+      var himEoTs = eatOutTs[himK] || 0;
+      var herEoTs = eatOutTs[herK] || 0;
+      // For 'shared' check, max of skip/eo ts on each side captures
+      // "latest user action on this side's per-slot pills."
+      var himTs = Math.max(himSkipTs, himEoTs);
+      var herTs = Math.max(herSkipTs, herEoTs);
 
       // Helper: is the per-slot pill action newer than the SHARED state?
       // When both ts are 0 (legacy data), returns false — fallback to
@@ -3985,8 +3998,11 @@ function _resolveStateContradictions(){
             delete SKIPPED[k];
           }
         }
-        if(st === 'skip-him' || st === 'skip-both') resolveSkipSide('him', himK, himTs);
-        if(st === 'skip-her' || st === 'skip-both') resolveSkipSide('her', herK, herTs);
+        // V51: pass each side's specific SKIPPED ts (not the max-of-skip-eo
+        // used for 'shared' branch). Skip-* state contradicts SKIPPED only,
+        // so compare against the SKIPPED's own ts.
+        if(st === 'skip-him' || st === 'skip-both') resolveSkipSide('him', himK, himSkipTs);
+        if(st === 'skip-her' || st === 'skip-both') resolveSkipSide('her', herK, herSkipTs);
       }
     });
   });
@@ -9572,9 +9588,16 @@ function _cloneScheduleState(){
     weekTs: w && w.ts ? JSON.parse(JSON.stringify(w.ts)) : {},
     weekLateSnackTs: w && w.lateSnackTs ? JSON.parse(JSON.stringify(w.lateSnackTs)) : {},
     weekSharedScheduleTs: w && w.sharedScheduleTs ? JSON.parse(JSON.stringify(w.sharedScheduleTs)) : {},
+    // V51 (2026-05-07): per-flag ts maps for SKIPPED + EAT_OUT.
+    weekSkippedTs: w && w.skippedTs ? JSON.parse(JSON.stringify(w.skippedTs)) : {},
+    weekEatOutTs: w && w.eatOutTs ? JSON.parse(JSON.stringify(w.eatOutTs)) : {},
     // V37: weekData mirrors used as prior-baselines by _stampDiffTs.
     weekSharedScheduleMirror: w && w.sharedSchedule ? JSON.parse(JSON.stringify(w.sharedSchedule)) : {},
-    weekLateSnackMirror: w && w.lateSnack ? JSON.parse(JSON.stringify(w.lateSnack)) : {}
+    weekLateSnackMirror: w && w.lateSnack ? JSON.parse(JSON.stringify(w.lateSnack)) : {},
+    // V51: also mirror SKIPPED + EAT_OUT for the same diff-stamp parity
+    // V37 enforced for sharedSchedule + lateSnack.
+    weekSkippedMirror: w && w.skipped ? JSON.parse(JSON.stringify(w.skipped)) : {},
+    weekEatOutMirror: w && w.eatOut ? JSON.parse(JSON.stringify(w.eatOut)) : {}
   };
 }
 function _restoreScheduleState(s){
@@ -9618,6 +9641,23 @@ function _restoreScheduleState(s){
     if(s.weekLateSnackMirror){
       if(!weekData[activeWeek].lateSnack) weekData[activeWeek].lateSnack = {};
       replaceObj(weekData[activeWeek].lateSnack, s.weekLateSnackMirror);
+    }
+    // V51: skipped/eatOut ts + mirrors
+    if(s.weekSkippedTs){
+      if(!weekData[activeWeek].skippedTs) weekData[activeWeek].skippedTs = {};
+      replaceObj(weekData[activeWeek].skippedTs, s.weekSkippedTs);
+    }
+    if(s.weekEatOutTs){
+      if(!weekData[activeWeek].eatOutTs) weekData[activeWeek].eatOutTs = {};
+      replaceObj(weekData[activeWeek].eatOutTs, s.weekEatOutTs);
+    }
+    if(s.weekSkippedMirror){
+      if(!weekData[activeWeek].skipped) weekData[activeWeek].skipped = {};
+      replaceObj(weekData[activeWeek].skipped, s.weekSkippedMirror);
+    }
+    if(s.weekEatOutMirror){
+      if(!weekData[activeWeek].eatOut) weekData[activeWeek].eatOut = {};
+      replaceObj(weekData[activeWeek].eatOut, s.weekEatOutMirror);
     }
   }
 }
@@ -12759,10 +12799,19 @@ function saveWeeks(){
   // Diff-stamp lateSnack and sharedSchedule BEFORE we overwrite the prior
   // snapshot. Each per-key timestamp records WHEN that key last changed,
   // enabling per-key last-write-wins merge across phones.
+  // V51 (2026-05-07): also diff-stamp SKIPPED + EAT_OUT independently —
+  // they're conceptually separate flags (per the user's V47 framing) and
+  // SHARED has its own per-key ts; SKIPPED + EAT_OUT should too. Lets
+  // the resolver compare per-flag latest-wins instead of relying on a
+  // shared bundled ts. Lets sync merge SKIPPED and EAT_OUT independently.
   if(!w.lateSnackTs) w.lateSnackTs={};
   if(!w.sharedScheduleTs) w.sharedScheduleTs={};
+  if(!w.skippedTs) w.skippedTs={};
+  if(!w.eatOutTs) w.eatOutTs={};
   _stampDiffTs(w.lateSnack, LATE_SNACK, w.lateSnackTs, now);
   _stampDiffTs(w.sharedSchedule, SHARED_SCHEDULE, w.sharedScheduleTs, now);
+  _stampDiffTs(w.skipped, SKIPPED, w.skippedTs, now);
+  _stampDiffTs(w.eatOut, EAT_OUT, w.eatOutTs, now);
   // Bundle per-week state into weekData
   w.sel=JSON.parse(JSON.stringify(SEL));
   w.skipped=JSON.parse(JSON.stringify(SKIPPED));
@@ -12844,6 +12893,11 @@ function getSyncPayload(){
   // `lateSnackTs` and `sharedScheduleTs` maps for last-write-wins merge.
   // v3 payloads still merge cleanly (treated as ts=0 — local v4 entries with
   // real timestamps win). See mergeSyncData for migration handling.
+  //
+  // V51 (2026-05-07): also includes per-week `skippedTs` and `eatOutTs`
+  // maps. Strictly additive — pre-V51 v4 payloads lack these fields, so
+  // remote rt=0 and local-with-V51-ts wins on merge. No version bump
+  // needed (additive evolution within v4).
   return {
     weekData:weekData,
     customMeals:customMeals,
@@ -12968,6 +13022,44 @@ function mergeSyncData(remote){
           if(remSched[k]!==undefined) weekData[w].sharedSchedule[k]=remSched[k];
           else delete weekData[w].sharedSchedule[k];
           weekData[w].sharedScheduleTs[k]=rt;
+        }
+      });
+      // V51 (2026-05-07): per-key LWW for SKIPPED + EAT_OUT independently.
+      // Skip and Eat Out are conceptually separate flags — each has its
+      // own per-key ts (V51 saveWeeks). Sync merges them independently
+      // so e.g. Phone A's toggleSkip OFF at T2 propagates to Phone B
+      // even when other slot state didn't change. Pre-V51 remote (no
+      // ts maps) treated as ts=0 — local v51 entries with real ts win.
+      const remSkip=remoteWeek.skipped||{};
+      const remSkipTs=remoteWeek.skippedTs||{};
+      if(!weekData[w].skipped)weekData[w].skipped={};
+      if(!weekData[w].skippedTs)weekData[w].skippedTs={};
+      var skKeys={};
+      Object.keys(remSkip).forEach(function(k){skKeys[k]=true;});
+      Object.keys(weekData[w].skipped).forEach(function(k){skKeys[k]=true;});
+      Object.keys(skKeys).forEach(function(k){
+        var lt=weekData[w].skippedTs[k]||0;
+        var rt=remoteIsLegacy?0:(remSkipTs[k]||0);
+        if(rt>lt){
+          if(remSkip[k]!==undefined) weekData[w].skipped[k]=remSkip[k];
+          else delete weekData[w].skipped[k];
+          weekData[w].skippedTs[k]=rt;
+        }
+      });
+      const remEO=remoteWeek.eatOut||{};
+      const remEOTs=remoteWeek.eatOutTs||{};
+      if(!weekData[w].eatOut)weekData[w].eatOut={};
+      if(!weekData[w].eatOutTs)weekData[w].eatOutTs={};
+      var eoKeys={};
+      Object.keys(remEO).forEach(function(k){eoKeys[k]=true;});
+      Object.keys(weekData[w].eatOut).forEach(function(k){eoKeys[k]=true;});
+      Object.keys(eoKeys).forEach(function(k){
+        var lt=weekData[w].eatOutTs[k]||0;
+        var rt=remoteIsLegacy?0:(remEOTs[k]||0);
+        if(rt>lt){
+          if(remEO[k]!==undefined) weekData[w].eatOut[k]=remEO[k];
+          else delete weekData[w].eatOut[k];
+          weekData[w].eatOutTs[k]=rt;
         }
       });
     });
