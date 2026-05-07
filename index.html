@@ -7479,6 +7479,28 @@ function setLateSnackIngredientAmt(p,d,idx,val){
   renderMeals();
   autoSaveWeek();
 }
+// V43 (2026-05-07): shared helper for setting EAT_OUT[k] with consistent
+// side effects (SKIPPED/MANUAL_SET/SHARED_SCHEDULE updates per V31/V34).
+// Used by toggleEatOut (with a placeholder entry) and loadEatOutEntry
+// (with a saved entry from EAT_OUT_DB). DOES NOT call invalidateLeftover
+// Cache / autoSaveWeek / renderMeals — callers do that. Also does not
+// touch shared/skip mutual exclusion clears (those are caller-specific).
+function _applyEatOutOn(p, d, s, entry){
+  const k=sk(p,d,s);
+  const dKey=dk(d,s);
+  const ourSkip=(p==='him')?'skip-him':'skip-her';
+  const otherSkip=(p==='him')?'skip-her':'skip-him';
+  EAT_OUT[k]=entry;
+  delete SKIPPED[k];
+  MANUAL_SET[k]=true;
+  // Set grid: shared → ourSkip; otherSkip → skip-both; ourSkip/skip-both
+  // already correct; otherwise (empty/normal) → ourSkip.
+  var cur=SHARED_SCHEDULE[dKey]||'';
+  if(cur==='shared') SHARED_SCHEDULE[dKey]=ourSkip;
+  else if(cur===otherSkip) SHARED_SCHEDULE[dKey]='skip-both';
+  else if(cur===ourSkip||cur==='skip-both') {/* already correct */}
+  else SHARED_SCHEDULE[dKey]=ourSkip;
+}
 function toggleEatOut(p,d,s){
   // V34 (2026-05-07): mirror per-slot Eat Out into SHARED_SCHEDULE so the
   // grid data state matches per-slot pill state. Without this, EAT_OUT
@@ -7487,6 +7509,8 @@ function toggleEatOut(p,d,s){
   // SHARED_SCHEDULE didn't agree. The next call to
   // _syncEatOutsToSharedSchedule (Apply path or grid edit) would then
   // delete the placeholder EAT_OUT, contradicting the user's intent.
+  // V43: ON branch delegates to _applyEatOutOn helper (shared with
+  // loadEatOutEntry).
   const k=sk(p,d,s);
   const dKey=dk(d,s);
   const ourSkip=(p==='him')?'skip-him':'skip-her';
@@ -7505,16 +7529,7 @@ function toggleEatOut(p,d,s){
     if(curOff===ourSkip) delete SHARED_SCHEDULE[dKey];
     else if(curOff==='skip-both') SHARED_SCHEDULE[dKey]=otherSkip;
   } else {
-    EAT_OUT[k]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
-    delete SKIPPED[k];
-    MANUAL_SET[k]=true;
-    // Set grid: shared → ourSkip; otherSkip → skip-both; ourSkip/skip-both
-    // already correct; otherwise (empty/normal) → ourSkip.
-    var curOn=SHARED_SCHEDULE[dKey]||'';
-    if(curOn==='shared') SHARED_SCHEDULE[dKey]=ourSkip;
-    else if(curOn===otherSkip) SHARED_SCHEDULE[dKey]='skip-both';
-    else if(curOn===ourSkip||curOn==='skip-both') {/* already correct */}
-    else SHARED_SCHEDULE[dKey]=ourSkip;
+    _applyEatOutOn(p, d, s, {name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null});
   }
   // V38 (2026-05-07): explicit autoSaveWeek (see toggleSkip for rationale).
   invalidateLeftoverCache();autoSaveWeek();renderMeals();
@@ -7562,9 +7577,18 @@ function saveEatOut(p,d,s){
   renderMeals();
 }
 function loadEatOutEntry(p,d,s,idx){
-  const k=sk(p,d,s);const entry=EAT_OUT_DB[idx];if(!entry)return;
-  EAT_OUT[k]={name:entry.name,restaurant:entry.restaurant,kcal:entry.kcal,pro:entry.pro,fat:entry.fat,carb:entry.carb};
-  renderMeals();
+  // V43 (2026-05-07): close the Y1 audit gap. Pre-V43 this just wrote
+  // EAT_OUT[k] from a saved entry — no SKIPPED clear, no MANUAL_SET, no
+  // SHARED_SCHEDULE update, no autoSaveWeek. A user with SKIPPED on a
+  // slot who loaded a saved Eat Out entry would end up with both flags
+  // set. Delegate to the V43 helper which mirrors toggleEatOut's V31/V34
+  // semantics, then run the same post-mutation triggers.
+  const entry=EAT_OUT_DB[idx];if(!entry)return;
+  _applyEatOutOn(p, d, s, {
+    name:entry.name, restaurant:entry.restaurant,
+    kcal:entry.kcal, pro:entry.pro, fat:entry.fat, carb:entry.carb
+  });
+  invalidateLeftoverCache();autoSaveWeek();renderMeals();
 }
 function deleteEatOutEntry(idx){EAT_OUT_DB.splice(idx,1);saveEatOutDB();renderMeals();}
 function changeMeal(slot,mealId){
