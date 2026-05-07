@@ -2605,12 +2605,18 @@ var LEFTOVER_LINK_COLORS = [
   // — too close to eat-out red. Violet added 2026-05-04 — distinct from
   // Manual purple (deeper, more saturated) and fuchsia (more blue).
   // V59 (2026-05-07): amber replaced with sky — amber's brown tone was too
-  // close to eat-out red and orange in the same row. Sky is a brighter blue
-  // distinct from both cyan and Him's blue (96,165,250).
+  // close to eat-out red and orange. V60 (2026-05-07): sky replaced with
+  // yellow — sky was too close to cyan. Yellow opens a new hue family
+  // distinct from all other palette colors (cyan/sky-blue range, orange/red,
+  // lime green, fuchsia/violet purple, Him blue, Her pink, shared emerald,
+  // eat-out red, manual purple). Yellow (250,204,21) is brighter and
+  // distinct from leftover-yellow (yel='rgba(245,158,11)') used elsewhere
+  // — leftover-yellow only appears in paint-mode queued highlights, so no
+  // visual clash in normal grid rendering.
   { name:'cyan',    rgb:'6,182,212' },
   { name:'orange',  rgb:'249,115,22' },
   { name:'lime',    rgb:'132,204,22' },
-  { name:'sky',     rgb:'56,189,248' },
+  { name:'yellow',  rgb:'250,204,21' },
   { name:'fuchsia', rgb:'217,70,239' },
   { name:'violet',  rgb:'139,92,246' }
 ];
