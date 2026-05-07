@@ -6131,7 +6131,8 @@ function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day){
   }).join('')+'</div>';
   const stepsHtml=(meal._colorSteps||meal.steps||[]).map(function(st){return'<li>'+st+'</li>'}).join('');
   const totalServings = portionList.length;
-  const servesLabel='🥗 Combined ingredients (serves '+totalServings+')';
+  // V26 (2026-05-07): simplified label.
+  const servesLabel='🥗 Ingredients (serves '+totalServings+')';
   const k='shared_'+day+'_'+s+(extraLabel||'');
   const isOpen=openCards[k]||false;
   return '<div class="mc slot-'+s+(isOpen?' open':'')+'" id="mc_'+k+'">'
@@ -6678,7 +6679,15 @@ function buildMealCardHtml(s, person, day, other){
   }
   let cookPill='';
   if(loInfo&&!loInfo.isLeftover){
-    if(loInfo.servings>1||loInfo.crossPersonCook) cookPill='<div class="mc-pill mc-pill-cook on no-click">Big Cook</div>';
+    // V26 (2026-05-07): only show Big Cook when batch has at least one
+    // portion at a different (day, slot) from the anchor — i.e., a real
+    // leftover or cross-slot reuse. Pure same-day-same-slot shared cooks
+    // (him + her on Mon dinner, no leftovers) are sufficiently identified
+    // by the Shared pill; the Big Cook pill is redundant there.
+    var hasLeftoverPortion = loInfo.portions && loInfo.portions.some(function(pt){
+      return pt.d !== day || pt.s !== s;
+    });
+    if(hasLeftoverPortion) cookPill='<div class="mc-pill mc-pill-cook on no-click">Big Cook</div>';
   }
   const notePill=activeMeal.note?'<div class="note-pill">⏰ '+activeMeal.note+'</div>':'';
 
@@ -6707,11 +6716,14 @@ function buildMealCardHtml(s, person, day, other){
   //   - Otherwise: 1
   const cookServings = showCombinedOnThisTab ? batchN : 1;
   let displayServings = cookServings;
+  // V26 (2026-05-07): simplified labels per user request. "Ingredients
+  // (serves N)" for batch combined view, plain "Ingredients" for everything
+  // else (including the per-serving toggle of a Big Cook anchor — context
+  // already conveyed by the Combined/Per-serving toggle button next to the
+  // title).
   let ingrSectionTitle = displayServings>1
-    ? '🥗 Combined ingredients (serves '+displayServings+')'
-    : (showCombinedHeader && wantsPerServing
-       ? '🥗 Ingredients (per serving · cooks '+batchN+')'
-       : '🥗 Ingredients');
+    ? '🥗 Ingredients (serves '+displayServings+')'
+    : '🥗 Ingredients';
   if (port.ingredients && port.ingredients.length && port.ingredients[0].dbKey !== undefined) {
     // Get ingredients with overrides applied
     const ovrIngr = applyOverrides(port,person,day,s);
@@ -6784,7 +6796,8 @@ function buildMealCardHtml(s, person, day, other){
     }
     if(cookBal&&batchPortions.length>=2){
       displayServings=batchPortions.length;
-      ingrSectionTitle='🥗 Combined ingredients (serves '+batchPortions.length+')';
+      // V26 (2026-05-07): simplified label.
+      ingrSectionTitle='🥗 Ingredients (serves '+batchPortions.length+')';
       var ovrIngr2=applyOverrides(port,person,day,s);
       ingrHtml=cookBal.map(function(ci,idx){
         var combinedAmt=0;
