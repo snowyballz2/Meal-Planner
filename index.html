@@ -6910,9 +6910,12 @@ function renderMeals(){
     html+='<div class="sched-title">'+ssIcon+' Schedule Meals</div>';
     if(sharedSchedOpen){
       if(_scheduleEditMode){
-        // Edit mode: show Clear (wipe painting), Undo (revert), Apply (commit).
+        // Edit mode: show Reset (wipe painting), Undo (revert), Apply (commit).
+        // Inside-edit "Reset" wipes everything (SEL too) — start fresh.
+        // Outside "Clear" wipes only user overrides (skips, eat-outs,
+        // ingredient pins) — meals stay. Different scope, different label.
         html+='<div style="display:flex;gap:6px">'
-          +'<div class="sched-btn" onclick="event.stopPropagation();if(confirm(\'Clear all schedule painting? You can still Undo afterwards.\')){clearScheduleEdit();}">Clear</div>'
+          +'<div class="sched-btn" onclick="event.stopPropagation();if(confirm(\'Reset the schedule grid to a blank slate? You can still Undo afterwards.\')){clearScheduleEdit();}">Reset</div>'
           +'<div class="sched-btn" onclick="event.stopPropagation();undoScheduleEdit()">Undo</div>'
           +'<div class="sched-btn sched-btn-set" onclick="event.stopPropagation();applyScheduleEdit()">Apply</div>'
           +'</div>';
@@ -6931,7 +6934,7 @@ function renderMeals(){
       if(_scheduleEditMode){
         html+='<div style="margin:6px 0;padding:8px 10px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.5);border-radius:8px;color:#A78BFA;font-size:12px;line-height:1.4">'
           +'<b>Edit Mode</b> — locked cells can be re-painted. Per-card pills also work. '
-          +'<b>Clear</b> wipes painting · <b>Apply</b> commits + creates plan · <b>Undo</b> reverts.'
+          +'<b>Reset</b> wipes the grid · <b>Apply</b> commits + re-randomizes only what you changed · <b>Undo</b> reverts.'
           +'</div>';
       } else {
         // Spacer between header buttons and grid
@@ -9104,22 +9107,63 @@ function enterScheduleEditMode(){
 }
 function applyScheduleEdit(){
   // Run V10 sync first (creates EAT_OUTs that were deferred), then setSchedule
-  // (locks MANUAL_SET + stamps her=him for shared cells), then randomize so
-  // the resulting plan reflects the new schedule layout end-to-end.
+  // (locks MANUAL_SET + stamps her=him for shared cells), then surgical-lock
+  // every UNTOUCHED slot so randomize only re-rolls what the user changed.
+  // Lastly, randomize using the current person tab as the target.
+  var snap = _scheduleEditSnapshot;
   if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSchedule();
   setSchedule();
+  // 2026-05-06+ V23: Surgical re-randomize — diff current state against the
+  // pre-edit snapshot. Slots whose SEL/SHARED/SKIPPED/EAT_OUT didn't change
+  // get a temporary MANUAL_SET=true lock so randomize skips them. Untouched
+  // meals stay; only edited slots re-roll. Locks restored after.
+  // (After Reset, the snapshot still holds the pre-edit state — Reset itself
+  // wipes everything, but we treat all slots as "changed" relative to the
+  // pre-edit snapshot, so randomize is unconstrained — matches user expecting
+  // a fresh week.)
+  var tempLocked = [];
+  if(snap){
+    DAYS.forEach(function(d){
+      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+        ['him','her'].forEach(function(p){
+          var k = sk(p,d,s);
+          if(MANUAL_SET[k]) return; // already locked legitimately — don't touch
+          var snapSel = snap.SEL[k];
+          var snapSharedState = snap.SHARED_SCHEDULE[dk(d,s)] || '';
+          var nowSharedState = SHARED_SCHEDULE[dk(d,s)] || '';
+          var snapSkipped = !!snap.SKIPPED[k];
+          var nowSkipped = !!SKIPPED[k];
+          var snapEatOut = !!snap.EAT_OUT[k];
+          var nowEatOut = !!EAT_OUT[k];
+          var touched = SEL[k] !== snapSel
+            || nowSharedState !== snapSharedState
+            || nowSkipped !== snapSkipped
+            || nowEatOut !== snapEatOut;
+          if(!touched){
+            MANUAL_SET[k] = true;
+            tempLocked.push(k);
+          }
+        });
+      });
+    });
+  }
   _scheduleEditMode = false;
   _scheduleEditCleared = false;
   _scheduleEditSnapshot = null;
-  // 2026-05-06+: Auto-randomize after Apply. Without this, restructured
-  // schedule cells leave the meal grid in a mismatched state (old SEL
-  // values, stale ingredient amounts). Run for both persons so the whole
-  // week regenerates against the new schedule.
-  randomizeWeek('shared');
+  // Use current `person` tab as the randomize target. If user is on Him tab,
+  // only him's unlocked slots re-roll; her's stays. Variety filter is
+  // household-level so target='him' still considers her's existing meals.
+  var rTarget = (person === 'him' || person === 'her' || person === 'shared') ? person : 'shared';
+  randomizeWeek(rTarget);
+  // Restore the temp locks — these slots weren't truly user-locked; we only
+  // locked them to keep randomize from re-rolling unchanged content.
+  tempLocked.forEach(function(k){ delete MANUAL_SET[k]; });
   // randomizeWeek closes the schedule panel — re-open so the user sees the
   // result without an extra tap.
   sharedSchedOpen = true;
   renderMeals();
+  if(topTab==='shop') renderShop();
+  autoSaveWeek();
 }
 function clearScheduleEdit(){
   // Clear all painting / highlights / per-cell state inside edit mode.
