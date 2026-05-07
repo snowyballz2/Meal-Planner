@@ -3844,6 +3844,16 @@ function _syncEatOutsToSharedSchedule(){
   // MANUAL_SET, so locking would prevent re-painting. Locking from
   // randomize is already covered by EAT_OUT[k] in isLockedForRandomize.
   // Called from updateSchedule and setSharedPreset on every grid edit.
+  //
+  // V31 (2026-05-07): also clear SKIPPED on the side getting EAT_OUT
+  // assigned. Skip and Eat Out are mutually exclusive intents — the
+  // per-slot pills enforce this (toggleSkip deletes EAT_OUT, toggleEatOut
+  // deletes SKIPPED). The grid path was missing the corresponding clear,
+  // so a slot with per-slot Skip already set could end up with both
+  // SKIPPED=true AND EAT_OUT={...} after the user paints skip-* on the
+  // grid and Apply runs. Treating grid 'skip-*' as eat-out (which it
+  // semantically is) means it should supersede any prior Skip on the
+  // affected side — same as the per-slot Eat Out pill.
   DAYS.forEach(function(d){
     ['breakfast','lunch','dinner'].forEach(function(s){
       var state=SHARED_SCHEDULE[dk(d,s)]||'';
@@ -3851,11 +3861,13 @@ function _syncEatOutsToSharedSchedule(){
       var herK=sk('her',d,s);
       if(state==='skip-him'||state==='skip-both'){
         if(!EAT_OUT[himK]) EAT_OUT[himK]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+        delete SKIPPED[himK];
       } else if(EAT_OUT[himK] && !_isEatOutCustomized(himK)){
         delete EAT_OUT[himK];
       }
       if(state==='skip-her'||state==='skip-both'){
         if(!EAT_OUT[herK]) EAT_OUT[herK]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+        delete SKIPPED[herK];
       } else if(EAT_OUT[herK] && !_isEatOutCustomized(herK)){
         delete EAT_OUT[herK];
       }
@@ -9366,12 +9378,21 @@ function setSchedule(){
           clearOverrides('her',d,s);
         }
       }
-      // Apply eat-outs
+      // Apply eat-outs.
+      // V31 (2026-05-07): also clear SKIPPED on the affected side. Skip and
+      // Eat Out are mutually exclusive — the per-slot pills enforce this
+      // (toggleSkip deletes EAT_OUT, toggleEatOut deletes SKIPPED). The grid
+      // path was missing the corresponding clear, so a slot with per-slot
+      // Skip already set could end up with both SKIPPED=true AND EAT_OUT={}
+      // after Apply. Treating grid 'skip-*' as eat-out (its actual semantic
+      // meaning) means it should supersede any prior Skip on that side.
       if(state==='skip-him'||state==='skip-both'){
         if(!EAT_OUT[sk('him',d,s)]) EAT_OUT[sk('him',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+        delete SKIPPED[sk('him',d,s)];
       }
       if(state==='skip-her'||state==='skip-both'){
         if(!EAT_OUT[sk('her',d,s)]) EAT_OUT[sk('her',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+        delete SKIPPED[sk('her',d,s)];
       }
     });
   });
