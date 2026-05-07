@@ -7571,6 +7571,12 @@ function changeMeal(slot,mealId){
   const selKey=sk(person,day,slot);
   stampSel(selKey,mealId);
   MANUAL_SET[selKey]=true;
+  // V42 (X4, 2026-05-07): user picking a specific meal commits them to
+  // EATING that meal. Skip and Eat Out both contradict that intent.
+  // Clearing them (and the corresponding SHARED_SCHEDULE skip-*
+  // adjustment below) keeps the slot's state consistent.
+  delete SKIPPED[selKey];
+  delete EAT_OUT[selKey];
   // Clear schedule state — manual choice overrides the plan
   const schedKey=dk(day,slot);
   const schedState=SHARED_SCHEDULE[schedKey];
