@@ -7360,25 +7360,15 @@ function renderMeals(){
                   : herFullSkip ? gry+'.25)'
                   : herEatOut ? red+'.2)'
                   : 'transparent';
-          // Border: link group color > shared > skip > eat-out > default.
-          // V56 (2026-05-07): himManual no longer drives the border.
-          // For shared / big-cook cells with USER_EDITED, the dot
-          // (.sched-set-dot below) carries the manual signal — purple
-          // border was hiding the shared-green/group-outline borders.
-          // For "manual + normal" cells, the purple BG (in lBg cascade)
-          // plus white label text already indicate manual; border can
-          // safely fall through to default-border without the dot.
-          let lBdr=lGroup?'2px solid rgba('+lGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':himFullSkip?'1.5px solid '+gry+'.6)':himEatOut?'1.5px solid '+red+'.4)':(himManual&&lNormal)?'2px solid '+prp+'.6)':'1.5px solid var(--border)';
-          let rBdr=rGroup?'2px solid rgba('+rGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':herFullSkip?'1.5px solid '+gry+'.6)':herEatOut?'1.5px solid '+red+'.4)':(herManual&&rNormal)?'2px solid '+prp+'.6)':'1.5px solid var(--border)';
-          // V56/V57/V59: badge shown on Him/Her label for USER_EDITED on
-          // shared / link-group cells (where the purple-bg signal isn't
-          // visible). Skip/eat-out suppress the badge per user.
-          // V59 (2026-05-07): also propagate USER_EDITED THROUGH link
+          // V56/V57/V59: USER_EDITED indicator on Him/Her side.
+          // V59 (2026-05-07): propagate USER_EDITED THROUGH link
           // groups — if any slot in the group is user-edited, ALL group
-          // members show the badge. A link group's slots share the same
-          // meal (cook anchor + leftovers); editing the cook anchor
-          // affects every leftover's content, so the visual indicator
-          // belongs on every group member.
+          // members show the indicator. A link group's slots share the
+          // same meal (cook anchor + leftovers); editing the cook
+          // anchor affects every leftover's content, so the visual
+          // indicator belongs on every group member.
+          // V62: this gate now drives the OUTER border being purple
+          // (lBdr/rBdr cascade puts USER_EDITED purple at top).
           function _groupHasUserEdit(g){
             if(!g || !g.slots) return false;
             for(var gi=0; gi<g.slots.length; gi++){
@@ -7397,6 +7387,15 @@ function renderMeals(){
             (herManual && (isShared || !!rGroup))
             || rGroupUserEdited
           );
+          // Border cascade. V62 (2026-05-07): USER_EDITED purple is the
+          // OUTERMOST border — overrides link group / shared / etc.
+          // outlines per user feedback ("always make the purple border
+          // the one on the outside"). Skip/eat-out still suppress the
+          // purple (their red/grey state already signals user-set, per
+          // V56 rule). For propagated group edits (V59), every member's
+          // half gets purple even if not directly edited.
+          let lBdr=himShowSetDot?'2px solid '+prp+'.85)':lGroup?'2px solid rgba('+lGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':himFullSkip?'1.5px solid '+gry+'.6)':himEatOut?'1.5px solid '+red+'.4)':(himManual&&lNormal)?'2px solid '+prp+'.6)':'1.5px solid var(--border)';
+          let rBdr=herShowSetDot?'2px solid '+prp+'.85)':rGroup?'2px solid rgba('+rGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':herFullSkip?'1.5px solid '+gry+'.6)':herEatOut?'1.5px solid '+red+'.4)':(herManual&&rNormal)?'2px solid '+prp+'.6)':'1.5px solid var(--border)';
           // Skip text gets a muted #ccc instead of full white, reinforcing
           // the "this slot is silenced" feel.
           let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared?'#fff':himFullSkip?'#cbd5e1':himEatOut?'#fff':'var(--gray)';
@@ -7456,13 +7455,19 @@ function renderMeals(){
           const bothHi = lSelfHi && rSelfHi;
           // Pick each half's "primary" color for the gradient. Order mirrors
           // the lBdr/rBdr cascade (group → manual → shared → skip → border).
-          let lCenterCol = lGroup ? 'rgba('+lGroupRgb+',.85)'
+          // V62: centerline picks up purple when USER_EDITED on
+          // shared/link cells, mirroring the border cascade. Without
+          // this, a shared+USER_EDITED cell would have a purple outer
+          // border but a green centerline — inconsistent.
+          let lCenterCol = himShowSetDot ? prp+'.85)'
+                         : lGroup ? 'rgba('+lGroupRgb+',.85)'
                          : (himManual&&lNormal) ? prp+'.6)'
                          : isShared ? grn+'.5)'
                          : himFullSkip ? gry+'.6)'
                          : himEatOut ? red+'.4)'
                          : '';
-          let rCenterCol = rGroup ? 'rgba('+rGroupRgb+',.85)'
+          let rCenterCol = herShowSetDot ? prp+'.85)'
+                         : rGroup ? 'rgba('+rGroupRgb+',.85)'
                          : (herManual&&rNormal) ? prp+'.6)'
                          : isShared ? grn+'.5)'
                          : herFullSkip ? gry+'.6)'
@@ -7485,16 +7490,12 @@ function renderMeals(){
           // Center is INVISIBLE absolute-positioned click overlay (above the
           // split-center bar, z-index:5). Halves abut directly (50/50 flex)
           // — their borders + the gradient overlay handle visuals.
-          // V61 (2026-05-07): inner purple border via box-shadow:inset.
-          // Replaces V57's label-wrapping pill per user feedback. Layers
-          // a purple line just inside the cell's existing border so
-          // shared green / link-group color stays visible on the outer
-          // edge while the inner purple signals USER_EDITED.
-          const lInset = himShowSetDot ? ';box-shadow:inset 0 0 0 1.5px rgba(167,139,250,.85)' : '';
-          const rInset = herShowSetDot ? ';box-shadow:inset 0 0 0 1.5px rgba(167,139,250,.85)' : '';
+          // V62 (2026-05-07): inner box-shadow approach (V61) reverted —
+          // user wanted purple as the OUTER border. The lBdr/rBdr cascade
+          // above puts USER_EDITED purple at the top.
           html+='<div class="sched-pill-wrap" style="'+dimStyle+'">'
-            +'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+';border-right:'+lBdrRightFinal+';color:'+lCol+lInset+'" '+lClick+'>'+lLabel+'</div>'
-            +'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+';border-left:'+rBdrLeftFinal+';color:'+rCol+rInset+'" '+rClick+'>'+rLabel+'</div>'
+            +'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+';border-right:'+lBdrRightFinal+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>'
+            +'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+';border-left:'+rBdrLeftFinal+';color:'+rCol+'" '+rClick+'>'+rLabel+'</div>'
             +splitCenter
             +'<div class="sched-pill-mid" '+cClick+'></div>'
             +'</div>';
