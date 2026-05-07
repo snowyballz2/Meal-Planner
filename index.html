@@ -16411,11 +16411,23 @@ window.MPStress=(function(){
           });
         });
       });
+      // V44 (2026-05-07, Z1 polish): also capture the V34 SHARED_SCHEDULE
+      // write that toggleEatOut now performs. eoSetup is the slot where
+      // the user "ate out" — V34 writes 'skip-him' or 'skip-her' on the
+      // SHARED_SCHEDULE entry for that day_slot (mirroring the per-slot
+      // pill into grid state). The sched value depends on which side.
+      var eoExpectedSched = null;
       if(eoSetup){
         toggleEatOut(eoSetup.p, eoSetup.d, eoSetup.s);
         EAT_OUT[eoSetup.k].name='Persist Test';
         EAT_OUT[eoSetup.k].kcal=700;
         EAT_OUT[eoSetup.k].pro=40;
+        eoExpectedSched = (eoSetup.p==='him') ? 'skip-him' : 'skip-her';
+        // Pre-randomize sanity check — V34 should have just written this.
+        add('rp_eoSchedPreV34',
+          SHARED_SCHEDULE[dk(eoSetup.d, eoSetup.s)] === eoExpectedSched,
+          'V34: per-slot Eat Out should write SHARED='+eoExpectedSched+
+            ', got '+(SHARED_SCHEDULE[dk(eoSetup.d, eoSetup.s)]||'(empty)'));
       }
       // (c) Find a different schedule-paintable cell (must be empty SHARED_SCHEDULE + non-MANUAL_SET on both sides)
       var schSetup=null;
@@ -16447,6 +16459,12 @@ window.MPStress=(function(){
           EAT_OUT[eoSetup.k] && EAT_OUT[eoSetup.k].kcal===700,
           'EAT_OUT kcal lost: '+(EAT_OUT[eoSetup.k] && EAT_OUT[eoSetup.k].kcal));
         add('rp_eatOutManualSet', !!MANUAL_SET[eoSetup.k], 'MANUAL_SET on eat-out wiped');
+        // V44 (Z1 polish): V34 SHARED_SCHEDULE write should also persist
+        // through randomize (it was a real user mutation via per-slot pill).
+        add('rp_eoSchedPersisted',
+          SHARED_SCHEDULE[dk(eoSetup.d, eoSetup.s)] === eoExpectedSched,
+          'V34 SHARED='+eoExpectedSched+' wiped by randomize: '+
+            (SHARED_SCHEDULE[dk(eoSetup.d, eoSetup.s)]||'(empty)'));
       }
       if(schSetup){
         add('rp_schedPersisted',
