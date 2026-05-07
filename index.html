@@ -2499,7 +2499,21 @@ var SEL={},CHECKS={},openCards={};
 // per-serving. Persisted in sessionStorage with openCards.
 var perServingMode={};
 var OVERRIDES={}; // key: 'person_day_slot', value: [{idx, dbKey, amt},...] - per-ingredient overrides
-var MANUAL_SET={}; // key: 'person_day_slot', true if user manually touched this slot
+var MANUAL_SET={}; // key: 'person_day_slot', true if slot is locked from randomize
+                   // (set broadly by setSchedule for shared/skip cells + per-slot
+                   // pills/changeMeal/paintAccept; used as the "lock" flag in
+                   // randomize Phase 1).
+// V53 (2026-05-07): USER_EDITED is a NARROWER display flag for the Set pill
+// + grid purple border. Set ONLY by direct user actions on a specific slot
+// (per-slot pills, changeMeal, paintAccept's queued slots, ingredient pins,
+// edit-mode grid taps that actually modified the cell). Pre-V53, the Set
+// pill rendered for any MANUAL_SET cell — but setSchedule's broad
+// shared/skip iteration stamped MANUAL_SET on every shared cell in the
+// schedule, making the Set pill show on cells the user never directly
+// touched (the page-default Mon-Sun shared dinners, every shared cell
+// post-Apply, etc.). USER_EDITED keeps the "user-touched" semantic
+// specific so the pill/border is meaningful.
+var USER_EDITED={}; // key: 'person_day_slot', true ONLY if user directly edited this slot
 var SKIPPED={}; // key: 'person_day_slot', true if skipped — calories shift to dinner
 var EAT_OUT={}; // key: 'person_day_slot', value: {name,restaurant,kcal,pro,fat,carb}
 var LATE_SNACK={}; // key: 'person_day', value: {name,kcal,pro,fat,carb}
@@ -3834,6 +3848,15 @@ function _bumpSlotTs(key){
   if(!weekData[activeWeek])return;
   if(!weekData[activeWeek].ts) weekData[activeWeek].ts={};
   weekData[activeWeek].ts[key]=Date.now();
+}
+// V53 (2026-05-07): mark a slot as USER_EDITED — used by Set pill +
+// grid purple border to indicate "user directly took an action on this
+// slot." Distinct from MANUAL_SET (which is broader: also stamped by
+// setSchedule's shared/skip iteration on Apply, randomize-lock for
+// link groups, etc.). USER_EDITED is set only by direct user actions
+// targeting a specific slot.
+function _markUserEdited(key){
+  USER_EDITED[key]=true;
 }
 function stampSel(key,mealId){
   SEL[key]=mealId;
@@ -6844,7 +6867,11 @@ function buildMealCardHtml(s, person, day, other){
   const port=activeMeal[person];if(!port)return '';
   const k=sk(person,day,s);
   const isOpen=openCards[k]||false;
-  const isManual=!!MANUAL_SET[k];
+  // V53: Set pill now reads USER_EDITED (narrow display flag) instead of
+  // MANUAL_SET (broad randomize-lock). Was over-broad pre-V53 because
+  // setSchedule's shared/skip iteration stamped MANUAL_SET on every cell
+  // in the schedule.
+  const isManual=!!USER_EDITED[k];
   const setPill=isManual?'<span class="set-pill">Set</span>':'';
 
   const opts=buildMealSelectOpts(slotMeals, activeId);
@@ -7260,8 +7287,13 @@ function renderMeals(){
           // replacement). Distinct from red (eat-out — meal accounted for
           // externally).
           const gry='rgba(156,163,175,';
-          const himManual=!!MANUAL_SET[sk('him',dd,ss)];
-          const herManual=!!MANUAL_SET[sk('her',dd,ss)];
+          // V53: schedule grid's purple-border "Set" indicator now reads
+          // USER_EDITED (narrow) instead of MANUAL_SET (broad). Same
+          // motivation as the Set pill swap — pre-V53 every shared/skip
+          // cell got purple border because setSchedule stamped MANUAL_SET
+          // broadly. USER_EDITED only set on direct user actions.
+          const himManual=!!USER_EDITED[sk('him',dd,ss)];
+          const herManual=!!USER_EDITED[sk('her',dd,ss)];
           // 2026-05-03: link group lookup for this cell. Anchor = same (day,slot)
           // as group's earliest member (regardless of person). Leftover = otherwise.
           const lGroup=getLinkGroupForSlot('him',dd,ss);
@@ -7573,6 +7605,8 @@ function toggleSkip(p,d,s){
   // V50 (2026-05-07): bump per-slot ts so latest-wins sync/resolver
   // sees the pill toggle as the slot's most recent mutation.
   _bumpSlotTs(k);
+  // V53: direct per-slot pill action — mark as user-edited.
+  _markUserEdited(k);
   invalidateLeftoverCache();autoSaveWeek();renderMeals();
 }
 function addLateSnack(p,d){LATE_SNACK[pk(p,d)]={name:'',kcal:null,pro:null,fat:null,carb:null};renderMeals();}
@@ -7677,6 +7711,8 @@ function _applyEatOutOn(p, d, s, entry){
   EAT_OUT[k]=entry;
   delete SKIPPED[k];
   MANUAL_SET[k]=true;
+  // V53: direct per-slot eat-out — mark as user-edited.
+  _markUserEdited(k);
   // Set grid: shared → ourSkip; otherSkip → skip-both; ourSkip/skip-both
   // already correct; otherwise (empty/normal) → ourSkip.
   var cur=SHARED_SCHEDULE[dKey]||'';
@@ -7712,6 +7748,8 @@ function toggleEatOut(p,d,s){
     var curOff=SHARED_SCHEDULE[dKey]||'';
     if(curOff===ourSkip) delete SHARED_SCHEDULE[dKey];
     else if(curOff==='skip-both') SHARED_SCHEDULE[dKey]=otherSkip;
+    // V53: toggling Eat Out OFF is still a direct user action on the slot.
+    _markUserEdited(k);
   } else {
     _applyEatOutOn(p, d, s, {name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null});
   }
@@ -7781,6 +7819,8 @@ function changeMeal(slot,mealId){
   const selKey=sk(person,day,slot);
   stampSel(selKey,mealId);
   MANUAL_SET[selKey]=true;
+  // V53: direct meal pick — mark slot user-edited.
+  _markUserEdited(selKey);
   // V42 (X4, 2026-05-07): user picking a specific meal commits them to
   // EATING that meal. Skip and Eat Out both contradict that intent.
   // Clearing them (and the corresponding SHARED_SCHEDULE skip-*
@@ -7825,6 +7865,10 @@ function toggleShared(slot,checked){
       // Mark both as manual set and update schedule to shared
       MANUAL_SET[meK]=true;
       MANUAL_SET[otherKey]=true;
+      // V53: clicking Shared affects both sides of the cell — mark both
+      // user-edited so the Set pill shows on each.
+      _markUserEdited(meK);
+      _markUserEdited(otherKey);
       SHARED_SCHEDULE[dKey]='shared';
       // V36 (A2): clear SKIPPED on both sides — shared and skip are
       // mutually exclusive intents.
@@ -7854,6 +7898,9 @@ function toggleShared(slot,checked){
     // alongside 'shared' but we only delete if it WAS 'shared' so the
     // pill OFF is precisely targeted.
     if(SHARED_SCHEDULE[dKey]==='shared') delete SHARED_SCHEDULE[dKey];
+    // V53: un-share is a deliberate user action affecting both halves.
+    _markUserEdited(meK);
+    _markUserEdited(otherKey);
   }
   invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
 }
@@ -7913,6 +7960,8 @@ function confirmTempIngredient(p,d,s){
     setOverride(pt.p,pt.d,pt.s,nextIdx,'_userSet',true);
     setOverride(pt.p,pt.d,pt.s,nextIdx,'_priorAmt',0);
     MANUAL_SET[sk(pt.p,pt.d,pt.s)]=true;
+    // V53: adding ingredient is a direct edit on each affected slot.
+    _markUserEdited(sk(pt.p,pt.d,pt.s));
   });
   document.getElementById('calPopupOverlay').style.display='none';
   // 2026-05-05+: SURGICAL append. Push the new ingredient entry directly
@@ -7965,6 +8014,8 @@ function _writeUserPin(p,d,s,idx,opts){
   setOverride(p,d,s,idx,'scalable', false);
   setOverride(p,d,s,idx,'_userSet', true);
   MANUAL_SET[sk(p,d,s)] = true;
+  // V53: ingredient pin = direct user edit on this slot.
+  _markUserEdited(sk(p,d,s));
   if(slotCache && slotCache[idx]){
     if(opts.amt !== undefined) slotCache[idx].amt = opts.amt;
     if(opts.dbKey !== undefined) slotCache[idx].dbKey = opts.dbKey;
@@ -9280,6 +9331,8 @@ function paintAccept(){
   queuedSlots.forEach(function(q){
     SEL[q.key]=_paintMealId;
     MANUAL_SET[q.key]=true;
+    // V53: paint mode = direct user assignment of meal to this slot.
+    _markUserEdited(q.key);
     weekData[activeWeek].ts[q.key]=now;
     clearOverrides(q.p,q.d,q.s);
     delete SKIPPED[q.key];
@@ -9579,6 +9632,7 @@ function _cloneScheduleState(){
     EAT_OUT: JSON.parse(JSON.stringify(EAT_OUT)),
     SKIPPED: JSON.parse(JSON.stringify(SKIPPED)),
     MANUAL_SET: JSON.parse(JSON.stringify(MANUAL_SET)),
+    USER_EDITED: JSON.parse(JSON.stringify(USER_EDITED)), // V53
     SEL: JSON.parse(JSON.stringify(SEL)),
     OVERRIDES: JSON.parse(JSON.stringify(OVERRIDES)),
     LATE_SNACK: JSON.parse(JSON.stringify(LATE_SNACK)),
@@ -9606,6 +9660,7 @@ function _restoreScheduleState(s){
   replaceObj(EAT_OUT, s.EAT_OUT);
   replaceObj(SKIPPED, s.SKIPPED);
   replaceObj(MANUAL_SET, s.MANUAL_SET);
+  if(s.USER_EDITED) replaceObj(USER_EDITED, s.USER_EDITED); // V53
   replaceObj(SEL, s.SEL);
   replaceObj(OVERRIDES, s.OVERRIDES);
   replaceObj(LATE_SNACK, s.LATE_SNACK);
@@ -9762,6 +9817,7 @@ function clearScheduleEdit(){
   Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
   Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
   Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+  Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];}); // V53
   Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
   Object.keys(SEL).forEach(function(k){delete SEL[k];});
   if(weekData[activeWeek] && weekData[activeWeek].leftoverLinks){
@@ -9797,15 +9853,32 @@ function undoScheduleEdit(){
 
 function setSchedule(){
   // Apply schedule immediately: shared meals get matched, eat-outs applied, all marked manual
+  // V53 (2026-05-07): USER_EDITED stamps gated on `_scheduleEditTouchedCells`
+  // (V25 tracker — cells the user actually grid-tapped this edit session).
+  // Pre-V53 the broad MANUAL_SET stamping made every shared/skip cell display
+  // the Set pill, including page-default Mon-Sun shared dinners and cells from
+  // previous Apply sessions. USER_EDITED keeps "user-touched" semantic precise.
   DAYS.forEach(function(d){
     ['breakfast','lunch','dinner'].forEach(function(s){
       const state=SHARED_SCHEDULE[dk(d,s)];
       if(!state) return;
-      if(state==='skip-him'||state==='skip-both') MANUAL_SET[sk('him',d,s)]=true;
-      if(state==='skip-her'||state==='skip-both') MANUAL_SET[sk('her',d,s)]=true;
+      const dKey=dk(d,s);
+      const wasTouched = !!_scheduleEditTouchedCells[dKey];
+      if(state==='skip-him'||state==='skip-both'){
+        MANUAL_SET[sk('him',d,s)]=true;
+        if(wasTouched) _markUserEdited(sk('him',d,s));
+      }
+      if(state==='skip-her'||state==='skip-both'){
+        MANUAL_SET[sk('her',d,s)]=true;
+        if(wasTouched) _markUserEdited(sk('her',d,s));
+      }
       if(state==='shared'){
         MANUAL_SET[sk('him',d,s)]=true;
         MANUAL_SET[sk('her',d,s)]=true;
+        if(wasTouched){
+          _markUserEdited(sk('him',d,s));
+          _markUserEdited(sk('her',d,s));
+        }
         // Match her to him's meal immediately
         const himId=getMealId('him',d,s);
         if(himId){
@@ -9854,6 +9927,7 @@ function clearWeek(){
   Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
   Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
   Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+  Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];}); // V53
   Object.keys(SHARED_SCHEDULE).forEach(function(k){
     if(/^skip-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
   });
@@ -12759,6 +12833,7 @@ function loadWeeks(){
     Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
     Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
     Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+    Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];}); // V53
     // Save the rollover
     lsSet('mealPlannerWeekData',weekData);
   }
@@ -12820,6 +12895,10 @@ function saveWeeks(){
   w.lateSnack=JSON.parse(JSON.stringify(LATE_SNACK));
   w.manualSet=JSON.parse(JSON.stringify(MANUAL_SET));
   w.sharedSchedule=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
+  // V53 (2026-05-07): persist USER_EDITED flag (display-only, narrower
+  // than MANUAL_SET — see global declaration). Bundled save with the
+  // rest of per-week state.
+  w.userEdited=JSON.parse(JSON.stringify(USER_EDITED));
   // 2026-05-03: leftoverLinks is the LEFTOVER_LINKS alias; mutations already
   // persist via this reference. Just ensure the field is present.
   if(!w.leftoverLinks) w.leftoverLinks = LEFTOVER_LINKS;
@@ -12839,6 +12918,7 @@ function loadWeekState(w){
   loadInto(LATE_SNACK,wd.lateSnack);
   loadInto(MANUAL_SET,wd.manualSet);
   loadInto(SHARED_SCHEDULE,wd.sharedSchedule);
+  loadInto(USER_EDITED,wd.userEdited); // V53
   initSharedSchedule(); // ensure defaults if empty
   rebindLeftoverLinks(); // 2026-05-03: bind LEFTOVER_LINKS to wd.leftoverLinks
 }
