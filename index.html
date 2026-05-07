@@ -7394,8 +7394,13 @@ function renderMeals(){
           // purple (their red/grey state already signals user-set, per
           // V56 rule). For propagated group edits (V59), every member's
           // half gets purple even if not directly edited.
-          let lBdr=himShowSetDot?'2px solid '+prp+'.85)':lGroup?'2px solid rgba('+lGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':himFullSkip?'1.5px solid '+gry+'.6)':himEatOut?'1.5px solid '+red+'.4)':(himManual&&lNormal)?'2px solid '+prp+'.6)':'1.5px solid var(--border)';
-          let rBdr=herShowSetDot?'2px solid '+prp+'.85)':rGroup?'2px solid rgba('+rGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':herFullSkip?'1.5px solid '+gry+'.6)':herEatOut?'1.5px solid '+red+'.4)':(herManual&&rNormal)?'2px solid '+prp+'.6)':'1.5px solid var(--border)';
+          // V63 (2026-05-07): unify all purple border opacities to .85 so
+          // the V62 outer purple (USER_EDITED on shared/link cells) and
+          // the legacy normal+manual purple match. Pre-V63 the manual+
+          // normal branch used prp+'.6)' which rendered as a noticeably
+          // different shade of purple.
+          let lBdr=himShowSetDot?'2px solid '+prp+'.85)':lGroup?'2px solid rgba('+lGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':himFullSkip?'1.5px solid '+gry+'.6)':himEatOut?'1.5px solid '+red+'.4)':(himManual&&lNormal)?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
+          let rBdr=herShowSetDot?'2px solid '+prp+'.85)':rGroup?'2px solid rgba('+rGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':herFullSkip?'1.5px solid '+gry+'.6)':herEatOut?'1.5px solid '+red+'.4)':(herManual&&rNormal)?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
           // Skip text gets a muted #ccc instead of full white, reinforcing
           // the "this slot is silenced" feel.
           let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared?'#fff':himFullSkip?'#cbd5e1':himEatOut?'#fff':'var(--gray)';
@@ -7407,9 +7412,11 @@ function renderMeals(){
           // V28: midCol cascade extended for grey full-skip path. When
           // either side is full-skipped (and not also shared/manual), the
           // centerline picks up the grey skip color.
+          // V63: bumped the manual+normal midCol purple from .4 → .85 to
+          // match the unified purple opacity across the cascade.
           const midCol=midColLink ? 'rgba('+midColLink+',.85)'
             : (himManual||herManual||isShared||himSkip||herSkip) ? (
-                ((himManual&&lNormal)||(herManual&&rNormal)) ? prp+'.4)'
+                ((himManual&&lNormal)||(herManual&&rNormal)) ? prp+'.85)'
                 : isShared ? grn+'.5)'
                 : (himFullSkip||herFullSkip) ? gry+'.6)'
                 : red+'.4)'
@@ -7459,16 +7466,18 @@ function renderMeals(){
           // shared/link cells, mirroring the border cascade. Without
           // this, a shared+USER_EDITED cell would have a purple outer
           // border but a green centerline — inconsistent.
+          // V63: legacy normal+manual purple bumped from .6 → .85 to
+          // match the V62 USER_EDITED outer purple opacity.
           let lCenterCol = himShowSetDot ? prp+'.85)'
                          : lGroup ? 'rgba('+lGroupRgb+',.85)'
-                         : (himManual&&lNormal) ? prp+'.6)'
+                         : (himManual&&lNormal) ? prp+'.85)'
                          : isShared ? grn+'.5)'
                          : himFullSkip ? gry+'.6)'
                          : himEatOut ? red+'.4)'
                          : '';
           let rCenterCol = herShowSetDot ? prp+'.85)'
                          : rGroup ? 'rgba('+rGroupRgb+',.85)'
-                         : (herManual&&rNormal) ? prp+'.6)'
+                         : (herManual&&rNormal) ? prp+'.85)'
                          : isShared ? grn+'.5)'
                          : herFullSkip ? gry+'.6)'
                          : herEatOut ? red+'.4)'
