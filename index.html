@@ -5058,6 +5058,54 @@ function verifyInvariants(){
     });
   });
 
+  // ── Invariant 24: Skip / Eat Out / Shared mutual exclusion ──
+  // V48 (2026-05-07). Per the V31-V47 contract matrix, the following
+  // state combinations are CONTRADICTIONS:
+  //   1. SKIPPED[k] && EAT_OUT[k] (per-slot — toggleSkip clears EAT_OUT
+  //      and toggleEatOut clears SKIPPED; can only co-occur via stale
+  //      cloud sync or pre-V31 saved data)
+  //   2. SHARED='shared' && SKIPPED on either side (V36/V41/V47 contract)
+  //   3. SHARED='shared' && EAT_OUT on either side (V41 contract)
+  //   4. SHARED='skip-him'  && SKIPPED[him]  (V31/V34 contract)
+  //   5. SHARED='skip-her'  && SKIPPED[her]  (V31/V34 contract)
+  //   6. SHARED='skip-both' && SKIPPED on either side (V31 contract)
+  // This invariant is HARD — every documented intent action enforces
+  // these contracts; any fire indicates a regression in mutation paths
+  // or an un-resolved state from cloud-sync / pre-audit data.
+  DAYS.forEach(function(d){
+    SLOTS.forEach(function(s2){
+      var himK=sk('him',d,s2), herK=sk('her',d,s2);
+      // (1) per-slot skip + eat-out (applies to all slots, not just grid)
+      if(SKIPPED[himK] && EAT_OUT[himK]){
+        violations.push('INV24 skip-and-eatout-both: him '+d+'/'+s2);
+      }
+      if(SKIPPED[herK] && EAT_OUT[herK]){
+        violations.push('INV24 skip-and-eatout-both: her '+d+'/'+s2);
+      }
+      // SHARED contradictions only on grid slots
+      if(['breakfast','lunch','dinner'].indexOf(s2)<0) return;
+      var st = SHARED_SCHEDULE[dk(d,s2)] || '';
+      if(st === 'shared'){
+        // (2) shared && SKIPPED
+        if(SKIPPED[himK]) violations.push('INV24 shared-and-skip: him '+d+'/'+s2);
+        if(SKIPPED[herK]) violations.push('INV24 shared-and-skip: her '+d+'/'+s2);
+        // (3) shared && EAT_OUT
+        if(EAT_OUT[himK]) violations.push('INV24 shared-and-eatout: him '+d+'/'+s2);
+        if(EAT_OUT[herK]) violations.push('INV24 shared-and-eatout: her '+d+'/'+s2);
+      } else if(st === 'skip-him'){
+        // (4)
+        if(SKIPPED[himK]) violations.push('INV24 skip-him-and-pillSkip: him '+d+'/'+s2);
+      } else if(st === 'skip-her'){
+        // (5)
+        if(SKIPPED[herK]) violations.push('INV24 skip-her-and-pillSkip: her '+d+'/'+s2);
+      } else if(st === 'skip-both'){
+        // (6)
+        if(SKIPPED[himK]) violations.push('INV24 skip-both-and-pillSkip: him '+d+'/'+s2);
+        if(SKIPPED[herK]) violations.push('INV24 skip-both-and-pillSkip: her '+d+'/'+s2);
+      }
+    });
+  });
+
   // ── Invariant 6: Per-meal Protein/Carb ratio change <50% ──
   // The balanced P/C ratio shouldn't deviate more than 50% from the
   // original recipe ratio. Catches the day balancer distorting meal identity.
@@ -7381,8 +7429,16 @@ function toggleSkip(p,d,s){
     delete EAT_OUT[k];
     MANUAL_SET[k]=true;
     // Drop our skip-* state (we're not eating out, we're skipping).
+    // V47 (2026-05-07, Gap B): also clear SHARED='shared'. Skip and
+    // shared are mutually exclusive (one says "no meal", the other says
+    // "both eat same meal"). V34 handled the skip-* cascade but missed
+    // 'shared' — symmetric to changeMeal (V42) which already deletes
+    // 'shared' when user picks a specific meal. Without this, a user
+    // toggling Skip on a shared cell left SHARED='shared' lingering;
+    // V28 visual cascade renders shared-green over himFullSkip-grey.
     var cur=SHARED_SCHEDULE[dKey]||'';
-    if(cur===ourSkip) delete SHARED_SCHEDULE[dKey];
+    if(cur==='shared') delete SHARED_SCHEDULE[dKey];
+    else if(cur===ourSkip) delete SHARED_SCHEDULE[dKey];
     else if(cur==='skip-both') SHARED_SCHEDULE[dKey]=otherSkip;
   }
   // V38 (2026-05-07): explicit autoSaveWeek so SKIPPED/MANUAL_SET +
@@ -13781,7 +13837,7 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0,INV24:0};
     violations.forEach(function(v){
       // Match INV20Soft first (longer suffix); fall back to INV<digits>.
       var ms=v.match(/^(INV20Soft)\b/);
@@ -13953,7 +14009,7 @@ window.MPStress=(function(){
     var kcalBins={'<-150':0,'-150..-120':0,'-120..-100':0,'+100..+120':0,'+120..+150':0,'>+150':0};
     var fatBins={'30.0-30.2':0,'30.2-30.5':0,'30.5-31.0':0,'31.0-32.0':0,'>32.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0,INV24:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
@@ -14812,7 +14868,7 @@ window.MPStress=(function(){
     lines.push('');
 
     // ── HARD INVARIANTS ─────────────────────────────────────────
-    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20','INV23'];
+    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20','INV23','INV24'];
     // INV20 hard-count subtracts soft-waste fires (marinara, chicken broth)
     // so the "Hard Invariants" line reflects only items that actually need
     // attention.
@@ -15514,7 +15570,7 @@ window.MPStress=(function(){
   // ~/.claude/projects/-Users-chris-Desktop-Meal-Planner/memory/reference_slot_mod_test.md
   // for full spec. 5 geometries × 5 ops × 12 assertions per scenario.
 
-  var _SM_HARD_KEYS=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20','INV23'];
+  var _SM_HARD_KEYS=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20','INV23','INV24'];
   function _smHardCount(){
     var inv=verifyInvariants();
     return inv.filter(function(v){return _SM_HARD_KEYS.some(function(k){return v.indexOf(k+' ')===0||v.indexOf(k+':')===0;});}).length;
