@@ -15649,6 +15649,23 @@ window.MPStress=(function(){
     function add(assertion, ok, issue, expected, actual){
       checks.push({assertion:assertion, ok:!!ok, issue:ok?null:(issue||''), expected:expected, actual:actual});
     }
+    // V35 (2026-05-07): grid taps are V25 edit-mode-only — outside edit
+    // mode they no-op. Pre-V25 tests (scheduleTapCycle, schedTapCenter,
+    // tapAlreadyShared, gridSkipPlusPillSkip, randomizePersist) expected
+    // outside-mode taps to work + V10 EAT_OUT auto-create. This helper
+    // simulates the legacy behavior: temporarily flip the edit-mode flag,
+    // tap, run V10 sync, restore flag. Production grid behavior is
+    // unchanged — this only affects test ops that exercise grid mechanics.
+    function _smGridTap(side, dd, ss){
+      var prevEM = _scheduleEditMode;
+      _scheduleEditMode = true;
+      if(side==='left') schedTapLeft(dd, ss);
+      else if(side==='right') schedTapRight(dd, ss);
+      else if(side==='center') schedTapCenter(dd, ss);
+      else if(side==='day') schedTapDay(dd);
+      _scheduleEditMode = prevEM;
+      _syncEatOutsToSharedSchedule();
+    }
     var preBal=JSON.parse(JSON.stringify(getBalancedSlotIngredients(p,d,s)||[]));
     if(!preBal.length && op!=='addIngr'){
       add('setup', false, 'no balanced cache for slot');
@@ -16148,8 +16165,9 @@ window.MPStress=(function(){
         add('setup', true, '', null, 'cell already has SHARED_SCHEDULE state, skipping tap-cycle');
         return {checks:checks};
       }
+      // V35: grid taps via _smGridTap helper (V25 made grid edit-mode-only).
       // Tap 1: normal → skip-him
-      schedTapLeft(d, s);
+      _smGridTap('left', d, s);
       add('tap1_state', SHARED_SCHEDULE[dk(d,s)]==='skip-him',
         'expected skip-him, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
       add('tap1_eatOutHim', !!EAT_OUT[stHimK], 'tap to skip-him should auto-create EAT_OUT[him]');
@@ -16157,7 +16175,7 @@ window.MPStress=(function(){
       checkSchedEatOut();
       checkCoherence();
       // Tap 2: skip-him → skip-both (right tap)
-      schedTapRight(d, s);
+      _smGridTap('right', d, s);
       add('tap2_state', SHARED_SCHEDULE[dk(d,s)]==='skip-both',
         'expected skip-both, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
       add('tap2_bothEatOut', !!EAT_OUT[stHimK] && !!EAT_OUT[stHerK], 'both EAT_OUTs should exist');
@@ -16167,7 +16185,7 @@ window.MPStress=(function(){
       EAT_OUT[stHerK].name='Custom Place';
       EAT_OUT[stHerK].kcal=500;
       // Tap 3: skip-both → skip-her (left tap clears him's side)
-      schedTapLeft(d, s);
+      _smGridTap('left', d, s);
       add('tap3_state', SHARED_SCHEDULE[dk(d,s)]==='skip-her',
         'expected skip-her, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
       add('tap3_himCleared', !EAT_OUT[stHimK], 'EAT_OUT[him] (placeholder) should be cleared');
@@ -16177,7 +16195,7 @@ window.MPStress=(function(){
       checkSchedEatOut();
       checkCoherence();
       // Tap 4: skip-her → normal (right tap)
-      schedTapRight(d, s);
+      _smGridTap('right', d, s);
       add('tap4_stateCleared', !SHARED_SCHEDULE[dk(d,s)],
         'expected (empty), got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
       add('tap4_herCustomizedSurvives',
@@ -16280,7 +16298,8 @@ window.MPStress=(function(){
         });
       });
       if(schSetup){
-        schedTapLeft(schSetup.d, schSetup.s);
+        // V35: use _smGridTap helper (V25 made grid edit-mode-only).
+        _smGridTap('left', schSetup.d, schSetup.s);
       }
       // RUN RANDOMIZE
       randomizeWeek('shared');
@@ -16324,12 +16343,13 @@ window.MPStress=(function(){
       if(SHARED_SCHEDULE[dk(d,s)]){
         add('setup', true, '', null, 'cell already non-normal'); return {checks:checks};
       }
+      // V35: grid taps via helper (V25 made grid edit-mode-only).
       // Tap to shared
-      schedTapCenter(d, s);
+      _smGridTap('center', d, s);
       add('stc_toShared', SHARED_SCHEDULE[dk(d,s)]==='shared', 'expected shared, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
       add('stc_noEatOuts', !EAT_OUT[stcHimK] && !EAT_OUT[stcHerK], 'shared should not auto-create EAT_OUTs');
       // Tap to normal
-      schedTapCenter(d, s);
+      _smGridTap('center', d, s);
       add('stc_toNormal', !SHARED_SCHEDULE[dk(d,s)], 'expected normal, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
       checkSchedEatOut();
       checkCoherence();
@@ -16491,7 +16511,8 @@ window.MPStress=(function(){
       SHARED_SCHEDULE[dk(d,s)]='shared';
       // V10 sync runs on next updateSchedule. Manually clear EAT_OUTs that
       // might have been set previously (we want a clean shared-only state).
-      schedTapLeft(d, s);
+      // V35: use _smGridTap helper (V25 made grid edit-mode-only).
+      _smGridTap('left', d, s);
       add('tas_toNormal', !SHARED_SCHEDULE[dk(d,s)],
         'expected normal, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
       add('tas_noEatOuts', !EAT_OUT[tasHimK] && !EAT_OUT[tasHerK], 'no EAT_OUTs after shared->normal');
@@ -16953,10 +16974,13 @@ window.MPStress=(function(){
     }
 
     else if(op==='gridSkipPlusPillSkip'){
-      // Schedule grid skip-* + per-card Skip pill on same person.
-      // Documents the known divergence: Skip pill clears EAT_OUT but doesn't
-      // clear SHARED_SCHEDULE → schedEatOutConsistency intentionally fails.
-      // Test surfaces the interaction; doesn't run schedEatOut check.
+      // Schedule grid skip-* + per-slot Skip pill on same person.
+      // V34 (2026-05-07): toggleSkip ON now ALSO clears SHARED_SCHEDULE
+      // skip-* on that side (was: divergence intentionally left). Test
+      // updated to assert the NEW symmetric behavior — Skip pill makes
+      // grid + per-slot agree (SKIPPED=true, EAT_OUT cleared, grid
+      // skip-* cleared). schedEatOutConsistency should now pass since
+      // there's no orphan SHARED_SCHEDULE state.
       if(s!=='breakfast' && s!=='lunch' && s!=='dinner'){
         add('setup', true, '', null, 'cell not in grid'); return {checks:checks};
       }
@@ -16965,8 +16989,8 @@ window.MPStress=(function(){
       if(MANUAL_SET[gpHimK]||SHARED_SCHEDULE[dk(d,s)]){
         add('setup', true, '', null, 'cell not pristine'); return {checks:checks};
       }
-      // Step 1: grid paint (V10 syncs EAT_OUT)
-      schedTapLeft(d, s);
+      // Step 1: grid paint (V10 syncs EAT_OUT). V35: use helper.
+      _smGridTap('left', d, s);
       add('gpps_step1_eo', !!EAT_OUT[gpHimK], 'V10: grid skip-him should create EAT_OUT');
       add('gpps_step1_noManSet', !MANUAL_SET[gpHimK], 'V10: grid taps do not set MANUAL_SET');
       // Step 2: Skip pill
@@ -16974,10 +16998,11 @@ window.MPStress=(function(){
       add('gpps_step2_skipped', !!SKIPPED[gpHimK], 'Skip pill should set SKIPPED');
       add('gpps_step2_manSet', !!MANUAL_SET[gpHimK], 'Skip pill should set MANUAL_SET');
       add('gpps_step2_eoCleared', !EAT_OUT[gpHimK], 'Skip pill should clear EAT_OUT');
-      add('gpps_schedNotAutoCleared', SHARED_SCHEDULE[dk(d,s)]==='skip-him',
-        'SHARED_SCHEDULE should still say skip-him (toggleSkip does not auto-clean schedule state — known divergence)');
-      // Don't run schedEatOutConsistency — it would fire here intentionally
-      // due to the documented divergence.
+      add('gpps_schedAutoCleared', !SHARED_SCHEDULE[dk(d,s)],
+        'V34: SHARED_SCHEDULE should be cleared by toggleSkip (got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)')+')');
+      // V34: divergence closed. schedEatOutConsistency should pass now
+      // — SHARED_SCHEDULE empty, no orphan EAT_OUT.
+      checkSchedEatOut();
       checkCoherence();
     }
 
