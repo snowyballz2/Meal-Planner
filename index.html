@@ -2688,8 +2688,14 @@ function _allocateLinkColor(){
   }
   return 0;
 }
-// Remove a slot from its group. If the group drops to 1 slot, dissolve it
-// (the remaining slot keeps its MANUAL_SET — single slots aren't groups).
+// Remove a slot from its group. If the group drops to 0 slots, dissolve it.
+// V68 (2026-05-07): groups with 1 surviving slot are NO LONGER dissolved —
+// the cook anchor keeps its colored band even when leftovers are removed
+// or edited away. Per user feedback: "If we remove/edit a leftover dont
+// automatically remove the whole big cook.. just that leftover." Pre-V68,
+// removing the lone leftover from a 2-slot group dissolved the group and
+// the cook anchor lost its visual identity. Now the anchor stays linked
+// (1-slot group) and the user can still see "this is the big-cook slot."
 // Returns true if a group was modified.
 function removeFromLinkGroup(p, d, s){
   if(!LEFTOVER_LINKS || !LEFTOVER_LINKS.length) return false;
@@ -2702,8 +2708,8 @@ function removeFromLinkGroup(p, d, s){
     }
     if(idx < 0) continue;
     g.slots.splice(idx, 1);
-    if(g.slots.length <= 1){
-      // Dissolve: anchor's MANUAL_SET stays (user explicitly set it via paint).
+    if(g.slots.length === 0){
+      // No slots left — dissolve. (V68: was `<= 1`; now only at 0.)
       LEFTOVER_LINKS.splice(i, 1);
     }
     return true;
@@ -2753,9 +2759,13 @@ var _autoSharedCells = {};
 var _autoLinkColorCache = {};
 
 // Drop slots from manual groups whose current meal no longer matches the
-// group's meal (e.g., user changed a slot's meal via card dropdown). Groups
-// that drop to ≤1 slot are dissolved. Self-healing on every render.
-// 2026-05-04 Q5.
+// group's meal (e.g., user changed a slot's meal via card dropdown).
+// V68 (2026-05-07): groups with 1 surviving slot are NO LONGER dissolved —
+// the cook anchor keeps its colored band even when leftovers are edited
+// away. Only fully-orphaned groups (0 valid slots) get spliced. Per user
+// feedback: removing/editing a leftover should NOT remove the whole big
+// cook visualization, just the affected leftover. Self-healing on every
+// render. 2026-05-04 Q5; V68 2026-05-07 dissolve threshold relaxed.
 function _validateManualLinkGroups(){
   if(!LEFTOVER_LINKS || !LEFTOVER_LINKS.length) return;
   for(var gi=LEFTOVER_LINKS.length-1; gi>=0; gi--){
@@ -2765,7 +2775,7 @@ function _validateManualLinkGroups(){
       return getMealId(sl.p, sl.d, sl.s) === g.meal;
     });
     if(validSlots.length === g.slots.length) continue;
-    if(validSlots.length <= 1) LEFTOVER_LINKS.splice(gi,1);
+    if(validSlots.length === 0) LEFTOVER_LINKS.splice(gi,1);
     else g.slots = validSlots;
   }
 }
@@ -7432,6 +7442,20 @@ function renderMeals(){
           // different shade of purple.
           let lBdr=himShowSetDot?'2px solid '+prp+'.85)':lGroup?'2px solid rgba('+lGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':himFullSkip?'1.5px solid '+gry+'.6)':himEatOut?'1.5px solid '+red+'.4)':(himManual&&lNormal)?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
           let rBdr=herShowSetDot?'2px solid '+prp+'.85)':rGroup?'2px solid rgba('+rGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':herFullSkip?'1.5px solid '+gry+'.6)':herEatOut?'1.5px solid '+red+'.4)':(herManual&&rNormal)?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
+          // V68 (2026-05-07): when USER_EDITED + link-group on the same
+          // side, layer the group color INSIDE the purple outer border
+          // via inset box-shadow. Preserves group identity ("we still
+          // want the big cook meals to have the interior border color
+          // if purple border on the outside"). 2px inset matches the
+          // 2px outer border so the inner band reads as a clean second
+          // layer rather than an outline. Skip/eat-out keep the inset
+          // off — their state already signals user-edited (per V56).
+          const lInsetShadow = (himShowSetDot && lGroup && !himFullSkip && !himEatOut)
+            ? 'inset 0 0 0 2px rgba('+lGroupRgb+',.85)'
+            : '';
+          const rInsetShadow = (herShowSetDot && rGroup && !herFullSkip && !herEatOut)
+            ? 'inset 0 0 0 2px rgba('+rGroupRgb+',.85)'
+            : '';
           // Skip text gets a muted #ccc instead of full white, reinforcing
           // the "this slot is silenced" feel.
           let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared?'#fff':himFullSkip?'#cbd5e1':himEatOut?'#fff':'var(--gray)';
@@ -7499,15 +7523,21 @@ function renderMeals(){
           // border but a green centerline — inconsistent.
           // V63: legacy normal+manual purple bumped from .6 → .85 to
           // match the V62 USER_EDITED outer purple opacity.
-          let lCenterCol = himShowSetDot ? prp+'.85)'
-                         : lGroup ? 'rgba('+lGroupRgb+',.85)'
+          // V68 (2026-05-07): when in a link group, centerline picks the
+          // GROUP color, not USER_EDITED purple — matches the new outer
+          // purple + inner group color border. The cell's group identity
+          // stays visible at the join even when user-edited. The outer
+          // purple border on the half communicates USER_EDITED; the
+          // centerline + inner band communicate group membership.
+          let lCenterCol = lGroup ? 'rgba('+lGroupRgb+',.85)'
+                         : himShowSetDot ? prp+'.85)'
                          : (himManual&&lNormal) ? prp+'.85)'
                          : isShared ? grn+'.5)'
                          : himFullSkip ? gry+'.6)'
                          : himEatOut ? red+'.4)'
                          : '';
-          let rCenterCol = herShowSetDot ? prp+'.85)'
-                         : rGroup ? 'rgba('+rGroupRgb+',.85)'
+          let rCenterCol = rGroup ? 'rgba('+rGroupRgb+',.85)'
+                         : herShowSetDot ? prp+'.85)'
                          : (herManual&&rNormal) ? prp+'.85)'
                          : isShared ? grn+'.5)'
                          : herFullSkip ? gry+'.6)'
@@ -7533,9 +7563,15 @@ function renderMeals(){
           // V62 (2026-05-07): inner box-shadow approach (V61) reverted —
           // user wanted purple as the OUTER border. The lBdr/rBdr cascade
           // above puts USER_EDITED purple at the top.
+          // V68 (2026-05-07): re-introduce the inset box-shadow but now
+          // for the GROUP COLOR (not purple) when USER_EDITED + lGroup
+          // overlap. Outer purple + inner group color signals "user-
+          // edited big cook" without losing the group's identity color.
+          const lShadow = lInsetShadow ? ';box-shadow:'+lInsetShadow : '';
+          const rShadow = rInsetShadow ? ';box-shadow:'+rInsetShadow : '';
           html+='<div class="sched-pill-wrap" style="'+dimStyle+'">'
-            +'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+';border-right:'+lBdrRightFinal+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>'
-            +'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+';border-left:'+rBdrLeftFinal+';color:'+rCol+'" '+rClick+'>'+rLabel+'</div>'
+            +'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+';border-right:'+lBdrRightFinal+';color:'+lCol+lShadow+'" '+lClick+'>'+lLabel+'</div>'
+            +'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+';border-left:'+rBdrLeftFinal+';color:'+rCol+rShadow+'" '+rClick+'>'+rLabel+'</div>'
             +splitCenter
             +'<div class="sched-pill-mid" '+cClick+'></div>'
             +'</div>';
