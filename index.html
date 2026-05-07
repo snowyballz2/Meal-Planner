@@ -7047,18 +7047,30 @@ function renderMeals(){
           // per-card pill state. SHARED_SCHEDULE 'skip-*' historically
           // means "eat out" (sets EAT_OUT via setSchedule); per-card Skip
           // and Eat Out pills set SKIPPED/EAT_OUT directly without
-          // touching SHARED_SCHEDULE. Grid grid is read-only outside edit
+          // touching SHARED_SCHEDULE. The grid is read-only outside edit
           // mode, but it still needs to mirror per-card actions.
-          const himCardSkip=!!SKIPPED[sk('him',dd,ss)]||!!EAT_OUT[sk('him',dd,ss)];
-          const herCardSkip=!!SKIPPED[sk('her',dd,ss)]||!!EAT_OUT[sk('her',dd,ss)];
-          const himSkip=(state==='skip-him'||state==='skip-both')||himCardSkip;
-          const herSkip=(state==='skip-her'||state==='skip-both')||herCardSkip;
+          // V28 (2026-05-07): split skip vs eat-out visually. Eat-out
+          // (SHARED_SCHEDULE 'skip-*' or per-card EAT_OUT) keeps the red
+          // visual; per-card Skip (SKIPPED, no replacement) renders grey.
+          // Grid taps cycle through eat-out states only — Skip is set
+          // ONLY via per-card pill, not via grid taps. SKIPPED takes
+          // priority over EAT_OUT so a slot flagged both ways shows grey.
+          const himFullSkip=!!SKIPPED[sk('him',dd,ss)];
+          const herFullSkip=!!SKIPPED[sk('her',dd,ss)];
+          const himEatOut=!himFullSkip && (state==='skip-him'||state==='skip-both'||!!EAT_OUT[sk('him',dd,ss)]);
+          const herEatOut=!herFullSkip && (state==='skip-her'||state==='skip-both'||!!EAT_OUT[sk('her',dd,ss)]);
+          const himSkip=himEatOut||himFullSkip;
+          const herSkip=herEatOut||herFullSkip;
           // 2026-05-04: detector-found shared cells (same-day-same-slot
           // batches) also render green. _autoSharedCells is repopulated
           // every render by _buildAutoLinkGroups. Doesn't mutate
           // SHARED_SCHEDULE — preserves user-intent semantics.
           const isShared=(state==='shared')||(state==='normal' && !!_autoSharedCells[dk(dd,ss)]);
           const grn='rgba(52,211,153,';const red='rgba(239,68,68,';const prp='rgba(167,139,250,';const yel='rgba(245,158,11,';
+          // V28: grey for full-skip (per-card Skip pill — no meal, no
+          // replacement). Distinct from red (eat-out — meal accounted for
+          // externally).
+          const gry='rgba(156,163,175,';
           const himManual=!!MANUAL_SET[sk('him',dd,ss)];
           const herManual=!!MANUAL_SET[sk('her',dd,ss)];
           // 2026-05-03: link group lookup for this cell. Anchor = same (day,slot)
@@ -7092,29 +7104,46 @@ function renderMeals(){
           // anchor from leftover by fill (filled = leftover, outline-only =
           // anchor). Mixed groups (Him in cyan group, Her in orange group)
           // tint each half in its own group color.
+          // V28: full-skip (grey) priority is between shared and eat-out;
+          // mutually exclusive with eat-out by construction (himFullSkip
+          // suppresses himEatOut above).
           let lBg = lGroup
                   ? (lIsLeftover ? 'rgba('+lGroupRgb+',.45)' : 'transparent')
                   : (himManual&&lNormal) ? prp+'.2)'
                   : isShared ? grn+'.25)'
-                  : himSkip ? red+'.2)'
+                  : himFullSkip ? gry+'.25)'
+                  : himEatOut ? red+'.2)'
                   : 'transparent';
           let rBg = rGroup
                   ? (rIsLeftover ? 'rgba('+rGroupRgb+',.45)' : 'transparent')
                   : (herManual&&rNormal) ? prp+'.2)'
                   : isShared ? grn+'.25)'
-                  : herSkip ? red+'.2)'
+                  : herFullSkip ? gry+'.25)'
+                  : herEatOut ? red+'.2)'
                   : 'transparent';
           // Border: link group color overrides Manual purple. Group outline = 2px.
           // (lGroupRgb/rGroupRgb already declared above the bg block.)
-          let lBdr=lGroup?'2px solid rgba('+lGroupRgb+',.85)':himManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':himSkip?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
-          let rBdr=rGroup?'2px solid rgba('+rGroupRgb+',.85)':herManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':herSkip?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
-          let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared||himSkip?'#fff':'var(--gray)';
-          let rCol=rIsLeftover?'#fff':(herManual&&rNormal)?'#fff':isShared||herSkip?'#fff':'var(--gray)';
+          let lBdr=lGroup?'2px solid rgba('+lGroupRgb+',.85)':himManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':himFullSkip?'1.5px solid '+gry+'.6)':himEatOut?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
+          let rBdr=rGroup?'2px solid rgba('+rGroupRgb+',.85)':herManual?'2px solid '+prp+'.6)':isShared?'1.5px solid '+grn+'.5)':herFullSkip?'1.5px solid '+gry+'.6)':herEatOut?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
+          // Skip text gets a muted #ccc instead of full white, reinforcing
+          // the "this slot is silenced" feel.
+          let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared?'#fff':himFullSkip?'#cbd5e1':himEatOut?'#fff':'var(--gray)';
+          let rCol=rIsLeftover?'#fff':(herManual&&rNormal)?'#fff':isShared?'#fff':herFullSkip?'#cbd5e1':herEatOut?'#fff':'var(--gray)';
           const lLabel='Him';
           const rLabel='Her';
           // midCol = group color if either side linked, else existing logic
           const midColLink=lGroupRgb||rGroupRgb;
-          const midCol=midColLink?'rgba('+midColLink+',.85)':(himManual||herManual||isShared||himSkip||herSkip)?((himManual&&lNormal)||(herManual&&rNormal)?prp+'.4)':(isShared)?grn+'.5)':red+'.4)'):'transparent';
+          // V28: midCol cascade extended for grey full-skip path. When
+          // either side is full-skipped (and not also shared/manual), the
+          // centerline picks up the grey skip color.
+          const midCol=midColLink ? 'rgba('+midColLink+',.85)'
+            : (himManual||herManual||isShared||himSkip||herSkip) ? (
+                ((himManual&&lNormal)||(herManual&&rNormal)) ? prp+'.4)'
+                : isShared ? grn+'.5)'
+                : (himFullSkip||herFullSkip) ? gry+'.6)'
+                : red+'.4)'
+              )
+            : 'transparent';
           const de=dd.replace(/'/g,"\\'");const se=ss.replace(/'/g,"\\'");
           // 2026-05-03: cross-column paint mode — every cell paintable, queued
           // tracked by full slot key (sk) instead of just (p,d).
@@ -7158,12 +7187,14 @@ function renderMeals(){
           let lCenterCol = lGroup ? 'rgba('+lGroupRgb+',.85)'
                          : (himManual&&lNormal) ? prp+'.6)'
                          : isShared ? grn+'.5)'
-                         : himSkip ? red+'.4)'
+                         : himFullSkip ? gry+'.6)'
+                         : himEatOut ? red+'.4)'
                          : '';
           let rCenterCol = rGroup ? 'rgba('+rGroupRgb+',.85)'
                          : (herManual&&rNormal) ? prp+'.6)'
                          : isShared ? grn+'.5)'
-                         : herSkip ? red+'.4)'
+                         : herFullSkip ? gry+'.6)'
+                         : herEatOut ? red+'.4)'
                          : '';
           // 2026-05-05: split center fires whenever both halves are highlighted
           // with different "center colors" — backgrounds are typically
