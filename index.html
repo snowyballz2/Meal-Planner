@@ -7385,7 +7385,11 @@ function toggleSkip(p,d,s){
     if(cur===ourSkip) delete SHARED_SCHEDULE[dKey];
     else if(cur==='skip-both') SHARED_SCHEDULE[dKey]=otherSkip;
   }
-  invalidateLeftoverCache();renderMeals();
+  // V38 (2026-05-07): explicit autoSaveWeek so SKIPPED/MANUAL_SET +
+  // (post-V34) SHARED_SCHEDULE writes persist deterministically per
+  // pill toggle. Pre-V38 relied on incidental saves from downstream
+  // renders / other actions within the 500ms debounce window.
+  invalidateLeftoverCache();autoSaveWeek();renderMeals();
 }
 function addLateSnack(p,d){LATE_SNACK[pk(p,d)]={name:'',kcal:null,pro:null,fat:null,carb:null};renderMeals();}
 function removeLateSnack(p,d){delete LATE_SNACK[pk(p,d)];renderMeals();}
@@ -7506,7 +7510,8 @@ function toggleEatOut(p,d,s){
     else if(curOn===ourSkip||curOn==='skip-both') {/* already correct */}
     else SHARED_SCHEDULE[dKey]=ourSkip;
   }
-  invalidateLeftoverCache();renderMeals();
+  // V38 (2026-05-07): explicit autoSaveWeek (see toggleSkip for rationale).
+  invalidateLeftoverCache();autoSaveWeek();renderMeals();
 }
 function setEatOutField(p,d,s,field,val){
   const k=sk(p,d,s);if(!EAT_OUT[k])return;
