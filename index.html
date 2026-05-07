@@ -3883,6 +3883,49 @@ function updateSchedule(){
   renderMeals();
 }
 
+// V49 (2026-05-07): resolve state contradictions that this codebase's
+// V31-V47 mutation paths can't have produced — but cloud sync's
+// mergeSyncData and pre-V31 saved data can. Apply deterministic
+// resolution rules matching the contracts the per-action paths enforce:
+//   1. SKIPPED[k] && EAT_OUT[k] → keep EAT_OUT, delete SKIPPED
+//      (matches V31's _syncEatOutsToSharedSchedule direction: when grid
+//      says skip-* the EAT_OUT placeholder wins over per-slot Skip)
+//   2. SHARED='shared' && SKIPPED on either side → delete SKIPPED
+//      (matches V36/V41/V47: shared wins; the "shared meal" intent
+//      supersedes per-slot Skip)
+//   3. SHARED='shared' && EAT_OUT on either side → delete EAT_OUT
+//      (matches V41: shared wins over external-meal logging)
+//   4. SHARED='skip-*' && SKIPPED on the skip side → delete SKIPPED
+//      (matches V31; same direction as #1 — handled by _sync, but we
+//      also do it here so callers can run resolve without needing _sync
+//      ordering)
+// Doesn't touch SEL or MANUAL_SET — those have their own contracts and
+// resolver scope is intentionally narrow.
+// Idempotent — running twice in a row produces no further changes.
+function _resolveStateContradictions(){
+  DAYS.forEach(function(d){
+    SLOTS.forEach(function(s){
+      var himK=sk('him',d,s), herK=sk('her',d,s);
+      // Per-slot SKIPPED+EAT_OUT (rule 1)
+      if(SKIPPED[himK] && EAT_OUT[himK]) delete SKIPPED[himK];
+      if(SKIPPED[herK] && EAT_OUT[herK]) delete SKIPPED[herK];
+      // SHARED contradictions only on grid slots
+      if(['breakfast','lunch','dinner'].indexOf(s)<0) return;
+      var st = SHARED_SCHEDULE[dk(d,s)] || '';
+      if(st === 'shared'){
+        // Rules 2 + 3
+        delete SKIPPED[himK]; delete SKIPPED[herK];
+        delete EAT_OUT[himK]; delete EAT_OUT[herK];
+      } else {
+        // Rule 4 — for skip-* states, clear SKIPPED on the skip-flagged
+        // side(s). 'skip-both' clears both.
+        if(st === 'skip-him' || st === 'skip-both') delete SKIPPED[himK];
+        if(st === 'skip-her' || st === 'skip-both') delete SKIPPED[herK];
+      }
+    });
+  });
+}
+
 function safeId(s){return s.replace(/[^a-zA-Z0-9_-]/g,'_')}
 
 // ── Macro display helpers ─────────────────────────────────────
@@ -12925,7 +12968,18 @@ function mergeSyncData(remote){
 
   // Reload active week's state into globals
   loadWeekState(activeWeek);
-  
+
+  // V49 (2026-05-07): post-merge contradiction resolution. Cloud sync
+  // imports remote state directly via per-key merges; if the remote
+  // device was on a pre-V31 build (or had a different state at the
+  // time of the snapshot) the imported state could include skip+eatout
+  // both set, shared+skip, shared+eatout, etc. Run the same
+  // resolver chain that boot uses (V46 sync + V49 resolve) so the
+  // merged state matches the V31-V48 mutual-exclusion contracts before
+  // the user sees it.
+  if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSchedule();
+  if(typeof _resolveStateContradictions === 'function') _resolveStateContradictions();
+
   saveWeeks();saveCustomMeals();saveCustomIngredients();saveEatOutDB();
   injectCustomMeals();renderWeekBar();
 }
@@ -13663,6 +13717,11 @@ loadCustomMeals();loadEatOutDB();loadAdjTargets();
 // removes orphaned non-customized placeholders, clears any SKIPPED
 // that's now contradicted by skip-* sync (per V31).
 if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSchedule();
+// V49 (2026-05-07): also resolve any 'shared' contradictions in
+// pre-audit saved data (V36/V41 contracts didn't exist before the
+// audit; old weekData could have SHARED='shared' alongside SKIPPED
+// or EAT_OUT). _sync handles only skip-* ↔ EAT_OUT alignment.
+if(typeof _resolveStateContradictions === 'function') _resolveStateContradictions();
 MEALS.forEach(function(m){expandMealIngredients(m);});
 MEALS.forEach(function(m){buildColorizedSteps(m);});
 renderDayTabs();setTopTab(topTab);renderMeals();
