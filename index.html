@@ -7025,7 +7025,15 @@ function renderMeals(){
           const _st=SHARED_SCHEDULE[dk(dd,ss)];
           return _st==='shared' || ((!_st||_st==='normal') && !!_autoSharedCells[dk(dd,ss)]);
         });
-        const dayAllSkip=slots3.every(function(ss){return SHARED_SCHEDULE[dk(dd,ss)]==='skip-both';});
+        // V27: also count per-card skip/eat-out for day-name red color.
+        // Day is "all skip" when both persons in every slot are flagged
+        // either via SHARED_SCHEDULE='skip-both' OR per-card SKIPPED/EAT_OUT.
+        const dayAllSkip=slots3.every(function(ss){
+          if(SHARED_SCHEDULE[dk(dd,ss)]==='skip-both') return true;
+          const himOut=!!SKIPPED[sk('him',dd,ss)]||!!EAT_OUT[sk('him',dd,ss)];
+          const herOut=!!SKIPPED[sk('her',dd,ss)]||!!EAT_OUT[sk('her',dd,ss)];
+          return himOut && herOut;
+        });
         const dayCol=dayAllShared?'#34D399':dayAllSkip?'#EF4444':'var(--text)';
         const dde=dd.replace(/'/g,"\\'");
         if(_paintMode){
@@ -7035,8 +7043,16 @@ function renderMeals(){
         }
         slots3.forEach(function(ss){
           const state=SHARED_SCHEDULE[dk(dd,ss)]||'normal';
-          const himSkip=(state==='skip-him'||state==='skip-both');
-          const herSkip=(state==='skip-her'||state==='skip-both');
+          // V27 (2026-05-07): extend skip/eat-out visual to also pick up
+          // per-card pill state. SHARED_SCHEDULE 'skip-*' historically
+          // means "eat out" (sets EAT_OUT via setSchedule); per-card Skip
+          // and Eat Out pills set SKIPPED/EAT_OUT directly without
+          // touching SHARED_SCHEDULE. Grid grid is read-only outside edit
+          // mode, but it still needs to mirror per-card actions.
+          const himCardSkip=!!SKIPPED[sk('him',dd,ss)]||!!EAT_OUT[sk('him',dd,ss)];
+          const herCardSkip=!!SKIPPED[sk('her',dd,ss)]||!!EAT_OUT[sk('her',dd,ss)];
+          const himSkip=(state==='skip-him'||state==='skip-both')||himCardSkip;
+          const herSkip=(state==='skip-her'||state==='skip-both')||herCardSkip;
           // 2026-05-04: detector-found shared cells (same-day-same-slot
           // batches) also render green. _autoSharedCells is repopulated
           // every render by _buildAutoLinkGroups. Doesn't mutate
