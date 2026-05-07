@@ -17693,6 +17693,106 @@ window.MPStress=(function(){
         'paint mode should still be off');
     }
 
+    else if(op==='editModeSurgicalApply'){
+      // V65 (2026-05-07): regression test for V64. Apply a single
+      // grid-tap edit and verify the cascade is contained — only the
+      // directly-edited slot's state should mutate. Pre-V64 a single
+      // edit on one cell would cause many other cells across the week
+      // to lose their meals/groups due to setSchedule's broad SEL
+      // stamping triggering "touched" diff false-positives.
+      if(s!=='breakfast' && s!=='lunch' && s!=='dinner'){
+        add('setup', true, '', null, 'cell not in grid'); return {checks:checks};
+      }
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      var dKeySA = dk(d, s);
+      var himKSA = sk('him', d, s), herKSA = sk('her', d, s);
+      // Test cell must be pristine — not in any pre-existing state.
+      if(SHARED_SCHEDULE[dKeySA]||MANUAL_SET[himKSA]||MANUAL_SET[herKSA]||
+         SKIPPED[himKSA]||SKIPPED[herKSA]||EAT_OUT[himKSA]||EAT_OUT[herKSA]){
+        add('setup', true, '', null, 'test cell not pristine'); return {checks:checks};
+      }
+      // Snapshot pre-edit state across the entire week
+      var preSelSA = JSON.parse(JSON.stringify(SEL));
+      var preSchedSA = JSON.parse(JSON.stringify(SHARED_SCHEDULE));
+      var preSkippedSA = JSON.parse(JSON.stringify(SKIPPED));
+      var preEatOutSA = JSON.parse(JSON.stringify(EAT_OUT));
+      // Enter edit mode + grid-tap left half (skip-him → eat-out)
+      enterScheduleEditMode();
+      schedTapLeft(d, s);
+      add('esa_pre_apply_sched',
+        SHARED_SCHEDULE[dKeySA] === 'skip-him',
+        'pre-Apply: SHARED should be skip-him after grid tap');
+      // Apply
+      applyScheduleEdit();
+      add('esa_post_editModeOff', _scheduleEditMode === false,
+        'edit mode should exit after Apply');
+      // Target slot's intended state
+      add('esa_target_sched',
+        SHARED_SCHEDULE[dKeySA] === 'skip-him',
+        'target SHARED should be skip-him post-Apply');
+      add('esa_target_eatOut', !!EAT_OUT[himKSA],
+        'target EAT_OUT[him] should be created post-Apply (V10 sync)');
+      // Cascade detection: SEL changes on slots NOT directly edited
+      var unexpectedSelChanges = [];
+      Object.keys(preSelSA).forEach(function(k){
+        if(preSelSA[k] !== SEL[k] && k !== himKSA){
+          unexpectedSelChanges.push(k);
+        }
+      });
+      Object.keys(SEL).forEach(function(k){
+        if(preSelSA[k] === undefined && SEL[k] !== undefined && k !== himKSA){
+          unexpectedSelChanges.push(k);
+        }
+      });
+      add('esa_no_sel_cascade',
+        unexpectedSelChanges.length === 0,
+        'V64: SEL cascaded to '+unexpectedSelChanges.length+' other slots: '+
+          unexpectedSelChanges.slice(0,3).join(','));
+      // Cascade detection: SHARED_SCHEDULE changes on cells NOT directly edited
+      var unexpectedSchedChanges = [];
+      var allSchedKeys = {};
+      Object.keys(preSchedSA).forEach(function(k){allSchedKeys[k]=true;});
+      Object.keys(SHARED_SCHEDULE).forEach(function(k){allSchedKeys[k]=true;});
+      Object.keys(allSchedKeys).forEach(function(k){
+        if(k===dKeySA) return;
+        var pre = preSchedSA[k] || '';
+        var post = SHARED_SCHEDULE[k] || '';
+        if(pre !== post) unexpectedSchedChanges.push(k);
+      });
+      add('esa_no_sched_cascade',
+        unexpectedSchedChanges.length === 0,
+        'SHARED_SCHEDULE cascaded to '+unexpectedSchedChanges.length+' other cells: '+
+          unexpectedSchedChanges.slice(0,3).join(','));
+      // Cascade detection: SKIPPED/EAT_OUT changes elsewhere
+      var unexpectedSkipChanges = 0, unexpectedEatChanges = 0;
+      Object.keys(preSkippedSA).forEach(function(k){
+        if(!!preSkippedSA[k] !== !!SKIPPED[k] && k !== himKSA && k !== herKSA){
+          unexpectedSkipChanges++;
+        }
+      });
+      Object.keys(SKIPPED).forEach(function(k){
+        if(preSkippedSA[k] === undefined && !!SKIPPED[k] && k !== himKSA && k !== herKSA){
+          unexpectedSkipChanges++;
+        }
+      });
+      Object.keys(preEatOutSA).forEach(function(k){
+        if(!!preEatOutSA[k] !== !!EAT_OUT[k] && k !== himKSA){
+          unexpectedEatChanges++;
+        }
+      });
+      Object.keys(EAT_OUT).forEach(function(k){
+        if(preEatOutSA[k] === undefined && !!EAT_OUT[k] && k !== himKSA){
+          unexpectedEatChanges++;
+        }
+      });
+      add('esa_no_skip_cascade', unexpectedSkipChanges === 0,
+        'SKIPPED cascaded to '+unexpectedSkipChanges+' other slots');
+      add('esa_no_eat_cascade', unexpectedEatChanges === 0,
+        'EAT_OUT cascaded to '+unexpectedEatChanges+' other slots');
+    }
+
     else if(op==='gridSkipPlusPillSkip'){
       // Schedule grid skip-* + per-slot Skip pill on same person.
       // V34 (2026-05-07): toggleSkip ON now ALSO clears SHARED_SCHEDULE
@@ -17754,7 +17854,9 @@ window.MPStress=(function(){
              // V33 (2026-05-07): V18-V22 audit coverage gaps
              'editModeIngredientEdit','editModeChangeMeal','editModePaintAccept','editModeConflictDetect',
              // V39 (2026-05-07): switchWeek confirm branches + paint+edit interop
-             'editModeWeekSwitchGuard','editModePaintModeInterop'];
+             'editModeWeekSwitchGuard','editModePaintModeInterop',
+             // V65 (2026-05-07): regression test for V64 surgical-apply cascade
+             'editModeSurgicalApply'];
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -17764,7 +17866,8 @@ window.MPStress=(function(){
             editToChangeMeal:{p:0,f:0},skipToEatOut:{p:0,f:0},
             editModeEnterUndo:{p:0,f:0},editModeClearApply:{p:0,f:0},editModeBypassLock:{p:0,f:0},editModePills:{p:0,f:0},
             editModeIngredientEdit:{p:0,f:0},editModeChangeMeal:{p:0,f:0},editModePaintAccept:{p:0,f:0},editModeConflictDetect:{p:0,f:0},
-            editModeWeekSwitchGuard:{p:0,f:0},editModePaintModeInterop:{p:0,f:0}},
+            editModeWeekSwitchGuard:{p:0,f:0},editModePaintModeInterop:{p:0,f:0},
+            editModeSurgicalApply:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
