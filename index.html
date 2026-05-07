@@ -17028,6 +17028,111 @@ window.MPStress=(function(){
         'manual cleanup failed');
     }
 
+    // ───── V18-V22 audit followups: V39 (2026-05-07) ─────
+
+    else if(op==='editModeWeekSwitchGuard'){
+      // V30 (2026-05-07): switchWeek inside edit mode confirms before
+      // discarding edits. Both branches verified:
+      //   - User cancels: stay on current week + edit mode preserved
+      //   - User confirms: Undo runs + switch proceeds + edit mode exits
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      if(activeWeek !== 'this'){
+        add('setup', true, '', null, 'op runs from this-week only'); return {checks:checks};
+      }
+      // Stub confirm to control branch
+      var origConfirm = window.confirm;
+      var origActiveWeek = activeWeek;
+      var origEditMode = _scheduleEditMode;
+      try {
+        // Branch 1: cancel — stay on this week
+        enterScheduleEditMode();
+        SHARED_SCHEDULE[dk('Tuesday','lunch')] = 'shared'; // make a small edit
+        window.confirm = function(){ return false; }; // user cancels
+        switchWeek('next');
+        add('emwsg_cancelStays', activeWeek === 'this',
+          'cancel branch: activeWeek should stay this, got '+activeWeek);
+        add('emwsg_cancelKeepsEditMode', _scheduleEditMode === true,
+          'cancel branch: edit mode should remain on');
+        // Cleanup: undo to leave clean state for branch 2
+        undoScheduleEdit();
+        add('emwsg_cleanBetween', _scheduleEditMode === false,
+          'between-branch cleanup failed');
+        // Branch 2: confirm — auto-undo + switch
+        enterScheduleEditMode();
+        SHARED_SCHEDULE[dk('Tuesday','lunch')] = 'shared';
+        window.confirm = function(){ return true; }; // user confirms
+        switchWeek('next');
+        add('emwsg_confirmSwitches', activeWeek === 'next',
+          'confirm branch: activeWeek should be next, got '+activeWeek);
+        add('emwsg_confirmExitsEditMode', _scheduleEditMode === false,
+          'confirm branch: edit mode should exit');
+      } finally {
+        window.confirm = origConfirm;
+        // Restore active week
+        if(activeWeek !== origActiveWeek){
+          switchWeek(origActiveWeek);
+        }
+        if(_scheduleEditMode){
+          undoScheduleEdit();
+        }
+      }
+    }
+
+    else if(op==='editModePaintModeInterop'){
+      // V25/V21: edit mode and paint mode are orthogonal flags. Paint
+      // mode's grid taps go through paintTap (different handler than
+      // schedTap*), so V25's edit-mode gate doesn't apply. Verify both
+      // flags can be live simultaneously and that exiting paint mode
+      // (paintAccept or togglePaintMode) doesn't disturb edit mode.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      if(s !== 'lunch' && s !== 'dinner'){
+        add('setup', true, '', null, 'paint only on main slots'); return {checks:checks};
+      }
+      var origMealEMPI = getMealId(p, d, s);
+      if(!origMealEMPI){
+        add('setup', true, '', null, 'no current meal'); return {checks:checks};
+      }
+      // Find another empty cell for paint group
+      var otherDEMPI = null;
+      DAYS.forEach(function(dd){
+        if(otherDEMPI || dd===d) return;
+        var ok = sk(p,dd,s);
+        if(MANUAL_SET[ok] || SKIPPED[ok] || EAT_OUT[ok]) return;
+        otherDEMPI = dd;
+      });
+      if(!otherDEMPI){
+        add('setup', true, '', null, 'no other day available'); return {checks:checks};
+      }
+      enterScheduleEditMode();
+      add('empi_editModeOn', _scheduleEditMode === true, 'edit mode failed to engage');
+      // Engage paint mode WHILE edit mode is on
+      _paintMode = true;
+      _paintMealId = origMealEMPI;
+      _paintSlot = 'main';
+      _paintQueued = {};
+      _paintQueued[sk(p, d, s)] = true;
+      _paintQueued[sk(p, otherDEMPI, s)] = true;
+      add('empi_bothFlags',
+        _scheduleEditMode === true && _paintMode === true,
+        'both flags should coexist');
+      // paintAccept exits paint mode but should NOT exit edit mode
+      paintAccept();
+      add('empi_paintExited', _paintMode === false,
+        'paintAccept should exit paint mode');
+      add('empi_editModeIntact', _scheduleEditMode === true,
+        'paintAccept should NOT touch edit mode flag');
+      // Undo should reset both link group and edit mode
+      undoScheduleEdit();
+      add('empi_editModeOff', _scheduleEditMode === false,
+        'edit mode not off after Undo');
+      add('empi_paintModeOff', _paintMode === false,
+        'paint mode should still be off');
+    }
+
     else if(op==='gridSkipPlusPillSkip'){
       // Schedule grid skip-* + per-slot Skip pill on same person.
       // V34 (2026-05-07): toggleSkip ON now ALSO clears SHARED_SCHEDULE
@@ -17087,7 +17192,9 @@ window.MPStress=(function(){
              'editToChangeMeal','skipToEatOut',
              'editModeEnterUndo','editModeClearApply','editModeBypassLock','editModePills',
              // V33 (2026-05-07): V18-V22 audit coverage gaps
-             'editModeIngredientEdit','editModeChangeMeal','editModePaintAccept','editModeConflictDetect'];
+             'editModeIngredientEdit','editModeChangeMeal','editModePaintAccept','editModeConflictDetect',
+             // V39 (2026-05-07): switchWeek confirm branches + paint+edit interop
+             'editModeWeekSwitchGuard','editModePaintModeInterop'];
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -17096,7 +17203,8 @@ window.MPStress=(function(){
             editLinkGroupSlot:{p:0,f:0},editSkippedSlot:{p:0,f:0},tapAlreadyShared:{p:0,f:0},pinAndRandomize:{p:0,f:0},gridSkipPlusPillSkip:{p:0,f:0},
             editToChangeMeal:{p:0,f:0},skipToEatOut:{p:0,f:0},
             editModeEnterUndo:{p:0,f:0},editModeClearApply:{p:0,f:0},editModeBypassLock:{p:0,f:0},editModePills:{p:0,f:0},
-            editModeIngredientEdit:{p:0,f:0},editModeChangeMeal:{p:0,f:0},editModePaintAccept:{p:0,f:0},editModeConflictDetect:{p:0,f:0}},
+            editModeIngredientEdit:{p:0,f:0},editModeChangeMeal:{p:0,f:0},editModePaintAccept:{p:0,f:0},editModeConflictDetect:{p:0,f:0},
+            editModeWeekSwitchGuard:{p:0,f:0},editModePaintModeInterop:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
