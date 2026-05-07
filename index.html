@@ -7495,6 +7495,12 @@ function toggleEatOut(p,d,s){
     delete EAT_OUT[k];
     delete MANUAL_SET[k];
     // Adjust grid: if our side claimed skip-*, remove it.
+    // V40 corner case (C2): if SHARED_SCHEDULE was 'shared' alongside
+    // EAT_OUT[k] (a contradictory state V34 ON wouldn't produce — could
+    // only arise from out-of-band code or pre-V34 stale data), V34 OFF
+    // leaves 'shared' alone. After EAT_OUT is removed and assuming SEL
+    // still matches (toggleEatOut never touched SEL), the cell becomes
+    // genuinely shared again. No correction needed.
     var curOff=SHARED_SCHEDULE[dKey]||'';
     if(curOff===ourSkip) delete SHARED_SCHEDULE[dKey];
     else if(curOff==='skip-both') SHARED_SCHEDULE[dKey]=otherSkip;
@@ -9251,15 +9257,31 @@ function runRandomizeFromPopup(){
   requestAnimationFrame(function(){window.scrollTo(0,0);});
 }
 // 2026-05-06+: Schedule edit mode — opt-in sandbox for restructuring the
-// schedule. Outside edit mode, grid taps work as V10 (live, auto-create
-// EAT_OUTs from skip-*, no MANUAL_SET locking — the latter requires Apply).
+// schedule.
+//
+// V25 (2026-05-07): grid editing is now EDIT-MODE-ONLY. Outside edit mode
+// the schedule grid is read-only — grid taps (schedTapLeft/Right/Center,
+// schedTapDay, schedLongPress) and column-zone bulk handlers
+// (setSharedPreset, setSharedPresetSide) all early-return. State changes
+// outside edit mode happen via per-slot pills (toggleSkip / toggleEatOut /
+// toggleShared on individual meal cards). The grid still RENDERS those
+// states (V27 + V28 split skip/eat-out visuals).
+//
 // Inside edit mode:
-//   - Grid taps bypass MANUAL_SET early-return (locked cells re-paintable).
-//   - V10 EAT_OUT sync is deferred until Apply.
-//   - Per-card pills (toggleSkip/EatOut/Shared) and meal swaps work live but
-//     are reverted by Undo via the snapshot.
-//   - Apply runs setSchedule (locks MANUAL_SET + stamps her=him for shared).
-//   - Undo restores the snapshot.
+//   - Grid taps work live (V25 unblocks them via the _scheduleEditMode
+//     flag); locked cells remain re-paintable. _scheduleEditTouchedCells
+//     marks user-tapped cells so V13 auto-detection
+//     (_autoSharedCells / _autoLinkGroups) doesn't override the user's
+//     intent for that cell.
+//   - V10 EAT_OUT sync is deferred until Apply (so taps don't materialize
+//     EAT_OUTs the user might Undo).
+//   - Per-slot pills (toggleSkip / toggleEatOut / toggleShared) and meal
+//     swaps work live; Undo reverts via the snapshot.
+//   - Apply runs setSchedule (locks MANUAL_SET + stamps her=him for shared)
+//     + surgical re-randomize (V23: only re-rolls slots the diff says are
+//     touched, including touched cells from V25).
+//   - Undo restores the snapshot (incl. ADJ_TARGETS + ts maps + weekData
+//     mirrors per V32 / V37).
 var _scheduleEditMode = false;
 var _scheduleEditSnapshot = null;
 // 2026-05-06+ V21: post-Clear suppression flag. Set when user clicks Clear
