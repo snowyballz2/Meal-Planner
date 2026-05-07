@@ -7362,7 +7362,31 @@ function toggleCard(k){
     if(otherCard)otherCard.classList.toggle('open',openCards[k]);
   }
 }
-function toggleSkip(p,d,s){const k=sk(p,d,s);SKIPPED[k]=!SKIPPED[k];if(!SKIPPED[k]){delete SKIPPED[k];delete MANUAL_SET[k];}else{delete EAT_OUT[k];MANUAL_SET[k]=true;}invalidateLeftoverCache();renderMeals();}
+function toggleSkip(p,d,s){
+  // V34 (2026-05-07): when toggling Skip ON, also clear any pre-existing
+  // grid eat-out state (SHARED_SCHEDULE 'skip-*') for this side so the
+  // schedule grid doesn't keep claiming "eat out" while the per-slot pill
+  // says "skip". Skip and Eat Out are mutually exclusive — most-recent
+  // action wins (here, Skip). Symmetric with V31's apply-path fix where
+  // the grid creating EAT_OUT clears SKIPPED.
+  const k=sk(p,d,s);
+  const dKey=dk(d,s);
+  const ourSkip=(p==='him')?'skip-him':'skip-her';
+  const otherSkip=(p==='him')?'skip-her':'skip-him';
+  SKIPPED[k]=!SKIPPED[k];
+  if(!SKIPPED[k]){
+    delete SKIPPED[k];
+    delete MANUAL_SET[k];
+  } else {
+    delete EAT_OUT[k];
+    MANUAL_SET[k]=true;
+    // Drop our skip-* state (we're not eating out, we're skipping).
+    var cur=SHARED_SCHEDULE[dKey]||'';
+    if(cur===ourSkip) delete SHARED_SCHEDULE[dKey];
+    else if(cur==='skip-both') SHARED_SCHEDULE[dKey]=otherSkip;
+  }
+  invalidateLeftoverCache();renderMeals();
+}
 function addLateSnack(p,d){LATE_SNACK[pk(p,d)]={name:'',kcal:null,pro:null,fat:null,carb:null};renderMeals();}
 function removeLateSnack(p,d){delete LATE_SNACK[pk(p,d)];renderMeals();}
 function setLateSnackField(p,d,field,val){
@@ -7451,7 +7475,39 @@ function setLateSnackIngredientAmt(p,d,idx,val){
   renderMeals();
   autoSaveWeek();
 }
-function toggleEatOut(p,d,s){const k=sk(p,d,s);if(EAT_OUT[k]){delete EAT_OUT[k];delete MANUAL_SET[k];}else{EAT_OUT[k]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};delete SKIPPED[k];MANUAL_SET[k]=true;}invalidateLeftoverCache();renderMeals();}
+function toggleEatOut(p,d,s){
+  // V34 (2026-05-07): mirror per-slot Eat Out into SHARED_SCHEDULE so the
+  // grid data state matches per-slot pill state. Without this, EAT_OUT
+  // existed without the corresponding 'skip-*' grid state — the V27
+  // visual fix made the grid render the eat-out red, but the underlying
+  // SHARED_SCHEDULE didn't agree. The next call to
+  // _syncEatOutsToSharedSchedule (Apply path or grid edit) would then
+  // delete the placeholder EAT_OUT, contradicting the user's intent.
+  const k=sk(p,d,s);
+  const dKey=dk(d,s);
+  const ourSkip=(p==='him')?'skip-him':'skip-her';
+  const otherSkip=(p==='him')?'skip-her':'skip-him';
+  if(EAT_OUT[k]){
+    delete EAT_OUT[k];
+    delete MANUAL_SET[k];
+    // Adjust grid: if our side claimed skip-*, remove it.
+    var curOff=SHARED_SCHEDULE[dKey]||'';
+    if(curOff===ourSkip) delete SHARED_SCHEDULE[dKey];
+    else if(curOff==='skip-both') SHARED_SCHEDULE[dKey]=otherSkip;
+  } else {
+    EAT_OUT[k]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
+    delete SKIPPED[k];
+    MANUAL_SET[k]=true;
+    // Set grid: shared → ourSkip; otherSkip → skip-both; ourSkip/skip-both
+    // already correct; otherwise (empty/normal) → ourSkip.
+    var curOn=SHARED_SCHEDULE[dKey]||'';
+    if(curOn==='shared') SHARED_SCHEDULE[dKey]=ourSkip;
+    else if(curOn===otherSkip) SHARED_SCHEDULE[dKey]='skip-both';
+    else if(curOn===ourSkip||curOn==='skip-both') {/* already correct */}
+    else SHARED_SCHEDULE[dKey]=ourSkip;
+  }
+  invalidateLeftoverCache();renderMeals();
+}
 function setEatOutField(p,d,s,field,val){
   const k=sk(p,d,s);if(!EAT_OUT[k])return;
   if(field==='name'||field==='restaurant')EAT_OUT[k][field]=val;
