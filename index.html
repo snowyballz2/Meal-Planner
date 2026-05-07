@@ -7614,6 +7614,13 @@ function toggleShared(slot,checked){
       // mutually exclusive intents.
       delete SKIPPED[meK];
       delete SKIPPED[otherKey];
+      // V41 (X2, 2026-05-07): clear EAT_OUT on both sides — shared and
+      // eat-out are also mutually exclusive (one says "both eat same
+      // internal meal", the other says "external meal logged separately").
+      // Without this, a slot with prior toggleEatOut could end up with
+      // SHARED='shared' + EAT_OUT both set after toggleShared ON.
+      delete EAT_OUT[meK];
+      delete EAT_OUT[otherKey];
       saveSharedSchedule();
     }
   } else {
@@ -9064,6 +9071,19 @@ function paintAccept(){
     const sides=cellSidesPainted[ck];
     if(sides.him && sides.her){
       SHARED_SCHEDULE[ck]='shared';
+      // V41 (X1, 2026-05-07): paintAccept forming a same-(d,s) shared
+      // cell follows the same shared mutual-exclusion contract as
+      // setSchedule + toggleShared — clear SKIPPED + EAT_OUT on both
+      // sides so a prior per-slot Skip / Eat Out doesn't coexist with
+      // the shared state.
+      const _ckParts=ck.split('_');
+      if(_ckParts.length>=2){
+        const _ckDay=_ckParts[0], _ckSlot=_ckParts[1];
+        delete SKIPPED[sk('him',_ckDay,_ckSlot)];
+        delete SKIPPED[sk('her',_ckDay,_ckSlot)];
+        delete EAT_OUT[sk('him',_ckDay,_ckSlot)];
+        delete EAT_OUT[sk('her',_ckDay,_ckSlot)];
+      }
     }
   });
   saveSharedSchedule();
@@ -9544,6 +9564,11 @@ function setSchedule(){
         // shared meal, neither side is skipping.
         delete SKIPPED[sk('him',d,s)];
         delete SKIPPED[sk('her',d,s)];
+        // V41 (X3, 2026-05-07): shared and eat-out also mutually
+        // exclusive. Apply path now drops EAT_OUT on both sides when
+        // the cell becomes shared, matching toggleShared's V41 update.
+        delete EAT_OUT[sk('him',d,s)];
+        delete EAT_OUT[sk('her',d,s)];
       }
       // Apply eat-outs.
       // V31 (2026-05-07): also clear SKIPPED on the affected side. Skip and
