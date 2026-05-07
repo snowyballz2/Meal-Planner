@@ -13885,6 +13885,12 @@ if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSched
 // audit; old weekData could have SHARED='shared' alongside SKIPPED
 // or EAT_OUT). _sync handles only skip-* ↔ EAT_OUT alignment.
 if(typeof _resolveStateContradictions === 'function') _resolveStateContradictions();
+// V52 (2026-05-07, G1): persist any boot-time auto-corrections so
+// other devices syncing in see the resolved state immediately.
+// mergeSyncData calls saveWeeks after the resolver chain; boot was
+// missing the parallel save. Debounced via autoSaveWeek (500ms) so
+// rapid load/render/scroll doesn't spam disk writes.
+if(typeof autoSaveWeek === 'function') autoSaveWeek();
 MEALS.forEach(function(m){expandMealIngredients(m);});
 MEALS.forEach(function(m){buildColorizedSteps(m);});
 renderDayTabs();setTopTab(topTab);renderMeals();
