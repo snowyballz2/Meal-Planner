@@ -7576,18 +7576,33 @@ function changeMeal(slot,mealId){
   clearOverrides(person,day,slot);invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
 }
 function toggleShared(slot,checked){
+  // V36 (2026-05-07): close two symmetry gaps from the V25-V35 audit.
+  //   A1: toggleShared OFF previously left SHARED_SCHEDULE='shared'
+  //       behind even though SEL diverged. The grid kept rendering green
+  //       and the data state contradicted the user's un-share intent.
+  //   A2: toggleShared ON didn't clear SKIPPED on either side. Shared and
+  //       Skip are mutually exclusive — if SKIPPED was set on either side
+  //       prior to sharing, the data ended up shared+SKIPPED. Now both
+  //       sides' SKIPPED gets cleared to match the per-slot pill semantics
+  //       already used by toggleEatOut.
   const other=person==='him'?'her':'him';
+  const dKey=dk(day,slot);
+  const meK=sk(person,day,slot);
+  const otherKey=sk(other,day,slot);
   if(checked){
     // Set the other person's meal to match — manual shared
     const myId=getMealId(person,day,slot);
     if(myId){
-      const otherKey=sk(other,day,slot);
       stampSel(otherKey,myId);
       clearOverrides(other,day,slot);
       // Mark both as manual set and update schedule to shared
-      MANUAL_SET[sk(person,day,slot)]=true;
+      MANUAL_SET[meK]=true;
       MANUAL_SET[otherKey]=true;
-      SHARED_SCHEDULE[dk(day,slot)]='shared';
+      SHARED_SCHEDULE[dKey]='shared';
+      // V36 (A2): clear SKIPPED on both sides — shared and skip are
+      // mutually exclusive intents.
+      delete SKIPPED[meK];
+      delete SKIPPED[otherKey];
       saveSharedSchedule();
     }
   } else {
@@ -7597,10 +7612,14 @@ function toggleShared(slot,checked){
     const others=candidates.filter(function(m){return m.id!==myId;});
     if(others.length){
       const pick=others[Math.floor(Math.random()*others.length)];
-      const otherKey=sk(other,day,slot);
       stampSel(otherKey,pick.id);
       clearOverrides(other,day,slot);
     }
+    // V36 (A1): drop SHARED_SCHEDULE='shared' so the grid no longer
+    // claims the cell is shared. Other states (skip-*) shouldn't exist
+    // alongside 'shared' but we only delete if it WAS 'shared' so the
+    // pill OFF is precisely targeted.
+    if(SHARED_SCHEDULE[dKey]==='shared') delete SHARED_SCHEDULE[dKey];
   }
   invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
 }
@@ -9467,6 +9486,11 @@ function setSchedule(){
           stampSel(sk('her',d,s),himId);
           clearOverrides('her',d,s);
         }
+        // V36 (A2): shared and skip are mutually exclusive. If either
+        // side had per-slot Skip set, clear it — the cell is now a
+        // shared meal, neither side is skipping.
+        delete SKIPPED[sk('him',d,s)];
+        delete SKIPPED[sk('her',d,s)];
       }
       // Apply eat-outs.
       // V31 (2026-05-07): also clear SKIPPED on the affected side. Skip and
