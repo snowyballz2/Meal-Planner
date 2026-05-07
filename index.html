@@ -9198,6 +9198,19 @@ var _scheduleEditCleared = false;
 // (touched cells unlock for re-roll even if SEL/SHARED_SCHEDULE is unchanged).
 var _scheduleEditTouchedCells = {};
 function _cloneScheduleState(){
+  // V32 (2026-05-07): also snapshot ADJ_TARGETS + per-key timestamp maps.
+  //   - ADJ_TARGETS: per-(person,day) checkboxes for kcal redistribution.
+  //     User can toggle these in edit mode (per-day stats popup); Undo
+  //     should revert.
+  //   - weekData[w].ts: per-slot SEL timestamps (sync last-write-wins).
+  //   - weekData[w].lateSnackTs / sharedScheduleTs: same.
+  //   - ADJ_TARGETS_TS: same for ADJ_TARGETS.
+  // Without these in the snapshot, edits during edit mode bump the ts maps
+  // (via stampSel, _stampDiffTs in saveWeeks, etc.) and Undo restores the
+  // data but leaves timestamps "newer" than pre-edit. On the next cloud
+  // sync, the pushed payload claims newer-than-remote ts on data that
+  // matches the pre-edit snapshot — could confuse multi-device sync.
+  var w = weekData[activeWeek];
   return {
     SHARED_SCHEDULE: JSON.parse(JSON.stringify(SHARED_SCHEDULE)),
     EAT_OUT: JSON.parse(JSON.stringify(EAT_OUT)),
@@ -9206,8 +9219,12 @@ function _cloneScheduleState(){
     SEL: JSON.parse(JSON.stringify(SEL)),
     OVERRIDES: JSON.parse(JSON.stringify(OVERRIDES)),
     LATE_SNACK: JSON.parse(JSON.stringify(LATE_SNACK)),
-    leftoverLinks: weekData[activeWeek] && weekData[activeWeek].leftoverLinks
-      ? JSON.parse(JSON.stringify(weekData[activeWeek].leftoverLinks)) : []
+    leftoverLinks: w && w.leftoverLinks ? JSON.parse(JSON.stringify(w.leftoverLinks)) : [],
+    ADJ_TARGETS: JSON.parse(JSON.stringify(ADJ_TARGETS)),
+    ADJ_TARGETS_TS: JSON.parse(JSON.stringify(ADJ_TARGETS_TS)),
+    weekTs: w && w.ts ? JSON.parse(JSON.stringify(w.ts)) : {},
+    weekLateSnackTs: w && w.lateSnackTs ? JSON.parse(JSON.stringify(w.lateSnackTs)) : {},
+    weekSharedScheduleTs: w && w.sharedScheduleTs ? JSON.parse(JSON.stringify(w.sharedScheduleTs)) : {}
   };
 }
 function _restoreScheduleState(s){
@@ -9219,11 +9236,28 @@ function _restoreScheduleState(s){
   replaceObj(SEL, s.SEL);
   replaceObj(OVERRIDES, s.OVERRIDES);
   replaceObj(LATE_SNACK, s.LATE_SNACK);
+  // V32: restore ADJ_TARGETS + ts maps. Tolerate older snapshots missing
+  // these fields (no-op when undefined).
+  if(s.ADJ_TARGETS) replaceObj(ADJ_TARGETS, s.ADJ_TARGETS);
+  if(s.ADJ_TARGETS_TS) replaceObj(ADJ_TARGETS_TS, s.ADJ_TARGETS_TS);
   if(weekData[activeWeek]){
     if(!weekData[activeWeek].leftoverLinks) weekData[activeWeek].leftoverLinks = [];
     weekData[activeWeek].leftoverLinks.length = 0;
     s.leftoverLinks.forEach(function(g){weekData[activeWeek].leftoverLinks.push(g);});
     if(typeof rebindLeftoverLinks === 'function') rebindLeftoverLinks();
+    // V32: restore per-week ts maps (mutate-in-place to keep object refs).
+    if(s.weekTs){
+      if(!weekData[activeWeek].ts) weekData[activeWeek].ts = {};
+      replaceObj(weekData[activeWeek].ts, s.weekTs);
+    }
+    if(s.weekLateSnackTs){
+      if(!weekData[activeWeek].lateSnackTs) weekData[activeWeek].lateSnackTs = {};
+      replaceObj(weekData[activeWeek].lateSnackTs, s.weekLateSnackTs);
+    }
+    if(s.weekSharedScheduleTs){
+      if(!weekData[activeWeek].sharedScheduleTs) weekData[activeWeek].sharedScheduleTs = {};
+      replaceObj(weekData[activeWeek].sharedScheduleTs, s.weekSharedScheduleTs);
+    }
   }
 }
 function enterScheduleEditMode(){
