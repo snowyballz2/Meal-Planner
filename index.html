@@ -9285,6 +9285,18 @@ function _cloneScheduleState(){
   // data but leaves timestamps "newer" than pre-edit. On the next cloud
   // sync, the pushed payload claims newer-than-remote ts on data that
   // matches the pre-edit snapshot — could confuse multi-device sync.
+  //
+  // V37 (2026-05-07): also snapshot the weekData mirrors that
+  // _stampDiffTs reads as its "prior" baseline:
+  //   - w.sharedSchedule: prior copy used by _stampDiffTs(prior, SHARED_SCHEDULE, ...)
+  //   - w.lateSnack:      prior copy used by _stampDiffTs(prior, LATE_SNACK, ...)
+  // Without restoring these, autoSaveWeek firing DURING edit mode saves
+  // mid-edit values into the mirrors. On Undo, V32 restores the live
+  // globals + ts maps to pre-edit, but the mirrors still hold mid-edit
+  // values. The next saveWeeks runs _stampDiffTs(mid-edit, pre-edit, ...)
+  // → detects diffs (since they no longer match) → re-bumps ts on the
+  // restored entries, undoing V32's restoration. Capturing the mirrors
+  // and restoring them keeps prior==current after Undo so no diff fires.
   var w = weekData[activeWeek];
   return {
     SHARED_SCHEDULE: JSON.parse(JSON.stringify(SHARED_SCHEDULE)),
@@ -9299,7 +9311,10 @@ function _cloneScheduleState(){
     ADJ_TARGETS_TS: JSON.parse(JSON.stringify(ADJ_TARGETS_TS)),
     weekTs: w && w.ts ? JSON.parse(JSON.stringify(w.ts)) : {},
     weekLateSnackTs: w && w.lateSnackTs ? JSON.parse(JSON.stringify(w.lateSnackTs)) : {},
-    weekSharedScheduleTs: w && w.sharedScheduleTs ? JSON.parse(JSON.stringify(w.sharedScheduleTs)) : {}
+    weekSharedScheduleTs: w && w.sharedScheduleTs ? JSON.parse(JSON.stringify(w.sharedScheduleTs)) : {},
+    // V37: weekData mirrors used as prior-baselines by _stampDiffTs.
+    weekSharedScheduleMirror: w && w.sharedSchedule ? JSON.parse(JSON.stringify(w.sharedSchedule)) : {},
+    weekLateSnackMirror: w && w.lateSnack ? JSON.parse(JSON.stringify(w.lateSnack)) : {}
   };
 }
 function _restoreScheduleState(s){
@@ -9332,6 +9347,17 @@ function _restoreScheduleState(s){
     if(s.weekSharedScheduleTs){
       if(!weekData[activeWeek].sharedScheduleTs) weekData[activeWeek].sharedScheduleTs = {};
       replaceObj(weekData[activeWeek].sharedScheduleTs, s.weekSharedScheduleTs);
+    }
+    // V37: also restore the prior-baseline mirrors so saveWeeks's
+    // _stampDiffTs sees prior==current after Undo (no false-positive ts
+    // bumps that would re-rebump the V32-restored ts maps).
+    if(s.weekSharedScheduleMirror){
+      if(!weekData[activeWeek].sharedSchedule) weekData[activeWeek].sharedSchedule = {};
+      replaceObj(weekData[activeWeek].sharedSchedule, s.weekSharedScheduleMirror);
+    }
+    if(s.weekLateSnackMirror){
+      if(!weekData[activeWeek].lateSnack) weekData[activeWeek].lateSnack = {};
+      replaceObj(weekData[activeWeek].lateSnack, s.weekLateSnackMirror);
     }
   }
 }
