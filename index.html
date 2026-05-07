@@ -2743,6 +2743,15 @@ var _autoLinkGroups = [];
 // the data-model contract). Repopulated every render. 2026-05-04.
 var _autoSharedCells = {};
 
+// V67 (2026-05-07): cache auto-link-group color assignments by group ID
+// so colors don't reshuffle when groups change (e.g., user removes one
+// link group, the OTHERS shouldn't get reassigned colors based on
+// iteration order). Persisted across renders. Maps group ID → colorIdx.
+// Cleared on clearWeek + week-rollover (per-week semantic). Cache may
+// hold orphan entries for groups that no longer exist; harmless and
+// prevents flicker if a group reappears later.
+var _autoLinkColorCache = {};
+
 // Drop slots from manual groups whose current meal no longer matches the
 // group's meal (e.g., user changed a slot's meal via card dropdown). Groups
 // that drop to ≤1 slot are dissolved. Self-healing on every render.
@@ -2793,8 +2802,14 @@ function _buildAutoLinkGroups(){
   //     back to standard shared-green visual. Cross-slot same-day leftovers
   //     (Mon lunch cook → Mon dinner leftover) DO count.
   //   - any portion already in a manual group (manual wins on conflict).
-  // Color cycles 0..5 by iteration order; 7th item reuses color of 1st.
+  // V67 (2026-05-07): colors are cached per group ID across renders so
+  // removing/modifying one group doesn't reshuffle the others. New
+  // groups allocate the first color NOT already assigned to another
+  // current group (with cycling fallback if all 6 are taken).
   var autoIdx = 0;
+  // Build set of colors currently in use by surviving groups (so new
+  // group allocations don't collide unless palette is fully saturated).
+  var usedColors = {};
   Object.keys(leftovers).forEach(function(k){
     var lo = leftovers[k];
     if(lo.isLeftover) return;
@@ -2847,11 +2862,27 @@ function _buildAutoLinkGroups(){
       if(anyTouched) return;
     }
 
+    var groupId = 'auto_'+k;
+    var cachedColor = _autoLinkColorCache[groupId];
+    var colorIdx;
+    if(typeof cachedColor === 'number'){
+      colorIdx = cachedColor;
+    } else {
+      // Allocate first unused color (in palette order); fall back to
+      // cycling if all are taken by other current groups.
+      colorIdx = -1;
+      for(var ci=0; ci<LEFTOVER_LINK_COLORS.length; ci++){
+        if(!usedColors[ci]){ colorIdx = ci; break; }
+      }
+      if(colorIdx < 0) colorIdx = autoIdx % LEFTOVER_LINK_COLORS.length;
+      _autoLinkColorCache[groupId] = colorIdx;
+    }
+    usedColors[colorIdx] = true;
     _autoLinkGroups.push({
-      id: 'auto_'+k,
+      id: groupId,
       meal: mealId,
       slots: validPortions.map(function(pt){return {p:pt.p, d:pt.d, s:pt.s};}),
-      colorIdx: autoIdx % LEFTOVER_LINK_COLORS.length,
+      colorIdx: colorIdx,
       auto: true
     });
     autoIdx++;
@@ -9958,11 +9989,21 @@ function setSchedule(){
           _markUserEdited(sk('him',d,s));
           _markUserEdited(sk('her',d,s));
         }
-        // Match her to him's meal immediately
-        const himId=getMealId('him',d,s);
-        if(himId){
-          stampSel(sk('her',d,s),himId);
-          clearOverrides('her',d,s);
+        // V66 (2026-05-07): gate the her=him stamp on `wasTouched`. The
+        // broad iteration over SHARED_SCHEDULE includes default Mon-Sun
+        // shared dinners and cells from prior sessions where her's SEL
+        // may have diverged from him's (auto-detected leftover patterns).
+        // Stamping her=him on every Apply was the source of post-V64
+        // residual cascade — even though randomize was prevented from
+        // re-rolling locked slots, setSchedule itself mutated SEL on
+        // shared cells the user never touched. Gating fixes only the
+        // cells the user actively grid-tapped this edit session.
+        if(wasTouched){
+          const himId=getMealId('him',d,s);
+          if(himId){
+            stampSel(sk('her',d,s),himId);
+            clearOverrides('her',d,s);
+          }
         }
         // V36 (A2): shared and skip are mutually exclusive. If either
         // side had per-slot Skip set, clear it — the cell is now a
@@ -10007,6 +10048,7 @@ function clearWeek(){
   Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
   Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
   Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];}); // V53
+  Object.keys(_autoLinkColorCache).forEach(function(k){delete _autoLinkColorCache[k];}); // V67
   Object.keys(SHARED_SCHEDULE).forEach(function(k){
     if(/^skip-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
   });
@@ -12913,6 +12955,7 @@ function loadWeeks(){
     Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
     Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
     Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];}); // V53
+    Object.keys(_autoLinkColorCache).forEach(function(k){delete _autoLinkColorCache[k];}); // V67
     // Save the rollover
     lsSet('mealPlannerWeekData',weekData);
   }
