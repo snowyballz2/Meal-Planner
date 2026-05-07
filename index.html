@@ -9080,12 +9080,34 @@ function paintAccept(){
     if(parts.length<3) return;
     queuedSlots.push({p:parts[0], d:parts[1], s:parts[2], key:k});
   });
-  // Apply meal + MANUAL_SET to all queued slots, clear stale overrides
+  // Apply meal + MANUAL_SET to all queued slots, clear stale overrides.
+  // V45 (2026-05-07, Gap A): also clear SKIPPED + EAT_OUT on every
+  // queued slot AND adjust SHARED_SCHEDULE per changeMeal's pattern
+  // (V42). paintAccept assigns a meal to each cell — same intent as a
+  // per-slot changeMeal which clears both flags AND breaks 'shared' /
+  // adjusts skip-*. Without the SHARED adjustment, a slot painted over
+  // a prior 'skip-*' state would still trigger _syncEatOutsToSharedSchedule
+  // to re-create the EAT_OUT placeholder (V31 contract), undoing V45's
+  // EAT_OUT clear. The same-(d,s)-shared-cell branch below re-sets
+  // SHARED='shared' after this step for any (d,s) with both halves
+  // queued, so step-1 deletes are correctly overwritten there.
   queuedSlots.forEach(function(q){
     SEL[q.key]=_paintMealId;
     MANUAL_SET[q.key]=true;
     weekData[activeWeek].ts[q.key]=now;
     clearOverrides(q.p,q.d,q.s);
+    delete SKIPPED[q.key];
+    delete EAT_OUT[q.key];
+    // V45: SHARED_SCHEDULE adjustment per changeMeal (V42) cascade.
+    var qSchedKey = dk(q.d, q.s);
+    var qSchedState = SHARED_SCHEDULE[qSchedKey];
+    if(qSchedState){
+      if(qSchedState==='shared') delete SHARED_SCHEDULE[qSchedKey];
+      else if(q.p==='him' && qSchedState==='skip-him') delete SHARED_SCHEDULE[qSchedKey];
+      else if(q.p==='her' && qSchedState==='skip-her') delete SHARED_SCHEDULE[qSchedKey];
+      else if(q.p==='him' && qSchedState==='skip-both') SHARED_SCHEDULE[qSchedKey]='skip-her';
+      else if(q.p==='her' && qSchedState==='skip-both') SHARED_SCHEDULE[qSchedKey]='skip-him';
+    }
   });
   // Schedule: if a single (d,s) cell has both him+her queued, mark that cell
   // as 'shared' in SHARED_SCHEDULE so the shared visual + downstream sharing
@@ -9101,19 +9123,10 @@ function paintAccept(){
     const sides=cellSidesPainted[ck];
     if(sides.him && sides.her){
       SHARED_SCHEDULE[ck]='shared';
-      // V41 (X1, 2026-05-07): paintAccept forming a same-(d,s) shared
-      // cell follows the same shared mutual-exclusion contract as
-      // setSchedule + toggleShared — clear SKIPPED + EAT_OUT on both
-      // sides so a prior per-slot Skip / Eat Out doesn't coexist with
-      // the shared state.
-      const _ckParts=ck.split('_');
-      if(_ckParts.length>=2){
-        const _ckDay=_ckParts[0], _ckSlot=_ckParts[1];
-        delete SKIPPED[sk('him',_ckDay,_ckSlot)];
-        delete SKIPPED[sk('her',_ckDay,_ckSlot)];
-        delete EAT_OUT[sk('him',_ckDay,_ckSlot)];
-        delete EAT_OUT[sk('her',_ckDay,_ckSlot)];
-      }
+      // Note: V41's SKIPPED/EAT_OUT clear here was subsumed by V45's
+      // per-queued-slot clear above — every queued slot already had
+      // SKIPPED/EAT_OUT deleted, so a same-(d,s) shared cell with both
+      // sides queued is fully covered.
     }
   });
   saveSharedSchedule();
@@ -13585,6 +13598,15 @@ window.addEventListener('beforeunload',function(){
 
 loadSyncId();loadCustomIngredients();loadWeeks();renderWeekBar();
 loadCustomMeals();loadEatOutDB();loadAdjTargets();
+// V46 (2026-05-07, Gap I): reconcile any inconsistent SHARED_SCHEDULE
+// vs EAT_OUT state at boot. V25 deferred _syncEatOutsToSharedSchedule
+// inside edit mode — if the user grid-tapped a skip-* state and the
+// page reloaded before Apply, SHARED_SCHEDULE='skip-him' was persisted
+// but the corresponding EAT_OUT[him] placeholder was never created.
+// This boot-time call auto-corrects: creates missing placeholders,
+// removes orphaned non-customized placeholders, clears any SKIPPED
+// that's now contradicted by skip-* sync (per V31).
+if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSchedule();
 MEALS.forEach(function(m){expandMealIngredients(m);});
 MEALS.forEach(function(m){buildColorizedSteps(m);});
 renderDayTabs();setTopTab(topTab);renderMeals();
