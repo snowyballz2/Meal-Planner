@@ -16288,6 +16288,186 @@ window.MPStress=(function(){
       checkCoherence();
     }
 
+    // ───── SCHEDULE EDIT MODE (V18-V21, 2026-05-06+) ─────
+    // Edit mode = opt-in sandbox for restructuring the schedule.
+    // V10 EAT_OUT sync deferred during edit; cells become re-paintable
+    // (MANUAL_SET locks bypassed); Undo reverts; Apply commits + randomize.
+    // These ops skip checkSchedEatOut/checkCoherence because edit mode
+    // intentionally creates transient invariant violations (e.g. skip-*
+    // SHARED_SCHEDULE without yet-synced EAT_OUT). They verify the lifecycle.
+
+    else if(op==='editModeEnterUndo'){
+      // Entry preserves visuals + Undo cleanly reverts.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      // Capture pre-edit state hashes
+      var preSel = Object.keys(SEL).length;
+      var preShared = Object.keys(SHARED_SCHEDULE).length;
+      var preEatOut = Object.keys(EAT_OUT).length;
+      var preManSet = Object.keys(MANUAL_SET).length;
+      var preAutoLink = (typeof _autoLinkGroups !== 'undefined' ? _autoLinkGroups.length : 0);
+      // Enter edit mode
+      enterScheduleEditMode();
+      add('emeu_editModeOn', _scheduleEditMode === true, 'edit mode not on');
+      add('emeu_clearedFlagFalse', _scheduleEditCleared === false, '_scheduleEditCleared should be false on entry');
+      add('emeu_snapshotExists', _scheduleEditSnapshot !== null, 'snapshot not captured');
+      // Visuals preserved: SHARED_SCHEDULE/EAT_OUT counts unchanged
+      add('emeu_sharedSchedPreserved', Object.keys(SHARED_SCHEDULE).length === preShared,
+        'SHARED_SCHEDULE size changed: pre='+preShared+' post='+Object.keys(SHARED_SCHEDULE).length);
+      add('emeu_eatOutPreserved', Object.keys(EAT_OUT).length === preEatOut,
+        'EAT_OUT size changed');
+      // Auto-link-groups not suppressed on entry (only after Clear)
+      add('emeu_autoLinkVisible',
+        (typeof _autoLinkGroups !== 'undefined' ? _autoLinkGroups.length : 0) === preAutoLink,
+        'auto-link-groups suppressed on entry');
+      // Make a small change
+      var emeuKey = sk(p, d, s);
+      var preThisLocked = !!MANUAL_SET[emeuKey] || !!SKIPPED[emeuKey] || !!EAT_OUT[emeuKey];
+      if(!preThisLocked){
+        toggleSkip(p, d, s);
+        add('emeu_changeApplied', !!SKIPPED[emeuKey], 'toggleSkip in edit mode failed to set SKIPPED');
+      } else {
+        add('emeu_changeApplied', true, '', null, 'slot already locked, skipping change');
+      }
+      // Undo
+      undoScheduleEdit();
+      add('emeu_editModeOff', _scheduleEditMode === false, 'edit mode not off after Undo');
+      add('emeu_clearedFlagReset', _scheduleEditCleared === false, '_scheduleEditCleared should be false after Undo');
+      add('emeu_snapshotCleared', _scheduleEditSnapshot === null, 'snapshot not cleared');
+      add('emeu_selRestored', Object.keys(SEL).length === preSel, 'SEL not restored');
+      add('emeu_sharedRestored', Object.keys(SHARED_SCHEDULE).length === preShared, 'SHARED_SCHEDULE not restored');
+      add('emeu_eatOutRestored', Object.keys(EAT_OUT).length === preEatOut, 'EAT_OUT not restored');
+      add('emeu_manSetRestored', Object.keys(MANUAL_SET).length === preManSet, 'MANUAL_SET not restored');
+    }
+
+    else if(op==='editModeClearApply'){
+      // Clear wipes everything + Apply commits + randomize repopulates.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      enterScheduleEditMode();
+      // Click Clear
+      clearScheduleEdit();
+      add('emca_selWiped', Object.keys(SEL).length === 0, 'SEL not wiped: '+Object.keys(SEL).length);
+      add('emca_sharedWiped', Object.keys(SHARED_SCHEDULE).length === 0, 'SHARED_SCHEDULE not wiped');
+      add('emca_eatOutWiped', Object.keys(EAT_OUT).length === 0, 'EAT_OUT not wiped');
+      add('emca_manSetWiped', Object.keys(MANUAL_SET).length === 0, 'MANUAL_SET not wiped');
+      add('emca_skippedWiped', Object.keys(SKIPPED).length === 0, 'SKIPPED not wiped');
+      add('emca_linkGroupsWiped',
+        !weekData[activeWeek].leftoverLinks || weekData[activeWeek].leftoverLinks.length === 0,
+        'leftoverLinks not wiped');
+      add('emca_clearedFlagSet', _scheduleEditCleared === true, '_scheduleEditCleared should be true after Clear');
+      add('emca_editModeStillOn', _scheduleEditMode === true, 'edit mode should stay on after Clear');
+      // Render to populate _autoLinkGroups + _autoSharedCells
+      renderMeals();
+      add('emca_autoLinkSuppressed',
+        (typeof _autoLinkGroups !== 'undefined' ? _autoLinkGroups.length : 0) === 0,
+        'auto-link-groups not suppressed after Clear');
+      add('emca_autoSharedSuppressed',
+        (typeof _autoSharedCells !== 'undefined' ? Object.keys(_autoSharedCells).length : 0) === 0,
+        'auto-shared cells not suppressed after Clear');
+      // Paint shared on Mon dinner
+      schedTapCenter('Monday','dinner');
+      add('emca_paintedShared', SHARED_SCHEDULE[dk('Monday','dinner')] === 'shared',
+        'paint failed: '+(SHARED_SCHEDULE[dk('Monday','dinner')]||'(empty)'));
+      add('emca_eatOutDeferred', Object.keys(EAT_OUT).length === 0,
+        'V10 sync should be deferred — EAT_OUT was created during edit');
+      // Apply
+      applyScheduleEdit();
+      add('emca_editModeOff', _scheduleEditMode === false, 'edit mode not off after Apply');
+      add('emca_clearedFlagReset', _scheduleEditCleared === false, '_scheduleEditCleared not reset after Apply');
+      add('emca_sharedCommitted', SHARED_SCHEDULE[dk('Monday','dinner')] === 'shared',
+        'shared not committed: '+(SHARED_SCHEDULE[dk('Monday','dinner')]||'(empty)'));
+      add('emca_herMatchedHim',
+        getMealId('him','Monday','dinner') === getMealId('her','Monday','dinner') &&
+        getMealId('him','Monday','dinner') !== null,
+        'her meal not matched to him on Apply');
+      add('emca_manSetOnShared',
+        !!MANUAL_SET[sk('him','Monday','dinner')] && !!MANUAL_SET[sk('her','Monday','dinner')],
+        'MANUAL_SET not set on shared cells after Apply');
+      add('emca_selRepopulated', Object.keys(SEL).length > 0, 'SEL not repopulated by randomize');
+    }
+
+    else if(op==='editModeBypassLock'){
+      // Locked cells become re-paintable in edit mode.
+      if(s !== 'breakfast' && s !== 'lunch' && s !== 'dinner'){
+        add('setup', true, '', null, 'cell not in grid'); return {checks:checks};
+      }
+      var emblK = sk(p, d, s);
+      // Skip if cell already has SHARED_SCHEDULE state
+      if(SHARED_SCHEDULE[dk(d, s)]){
+        add('setup', true, '', null, 'cell has prior schedule state'); return {checks:checks};
+      }
+      // Lock the cell via toggleSkip
+      if(MANUAL_SET[emblK] || SKIPPED[emblK] || EAT_OUT[emblK]){
+        add('setup', true, '', null, 'cell already locked'); return {checks:checks};
+      }
+      toggleSkip(p, d, s);
+      var preMS = !!MANUAL_SET[emblK];
+      add('embl_lockSet', preMS, 'pre-test lock failed');
+      // Outside edit mode: tap is no-op
+      var tapFn = (p === 'him') ? schedTapLeft : schedTapRight;
+      var preTapState = SHARED_SCHEDULE[dk(d, s)] || '';
+      tapFn(d, s);
+      var postTapOutsideState = SHARED_SCHEDULE[dk(d, s)] || '';
+      add('embl_outsideNoOp', preTapState === postTapOutsideState,
+        'outside edit mode, locked cell taps should be no-op (got '+postTapOutsideState+')');
+      // Enter edit mode
+      enterScheduleEditMode();
+      // Tap should now work
+      tapFn(d, s);
+      var inEditState = SHARED_SCHEDULE[dk(d, s)] || '';
+      add('embl_bypassWorks', inEditState !== preTapState,
+        'edit mode tap should change state (got '+inEditState+')');
+      // V10 sync should be deferred — no auto-EAT_OUT
+      // (only if cell went into skip-* state, otherwise N/A)
+      if(/^skip-/.test(inEditState)){
+        var himInEditEatOut = !!EAT_OUT[sk('him', d, s)];
+        var herInEditEatOut = !!EAT_OUT[sk('her', d, s)];
+        // We wanted these BOTH false (deferred), but some could pre-exist from toggleSkip's clear.
+        // Just check that we didn't create a NEW EAT_OUT for this cell's skip side.
+        var skipsHim = (inEditState === 'skip-him' || inEditState === 'skip-both');
+        var skipsHer = (inEditState === 'skip-her' || inEditState === 'skip-both');
+        var deferred = (!skipsHim || !himInEditEatOut) && (!skipsHer || !herInEditEatOut);
+        add('embl_v10Deferred', deferred, 'V10 sync NOT deferred — EAT_OUT created during tap');
+      } else {
+        add('embl_v10Deferred', true, '', null, 'n/a (state not skip-*)');
+      }
+      // Cleanup via Undo
+      undoScheduleEdit();
+      add('embl_undoExits', _scheduleEditMode === false, 'undo did not exit edit mode');
+    }
+
+    else if(op==='editModePills'){
+      // Per-card pills work live in edit mode; Undo reverts them.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      var empK = sk(p, d, s);
+      // Pre-state must be clean for this slot
+      if(MANUAL_SET[empK] || SKIPPED[empK] || EAT_OUT[empK]){
+        add('setup', true, '', null, 'slot not pristine'); return {checks:checks};
+      }
+      var preEatOutCount = Object.keys(EAT_OUT).length;
+      enterScheduleEditMode();
+      // toggleEatOut works live
+      toggleEatOut(p, d, s);
+      add('emp_eatOutSet', !!EAT_OUT[empK], 'toggleEatOut should work in edit mode');
+      add('emp_manSet', !!MANUAL_SET[empK], 'MANUAL_SET should be set');
+      // Customize macros
+      EAT_OUT[empK].name = 'EditMode Test';
+      EAT_OUT[empK].kcal = 800;
+      add('emp_customized', EAT_OUT[empK].kcal === 800, 'customization not stored');
+      // Undo reverts
+      undoScheduleEdit();
+      add('emp_eatOutCleared', !EAT_OUT[empK], 'EAT_OUT should be cleared by Undo');
+      add('emp_manSetCleared', !MANUAL_SET[empK], 'MANUAL_SET should be cleared by Undo');
+      add('emp_eatOutCountRestored', Object.keys(EAT_OUT).length === preEatOutCount,
+        'EAT_OUT count not restored after Undo');
+      add('emp_editModeOff', _scheduleEditMode === false, 'edit mode not off after Undo');
+    }
+
     else if(op==='gridSkipPlusPillSkip'){
       // Schedule grid skip-* + per-card Skip pill on same person.
       // Documents the known divergence: Skip pill clears EAT_OUT but doesn't
@@ -16340,14 +16520,16 @@ window.MPStress=(function(){
              'skipPill','eatOutPill','scheduleTapCycle','changeMealOp','randomizePersist',
              'schedTapCenter','clearWeekOp','paintAcceptOp','lateSnackOp',
              'editLinkGroupSlot','editSkippedSlot','tapAlreadyShared','pinAndRandomize','gridSkipPlusPillSkip',
-             'editToChangeMeal','skipToEatOut'];
+             'editToChangeMeal','skipToEatOut',
+             'editModeEnterUndo','editModeClearApply','editModeBypassLock','editModePills'];
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
             skipPill:{p:0,f:0},eatOutPill:{p:0,f:0},scheduleTapCycle:{p:0,f:0},changeMealOp:{p:0,f:0},randomizePersist:{p:0,f:0},
             schedTapCenter:{p:0,f:0},clearWeekOp:{p:0,f:0},paintAcceptOp:{p:0,f:0},lateSnackOp:{p:0,f:0},
             editLinkGroupSlot:{p:0,f:0},editSkippedSlot:{p:0,f:0},tapAlreadyShared:{p:0,f:0},pinAndRandomize:{p:0,f:0},gridSkipPlusPillSkip:{p:0,f:0},
-            editToChangeMeal:{p:0,f:0},skipToEatOut:{p:0,f:0}},
+            editToChangeMeal:{p:0,f:0},skipToEatOut:{p:0,f:0},
+            editModeEnterUndo:{p:0,f:0},editModeClearApply:{p:0,f:0},editModeBypassLock:{p:0,f:0},editModePills:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
