@@ -3152,8 +3152,36 @@ function schedTapCenter(d,s){
   // V25: treat auto-shared as "currently shared" so first tap un-shares
   // visually (see schedLongPress for full rationale).
   const wasVisuallyShared = cur === 'shared' || !!_autoSharedCells[k];
-  if(wasVisuallyShared) delete SHARED_SCHEDULE[k];
-  else SHARED_SCHEDULE[k]='shared';
+  if(wasVisuallyShared){
+    delete SHARED_SCHEDULE[k];
+    // V82 (2026-05-08): tap to un-share clears USER_EDITED + MANUAL_SET on
+    // both sides so the cell can visually cycle back to default. Without
+    // this, the V79 outer-purple cascade (himShowSetDot or _himNormalPurple)
+    // keeps the cell purple-bordered after un-share, making it look stuck.
+    // Per user feedback: "nothing should ever be frozen or locked in edit
+    // mode". MANUAL_SET cleared too because the cell is no longer
+    // user-set as shared.
+    delete USER_EDITED[sk('him',d,s)];
+    delete USER_EDITED[sk('her',d,s)];
+    delete MANUAL_SET[sk('him',d,s)];
+    delete MANUAL_SET[sk('her',d,s)];
+    // V82: preserve SEL through Apply — un-sharing is a state change,
+    // not a request for new meals. Both halves should keep their
+    // current SEL.
+    _scheduleEditPreserveSel[sk('him',d,s)] = true;
+    _scheduleEditPreserveSel[sk('her',d,s)] = true;
+  } else {
+    // V82: tap to make shared. If cell was in eo-* state, clear the
+    // associated EAT_OUT flags on both sides — eat-out and shared are
+    // mutually exclusive (V41/V36). Pre-V82 the schedTapCenter wrote
+    // SHARED='shared' over an eo-* state without clearing EAT_OUT,
+    // leaving INV24 fires for shared-and-eatout-conflict.
+    if(/^eo-/.test(cur)){
+      _v70UndoEatOutSide('him', d, s);
+      _v70UndoEatOutSide('her', d, s);
+    }
+    SHARED_SCHEDULE[k]='shared';
+  }
   _scheduleEditTouchedCells[k]=true;
   // V71: center toggles shared (affects both sides) → mark both.
   _scheduleEditTouchedSides[sk('him',d,s)]=true;
@@ -3174,9 +3202,33 @@ function schedTapDay(d){
   const allEO=slots.every(function(s){return SHARED_SCHEDULE[dk(d,s)]==='eo-both';});
   slots.forEach(function(s){
     const k=dk(d,s);
-    if(allShared) SHARED_SCHEDULE[k]='eo-both'; // shared → eat out
-    else if(allEO) delete SHARED_SCHEDULE[k];      // eat out → normal
-    else SHARED_SCHEDULE[k]='shared';               // normal → shared
+    var prevState = SHARED_SCHEDULE[k] || '';
+    if(allShared){
+      SHARED_SCHEDULE[k]='eo-both';
+      // shared → eat-out: V70 cascade not needed since EAT_OUT
+      // placeholders will be created by sync later; SKIPPED clears
+      // are handled by setSchedule's eo-* branch at Apply.
+    }
+    else if(allEO){
+      // eo-both → normal: clear EAT_OUT + USER_EDITED + MANUAL_SET on
+      // both sides via V70 helper (also marks _scheduleEditPreserveSel
+      // so SEL is preserved through randomize at Apply).
+      _v70UndoEatOutSide('him', d, s);
+      _v70UndoEatOutSide('her', d, s);
+      delete SHARED_SCHEDULE[k];
+    }
+    else {
+      // normal → shared. V82 (2026-05-08): if prev state was eo-*,
+      // clear EAT_OUT flags via V70 cascade — eat-out and shared are
+      // mutually exclusive (V41/V36). Pre-V82 schedTapDay wrote
+      // 'shared' over an eo-* state without clearing EAT_OUT, leaving
+      // INV24 fires.
+      if(/^eo-/.test(prevState)){
+        _v70UndoEatOutSide('him', d, s);
+        _v70UndoEatOutSide('her', d, s);
+      }
+      SHARED_SCHEDULE[k]='shared';
+    }
     _scheduleEditTouchedCells[k]=true;
     // V71: day-tap affects both sides for all 3 slots.
     _scheduleEditTouchedSides[sk('him',d,s)]=true;
@@ -10382,6 +10434,29 @@ function setSchedule(){
         if(wasTouched) _markUserEdited(sk('her',d,s));
       }
       if(state==='shared'){
+        // V82 (2026-05-08): auto-repair stale 'shared' state. If the
+        // user did NOT actively touch this cell this edit session AND
+        // the actual SEL meals diverge between Him and Her, drop the
+        // 'shared' state rather than forcing her=him (which would
+        // clobber Her's diverged SEL). This satisfies INV24
+        // (schedSharedConsistency: SHARED='shared' implies meal match)
+        // without reverting V66's wasTouched gate that prevents the
+        // cascade-randomize bug. Sources of stale 'shared' state:
+        //   - DEFAULTS auto-init all dinners as 'shared' on first run
+        //   - Prior randomize where Her's SEL diverged from Him's on a
+        //     'shared' cell that the user didn't re-tap
+        //   - Cloud sync importing stale SHARED_SCHEDULE
+        // For wasTouched=true cells: user explicitly tapped 'shared'
+        // this session, so stamp her=him to honor their intent.
+        if(!wasTouched){
+          var _v82_himId = getMealId('him',d,s);
+          var _v82_herId = getMealId('her',d,s);
+          if(_v82_himId && _v82_herId && _v82_himId !== _v82_herId){
+            // Stale 'shared' with diverged meals — clear it.
+            delete SHARED_SCHEDULE[dk(d,s)];
+            return; // skip remaining shared-branch cleanup
+          }
+        }
         MANUAL_SET[sk('him',d,s)]=true;
         MANUAL_SET[sk('her',d,s)]=true;
         if(wasTouched){
