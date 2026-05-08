@@ -3088,82 +3088,115 @@ function _v70UndoEatOutSide(p, d, s){
   if(typeof _bumpSlotTs === 'function') _bumpSlotTs(k);
   _scheduleEditPreserveSel[k] = true;
 }
+// V85 (2026-05-08): unified "first tap clears Him/Her's visual state"
+// helper. Per user feedback: "every first tap clears". If a side
+// currently displays ANY visual indicator (link group color, shared
+// green, eat-out red, manual purple from USER_EDITED), the first tap
+// clears that side back to default visual. Subsequent tap goes to eo.
+//
+// Per-side cleanup: for shared (cell-level visual), this is
+// distributed across both sides — V82d-style cleanup. For link/eo/
+// manual purple (per-side visuals), only the named side is cleared.
+//
+// Returns true if a clear action fired (caller should return without
+// running standard cycle), false if the side was already default.
+function _v85ClearSideVisualIfAny(side, d, s){
+  const k = dk(d, s);
+  const cur = SHARED_SCHEDULE[k] || '';
+  const otherSide = (side === 'him') ? 'her' : 'him';
+  const sk_this = sk(side, d, s);
+  const sk_other = sk(otherSide, d, s);
+  const lGroupReal = getLinkGroupForSlot(side, d, s);
+  const hasLink = !!lGroupReal && !_scheduleEditClearedLinkSides[sk_this];
+  const hasShared = (cur === 'shared');
+  const hasMyEatOut = (side === 'him')
+    ? (cur === 'eo-him' || cur === 'eo-both')
+    : (cur === 'eo-her' || cur === 'eo-both');
+  const hasManualPurple = !!USER_EDITED[sk_this] || !!MANUAL_SET[sk_this];
+  const hasSkip = !!SKIPPED[sk_this];
+
+  // Default cell — no clear needed.
+  if(!hasLink && !hasShared && !hasMyEatOut && !hasManualPurple && !hasSkip) return false;
+
+  // Shared is cell-level — clearing affects both halves.
+  if(hasShared){
+    delete SHARED_SCHEDULE[k];
+    delete USER_EDITED[sk_this];
+    delete USER_EDITED[sk_other];
+    delete MANUAL_SET[sk_this];
+    delete MANUAL_SET[sk_other];
+    _scheduleEditPreserveSel[sk_this] = true;
+    _scheduleEditPreserveSel[sk_other] = true;
+    _scheduleEditTouchedSides[sk_other] = true; // shared-break touches both
+    return true;
+  }
+  // Eat-out: V70 cascade handles EAT_OUT/USER_EDITED/MANUAL_SET clear
+  // for the side. Adjust SHARED state per which sides are eat-out.
+  if(hasMyEatOut){
+    _v70UndoEatOutSide(side, d, s);
+    if(side === 'him'){
+      if(cur === 'eo-him') delete SHARED_SCHEDULE[k];
+      else if(cur === 'eo-both') SHARED_SCHEDULE[k] = 'eo-her';
+    } else {
+      if(cur === 'eo-her') delete SHARED_SCHEDULE[k];
+      else if(cur === 'eo-both') SHARED_SCHEDULE[k] = 'eo-him';
+    }
+    return true;
+  }
+  // Skip: clear per-side
+  if(hasSkip){
+    delete SKIPPED[sk_this];
+    delete USER_EDITED[sk_this];
+    delete MANUAL_SET[sk_this];
+    _scheduleEditPreserveSel[sk_this] = true;
+    return true;
+  }
+  // Link group + manual purple: clear both layers if present (so the
+  // cell falls fully to default visual on this side).
+  if(hasLink) _scheduleEditClearedLinkSides[sk_this] = true;
+  if(hasManualPurple){
+    delete USER_EDITED[sk_this];
+    delete MANUAL_SET[sk_this];
+    _scheduleEditPreserveSel[sk_this] = true;
+  }
+  return true;
+}
+
 function schedTapLeft(d,s){
   // V25 (2026-05-07): grid editing is edit-mode-only. Outside edit mode,
   // per-card pills (toggleSkip / toggleEatOut / toggleShared) handle state.
   if(!_scheduleEditMode) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
-  // V84 (2026-05-08): first tap on a link-group cell with no SHARED
-  // state clears the link visual on Him's side (no eo, no SHARED
-  // change). Second tap sets eo. Per user feedback: "should always
-  // go normal before eo." Only fires once per side per edit session;
-  // subsequent taps fall into the standard eo cycle.
-  const himLGroupReal = getLinkGroupForSlot('him', d, s);
-  if(cur==='' && himLGroupReal && !_scheduleEditClearedLinkSides[sk('him',d,s)]){
-    _scheduleEditClearedLinkSides[sk('him',d,s)] = true;
+  // V85: first tap clears Him's visual state if any. Returns true =
+  // clear action fired = stop here.
+  if(_v85ClearSideVisualIfAny('him', d, s)){
     _scheduleEditTouchedCells[k] = true;
     _scheduleEditTouchedSides[sk('him',d,s)] = true;
     updateSchedule();
     return;
   }
-  // V71: tap on Him's side. Most transitions affect Him only (mark him's
-  // side touched). Special case: 'shared' → '' un-shares both halves
-  // (cell-level transition) → mark both sides.
-  var sharedBreak = (cur==='shared');
-  if(cur==='shared'){
-    delete SHARED_SCHEDULE[k];
-  } else if(cur==='eo-him'){
-    delete SHARED_SCHEDULE[k];
-    _v70UndoEatOutSide('him', d, s); // V70: clear eat-out + Set + mark preserve
-  } else if(cur==='eo-her'){
-    SHARED_SCHEDULE[k]='eo-both';
-  } else if(cur==='eo-both'){
-    SHARED_SCHEDULE[k]='eo-her';
-    _v70UndoEatOutSide('him', d, s); // V70: him goes from eat-out to normal
-  } else {
-    SHARED_SCHEDULE[k]='eo-him'; // him eats out
-  }
-  _scheduleEditTouchedCells[k]=true;
-  // V71: per-side touched. Tap Him → only Him. Sharing-break → both.
-  _scheduleEditTouchedSides[sk('him',d,s)]=true;
-  if(sharedBreak) _scheduleEditTouchedSides[sk('her',d,s)]=true;
+  // Standard cycle: Him's side is default. Advance toward eo-him.
+  if(cur === 'eo-her') SHARED_SCHEDULE[k] = 'eo-both'; // add Him's eat-out
+  else SHARED_SCHEDULE[k] = 'eo-him';
+  _scheduleEditTouchedCells[k] = true;
+  _scheduleEditTouchedSides[sk('him',d,s)] = true;
   updateSchedule();
 }
 function schedTapRight(d,s){
-  // V25 (2026-05-07): grid editing is edit-mode-only.
   if(!_scheduleEditMode) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
-  // V84: first tap on a link-group cell with no SHARED state clears
-  // Her's link visual without setting eo. See schedTapLeft for full
-  // rationale.
-  const herLGroupReal = getLinkGroupForSlot('her', d, s);
-  if(cur==='' && herLGroupReal && !_scheduleEditClearedLinkSides[sk('her',d,s)]){
-    _scheduleEditClearedLinkSides[sk('her',d,s)] = true;
+  if(_v85ClearSideVisualIfAny('her', d, s)){
     _scheduleEditTouchedCells[k] = true;
     _scheduleEditTouchedSides[sk('her',d,s)] = true;
     updateSchedule();
     return;
   }
-  var sharedBreak = (cur==='shared');
-  if(cur==='shared'){
-    delete SHARED_SCHEDULE[k];
-  } else if(cur==='eo-her'){
-    delete SHARED_SCHEDULE[k];
-    _v70UndoEatOutSide('her', d, s); // V70
-  } else if(cur==='eo-him'){
-    SHARED_SCHEDULE[k]='eo-both';
-  } else if(cur==='eo-both'){
-    SHARED_SCHEDULE[k]='eo-him';
-    _v70UndoEatOutSide('her', d, s); // V70: her goes from eat-out to normal
-  } else {
-    SHARED_SCHEDULE[k]='eo-her'; // her eats out
-  }
-  _scheduleEditTouchedCells[k]=true;
-  // V71: per-side touched. Tap Her → only Her. Sharing-break → both.
-  _scheduleEditTouchedSides[sk('her',d,s)]=true;
-  if(sharedBreak) _scheduleEditTouchedSides[sk('him',d,s)]=true;
+  if(cur === 'eo-him') SHARED_SCHEDULE[k] = 'eo-both';
+  else SHARED_SCHEDULE[k] = 'eo-her';
+  _scheduleEditTouchedCells[k] = true;
+  _scheduleEditTouchedSides[sk('her',d,s)] = true;
   updateSchedule();
 }
 // 2026-05-03 (Item 1): center-zone tap toggles shared. Same logic as the
@@ -14670,11 +14703,17 @@ window.MPStress=(function(){
     // Without this, calling randomizeWeek() inside a scenario rewrites the
     // global _postRandomizeCache, contaminating subsequent reset assertions.
     var postRand = (typeof _postRandomizeCache==='object' && _postRandomizeCache) ? clone(_postRandomizeCache) : {};
-    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),_lastSel:lastSel,_dayBalancedCache:dayBal,_leftoverCache:leftover,_postRandomizeCache:postRand};
+    // V85 (2026-05-08): include USER_EDITED in snapshot. Pre-V85 it
+    // wasn't captured, so prior ops' USER_EDITED stamps leaked into
+    // later ops via freshRestore. Now that V85 makes first-tap clear
+    // USER_EDITED purple, those stale stamps would change first-tap
+    // semantics for downstream tests. Capturing keeps each op
+    // isolated.
+    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),USER_EDITED:clone(USER_EDITED),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),_lastSel:lastSel,_dayBalancedCache:dayBal,_leftoverCache:leftover,_postRandomizeCache:postRand};
   }
   function replace(g,v){Object.keys(g).forEach(function(k){delete g[k];});Object.keys(v).forEach(function(k){g[k]=v[k];});}
   function restore(s){
-    replace(SEL,s.SEL);replace(SKIPPED,s.SKIPPED);replace(EAT_OUT,s.EAT_OUT);replace(MANUAL_SET,s.MANUAL_SET);replace(SHARED_SCHEDULE,s.SHARED_SCHEDULE);replace(ADJ_TARGETS,s.ADJ_TARGETS);replace(OVERRIDES,s.OVERRIDES);replace(LATE_SNACK,s.LATE_SNACK);
+    replace(SEL,s.SEL);replace(SKIPPED,s.SKIPPED);replace(EAT_OUT,s.EAT_OUT);replace(MANUAL_SET,s.MANUAL_SET);if(s.USER_EDITED) replace(USER_EDITED,s.USER_EDITED); else Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];});replace(SHARED_SCHEDULE,s.SHARED_SCHEDULE);replace(ADJ_TARGETS,s.ADJ_TARGETS);replace(OVERRIDES,s.OVERRIDES);replace(LATE_SNACK,s.LATE_SNACK);
     if (s._lastSel && weekData.last) { weekData.last.sel = s._lastSel; }
     // Restore caches AFTER source-state restore. Don't call invalidateLeftoverCache
     // — the snapshot already has the correct cache contents from when it was
@@ -16859,31 +16898,35 @@ window.MPStress=(function(){
       var prevEM = _scheduleEditMode;
       _scheduleEditMode = true;
       if(side==='left'){
-        // V84 (2026-05-08): if first tap on a link-group cell only clears
-        // the visual (no SHARED change), call again to advance to eo-him.
-        // Test ops simulating user actions expect "tap = state change".
+        // V85 (2026-05-08): tap-then-retry-if-clear. If first tap was a
+        // V84/V85 "clear visual" step (didn't advance to Him's eo
+        // state), tap again. Detection: post-tap SHARED isn't eo-him
+        // or eo-both AND it equals pre-tap SHARED. Test ops simulating
+        // user-set-eo via tap expect the eo state after one helper call.
         var preState = SHARED_SCHEDULE[dk(dd,ss)] || '';
-        var preCleared = !!_scheduleEditClearedLinkSides[sk('him',dd,ss)];
         schedTapLeft(dd, ss);
         var postState = SHARED_SCHEDULE[dk(dd,ss)] || '';
-        if(preState===postState && !preCleared && _scheduleEditClearedLinkSides[sk('him',dd,ss)]){
-          // First tap was the V84 clear step. Tap again to set eo-him.
+        var postHimEo = postState === 'eo-him' || postState === 'eo-both';
+        if(preState === postState && !postHimEo){
           schedTapLeft(dd, ss);
         }
       }
       else if(side==='right'){
         var preStateR = SHARED_SCHEDULE[dk(dd,ss)] || '';
-        var preClearedR = !!_scheduleEditClearedLinkSides[sk('her',dd,ss)];
         schedTapRight(dd, ss);
         var postStateR = SHARED_SCHEDULE[dk(dd,ss)] || '';
-        if(preStateR===postStateR && !preClearedR && _scheduleEditClearedLinkSides[sk('her',dd,ss)]){
+        var postHerEo = postStateR === 'eo-her' || postStateR === 'eo-both';
+        if(preStateR === postStateR && !postHerEo){
           schedTapRight(dd, ss);
         }
       }
       else if(side==='center') schedTapCenter(dd, ss);
       else if(side==='day') schedTapDay(dd);
       _scheduleEditMode = prevEM;
-      _syncEatOutsToSharedSchedule();
+      // V85: only sync when caller was outside edit mode. If caller was
+      // already in edit mode (prevEM=true), preserve V25's deferred-sync
+      // contract — sync runs at Apply, not during taps.
+      if(!prevEM) _syncEatOutsToSharedSchedule();
     }
     var preBal=JSON.parse(JSON.stringify(getBalancedSlotIngredients(p,d,s)||[]));
     if(!preBal.length && op!=='addIngr'){
@@ -17975,17 +18018,18 @@ window.MPStress=(function(){
       toggleSkip(p, d, s);
       var preMS = !!MANUAL_SET[emblK];
       add('embl_lockSet', preMS, 'pre-test lock failed');
-      // Outside edit mode: tap is no-op
+      // Outside edit mode: tap is no-op (use direct schedTap since
+      // we want to verify the no-op gate, not auto-retry).
       var tapFn = (p === 'him') ? schedTapLeft : schedTapRight;
       var preTapState = SHARED_SCHEDULE[dk(d, s)] || '';
       tapFn(d, s);
       var postTapOutsideState = SHARED_SCHEDULE[dk(d, s)] || '';
       add('embl_outsideNoOp', preTapState === postTapOutsideState,
         'outside edit mode, locked cell taps should be no-op (got '+postTapOutsideState+')');
-      // Enter edit mode
+      // Enter edit mode + tap via _smGridTap (V85 may need 2 taps to
+      // advance from a visually-set cell — e.g. SKIPPED purple — to eo).
       enterScheduleEditMode();
-      // Tap should now work
-      tapFn(d, s);
+      _smGridTap(p === 'him' ? 'left' : 'right', d, s);
       var inEditState = SHARED_SCHEDULE[dk(d, s)] || '';
       add('embl_bypassWorks', inEditState !== preTapState,
         'edit mode tap should change state (got '+inEditState+')');
@@ -18180,17 +18224,23 @@ window.MPStress=(function(){
       toggleSkip(p, d, s);
       add('ecd_step1_skipped', !!SKIPPED[ecdK], 'Skip pill should set SKIPPED');
       add('ecd_step1_noEatOut', !EAT_OUT[ecdK], 'Skip pill should clear EAT_OUT');
-      // Step 2: enter edit mode + grid-tap to set skip-*
+      // Step 2: enter edit mode + grid-tap to set skip-*. V85: use
+      // _smGridTap so a Skip-darkened cell auto-retries (first tap
+      // clears the skip purple/skip-bg visual; second tap advances to
+      // eo).
       enterScheduleEditMode();
-      var tapFn = (p === 'him') ? schedTapLeft : schedTapRight;
-      tapFn(d, s);
+      _smGridTap(p === 'him' ? 'left' : 'right', d, s);
       var expectedSkipState = (p === 'him') ? 'eo-him' : 'eo-her';
       add('ecd_step2_gridSkipSet',
         SHARED_SCHEDULE[dk(d, s)] === expectedSkipState,
         'grid tap should set '+expectedSkipState+
           ' (got '+(SHARED_SCHEDULE[dk(d, s)]||'(empty)')+')');
-      add('ecd_step2_skippedStillSet', !!SKIPPED[ecdK],
-        'SKIPPED should still be true mid-edit (V10 deferred)');
+      // V85 (2026-05-08): first tap on a SKIPPED cell now clears SKIPPED
+      // (data + visual) before advancing to eo on second tap.
+      // Pre-V85 expected SKIPPED to remain mid-edit (deferred per V31);
+      // V85 changes this contract — visual state clears on first tap.
+      add('ecd_step2_skippedCleared', !SKIPPED[ecdK],
+        'V85: SKIPPED should be cleared by first-tap-clears semantic');
       // Step 3: simulate Apply's sync path (V31 fix: clears SKIPPED).
       // Avoid full applyScheduleEdit since it triggers randomize.
       _syncEatOutsToSharedSchedule();
@@ -18343,9 +18393,11 @@ window.MPStress=(function(){
       var preSchedSA = JSON.parse(JSON.stringify(SHARED_SCHEDULE));
       var preSkippedSA = JSON.parse(JSON.stringify(SKIPPED));
       var preEatOutSA = JSON.parse(JSON.stringify(EAT_OUT));
-      // Enter edit mode + grid-tap left half (eo-him → eat-out)
+      // Enter edit mode + grid-tap left half (V85: _smGridTap auto-retries
+      // for cells with link-group / manual / skip visual — pristine cell
+      // here, single tap should still reach eo-him).
       enterScheduleEditMode();
-      schedTapLeft(d, s);
+      _smGridTap('left', d, s);
       add('esa_pre_apply_sched',
         SHARED_SCHEDULE[dKeySA] === 'eo-him',
         'pre-Apply: SHARED should be eo-him after grid tap');
@@ -18463,9 +18515,10 @@ window.MPStress=(function(){
       var preHerEatOut = !!EAT_OUT[herKHT];
       var preHerManual = !!MANUAL_SET[herKHT];
       var preHerUserEd = !!USER_EDITED[herKHT];
-      // Enter edit mode + tap Him's side only
+      // Enter edit mode + tap Him's side only (V85 helper auto-retries
+      // for cells with visual state).
       enterScheduleEditMode();
-      schedTapLeft(d, s);
+      _smGridTap('left', d, s);
       add('htph_pre_apply_sched',
         SHARED_SCHEDULE[dKeyHT] === 'eo-him',
         'pre-Apply: SHARED should be eo-him after Him grid tap');
