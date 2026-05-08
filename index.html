@@ -7542,8 +7542,18 @@ function renderMeals(){
           const herManual=!!USER_EDITED[sk('her',dd,ss)];
           // 2026-05-03: link group lookup for this cell. Anchor = same (day,slot)
           // as group's earliest member (regardless of person). Leftover = otherwise.
-          const lGroup=getLinkGroupForSlot('him',dd,ss);
-          const rGroup=getLinkGroupForSlot('her',dd,ss);
+          // V75 (2026-05-07): when in paint mode and editing the meal that
+          // owns this slot's group, suppress the lGroup/rGroup so the cell
+          // renders without the underlying group color. The paint queue
+          // (orange/group-tinted highlight) drives the visual instead, and
+          // un-queued cells render as default ("paint removed" semantic).
+          // Per user feedback: "when I deselect a leftover it clears the
+          // paint, but then shows the color of the leftover beneath it
+          // which is confusing."
+          const lGroupOrig=getLinkGroupForSlot('him',dd,ss);
+          const rGroupOrig=getLinkGroupForSlot('her',dd,ss);
+          const lGroup = (_paintMode && _paintMealId && lGroupOrig && lGroupOrig.meal === _paintMealId) ? null : lGroupOrig;
+          const rGroup = (_paintMode && _paintMealId && rGroupOrig && rGroupOrig.meal === _paintMealId) ? null : rGroupOrig;
           const lIsAnchor=lGroup?isLinkAnchor(lGroup,'him',dd,ss):false;
           const rIsAnchor=rGroup?isLinkAnchor(rGroup,'her',dd,ss):false;
           const lIsLeftover=lGroup&&!lIsAnchor;
@@ -7701,10 +7711,20 @@ function renderMeals(){
           const himQueued=_paintMode&&_paintQueued[sk('him',dd,ss)];
           const herQueued=_paintMode&&_paintQueued[sk('her',dd,ss)];
           if(isPaintCol){
-            lBg=himQueued?'rgba(245,158,11,.3)':lBg;
-            rBg=herQueued?'rgba(245,158,11,.3)':rBg;
-            lBdr=himQueued?'2px solid rgba(245,158,11,.6)':lBdr;
-            rBdr=herQueued?'2px solid rgba(245,158,11,.6)':rBdr;
+            // V75 (2026-05-07): paint highlight uses the existing group's
+            // color when editing an existing group. Per user feedback:
+            // "when I select an existing group that has a color assigned..
+            // the selected slots use that same color for painting instead
+            // of showing a default orangish/brown paint color." Falls back
+            // to default orange (245,158,11) for new groups (paint creating
+            // a NEW group from scratch).
+            var _paintRgb = (_paintExistingColorIdx >= 0)
+              ? LEFTOVER_LINK_COLORS[_paintExistingColorIdx].rgb
+              : '245,158,11';
+            lBg=himQueued?'rgba('+_paintRgb+',.3)':lBg;
+            rBg=herQueued?'rgba('+_paintRgb+',.3)':rBg;
+            lBdr=himQueued?'2px solid rgba('+_paintRgb+',.6)':lBdr;
+            rBdr=herQueued?'2px solid rgba('+_paintRgb+',.6)':rBdr;
             lCol=himQueued?'#fff':lCol;
             rCol=herQueued?'#fff':rCol;
           }
@@ -9624,11 +9644,25 @@ var _paintMealId='';    // selected meal ID (active in paint mode)
 var _paintQueued={};    // key: 'person_day_slot', true if queued (sk format)
 var _paintSavedSlot=''; // 'breakfast' | 'main' | 'snack' — picker category
 var _paintSavedMeal=''; // persisted meal selection across re-renders
+// V75 (2026-05-07): when entering paint mode for an existing group
+// (manual or auto), capture its color index so:
+//   1) queued cells render with the group's actual color (instead of
+//      the default orange paint highlight) — visual continuity
+//   2) paintAccept reuses the same color (no random reassignment on
+//      save) — group identity preserved
+// Per user feedback: "when I select an existing group that has a color
+// assigned.. the selected slots use that same color for painting
+// instead of showing a default orangish/brown paint color.. when
+// saving the changes for the group it changes the color.. why does
+// it change the color?"
+// -1 = no existing group (new paint).
+var _paintExistingColorIdx = -1;
 
 function togglePaintMode(){
   if(_paintMode){
     // Cancel painting mode
     _paintMode=false;_paintSlot='';_paintMealId='';_paintQueued={};
+    _paintExistingColorIdx = -1; // V75
   } else {
     const slotSel=document.getElementById('paintSlotSel');
     const mealSel=document.getElementById('paintMealSel');
@@ -9637,6 +9671,7 @@ function togglePaintMode(){
     _paintMealId=mealSel.value;
     _paintMode=true;
     _paintQueued={};
+    _paintExistingColorIdx = -1; // V75: reset, set below if editing existing
     // 2026-05-03: if this meal is already in a link group, pre-load that
     // group's slots as queued so the user can edit (add/remove cells).
     const existingGroup=getLinkGroupForMeal(_paintMealId);
@@ -9644,6 +9679,11 @@ function togglePaintMode(){
       existingGroup.slots.forEach(function(sl){
         _paintQueued[sk(sl.p,sl.d,sl.s)]=true;
       });
+      // V75: capture the existing group's color (manual or auto) so
+      // queued highlights match it AND paintAccept preserves it.
+      if(typeof existingGroup.colorIdx === 'number' && existingGroup.colorIdx >= 0){
+        _paintExistingColorIdx = existingGroup.colorIdx;
+      }
     }
   }
   renderMeals();
@@ -9776,14 +9816,27 @@ function paintAccept(){
   var uniqueCells={};
   queuedSlots.forEach(function(q){uniqueCells[q.d+'_'+q.s]=true;});
   if(Object.keys(uniqueCells).length>=2){
+    // V75 (2026-05-07): reuse existing group's colorIdx if we're editing
+    // an existing group. Pre-V75 paintAccept always called
+    // _allocateLinkColor() which returned the FIRST unused color —
+    // typically a different color from the original since the editing
+    // group itself was already excluded from "used" by the time the new
+    // entry was pushed (the existing entry was spliced earlier in this
+    // function). Result: every Apply changed the group's color
+    // unexpectedly. Now if we captured a color in togglePaintMode, use
+    // it. Otherwise allocate fresh.
+    var newColorIdx = (_paintExistingColorIdx >= 0)
+      ? _paintExistingColorIdx
+      : _allocateLinkColor();
     LEFTOVER_LINKS.push({
       id:'lg_'+Date.now()+'_'+Math.floor(Math.random()*1000),
       meal:_paintMealId,
       slots:queuedSlots.map(function(q){return {p:q.p, d:q.d, s:q.s};}),
-      colorIdx:_allocateLinkColor()
+      colorIdx: newColorIdx
     });
   }
   _paintMode=false;_paintSlot='';_paintMealId='';_paintQueued={};
+  _paintExistingColorIdx = -1; // V75
   invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
 }
 function onPaintSlotChange(){
@@ -9833,6 +9886,7 @@ function deleteCurrentGroup(){
   if(!group){
     // Already not a group — just exit paint mode
     _paintMode=false;_paintSlot='';_paintMealId='';_paintQueued={};
+    _paintExistingColorIdx = -1; // V75
     renderMeals();
     return;
   }
@@ -9847,6 +9901,7 @@ function deleteCurrentGroup(){
     if(LEFTOVER_LINKS[i].meal===_paintMealId) LEFTOVER_LINKS.splice(i,1);
   }
   _paintMode=false;_paintSlot='';_paintMealId='';_paintQueued={};
+  _paintExistingColorIdx = -1; // V75
   invalidateLeftoverCache();
   autoSaveWeek();
   renderMeals();
