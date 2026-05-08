@@ -2570,7 +2570,7 @@ function loadAdjTargets(){
   }
 }
 function saveAdjTargets(){lsSet('mealPlannerAdjTargets',{targets:ADJ_TARGETS,ts:ADJ_TARGETS_TS});}
-var SHARED_SCHEDULE = {}; // key: 'day_slot', value: 'shared'|'skip-him'|'skip-her'|'skip-both' or absent (normal)
+var SHARED_SCHEDULE = {}; // key: 'day_slot', value: 'shared'|'eo-him'|'eo-her'|'eo-both' or absent (normal)
 var sharedSchedOpen = false; // collapsible panel state
 function initSharedSchedule(){
   if(!Object.keys(SHARED_SCHEDULE).length){
@@ -2578,6 +2578,14 @@ function initSharedSchedule(){
   }
   Object.keys(SHARED_SCHEDULE).forEach(function(k){
     if(SHARED_SCHEDULE[k]===true) SHARED_SCHEDULE[k]='shared';
+    // V71 (2026-05-07): legacy 'skip-*' values renamed to 'eo-*' since
+    // they actually represent eat-out (per user feedback: "Eat-out
+    // should never be referred to as skip anywhere"). Migrate any
+    // pre-V71 stored values forward.
+    var v = SHARED_SCHEDULE[k];
+    if(v === 'skip-him') SHARED_SCHEDULE[k] = 'eo-him';
+    else if(v === 'skip-her') SHARED_SCHEDULE[k] = 'eo-her';
+    else if(v === 'skip-both') SHARED_SCHEDULE[k] = 'eo-both';
   });
 }
 
@@ -2989,7 +2997,7 @@ function _buildAutoLinkGroups(){
   });
 }
 // Split pill: tap toggles skip, long press toggles shared
-// Left tap: normal ↔ skip-him. Right tap: normal ↔ skip-her.
+// Left tap: normal ↔ eo-him. Right tap: normal ↔ eo-her.
 // Long press either side: toggle shared for the whole cell.
 //
 // V25 (2026-05-07): schedule grid editing is now EDIT-MODE-ONLY. Outside edit
@@ -3017,6 +3025,9 @@ function schedLongPress(d,s){
   if(wasVisuallyShared) delete SHARED_SCHEDULE[k];
   else SHARED_SCHEDULE[k]='shared';
   _scheduleEditTouchedCells[k]=true;
+  // V71: long-press toggles shared (affects both sides) → mark both.
+  _scheduleEditTouchedSides[sk('him',d,s)]=true;
+  _scheduleEditTouchedSides[sk('her',d,s)]=true;
   _schedLongFired=true;
   // Keep fired flag for 600ms to catch delayed touchend after DOM rebuild
   clearTimeout(_schedLongFiredTimer);
@@ -3057,20 +3068,27 @@ function schedTapLeft(d,s){
   if(!_scheduleEditMode) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
+  // V71: tap on Him's side. Most transitions affect Him only (mark him's
+  // side touched). Special case: 'shared' → '' un-shares both halves
+  // (cell-level transition) → mark both sides.
+  var sharedBreak = (cur==='shared');
   if(cur==='shared'){
     delete SHARED_SCHEDULE[k];
-  } else if(cur==='skip-him'){
+  } else if(cur==='eo-him'){
     delete SHARED_SCHEDULE[k];
     _v70UndoEatOutSide('him', d, s); // V70: clear eat-out + Set + mark preserve
-  } else if(cur==='skip-her'){
-    SHARED_SCHEDULE[k]='skip-both';
-  } else if(cur==='skip-both'){
-    SHARED_SCHEDULE[k]='skip-her';
+  } else if(cur==='eo-her'){
+    SHARED_SCHEDULE[k]='eo-both';
+  } else if(cur==='eo-both'){
+    SHARED_SCHEDULE[k]='eo-her';
     _v70UndoEatOutSide('him', d, s); // V70: him goes from eat-out to normal
   } else {
-    SHARED_SCHEDULE[k]='skip-him'; // him eats out
+    SHARED_SCHEDULE[k]='eo-him'; // him eats out
   }
   _scheduleEditTouchedCells[k]=true;
+  // V71: per-side touched. Tap Him → only Him. Sharing-break → both.
+  _scheduleEditTouchedSides[sk('him',d,s)]=true;
+  if(sharedBreak) _scheduleEditTouchedSides[sk('her',d,s)]=true;
   updateSchedule();
 }
 function schedTapRight(d,s){
@@ -3078,20 +3096,24 @@ function schedTapRight(d,s){
   if(!_scheduleEditMode) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
+  var sharedBreak = (cur==='shared');
   if(cur==='shared'){
     delete SHARED_SCHEDULE[k];
-  } else if(cur==='skip-her'){
+  } else if(cur==='eo-her'){
     delete SHARED_SCHEDULE[k];
     _v70UndoEatOutSide('her', d, s); // V70
-  } else if(cur==='skip-him'){
-    SHARED_SCHEDULE[k]='skip-both';
-  } else if(cur==='skip-both'){
-    SHARED_SCHEDULE[k]='skip-him';
+  } else if(cur==='eo-him'){
+    SHARED_SCHEDULE[k]='eo-both';
+  } else if(cur==='eo-both'){
+    SHARED_SCHEDULE[k]='eo-him';
     _v70UndoEatOutSide('her', d, s); // V70: her goes from eat-out to normal
   } else {
-    SHARED_SCHEDULE[k]='skip-her'; // her eats out
+    SHARED_SCHEDULE[k]='eo-her'; // her eats out
   }
   _scheduleEditTouchedCells[k]=true;
+  // V71: per-side touched. Tap Her → only Her. Sharing-break → both.
+  _scheduleEditTouchedSides[sk('her',d,s)]=true;
+  if(sharedBreak) _scheduleEditTouchedSides[sk('him',d,s)]=true;
   updateSchedule();
 }
 // 2026-05-03 (Item 1): center-zone tap toggles shared. Same logic as the
@@ -3107,6 +3129,9 @@ function schedTapCenter(d,s){
   if(wasVisuallyShared) delete SHARED_SCHEDULE[k];
   else SHARED_SCHEDULE[k]='shared';
   _scheduleEditTouchedCells[k]=true;
+  // V71: center toggles shared (affects both sides) → mark both.
+  _scheduleEditTouchedSides[sk('him',d,s)]=true;
+  _scheduleEditTouchedSides[sk('her',d,s)]=true;
   updateSchedule();
 }
 function schedTapDay(d){
@@ -3120,13 +3145,16 @@ function schedTapDay(d){
     var k = dk(d,s);
     return SHARED_SCHEDULE[k]==='shared' || !!_autoSharedCells[k];
   });
-  const allEO=slots.every(function(s){return SHARED_SCHEDULE[dk(d,s)]==='skip-both';});
+  const allEO=slots.every(function(s){return SHARED_SCHEDULE[dk(d,s)]==='eo-both';});
   slots.forEach(function(s){
     const k=dk(d,s);
-    if(allShared) SHARED_SCHEDULE[k]='skip-both'; // shared → eat out
+    if(allShared) SHARED_SCHEDULE[k]='eo-both'; // shared → eat out
     else if(allEO) delete SHARED_SCHEDULE[k];      // eat out → normal
     else SHARED_SCHEDULE[k]='shared';               // normal → shared
     _scheduleEditTouchedCells[k]=true;
+    // V71: day-tap affects both sides for all 3 slots.
+    _scheduleEditTouchedSides[sk('him',d,s)]=true;
+    _scheduleEditTouchedSides[sk('her',d,s)]=true;
   });
   updateSchedule();
 }
@@ -3144,6 +3172,9 @@ function setSharedPreset(preset){
       if(allOn) delete SHARED_SCHEDULE[k];
       else SHARED_SCHEDULE[k]='shared';
       _scheduleEditTouchedCells[k]=true;
+      // V71: column preset toggles shared (both sides) for the slot column.
+      _scheduleEditTouchedSides[sk('him',d,slot)]=true;
+      _scheduleEditTouchedSides[sk('her',d,slot)]=true;
     });
   }
   _syncEatOutsToSharedSchedule();
@@ -3156,24 +3187,26 @@ function setSharedPresetSide(preset,side){
   const slot=preset==='breakfasts'?'breakfast':preset==='lunches'?'lunch':preset==='dinners'?'dinner':null;
   if(!slot) return;
   // Toggle eat-out for this person on all days for this slot
-  const skipKey=side==='him'?'skip-him':'skip-her';
+  const skipKey=side==='him'?'eo-him':'eo-her';
   const allOn=DAYS.every(function(d){
     const st=SHARED_SCHEDULE[dk(d,slot)];
-    return st===skipKey||st==='skip-both';
+    return st===skipKey||st==='eo-both';
   });
   DAYS.forEach(function(d){
     const k=dk(d,slot);
     const cur=SHARED_SCHEDULE[k]||'';
     if(allOn){
       // Remove this side's eat-out
-      if(cur==='skip-both') SHARED_SCHEDULE[k]=(side==='him'?'skip-her':'skip-him');
+      if(cur==='eo-both') SHARED_SCHEDULE[k]=(side==='him'?'eo-her':'eo-him');
       else if(cur===skipKey) delete SHARED_SCHEDULE[k];
     } else {
       // Add this side's eat-out (overrides shared — can't share if one person is eating out)
-      if(cur===(side==='him'?'skip-her':'skip-him')) SHARED_SCHEDULE[k]='skip-both';
+      if(cur===(side==='him'?'eo-her':'eo-him')) SHARED_SCHEDULE[k]='eo-both';
       else SHARED_SCHEDULE[k]=skipKey;
     }
     _scheduleEditTouchedCells[k]=true;
+    // V71: side-preset only affects the named side.
+    _scheduleEditTouchedSides[sk(side,d,slot)]=true;
   });
   updateSchedule();
 }
@@ -4075,7 +4108,7 @@ function _syncEatOutsToSharedSchedule(){
       var state=SHARED_SCHEDULE[dk(d,s)]||'';
       var himK=sk('him',d,s);
       var herK=sk('her',d,s);
-      if(state==='skip-him'||state==='skip-both'){
+      if(state==='eo-him'||state==='eo-both'){
         if(!EAT_OUT[himK]) EAT_OUT[himK]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
         delete SKIPPED[himK];
       } else if(EAT_OUT[himK] && !_isEatOutCustomized(himK)){
@@ -4083,7 +4116,7 @@ function _syncEatOutsToSharedSchedule(){
         delete MANUAL_SET[himK];   // V69
         delete USER_EDITED[himK];  // V69
       }
-      if(state==='skip-her'||state==='skip-both'){
+      if(state==='eo-her'||state==='eo-both'){
         if(!EAT_OUT[herK]) EAT_OUT[herK]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
         delete SKIPPED[herK];
       } else if(EAT_OUT[herK] && !_isEatOutCustomized(herK)){
@@ -4195,11 +4228,11 @@ function _resolveStateContradictions(){
           if(!SKIPPED[k]) return;
           if(pillNewerThanShared(kTs)){
             // Per-slot Skip is newer — remove this side from SHARED.
-            if(st === 'skip-him' && p==='him') delete SHARED_SCHEDULE[dKey];
-            else if(st === 'skip-her' && p==='her') delete SHARED_SCHEDULE[dKey];
-            else if(st === 'skip-both'){
-              // Drop only this side from skip-both.
-              SHARED_SCHEDULE[dKey] = (p==='him') ? 'skip-her' : 'skip-him';
+            if(st === 'eo-him' && p==='him') delete SHARED_SCHEDULE[dKey];
+            else if(st === 'eo-her' && p==='her') delete SHARED_SCHEDULE[dKey];
+            else if(st === 'eo-both'){
+              // Drop only this side from eo-both.
+              SHARED_SCHEDULE[dKey] = (p==='him') ? 'eo-her' : 'eo-him';
             }
             // Refresh st if we mutated it (subsequent sides need accurate state).
             st = SHARED_SCHEDULE[dKey] || '';
@@ -4211,8 +4244,8 @@ function _resolveStateContradictions(){
         // V51: pass each side's specific SKIPPED ts (not the max-of-skip-eo
         // used for 'shared' branch). Skip-* state contradicts SKIPPED only,
         // so compare against the SKIPPED's own ts.
-        if(st === 'skip-him' || st === 'skip-both') resolveSkipSide('him', himK, himSkipTs);
-        if(st === 'skip-her' || st === 'skip-both') resolveSkipSide('her', herK, herSkipTs);
+        if(st === 'eo-him' || st === 'eo-both') resolveSkipSide('him', himK, himSkipTs);
+        if(st === 'eo-her' || st === 'eo-both') resolveSkipSide('her', herK, herSkipTs);
       }
     });
   });
@@ -5401,9 +5434,9 @@ function verifyInvariants(){
   //      cloud sync or pre-V31 saved data)
   //   2. SHARED='shared' && SKIPPED on either side (V36/V41/V47 contract)
   //   3. SHARED='shared' && EAT_OUT on either side (V41 contract)
-  //   4. SHARED='skip-him'  && SKIPPED[him]  (V31/V34 contract)
-  //   5. SHARED='skip-her'  && SKIPPED[her]  (V31/V34 contract)
-  //   6. SHARED='skip-both' && SKIPPED on either side (V31 contract)
+  //   4. SHARED='eo-him'  && SKIPPED[him]  (V31/V34 contract)
+  //   5. SHARED='eo-her'  && SKIPPED[her]  (V31/V34 contract)
+  //   6. SHARED='eo-both' && SKIPPED on either side (V31 contract)
   // This invariant is HARD — every documented intent action enforces
   // these contracts; any fire indicates a regression in mutation paths
   // or an un-resolved state from cloud-sync / pre-audit data.
@@ -5427,16 +5460,16 @@ function verifyInvariants(){
         // (3) shared && EAT_OUT
         if(EAT_OUT[himK]) violations.push('INV24 shared-and-eatout: him '+d+'/'+s2);
         if(EAT_OUT[herK]) violations.push('INV24 shared-and-eatout: her '+d+'/'+s2);
-      } else if(st === 'skip-him'){
+      } else if(st === 'eo-him'){
         // (4)
-        if(SKIPPED[himK]) violations.push('INV24 skip-him-and-pillSkip: him '+d+'/'+s2);
-      } else if(st === 'skip-her'){
+        if(SKIPPED[himK]) violations.push('INV24 eo-him-and-pillSkip: him '+d+'/'+s2);
+      } else if(st === 'eo-her'){
         // (5)
-        if(SKIPPED[herK]) violations.push('INV24 skip-her-and-pillSkip: her '+d+'/'+s2);
-      } else if(st === 'skip-both'){
+        if(SKIPPED[herK]) violations.push('INV24 eo-her-and-pillSkip: her '+d+'/'+s2);
+      } else if(st === 'eo-both'){
         // (6)
-        if(SKIPPED[himK]) violations.push('INV24 skip-both-and-pillSkip: him '+d+'/'+s2);
-        if(SKIPPED[herK]) violations.push('INV24 skip-both-and-pillSkip: her '+d+'/'+s2);
+        if(SKIPPED[himK]) violations.push('INV24 eo-both-and-pillSkip: him '+d+'/'+s2);
+        if(SKIPPED[herK]) violations.push('INV24 eo-both-and-pillSkip: her '+d+'/'+s2);
       }
     });
   });
@@ -7430,9 +7463,9 @@ function renderMeals(){
         });
         // V27: also count per-card skip/eat-out for day-name red color.
         // Day is "all skip" when both persons in every slot are flagged
-        // either via SHARED_SCHEDULE='skip-both' OR per-card SKIPPED/EAT_OUT.
+        // either via SHARED_SCHEDULE='eo-both' OR per-card SKIPPED/EAT_OUT.
         const dayAllSkip=slots3.every(function(ss){
-          if(SHARED_SCHEDULE[dk(dd,ss)]==='skip-both') return true;
+          if(SHARED_SCHEDULE[dk(dd,ss)]==='eo-both') return true;
           const himOut=!!SKIPPED[sk('him',dd,ss)]||!!EAT_OUT[sk('him',dd,ss)];
           const herOut=!!SKIPPED[sk('her',dd,ss)]||!!EAT_OUT[sk('her',dd,ss)];
           return himOut && herOut;
@@ -7458,12 +7491,12 @@ function renderMeals(){
           // Grid taps cycle through eat-out states only — Skip is set
           // ONLY via per-card pill, not via grid taps. SKIPPED takes
           // priority over EAT_OUT so a slot flagged both ways shows grey.
-          const himFullSkip=!!SKIPPED[sk('him',dd,ss)];
-          const herFullSkip=!!SKIPPED[sk('her',dd,ss)];
-          const himEatOut=!himFullSkip && (state==='skip-him'||state==='skip-both'||!!EAT_OUT[sk('him',dd,ss)]);
-          const herEatOut=!herFullSkip && (state==='skip-her'||state==='skip-both'||!!EAT_OUT[sk('her',dd,ss)]);
-          const himSkip=himEatOut||himFullSkip;
-          const herSkip=herEatOut||herFullSkip;
+          const himSkippedSlot=!!SKIPPED[sk('him',dd,ss)];
+          const herSkippedSlot=!!SKIPPED[sk('her',dd,ss)];
+          const himEatOut=!himSkippedSlot && (state==='eo-him'||state==='eo-both'||!!EAT_OUT[sk('him',dd,ss)]);
+          const herEatOut=!herSkippedSlot && (state==='eo-her'||state==='eo-both'||!!EAT_OUT[sk('her',dd,ss)]);
+          const himSkip=himEatOut||himSkippedSlot;
+          const herSkip=herEatOut||herSkippedSlot;
           // 2026-05-04: detector-found shared cells (same-day-same-slot
           // batches) also render green. _autoSharedCells is repopulated
           // every render by _buildAutoLinkGroups. Doesn't mutate
@@ -7513,20 +7546,20 @@ function renderMeals(){
           // anchor). Mixed groups (Him in cyan group, Her in orange group)
           // tint each half in its own group color.
           // V28: full-skip (grey) priority is between shared and eat-out;
-          // mutually exclusive with eat-out by construction (himFullSkip
+          // mutually exclusive with eat-out by construction (himSkippedSlot
           // suppresses himEatOut above).
           let lBg = lGroup
                   ? (lIsLeftover ? 'rgba('+lGroupRgb+',.45)' : 'transparent')
                   : (himManual&&lNormal) ? prp+'.2)'
                   : isShared ? grn+'.25)'
-                  : himFullSkip ? gry+'.25)'
+                  : himSkippedSlot ? gry+'.25)'
                   : himEatOut ? red+'.2)'
                   : 'transparent';
           let rBg = rGroup
                   ? (rIsLeftover ? 'rgba('+rGroupRgb+',.45)' : 'transparent')
                   : (herManual&&rNormal) ? prp+'.2)'
                   : isShared ? grn+'.25)'
-                  : herFullSkip ? gry+'.25)'
+                  : herSkippedSlot ? gry+'.25)'
                   : herEatOut ? red+'.2)'
                   : 'transparent';
           // V56/V57/V59: USER_EDITED indicator on Him/Her side.
@@ -7548,11 +7581,22 @@ function renderMeals(){
           }
           const lGroupUserEdited = !!lGroup && _groupHasUserEdit(lGroup);
           const rGroupUserEdited = !!rGroup && _groupHasUserEdit(rGroup);
-          const himShowSetDot = !himSkip && (
+          // V71 (2026-05-07): in edit mode, suppress USER_EDITED purple
+          // OUTER border so state colors (eat-out red, etc.) show through
+          // when user taps. Per user feedback: "It is showing a purple
+          // border and then when clicking it you can now only cycle the
+          // purple border on and off, but that makes no sense.. and you
+          // cant tap/change the button anymore." The purple was sitting
+          // on top of state changes, hiding the underlying eat-out cycle.
+          // In edit mode we drop the OUTER purple entirely; USER_EDITED
+          // can still surface via the V68a inner box-shadow + per-card
+          // Set pill, but the schedule grid stays "clean" so taps are
+          // visible. Outside edit mode the outer purple returns.
+          const himShowSetDot = !himSkip && !_scheduleEditMode && (
             (himManual && (isShared || !!lGroup))   // direct edit + shared/group
             || lGroupUserEdited                      // or any group member edited
           );
-          const herShowSetDot = !herSkip && (
+          const herShowSetDot = !herSkip && !_scheduleEditMode && (
             (herManual && (isShared || !!rGroup))
             || rGroupUserEdited
           );
@@ -7568,8 +7612,13 @@ function renderMeals(){
           // the legacy normal+manual purple match. Pre-V63 the manual+
           // normal branch used prp+'.6)' which rendered as a noticeably
           // different shade of purple.
-          let lBdr=himShowSetDot?'2px solid '+prp+'.85)':lGroup?'2px solid rgba('+lGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':himFullSkip?'1.5px solid '+gry+'.6)':himEatOut?'1.5px solid '+red+'.4)':(himManual&&lNormal)?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
-          let rBdr=herShowSetDot?'2px solid '+prp+'.85)':rGroup?'2px solid rgba('+rGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':herFullSkip?'1.5px solid '+gry+'.6)':herEatOut?'1.5px solid '+red+'.4)':(herManual&&rNormal)?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
+          // V71: in edit mode, also suppress the legacy manual+normal purple
+          // branch (himManual && lNormal). Edit mode = clean canvas; nothing
+          // looks "set/locked" so user can tap freely without confusion.
+          const _himNormalPurple = !_scheduleEditMode && himManual && lNormal;
+          const _herNormalPurple = !_scheduleEditMode && herManual && rNormal;
+          let lBdr=himShowSetDot?'2px solid '+prp+'.85)':lGroup?'2px solid rgba('+lGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':himSkippedSlot?'1.5px solid '+gry+'.6)':himEatOut?'1.5px solid '+red+'.4)':_himNormalPurple?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
+          let rBdr=herShowSetDot?'2px solid '+prp+'.85)':rGroup?'2px solid rgba('+rGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':herSkippedSlot?'1.5px solid '+gry+'.6)':herEatOut?'1.5px solid '+red+'.4)':_herNormalPurple?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
           // V68 (2026-05-07): when USER_EDITED + link-group on the same
           // side, layer the group color INSIDE the purple outer border
           // via inset box-shadow. Preserves group identity ("we still
@@ -7578,16 +7627,16 @@ function renderMeals(){
           // 2px outer border so the inner band reads as a clean second
           // layer rather than an outline. Skip/eat-out keep the inset
           // off — their state already signals user-edited (per V56).
-          const lInsetShadow = (himShowSetDot && lGroup && !himFullSkip && !himEatOut)
+          const lInsetShadow = (himShowSetDot && lGroup && !himSkippedSlot && !himEatOut)
             ? 'inset 0 0 0 2px rgba('+lGroupRgb+',.85)'
             : '';
-          const rInsetShadow = (herShowSetDot && rGroup && !herFullSkip && !herEatOut)
+          const rInsetShadow = (herShowSetDot && rGroup && !herSkippedSlot && !herEatOut)
             ? 'inset 0 0 0 2px rgba('+rGroupRgb+',.85)'
             : '';
           // Skip text gets a muted #ccc instead of full white, reinforcing
           // the "this slot is silenced" feel.
-          let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared?'#fff':himFullSkip?'#cbd5e1':himEatOut?'#fff':'var(--gray)';
-          let rCol=rIsLeftover?'#fff':(herManual&&rNormal)?'#fff':isShared?'#fff':herFullSkip?'#cbd5e1':herEatOut?'#fff':'var(--gray)';
+          let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared?'#fff':himSkippedSlot?'#cbd5e1':himEatOut?'#fff':'var(--gray)';
+          let rCol=rIsLeftover?'#fff':(herManual&&rNormal)?'#fff':isShared?'#fff':herSkippedSlot?'#cbd5e1':herEatOut?'#fff':'var(--gray)';
           const lLabel='Him';
           const rLabel='Her';
           // midCol = group color if either side linked, else existing logic
@@ -7601,7 +7650,7 @@ function renderMeals(){
             : (himManual||herManual||isShared||himSkip||herSkip) ? (
                 ((himManual&&lNormal)||(herManual&&rNormal)) ? prp+'.85)'
                 : isShared ? grn+'.5)'
-                : (himFullSkip||herFullSkip) ? gry+'.6)'
+                : (himSkippedSlot||herSkippedSlot) ? gry+'.6)'
                 : red+'.4)'
               )
             : 'transparent';
@@ -7661,14 +7710,14 @@ function renderMeals(){
                          : himShowSetDot ? prp+'.85)'
                          : (himManual&&lNormal) ? prp+'.85)'
                          : isShared ? grn+'.5)'
-                         : himFullSkip ? gry+'.6)'
+                         : himSkippedSlot ? gry+'.6)'
                          : himEatOut ? red+'.4)'
                          : '';
           let rCenterCol = rGroup ? 'rgba('+rGroupRgb+',.85)'
                          : herShowSetDot ? prp+'.85)'
                          : (herManual&&rNormal) ? prp+'.85)'
                          : isShared ? grn+'.5)'
-                         : herFullSkip ? gry+'.6)'
+                         : herSkippedSlot ? gry+'.6)'
                          : herEatOut ? red+'.4)'
                          : '';
           // 2026-05-05: split center fires whenever both halves are highlighted
@@ -7839,8 +7888,8 @@ function toggleSkip(p,d,s){
   // the grid creating EAT_OUT clears SKIPPED.
   const k=sk(p,d,s);
   const dKey=dk(d,s);
-  const ourSkip=(p==='him')?'skip-him':'skip-her';
-  const otherSkip=(p==='him')?'skip-her':'skip-him';
+  const ourSkip=(p==='him')?'eo-him':'eo-her';
+  const otherSkip=(p==='him')?'eo-her':'eo-him';
   SKIPPED[k]=!SKIPPED[k];
   if(!SKIPPED[k]){
     delete SKIPPED[k];
@@ -7859,11 +7908,11 @@ function toggleSkip(p,d,s){
     // 'shared' — symmetric to changeMeal (V42) which already deletes
     // 'shared' when user picks a specific meal. Without this, a user
     // toggling Skip on a shared cell left SHARED='shared' lingering;
-    // V28 visual cascade renders shared-green over himFullSkip-grey.
+    // V28 visual cascade renders shared-green over himSkippedSlot-grey.
     var cur=SHARED_SCHEDULE[dKey]||'';
     if(cur==='shared') delete SHARED_SCHEDULE[dKey];
     else if(cur===ourSkip) delete SHARED_SCHEDULE[dKey];
-    else if(cur==='skip-both') SHARED_SCHEDULE[dKey]=otherSkip;
+    else if(cur==='eo-both') SHARED_SCHEDULE[dKey]=otherSkip;
   }
   // V38 (2026-05-07): explicit autoSaveWeek so SKIPPED/MANUAL_SET +
   // (post-V34) SHARED_SCHEDULE writes persist deterministically per
@@ -7974,19 +8023,19 @@ function setLateSnackIngredientAmt(p,d,idx,val){
 function _applyEatOutOn(p, d, s, entry){
   const k=sk(p,d,s);
   const dKey=dk(d,s);
-  const ourSkip=(p==='him')?'skip-him':'skip-her';
-  const otherSkip=(p==='him')?'skip-her':'skip-him';
+  const ourSkip=(p==='him')?'eo-him':'eo-her';
+  const otherSkip=(p==='him')?'eo-her':'eo-him';
   EAT_OUT[k]=entry;
   delete SKIPPED[k];
   MANUAL_SET[k]=true;
   // V53: direct per-slot eat-out — mark as user-edited.
   _markUserEdited(k);
-  // Set grid: shared → ourSkip; otherSkip → skip-both; ourSkip/skip-both
+  // Set grid: shared → ourSkip; otherSkip → eo-both; ourSkip/eo-both
   // already correct; otherwise (empty/normal) → ourSkip.
   var cur=SHARED_SCHEDULE[dKey]||'';
   if(cur==='shared') SHARED_SCHEDULE[dKey]=ourSkip;
-  else if(cur===otherSkip) SHARED_SCHEDULE[dKey]='skip-both';
-  else if(cur===ourSkip||cur==='skip-both') {/* already correct */}
+  else if(cur===otherSkip) SHARED_SCHEDULE[dKey]='eo-both';
+  else if(cur===ourSkip||cur==='eo-both') {/* already correct */}
   else SHARED_SCHEDULE[dKey]=ourSkip;
 }
 function toggleEatOut(p,d,s){
@@ -8001,8 +8050,8 @@ function toggleEatOut(p,d,s){
   // loadEatOutEntry).
   const k=sk(p,d,s);
   const dKey=dk(d,s);
-  const ourSkip=(p==='him')?'skip-him':'skip-her';
-  const otherSkip=(p==='him')?'skip-her':'skip-him';
+  const ourSkip=(p==='him')?'eo-him':'eo-her';
+  const otherSkip=(p==='him')?'eo-her':'eo-him';
   if(EAT_OUT[k]){
     delete EAT_OUT[k];
     delete MANUAL_SET[k];
@@ -8015,7 +8064,7 @@ function toggleEatOut(p,d,s){
     // genuinely shared again. No correction needed.
     var curOff=SHARED_SCHEDULE[dKey]||'';
     if(curOff===ourSkip) delete SHARED_SCHEDULE[dKey];
-    else if(curOff==='skip-both') SHARED_SCHEDULE[dKey]=otherSkip;
+    else if(curOff==='eo-both') SHARED_SCHEDULE[dKey]=otherSkip;
     // V54 (2026-05-07): toggleEatOut OFF un-sets the slot — clear
     // USER_EDITED. Symmetric with toggleSkip OFF.
     delete USER_EDITED[k];
@@ -8109,10 +8158,10 @@ function changeMeal(slot,mealId){
     // If shared, clear it (manual pick breaks sharing)
     // If eat-out for this person, clear it (they're now eating a home meal)
     if(schedState==='shared') delete SHARED_SCHEDULE[schedKey];
-    else if(person==='him'&&(schedState==='skip-him')) delete SHARED_SCHEDULE[schedKey];
-    else if(person==='her'&&(schedState==='skip-her')) delete SHARED_SCHEDULE[schedKey];
-    else if(person==='him'&&schedState==='skip-both') SHARED_SCHEDULE[schedKey]='skip-her';
-    else if(person==='her'&&schedState==='skip-both') SHARED_SCHEDULE[schedKey]='skip-him';
+    else if(person==='him'&&(schedState==='eo-him')) delete SHARED_SCHEDULE[schedKey];
+    else if(person==='her'&&(schedState==='eo-her')) delete SHARED_SCHEDULE[schedKey];
+    else if(person==='him'&&schedState==='eo-both') SHARED_SCHEDULE[schedKey]='eo-her';
+    else if(person==='her'&&schedState==='eo-both') SHARED_SCHEDULE[schedKey]='eo-him';
     saveSharedSchedule();
   }
   clearOverrides(person,day,slot);invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
@@ -9621,10 +9670,10 @@ function paintAccept(){
     var qSchedState = SHARED_SCHEDULE[qSchedKey];
     if(qSchedState){
       if(qSchedState==='shared') delete SHARED_SCHEDULE[qSchedKey];
-      else if(q.p==='him' && qSchedState==='skip-him') delete SHARED_SCHEDULE[qSchedKey];
-      else if(q.p==='her' && qSchedState==='skip-her') delete SHARED_SCHEDULE[qSchedKey];
-      else if(q.p==='him' && qSchedState==='skip-both') SHARED_SCHEDULE[qSchedKey]='skip-her';
-      else if(q.p==='her' && qSchedState==='skip-both') SHARED_SCHEDULE[qSchedKey]='skip-him';
+      else if(q.p==='him' && qSchedState==='eo-him') delete SHARED_SCHEDULE[qSchedKey];
+      else if(q.p==='her' && qSchedState==='eo-her') delete SHARED_SCHEDULE[qSchedKey];
+      else if(q.p==='him' && qSchedState==='eo-both') SHARED_SCHEDULE[qSchedKey]='eo-her';
+      else if(q.p==='her' && qSchedState==='eo-both') SHARED_SCHEDULE[qSchedKey]='eo-him';
     }
   });
   // Schedule: if a single (d,s) cell has both him+her queued, mark that cell
@@ -9891,6 +9940,16 @@ var _scheduleEditTouchedCells = {};
 // eat out to normal it toggles set to not set." Reset on edit-mode
 // entry, Apply, Undo, Reset (same lifecycle as touchedCells).
 var _scheduleEditPreserveSel = {};
+// V71 (2026-05-07): per-SIDE touched tracking — keyed by sk(p,d,s)
+// instead of dk(d,s). Tapping Him's side marks only Him's slot key;
+// Her's stays unmarked. Apply's diff loop reads this so Her's slot
+// doesn't get flagged as touched just because the cell-level
+// SHARED_SCHEDULE changed. Cell-level _scheduleEditTouchedCells is
+// retained for auto-detection suppression (which is inherently
+// cell-level: a tapped cell shouldn't auto-paint shared/grouped).
+// Per user feedback: "Cycling him eat out should not change her
+// completely unrelated meal, but it currently does."
+var _scheduleEditTouchedSides = {};
 function _cloneScheduleState(){
   // V32 (2026-05-07): also snapshot ADJ_TARGETS + per-key timestamp maps.
   //   - ADJ_TARGETS: per-(person,day) checkboxes for kcal redistribution.
@@ -10010,6 +10069,7 @@ function enterScheduleEditMode(){
   _scheduleEditMode = true;
   _scheduleEditCleared = false;
   _scheduleEditTouchedCells = {};
+  _scheduleEditTouchedSides = {}; // V71
   _scheduleEditPreserveSel = {}; // V70
   _scheduleEditSnapshot = _cloneScheduleState();
   renderMeals();
@@ -10038,13 +10098,28 @@ function applyScheduleEdit(){
     }
     var snapGroups = _smGroupMap(snap.leftoverLinks);
     var nowGroups = _smGroupMap(LEFTOVER_LINKS);
+    // V71 (2026-05-07): per-side check for SHARED_SCHEDULE affecting a side.
+    // 'shared' affects both. 'eo-both' affects both. 'eo-him' / 'eo-her' only
+    // affects the named side. Without this, tapping Him's side to set 'eo-him'
+    // would diff Her's slot as touched (because SHARED at the cell-level
+    // changed), causing randomize to re-roll Her — exactly the user's
+    // complaint: "Cycling him eat out should not change her completely
+    // unrelated meal, but it currently does."
+    function _sharedAffectsSide(state, side){
+      if(!state) return false;
+      if(state === 'shared') return true;
+      if(state === 'eo-both') return true;
+      if(state === 'eo-him' && side === 'him') return true;
+      if(state === 'eo-her' && side === 'her') return true;
+      return false;
+    }
     DAYS.forEach(function(d){
       ['breakfast','lunch','snack','dinner'].forEach(function(s){
         ['him','her'].forEach(function(p){
           var k = sk(p,d,s);
           if(MANUAL_SET[k]) return; // already locked legitimately — don't touch
           // V70 (2026-05-07): if user grid-tapped this slot to undo eat-out
-          // (skip-* → normal transition), preserve SEL — don't randomize.
+          // (eo-* → normal transition), preserve SEL — don't randomize.
           // Without this short-circuit, the SHARED + EAT_OUT diff would
           // mark the slot "touched" → randomize replaces the original meal
           // (e.g., a chicken that was anchor of a 3-portion auto-link-group)
@@ -10062,12 +10137,23 @@ function applyScheduleEdit(){
           // shared via _autoSharedCells, never had SHARED_SCHEDULE='shared'
           // explicitly). Without this, the diff sees no change and the cell
           // stays locked from re-randomize.
+          // V71 (2026-05-07): SHARED diff is now per-side via
+          // _sharedAffectsSide. Tap Him → SHARED 'eo-him' affects Him only,
+          // so Her's diff doesn't pick it up.
+          var snapShared = snap.SHARED_SCHEDULE[dk(d,s)] || '';
+          var curShared = SHARED_SCHEDULE[dk(d,s)] || '';
+          var sharedSideChanged = _sharedAffectsSide(snapShared, p) !== _sharedAffectsSide(curShared, p);
+          // V71: per-side touched tracker (sk-keyed). Replaces the dk-level
+          // _scheduleEditTouchedCells fallback so a tap on Him's side doesn't
+          // flag Her's slot as touched. Cell-level _scheduleEditTouchedCells
+          // is retained for auto-detection (cell-level visual concept) but
+          // the diff loop reads the per-side one.
           var touched = SEL[k] !== snap.SEL[k]
-            || (SHARED_SCHEDULE[dk(d,s)] || '') !== (snap.SHARED_SCHEDULE[dk(d,s)] || '')
+            || sharedSideChanged
             || !!SKIPPED[k] !== !!snap.SKIPPED[k]
             || !!EAT_OUT[k] !== !!snap.EAT_OUT[k]
             || !!nowGroups[k] !== !!snapGroups[k]
-            || !!_scheduleEditTouchedCells[dk(d,s)];
+            || !!_scheduleEditTouchedSides[k];
           if(!touched){
             MANUAL_SET[k] = true;
             tempLocked.push(k);
@@ -10086,6 +10172,7 @@ function applyScheduleEdit(){
   _scheduleEditMode = false;
   _scheduleEditCleared = false;
   _scheduleEditTouchedCells = {};
+  _scheduleEditTouchedSides = {}; // V71
   _scheduleEditPreserveSel = {}; // V70
   _scheduleEditSnapshot = null;
   // Use current `person` tab as the randomize target. If user is on Him tab,
@@ -10131,6 +10218,7 @@ function clearScheduleEdit(){
   // gates auto-detection wholesale, so per-cell touched markers don't
   // matter visually until the user starts tapping again.
   _scheduleEditTouchedCells = {};
+  _scheduleEditTouchedSides = {}; // V71
   _scheduleEditPreserveSel = {}; // V70
   // Stay in edit mode — user is mid-restructure.
   invalidateLeftoverCache();
@@ -10143,6 +10231,7 @@ function undoScheduleEdit(){
   _scheduleEditMode = false;
   _scheduleEditCleared = false;
   _scheduleEditTouchedCells = {};
+  _scheduleEditTouchedSides = {}; // V71
   _scheduleEditPreserveSel = {}; // V70
   _scheduleEditSnapshot = null;
   invalidateLeftoverCache();
@@ -10164,11 +10253,11 @@ function setSchedule(){
       if(!state) return;
       const dKey=dk(d,s);
       const wasTouched = !!_scheduleEditTouchedCells[dKey];
-      if(state==='skip-him'||state==='skip-both'){
+      if(state==='eo-him'||state==='eo-both'){
         MANUAL_SET[sk('him',d,s)]=true;
         if(wasTouched) _markUserEdited(sk('him',d,s));
       }
-      if(state==='skip-her'||state==='skip-both'){
+      if(state==='eo-her'||state==='eo-both'){
         MANUAL_SET[sk('her',d,s)]=true;
         if(wasTouched) _markUserEdited(sk('her',d,s));
       }
@@ -10214,11 +10303,11 @@ function setSchedule(){
       // Skip already set could end up with both SKIPPED=true AND EAT_OUT={}
       // after Apply. Treating grid 'skip-*' as eat-out (its actual semantic
       // meaning) means it should supersede any prior Skip on that side.
-      if(state==='skip-him'||state==='skip-both'){
+      if(state==='eo-him'||state==='eo-both'){
         if(!EAT_OUT[sk('him',d,s)]) EAT_OUT[sk('him',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
         delete SKIPPED[sk('him',d,s)];
       }
-      if(state==='skip-her'||state==='skip-both'){
+      if(state==='eo-her'||state==='eo-both'){
         if(!EAT_OUT[sk('her',d,s)]) EAT_OUT[sk('her',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
         delete SKIPPED[sk('her',d,s)];
       }
@@ -10240,7 +10329,7 @@ function clearWeek(){
   Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];}); // V53
   Object.keys(_autoLinkColorCache).forEach(function(k){delete _autoLinkColorCache[k];}); // V67
   Object.keys(SHARED_SCHEDULE).forEach(function(k){
-    if(/^skip-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
+    if(/^eo-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
   });
   // V10 sync no-op now (no skip-* states left), but call it to honor the
   // invariant contract — if any user-customized EAT_OUTs survive on cells
@@ -13411,7 +13500,14 @@ function mergeSyncData(remote){
         var lt=weekData[w].sharedScheduleTs[k]||0;
         var rt=remoteIsLegacy?0:(remSchedTs[k]||0);
         if(rt>lt){
-          if(remSched[k]!==undefined) weekData[w].sharedSchedule[k]=remSched[k];
+          if(remSched[k]!==undefined) {
+            // V71 (2026-05-07): migrate legacy 'skip-*' from remote
+            var rv = remSched[k];
+            if(rv === 'skip-him') rv = 'eo-him';
+            else if(rv === 'skip-her') rv = 'eo-her';
+            else if(rv === 'skip-both') rv = 'eo-both';
+            weekData[w].sharedSchedule[k]=rv;
+          }
           else delete weekData[w].sharedSchedule[k];
           weekData[w].sharedScheduleTs[k]=rt;
         }
@@ -14266,7 +14362,7 @@ loadCustomMeals();loadEatOutDB();loadAdjTargets();
 // V46 (2026-05-07, Gap I): reconcile any inconsistent SHARED_SCHEDULE
 // vs EAT_OUT state at boot. V25 deferred _syncEatOutsToSharedSchedule
 // inside edit mode — if the user grid-tapped a skip-* state and the
-// page reloaded before Apply, SHARED_SCHEDULE='skip-him' was persisted
+// page reloaded before Apply, SHARED_SCHEDULE='eo-him' was persisted
 // but the corresponding EAT_OUT[him] placeholder was never created.
 // This boot-time call auto-corrects: creates missing placeholders,
 // removes orphaned non-customized placeholders, clears any SKIPPED
@@ -16206,10 +16302,10 @@ window.MPStress=(function(){
       ['breakfast','lunch','dinner'].forEach(function(s){
         var state=SHARED_SCHEDULE[dk(d,s)]||'';
         var himK=sk('him',d,s), herK=sk('her',d,s);
-        if((state==='skip-him'||state==='skip-both') && !EAT_OUT[himK]){
+        if((state==='eo-him'||state==='eo-both') && !EAT_OUT[himK]){
           problems.push(himK+' SHARED='+state+' but EAT_OUT missing');
         }
-        if((state==='skip-her'||state==='skip-both') && !EAT_OUT[herK]){
+        if((state==='eo-her'||state==='eo-both') && !EAT_OUT[herK]){
           problems.push(herK+' SHARED='+state+' but EAT_OUT missing');
         }
       });
@@ -16235,7 +16331,7 @@ window.MPStress=(function(){
       if(EAT_OUT[k]) return;
       // 3) Shared cell
       var schedState=SHARED_SCHEDULE[dk(d,s)]||'';
-      if(schedState==='shared'||/^skip-/.test(schedState)) return;
+      if(schedState==='shared'||/^eo-/.test(schedState)) return;
       // 4) In a manual link group
       if(typeof LEFTOVER_LINKS!=='undefined' && LEFTOVER_LINKS && LEFTOVER_LINKS.some(function(g){
         return g.slots && g.slots.some(function(sl){return sl.p===p && sl.d===d && sl.s===s;});
@@ -16996,35 +17092,35 @@ window.MPStress=(function(){
         return {checks:checks};
       }
       // V35: grid taps via _smGridTap helper (V25 made grid edit-mode-only).
-      // Tap 1: normal → skip-him
+      // Tap 1: normal → eo-him
       _smGridTap('left', d, s);
-      add('tap1_state', SHARED_SCHEDULE[dk(d,s)]==='skip-him',
-        'expected skip-him, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
-      add('tap1_eatOutHim', !!EAT_OUT[stHimK], 'tap to skip-him should auto-create EAT_OUT[him]');
+      add('tap1_state', SHARED_SCHEDULE[dk(d,s)]==='eo-him',
+        'expected eo-him, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
+      add('tap1_eatOutHim', !!EAT_OUT[stHimK], 'tap to eo-him should auto-create EAT_OUT[him]');
       add('tap1_eatOutHerNot', !EAT_OUT[stHerK], 'EAT_OUT[her] should not exist');
       checkSchedEatOut();
       checkCoherence();
-      // Tap 2: skip-him → skip-both (right tap)
+      // Tap 2: eo-him → eo-both (right tap)
       _smGridTap('right', d, s);
-      add('tap2_state', SHARED_SCHEDULE[dk(d,s)]==='skip-both',
-        'expected skip-both, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
+      add('tap2_state', SHARED_SCHEDULE[dk(d,s)]==='eo-both',
+        'expected eo-both, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
       add('tap2_bothEatOut', !!EAT_OUT[stHimK] && !!EAT_OUT[stHerK], 'both EAT_OUTs should exist');
       checkSchedEatOut();
       checkCoherence();
       // Customize her's eat-out
       EAT_OUT[stHerK].name='Custom Place';
       EAT_OUT[stHerK].kcal=500;
-      // Tap 3: skip-both → skip-her (left tap clears him's side)
+      // Tap 3: eo-both → eo-her (left tap clears him's side)
       _smGridTap('left', d, s);
-      add('tap3_state', SHARED_SCHEDULE[dk(d,s)]==='skip-her',
-        'expected skip-her, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
+      add('tap3_state', SHARED_SCHEDULE[dk(d,s)]==='eo-her',
+        'expected eo-her, got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
       add('tap3_himCleared', !EAT_OUT[stHimK], 'EAT_OUT[him] (placeholder) should be cleared');
       add('tap3_herPreserved',
         !!EAT_OUT[stHerK] && EAT_OUT[stHerK].name==='Custom Place',
         'EAT_OUT[her] customized data should remain');
       checkSchedEatOut();
       checkCoherence();
-      // Tap 4: skip-her → normal (right tap)
+      // Tap 4: eo-her → normal (right tap)
       _smGridTap('right', d, s);
       add('tap4_stateCleared', !SHARED_SCHEDULE[dk(d,s)],
         'expected (empty), got '+(SHARED_SCHEDULE[dk(d,s)]||'(empty)'));
@@ -17111,7 +17207,7 @@ window.MPStress=(function(){
       });
       // V44 (2026-05-07, Z1 polish): also capture the V34 SHARED_SCHEDULE
       // write that toggleEatOut now performs. eoSetup is the slot where
-      // the user "ate out" — V34 writes 'skip-him' or 'skip-her' on the
+      // the user "ate out" — V34 writes 'eo-him' or 'eo-her' on the
       // SHARED_SCHEDULE entry for that day_slot (mirroring the per-slot
       // pill into grid state). The sched value depends on which side.
       var eoExpectedSched = null;
@@ -17120,7 +17216,7 @@ window.MPStress=(function(){
         EAT_OUT[eoSetup.k].name='Persist Test';
         EAT_OUT[eoSetup.k].kcal=700;
         EAT_OUT[eoSetup.k].pro=40;
-        eoExpectedSched = (eoSetup.p==='him') ? 'skip-him' : 'skip-her';
+        eoExpectedSched = (eoSetup.p==='him') ? 'eo-him' : 'eo-her';
         // Pre-randomize sanity check — V34 should have just written this.
         add('rp_eoSchedPreV34',
           SHARED_SCHEDULE[dk(eoSetup.d, eoSetup.s)] === eoExpectedSched,
@@ -17166,7 +17262,7 @@ window.MPStress=(function(){
       }
       if(schSetup){
         add('rp_schedPersisted',
-          SHARED_SCHEDULE[dk(schSetup.d,schSetup.s)]==='skip-him',
+          SHARED_SCHEDULE[dk(schSetup.d,schSetup.s)]==='eo-him',
           'SHARED_SCHEDULE wiped: '+(SHARED_SCHEDULE[dk(schSetup.d,schSetup.s)]||'(empty)'));
         add('rp_schedEatOutPersisted',
           !!EAT_OUT[schSetup.himK],
@@ -17599,13 +17695,13 @@ window.MPStress=(function(){
         'edit mode tap should change state (got '+inEditState+')');
       // V10 sync should be deferred — no auto-EAT_OUT
       // (only if cell went into skip-* state, otherwise N/A)
-      if(/^skip-/.test(inEditState)){
+      if(/^eo-/.test(inEditState)){
         var himInEditEatOut = !!EAT_OUT[sk('him', d, s)];
         var herInEditEatOut = !!EAT_OUT[sk('her', d, s)];
         // We wanted these BOTH false (deferred), but some could pre-exist from toggleSkip's clear.
         // Just check that we didn't create a NEW EAT_OUT for this cell's skip side.
-        var skipsHim = (inEditState === 'skip-him' || inEditState === 'skip-both');
-        var skipsHer = (inEditState === 'skip-her' || inEditState === 'skip-both');
+        var skipsHim = (inEditState === 'eo-him' || inEditState === 'eo-both');
+        var skipsHer = (inEditState === 'eo-her' || inEditState === 'eo-both');
         var deferred = (!skipsHim || !himInEditEatOut) && (!skipsHer || !herInEditEatOut);
         add('embl_v10Deferred', deferred, 'V10 sync NOT deferred — EAT_OUT created during tap');
       } else {
@@ -17792,7 +17888,7 @@ window.MPStress=(function(){
       enterScheduleEditMode();
       var tapFn = (p === 'him') ? schedTapLeft : schedTapRight;
       tapFn(d, s);
-      var expectedSkipState = (p === 'him') ? 'skip-him' : 'skip-her';
+      var expectedSkipState = (p === 'him') ? 'eo-him' : 'eo-her';
       add('ecd_step2_gridSkipSet',
         SHARED_SCHEDULE[dk(d, s)] === expectedSkipState,
         'grid tap should set '+expectedSkipState+
@@ -17951,20 +18047,20 @@ window.MPStress=(function(){
       var preSchedSA = JSON.parse(JSON.stringify(SHARED_SCHEDULE));
       var preSkippedSA = JSON.parse(JSON.stringify(SKIPPED));
       var preEatOutSA = JSON.parse(JSON.stringify(EAT_OUT));
-      // Enter edit mode + grid-tap left half (skip-him → eat-out)
+      // Enter edit mode + grid-tap left half (eo-him → eat-out)
       enterScheduleEditMode();
       schedTapLeft(d, s);
       add('esa_pre_apply_sched',
-        SHARED_SCHEDULE[dKeySA] === 'skip-him',
-        'pre-Apply: SHARED should be skip-him after grid tap');
+        SHARED_SCHEDULE[dKeySA] === 'eo-him',
+        'pre-Apply: SHARED should be eo-him after grid tap');
       // Apply
       applyScheduleEdit();
       add('esa_post_editModeOff', _scheduleEditMode === false,
         'edit mode should exit after Apply');
       // Target slot's intended state
       add('esa_target_sched',
-        SHARED_SCHEDULE[dKeySA] === 'skip-him',
-        'target SHARED should be skip-him post-Apply');
+        SHARED_SCHEDULE[dKeySA] === 'eo-him',
+        'target SHARED should be eo-him post-Apply');
       add('esa_target_eatOut', !!EAT_OUT[himKSA],
         'target EAT_OUT[him] should be created post-Apply (V10 sync)');
       // Cascade detection: SEL changes on slots NOT directly edited
@@ -18026,6 +18122,82 @@ window.MPStress=(function(){
         'EAT_OUT cascaded to '+unexpectedEatChanges+' other slots');
     }
 
+    else if(op==='editModeHimTapPreservesHer'){
+      // V71 (2026-05-07): regression test for "Him tap should not change
+      // Her's unrelated meal." Per user feedback: "Cycling him eat out
+      // should not change her completely unrelated meal, but it
+      // currently does."
+      //
+      // Pre-V71: SHARED_SCHEDULE is at the cell level, so any change
+      // (e.g., '' → 'eo-him') showed as a "diff" for BOTH halves in
+      // applyScheduleEdit's diff loop. Her's slot would be flagged
+      // "touched" → randomize re-rolled Her's SEL, breaking auto-link-
+      // groups Her was part of and replacing her dinner with a random
+      // pick.
+      //
+      // V71 fix: per-side touched tracking (_scheduleEditTouchedSides
+      // keyed by sk(p,d,s)) + _sharedAffectsSide helper. Tap Him only
+      // marks him's slot key. SHARED diff is checked per-side: 'eo-him'
+      // affects only him.
+      if(s!=='breakfast' && s!=='lunch' && s!=='dinner'){
+        add('setup', true, '', null, 'cell not in grid'); return {checks:checks};
+      }
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'skip non-solo'); return {checks:checks};
+      }
+      var dKeyHT = dk(d, s);
+      var himKHT = sk('him', d, s), herKHT = sk('her', d, s);
+      // Cell must be pristine for both sides
+      if(SHARED_SCHEDULE[dKeyHT]||MANUAL_SET[himKHT]||MANUAL_SET[herKHT]||
+         SKIPPED[himKHT]||SKIPPED[herKHT]||EAT_OUT[himKHT]||EAT_OUT[herKHT]){
+        add('setup', true, '', null, 'cell not pristine'); return {checks:checks};
+      }
+      // Her must have a meal that's DIFFERENT from Him's so the diff
+      // loop can't legitimately tie them. Pick a non-pkg lunch/dinner
+      // meal for Her if needed.
+      var preHerMeal = SEL[herKHT];
+      var preHimMeal = SEL[himKHT];
+      if(!preHerMeal || !preHimMeal || preHerMeal === preHimMeal){
+        add('setup', true, '', null, 'need distinct him/her meals on this cell'); return {checks:checks};
+      }
+      // Snapshot Her's full state across the week (focus: her dinner cell + SEL)
+      var preHerSel = preHerMeal;
+      var preHerShared = SHARED_SCHEDULE[dKeyHT] || '';
+      var preHerSkipped = !!SKIPPED[herKHT];
+      var preHerEatOut = !!EAT_OUT[herKHT];
+      var preHerManual = !!MANUAL_SET[herKHT];
+      var preHerUserEd = !!USER_EDITED[herKHT];
+      // Enter edit mode + tap Him's side only
+      enterScheduleEditMode();
+      schedTapLeft(d, s);
+      add('htph_pre_apply_sched',
+        SHARED_SCHEDULE[dKeyHT] === 'eo-him',
+        'pre-Apply: SHARED should be eo-him after Him grid tap');
+      // Apply
+      applyScheduleEdit();
+      add('htph_post_editModeOff', _scheduleEditMode === false,
+        'edit mode should exit after Apply');
+      // Him's side: should be eat-out post-Apply (target of the tap)
+      add('htph_him_eatout', !!EAT_OUT[himKHT],
+        'Him EAT_OUT should be created post-Apply (V10 sync)');
+      // HER'S SIDE: nothing should have changed
+      add('htph_her_sel_preserved',
+        SEL[herKHT] === preHerSel,
+        'Her SEL must be preserved (was '+preHerSel+', now '+SEL[herKHT]+')');
+      add('htph_her_no_eatout',
+        !!EAT_OUT[herKHT] === preHerEatOut,
+        'Her EAT_OUT must NOT be created by Him tap (was '+preHerEatOut+', now '+!!EAT_OUT[herKHT]+')');
+      add('htph_her_no_skip',
+        !!SKIPPED[herKHT] === preHerSkipped,
+        'Her SKIPPED must NOT be set by Him tap');
+      add('htph_her_no_manual',
+        !!MANUAL_SET[herKHT] === preHerManual,
+        'Her MANUAL_SET must NOT be set by Him tap (got '+!!MANUAL_SET[herKHT]+', expected '+preHerManual+')');
+      add('htph_her_no_userEd',
+        !!USER_EDITED[herKHT] === preHerUserEd,
+        'Her USER_EDITED must NOT be set by Him tap');
+    }
+
     else if(op==='gridSkipPlusPillSkip'){
       // Schedule grid skip-* + per-slot Skip pill on same person.
       // V34 (2026-05-07): toggleSkip ON now ALSO clears SHARED_SCHEDULE
@@ -18044,7 +18216,7 @@ window.MPStress=(function(){
       }
       // Step 1: grid paint (V10 syncs EAT_OUT). V35: use helper.
       _smGridTap('left', d, s);
-      add('gpps_step1_eo', !!EAT_OUT[gpHimK], 'V10: grid skip-him should create EAT_OUT');
+      add('gpps_step1_eo', !!EAT_OUT[gpHimK], 'V10: grid eo-him should create EAT_OUT');
       add('gpps_step1_noManSet', !MANUAL_SET[gpHimK], 'V10: grid taps do not set MANUAL_SET');
       // Step 2: Skip pill
       toggleSkip('him', d, s);
@@ -18089,7 +18261,10 @@ window.MPStress=(function(){
              // V39 (2026-05-07): switchWeek confirm branches + paint+edit interop
              'editModeWeekSwitchGuard','editModePaintModeInterop',
              // V65 (2026-05-07): regression test for V64 surgical-apply cascade
-             'editModeSurgicalApply'];
+             'editModeSurgicalApply',
+             // V71 (2026-05-07): regression test for "Him tap should not
+             // change Her's unrelated meal" — per-side touched tracking.
+             'editModeHimTapPreservesHer'];
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -18100,7 +18275,8 @@ window.MPStress=(function(){
             editModeEnterUndo:{p:0,f:0},editModeClearApply:{p:0,f:0},editModeBypassLock:{p:0,f:0},editModePills:{p:0,f:0},
             editModeIngredientEdit:{p:0,f:0},editModeChangeMeal:{p:0,f:0},editModePaintAccept:{p:0,f:0},editModeConflictDetect:{p:0,f:0},
             editModeWeekSwitchGuard:{p:0,f:0},editModePaintModeInterop:{p:0,f:0},
-            editModeSurgicalApply:{p:0,f:0}},
+            editModeSurgicalApply:{p:0,f:0},
+            editModeHimTapPreservesHer:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
@@ -18126,7 +18302,7 @@ window.MPStress=(function(){
       Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
       Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
       Object.keys(SHARED_SCHEDULE).forEach(function(k){
-        if(/^skip-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
+        if(/^eo-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
       });
     }
     function recordCheck(c){
@@ -18268,7 +18444,7 @@ window.MPStress=(function(){
       Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
       Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
       Object.keys(SHARED_SCHEDULE).forEach(function(k){
-        if(/^skip-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
+        if(/^eo-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
       });
     }
 
