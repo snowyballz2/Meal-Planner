@@ -5272,24 +5272,54 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
       }
     }
 
+    // V90 (2026-05-08): predict the post-trim+pair macro % for the WHOLE DAY.
+    // Lets each trim guard short-circuit when the trim is futile (won't bring
+    // the offending macro under threshold). Operates on day macros (t.carb,
+    // t.pro, t.fat from dailyMacros()) so all evaluations are whole-day.
+    function predictDayMacroPct(trim, pairItem, macro){
+      const tdb = trim.item.db;
+      let dCarb = -trim.dec * (tdb.carb || 0);
+      let dPro  = -trim.dec * (tdb.pro || 0);
+      let dFat  = -trim.dec * (tdb.fat || 0);
+      if(pairItem){
+        const inc = incrementFor(pairItem.db);
+        const pdb = pairItem.db;
+        dCarb += inc * (pdb.carb || 0);
+        dPro  += inc * (pdb.pro || 0);
+        dFat  += inc * (pdb.fat || 0);
+      }
+      const nCarb = t.carb + dCarb;
+      const nPro  = t.pro + dPro;
+      const nFat  = t.fat + dFat;
+      const nMk = nCarb*4 + nPro*4 + nFat*9;
+      if(nMk <= 0) return 0;
+      if(macro === 'carb') return (nCarb*4)/nMk;
+      if(macro === 'fat')  return (nFat*9)/nMk;
+      if(macro === 'pro')  return (nPro*4)/nMk;
+      return 0;
+    }
+
     // ── Priority 2: carb% over 55 ──
     // Trim carb; paired protein add is optional (trimming alone still helps
     // carbPct come down). Dead carbFloor safety check removed — carbPct
     // can't be ≤ carbFloor when it's > 55%.
-    // V89a (2026-05-08): "no make-worse" guard. Only trim if either
-    // (a) we can pair with a protein add (kcal-neutral),
-    // OR (b) day kcal is already over target (calGap0 < 0 — trimming
-    // brings us closer to target).
-    // Pre-V89a the balancer trimmed carb (e.g. oats) chasing carbPct
-    // even when day kcal was already under target, deepening the kcal
-    // deficit without resolving carb% (case #1 seed 12440 him Wed:
-    // oats trimmed to minAmt floor, carb% still 57.5%, day -173 kcal).
+    //
+    // V89a + V90 "no make-worse" guard (whole-day view). Trim only if:
+    // (a) day kcal is already over target (calGap0 < 0 — free to drop kcal), OR
+    // (b) trim+pair will actually bring carbPct ≤ 55% AND we have a paired
+    //     protein add (so day kcal stays neutral).
+    // Pre-V89/V90 the balancer trimmed carb (e.g. oats) chasing carbPct
+    // even when the trim didn't fix it AND day was under target — deepening
+    // the breakfast deficit by moving kcal to lunch/dinner via the pair
+    // (case #1 seed 12440 him Wed: oats trimmed to minAmt floor, carb% still
+    // 57.5%, breakfast -191, day -173).
     if(mk >= 1 && carbPct - 0.55 > 0.001){
       const trim = bestTrim(['carb'], CAL_SLOTS);
       if(trim){
         const trimKcalStep = trim.dec * trim.item.db.kcal;
         const pItem = bestAdd('protein', trimKcalStep, CAL_SLOTS);
-        const safeToTrim = !!pItem || calGap0 < 0; // V89a
+        const willFix = predictDayMacroPct(trim, pItem, 'carb') <= 0.55 + 0.001;
+        const safeToTrim = (calGap0 < 0) || (pItem && willFix);
         if(safeToTrim){
           applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
           if(pItem) applyDelta(pItem.slot, pItem.idx, pItem.cur + incrementFor(pItem.db));
@@ -5298,14 +5328,14 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     }
 
     // ── Priority 3: fat% over 30 ──
-    // Trim fat; paired protein add is optional.
-    // V89a "no make-worse" guard (same rationale as Priority 2).
+    // V89a + V90 guard (whole-day): same logic as P2.
     if(mk >= 1 && fatPct - 0.30 > 0.001){
       const trim = bestTrim(['fat'], CAL_SLOTS);
       if(trim){
         const trimKcalStep = trim.dec * trim.item.db.kcal;
         const pItem = bestAdd('protein', trimKcalStep, CAL_SLOTS);
-        const safeToTrim = !!pItem || calGap0 < 0; // V89a
+        const willFix = predictDayMacroPct(trim, pItem, 'fat') <= 0.30 + 0.001;
+        const safeToTrim = (calGap0 < 0) || (pItem && willFix);
         if(safeToTrim){
           applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
           if(pItem) applyDelta(pItem.slot, pItem.idx, pItem.cur + incrementFor(pItem.db));
@@ -5313,9 +5343,8 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
       }
     }
 
-    // ── Priority 3b: pro% over 40 (V89b, 2026-05-08) ──
-    // Trim protein; paired carb add preferred (cal-neutral). Uses same V89a
-    // "no make-worse" guard. proPct hoisted into refreshMacros.
+    // ── Priority 3b: pro% over 40 (V89b + V90, 2026-05-08) ──
+    // V89a + V90 guard with carb/fat pair preference.
     if(mk >= 1 && proPct - 0.40 > 0.001){
       const trim = bestTrim(['protein'], CAL_SLOTS);
       if(trim){
@@ -5324,7 +5353,8 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
         // up to recipe room before hitting carb 55% cap). Fall back to fat add.
         const cItem = bestAdd('carb', trimKcalStep, CAL_SLOTS)
                   || bestAdd('fat', trimKcalStep, CAL_SLOTS);
-        const safeToTrim = !!cItem || calGap0 < 0;
+        const willFix = predictDayMacroPct(trim, cItem, 'pro') <= 0.40 + 0.001;
+        const safeToTrim = (calGap0 < 0) || (cItem && willFix);
         if(safeToTrim){
           applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
           if(cItem) applyDelta(cItem.slot, cItem.idx, cItem.cur + incrementFor(cItem.db));
