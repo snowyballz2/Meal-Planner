@@ -2616,19 +2616,21 @@ var LEFTOVER_LINK_COLORS = [
   // Manual purple (deeper, more saturated) and fuchsia (more blue).
   // V59 (2026-05-07): amber replaced with sky — amber's brown tone was too
   // close to eat-out red and orange. V60 (2026-05-07): sky replaced with
-  // yellow — sky was too close to cyan. Yellow opens a new hue family
-  // distinct from all other palette colors (cyan/sky-blue range, orange/red,
-  // lime green, fuchsia/violet purple, Him blue, Her pink, shared emerald,
-  // eat-out red, manual purple). Yellow (250,204,21) is brighter and
-  // distinct from leftover-yellow (yel='rgba(245,158,11)') used elsewhere
-  // — leftover-yellow only appears in paint-mode queued highlights, so no
-  // visual clash in normal grid rendering.
-  { name:'cyan',    rgb:'6,182,212' },
-  { name:'orange',  rgb:'249,115,22' },
-  { name:'lime',    rgb:'132,204,22' },
-  { name:'yellow',  rgb:'250,204,21' },
-  { name:'fuchsia', rgb:'217,70,239' },
-  { name:'violet',  rgb:'139,92,246' }
+  // yellow — sky was too close to cyan.
+  // V73 (2026-05-07): grey + dark blue added (8 total colors). Grey is
+  // free for link groups now that skip cells use a "darkened tab" look
+  // instead of grey (per user feedback). Dark blue is distinct from Him
+  // blue (lighter/brighter); link-group dark blue is deeper/saturated.
+  // Strict no-reuse: when all 8 are taken, the 9th group is not assigned
+  // a color and renders as a normal (uncolored) cell.
+  { name:'cyan',     rgb:'6,182,212' },
+  { name:'orange',   rgb:'249,115,22' },
+  { name:'lime',     rgb:'132,204,22' },
+  { name:'yellow',   rgb:'250,204,21' },
+  { name:'fuchsia',  rgb:'217,70,239' },
+  { name:'violet',   rgb:'139,92,246' },
+  { name:'grey',     rgb:'156,163,175' }, // V73
+  { name:'darkblue', rgb:'30,58,138' }    // V73
 ];
 // Slot-ordering for anchor identification. Matches the existing leftover
 // detector's cookSlots ordering (breakfast=0, lunch=1, snack=2, dinner=3).
@@ -2686,15 +2688,24 @@ function isLinkAnchor(group, p, d, s){
   });
   return myKey === minKey;
 }
-// Allocate the lowest unused colorIdx in the current week's groups. If all
-// 6 are used, cycle from 0 (allow duplicates — visually rare and acceptable).
+// Allocate the lowest unused colorIdx across BOTH manual + auto link groups
+// in the current week. V73 (2026-05-07): strict no-reuse — if all 8 are
+// used (across manual + auto), return -1 and the group renders without a
+// colored band. Per user feedback: "Do not allow a color to be used more
+// than once in one week."
 function _allocateLinkColor(){
   var used = {};
-  LEFTOVER_LINKS.forEach(function(g){ used[g.colorIdx] = true; });
+  LEFTOVER_LINKS.forEach(function(g){ if(g.colorIdx >= 0) used[g.colorIdx] = true; });
+  // Also exclude colors currently in use by auto-link-groups so paint
+  // accept doesn't pick a color the user is already seeing on an auto
+  // group elsewhere.
+  if(typeof _autoLinkGroups !== 'undefined'){
+    _autoLinkGroups.forEach(function(g){ if(g.colorIdx >= 0) used[g.colorIdx] = true; });
+  }
   for(var i=0; i<LEFTOVER_LINK_COLORS.length; i++){
     if(!used[i]) return i;
   }
-  return 0;
+  return -1; // V73: no available color; group renders uncolored
 }
 // Remove a slot from its group. If the group drops to 0 slots, dissolve it.
 // V68 (2026-05-07): groups with 1 surviving slot are NO LONGER dissolved —
@@ -2883,19 +2894,21 @@ function _buildAutoLinkGroups(){
     var groupId = 'auto_'+k;
     var cachedColor = _autoLinkColorCache[groupId];
     var colorIdx;
-    if(typeof cachedColor === 'number'){
+    if(typeof cachedColor === 'number' && cachedColor >= 0 && !usedColors[cachedColor]){
       colorIdx = cachedColor;
     } else {
-      // Allocate first unused color (in palette order); fall back to
-      // cycling if all are taken by other current groups.
+      // V73 (2026-05-07): strict no-reuse. Allocate first unused color
+      // in palette order. If all 8 are taken, this group gets colorIdx
+      // = -1 — render skips the colored band and the cell looks
+      // uncolored (no fallback cycling). Per user feedback: "Do not
+      // allow a color to be used more than once in one week."
       colorIdx = -1;
       for(var ci=0; ci<LEFTOVER_LINK_COLORS.length; ci++){
         if(!usedColors[ci]){ colorIdx = ci; break; }
       }
-      if(colorIdx < 0) colorIdx = autoIdx % LEFTOVER_LINK_COLORS.length;
       _autoLinkColorCache[groupId] = colorIdx;
     }
-    usedColors[colorIdx] = true;
+    if(colorIdx >= 0) usedColors[colorIdx] = true;
     _autoLinkGroups.push({
       id: groupId,
       meal: mealId,
@@ -2973,17 +2986,17 @@ function _buildAutoLinkGroups(){
         var groupId2 = 'auto_'+anchorK;
         var cachedColor2 = _autoLinkColorCache[groupId2];
         var colorIdx2;
-        if(typeof cachedColor2 === 'number'){
+        if(typeof cachedColor2 === 'number' && cachedColor2 >= 0 && !usedColors[cachedColor2]){
           colorIdx2 = cachedColor2;
         } else {
+          // V73: strict no-reuse — no cycling fallback.
           colorIdx2 = -1;
           for(var ci2=0; ci2<LEFTOVER_LINK_COLORS.length; ci2++){
             if(!usedColors[ci2]){ colorIdx2 = ci2; break; }
           }
-          if(colorIdx2 < 0) colorIdx2 = autoIdx % LEFTOVER_LINK_COLORS.length;
           _autoLinkColorCache[groupId2] = colorIdx2;
         }
-        usedColors[colorIdx2] = true;
+        if(colorIdx2 >= 0) usedColors[colorIdx2] = true;
         _autoLinkGroups.push({
           id: groupId2,
           meal: mealId,
@@ -7525,8 +7538,9 @@ function renderMeals(){
           // Group color RGB lookups — needed by lBg/rBg (leftover bg tinted
           // in group color) AND by lBdr/rBdr (group color outline). Defined
           // here, BEFORE bg/border calculations, to avoid TDZ errors.
-          const lGroupRgb=lGroup?LEFTOVER_LINK_COLORS[lGroup.colorIdx].rgb:null;
-          const rGroupRgb=rGroup?LEFTOVER_LINK_COLORS[rGroup.colorIdx].rgb:null;
+          // V73: guard colorIdx=-1 (no-color groups when palette saturated).
+          const lGroupRgb=(lGroup && lGroup.colorIdx >= 0)?LEFTOVER_LINK_COLORS[lGroup.colorIdx].rgb:null;
+          const rGroupRgb=(rGroup && rGroup.colorIdx >= 0)?LEFTOVER_LINK_COLORS[rGroup.colorIdx].rgb:null;
           // Background priority (highest first):
           //   1. In a link group:
           //      - leftover → yellow (links state — "this is a leftover")
@@ -7548,18 +7562,26 @@ function renderMeals(){
           // V28: full-skip (grey) priority is between shared and eat-out;
           // mutually exclusive with eat-out by construction (himSkippedSlot
           // suppresses himEatOut above).
+          // V73 (2026-05-07): skip cells use a "darkened tab" look —
+          // dark transparent background overlay + default border + dim
+          // text. Grey was freed up because it's now a link-group color.
+          // Per user feedback: "Change the skip to just be a darkened
+          // tab and not grey anymore".
+          var SKIP_BG = 'rgba(0,0,0,.4)';
+          var SKIP_BDR = '1.5px solid var(--border)';
+          var SKIP_TEXT = 'rgba(255,255,255,.35)';
           let lBg = lGroup
                   ? (lIsLeftover ? 'rgba('+lGroupRgb+',.45)' : 'transparent')
                   : (himManual&&lNormal) ? prp+'.2)'
                   : isShared ? grn+'.25)'
-                  : himSkippedSlot ? gry+'.25)'
+                  : himSkippedSlot ? SKIP_BG
                   : himEatOut ? red+'.2)'
                   : 'transparent';
           let rBg = rGroup
                   ? (rIsLeftover ? 'rgba('+rGroupRgb+',.45)' : 'transparent')
                   : (herManual&&rNormal) ? prp+'.2)'
                   : isShared ? grn+'.25)'
-                  : herSkippedSlot ? gry+'.25)'
+                  : herSkippedSlot ? SKIP_BG
                   : herEatOut ? red+'.2)'
                   : 'transparent';
           // V56/V57/V59: USER_EDITED indicator on Him/Her side.
@@ -7617,8 +7639,11 @@ function renderMeals(){
           // looks "set/locked" so user can tap freely without confusion.
           const _himNormalPurple = !_scheduleEditMode && himManual && lNormal;
           const _herNormalPurple = !_scheduleEditMode && herManual && rNormal;
-          let lBdr=himShowSetDot?'2px solid '+prp+'.85)':lGroup?'2px solid rgba('+lGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':himSkippedSlot?'1.5px solid '+gry+'.6)':himEatOut?'1.5px solid '+red+'.4)':_himNormalPurple?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
-          let rBdr=herShowSetDot?'2px solid '+prp+'.85)':rGroup?'2px solid rgba('+rGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':herSkippedSlot?'1.5px solid '+gry+'.6)':herEatOut?'1.5px solid '+red+'.4)':_herNormalPurple?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
+          // V73: himSkippedSlot/herSkippedSlot use SKIP_BDR (default border)
+          // so cells visually "fade" via SKIP_BG instead of the old grey
+          // border outline.
+          let lBdr=himShowSetDot?'2px solid '+prp+'.85)':lGroup?'2px solid rgba('+lGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':himSkippedSlot?SKIP_BDR:himEatOut?'1.5px solid '+red+'.4)':_himNormalPurple?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
+          let rBdr=herShowSetDot?'2px solid '+prp+'.85)':rGroup?'2px solid rgba('+rGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':herSkippedSlot?SKIP_BDR:herEatOut?'1.5px solid '+red+'.4)':_herNormalPurple?'2px solid '+prp+'.85)':'1.5px solid var(--border)';
           // V68 (2026-05-07): when USER_EDITED + link-group on the same
           // side, layer the group color INSIDE the purple outer border
           // via inset box-shadow. Preserves group identity ("we still
@@ -7635,8 +7660,9 @@ function renderMeals(){
             : '';
           // Skip text gets a muted #ccc instead of full white, reinforcing
           // the "this slot is silenced" feel.
-          let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared?'#fff':himSkippedSlot?'#cbd5e1':himEatOut?'#fff':'var(--gray)';
-          let rCol=rIsLeftover?'#fff':(herManual&&rNormal)?'#fff':isShared?'#fff':herSkippedSlot?'#cbd5e1':herEatOut?'#fff':'var(--gray)';
+          // V73: skip text color = SKIP_TEXT (faded) instead of light grey.
+          let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared?'#fff':himSkippedSlot?SKIP_TEXT:himEatOut?'#fff':'var(--gray)';
+          let rCol=rIsLeftover?'#fff':(herManual&&rNormal)?'#fff':isShared?'#fff':herSkippedSlot?SKIP_TEXT:herEatOut?'#fff':'var(--gray)';
           const lLabel='Him';
           const rLabel='Her';
           // midCol = group color if either side linked, else existing logic
@@ -7646,11 +7672,12 @@ function renderMeals(){
           // centerline picks up the grey skip color.
           // V63: bumped the manual+normal midCol purple from .4 → .85 to
           // match the unified purple opacity across the cascade.
+          // V73: skipped centerline = SKIP_BG dark overlay (no grey outline).
           const midCol=midColLink ? 'rgba('+midColLink+',.85)'
             : (himManual||herManual||isShared||himSkip||herSkip) ? (
                 ((himManual&&lNormal)||(herManual&&rNormal)) ? prp+'.85)'
                 : isShared ? grn+'.5)'
-                : (himSkippedSlot||herSkippedSlot) ? gry+'.6)'
+                : (himSkippedSlot||herSkippedSlot) ? SKIP_BG
                 : red+'.4)'
               )
             : 'transparent';
@@ -7706,18 +7733,19 @@ function renderMeals(){
           // stays visible at the join even when user-edited. The outer
           // purple border on the half communicates USER_EDITED; the
           // centerline + inner band communicate group membership.
-          let lCenterCol = lGroup ? 'rgba('+lGroupRgb+',.85)'
+          // V73: skipped center color = SKIP_BG.
+          let lCenterCol = lGroup ? (lGroupRgb?'rgba('+lGroupRgb+',.85)':'')
                          : himShowSetDot ? prp+'.85)'
                          : (himManual&&lNormal) ? prp+'.85)'
                          : isShared ? grn+'.5)'
-                         : himSkippedSlot ? gry+'.6)'
+                         : himSkippedSlot ? SKIP_BG
                          : himEatOut ? red+'.4)'
                          : '';
-          let rCenterCol = rGroup ? 'rgba('+rGroupRgb+',.85)'
+          let rCenterCol = rGroup ? (rGroupRgb?'rgba('+rGroupRgb+',.85)':'')
                          : herShowSetDot ? prp+'.85)'
                          : (herManual&&rNormal) ? prp+'.85)'
                          : isShared ? grn+'.5)'
-                         : herSkippedSlot ? gry+'.6)'
+                         : herSkippedSlot ? SKIP_BG
                          : herEatOut ? red+'.4)'
                          : '';
           // 2026-05-05: split center fires whenever both halves are highlighted
@@ -7792,7 +7820,9 @@ function renderMeals(){
         [].concat(LEFTOVER_LINKS||[], _autoLinkGroups||[]).forEach(function(g){
           if(_pickerSeen[g.meal]) return;
           _pickerSeen[g.meal]=true;
-          const colorName=LEFTOVER_LINK_COLORS[g.colorIdx].name;
+          // V73: groups whose colorIdx<0 had no color allocated (palette
+          // saturated). Show "(no color)" in the picker instead of crashing.
+          const colorName=(g.colorIdx >= 0)?LEFTOVER_LINK_COLORS[g.colorIdx].name:'no color';
           const meal=getMeal(g.meal);
           const label=(meal?meal.label:g.meal);
           const optVal='group:'+g.meal;
