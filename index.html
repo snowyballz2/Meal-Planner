@@ -7662,9 +7662,17 @@ function renderMeals(){
           var _v76_herId = getMealId('her', dd, ss);
           var _v76_mealsMatch = !!_v76_himId && _v76_himId === _v76_herId;
           var _v81_cellTouched = _scheduleEditMode && !!_scheduleEditTouchedCells[dk(dd,ss)];
-          const isShared = _v81_cellTouched
-            ? (state === 'shared')
-            : (_v76_mealsMatch && !himSkip && !herSkip);
+          // V87 (2026-05-08): when Reset (`_scheduleEditCleared`) is active,
+          // suppress shared visual entirely — including the V76 mealsMatch
+          // path. `getMealId` falls back to DEFAULTS when SEL is empty, so
+          // post-Reset cells with no SEL still match via DEFAULTS and would
+          // render green-shared. Reset is a fresh-slate operation; nothing
+          // should look "set" until user starts tapping again.
+          const isShared = (_scheduleEditMode && _scheduleEditCleared)
+            ? false
+            : (_v81_cellTouched
+              ? (state === 'shared')
+              : (_v76_mealsMatch && !himSkip && !herSkip));
           const grn='rgba(52,211,153,';const red='rgba(239,68,68,';const prp='rgba(167,139,250,';const yel='rgba(245,158,11,';
           // V28: grey for full-skip (per-card Skip pill — no meal, no
           // replacement). Distinct from red (eat-out — meal accounted for
