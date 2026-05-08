@@ -2897,6 +2897,96 @@ function _buildAutoLinkGroups(){
     });
     autoIdx++;
   });
+
+  // V69 (2026-05-07): "would-be anchor" pass. computeLeftovers filters
+  // out SKIPPED/EAT_OUT slots before grouping, so a 2-portion batch
+  // (anchor + 1 leftover) loses its only leftover when the user sets
+  // it to eat-out/skip → batch.length<2 → no entry in `leftovers` →
+  // anchor loses its colored band entirely. Per user feedback ("If
+  // we remove/edit a leftover dont automatically remove the whole
+  // big cook.. just that leftover"), the anchor should retain its
+  // band even after losing all leftovers.
+  //
+  // For each lunch/dinner slot that ISN'T already a tracked anchor:
+  // check if any OTHER slot (within batch window, lunch/dinner only)
+  // has the same meal AND is currently SKIPPED/EAT_OUT — i.e., a
+  // "would-be" leftover that got removed. If yes, form a 1-slot
+  // auto-link-group for the anchor so its band survives.
+  var trackedAnchors = {};
+  _autoLinkGroups.forEach(function(g){
+    g.slots.forEach(function(sl){
+      trackedAnchors[sk(sl.p, sl.d, sl.s)] = true;
+    });
+  });
+  // V69 sort-key parallels computeLeftovers' batch-anchor rule:
+  // (day_index, slot_order, him-first). Lower key = earlier; the
+  // earliest-keyed slot in a batch is the anchor.
+  var V69_SLOT_ORDER = {breakfast:0, lunch:1, snack:2, dinner:3};
+  function _v69SortKey(p, d, s){
+    return DAYS.indexOf(d) * 100 + V69_SLOT_ORDER[s] * 2 + (p === 'him' ? 0 : 1);
+  }
+  ['him','her'].forEach(function(p){
+    DAYS.forEach(function(d, di){
+      ['lunch','dinner'].forEach(function(s){
+        var anchorK = sk(p, d, s);
+        if(trackedAnchors[anchorK]) return;
+        // Anchor itself must be active (not skipped/eat-out).
+        if(SKIPPED[anchorK] || EAT_OUT[anchorK]) return;
+        if(manualSlotKeys[anchorK]) return; // manual wins
+        var mealId = getMealId(p, d, s);
+        if(!mealId) return;
+        // Same V25 edit-mode override.
+        if(_scheduleEditMode && _scheduleEditTouchedCells[dk(d, s)]) return;
+        // To qualify as the "would-be anchor", THIS slot must be the
+        // earliest same-meal slot in the batch window (so an actual
+        // anchor that's still alive remains the anchor; this prevents
+        // a stranded leftover from getting a band when its real cook
+        // anchor exists elsewhere in the window). AND there must be at
+        // least one same-meal slot LATER in the window that's currently
+        // skipped/eat-out — i.e., a removed leftover.
+        var thisKey = _v69SortKey(p, d, s);
+        var hasEarlier = false;
+        var hasRemovedLeftover = false;
+        ['him','her'].forEach(function(p2){
+          DAYS.forEach(function(d2, di2){
+            if(Math.abs(di2 - di) > 2) return;
+            ['lunch','dinner'].forEach(function(s2){
+              if(p2===p && d2===d && s2===s) return;
+              if(getMealId(p2, d2, s2) !== mealId) return;
+              var k2 = sk(p2, d2, s2);
+              var key2 = _v69SortKey(p2, d2, s2);
+              if(key2 < thisKey) hasEarlier = true;
+              if((SKIPPED[k2] || EAT_OUT[k2]) && key2 > thisKey) hasRemovedLeftover = true;
+            });
+          });
+        });
+        if(hasEarlier) return;          // not the would-be anchor
+        if(!hasRemovedLeftover) return; // solo cook, not a "big cook with removed leftover"
+        var groupId2 = 'auto_'+anchorK;
+        var cachedColor2 = _autoLinkColorCache[groupId2];
+        var colorIdx2;
+        if(typeof cachedColor2 === 'number'){
+          colorIdx2 = cachedColor2;
+        } else {
+          colorIdx2 = -1;
+          for(var ci2=0; ci2<LEFTOVER_LINK_COLORS.length; ci2++){
+            if(!usedColors[ci2]){ colorIdx2 = ci2; break; }
+          }
+          if(colorIdx2 < 0) colorIdx2 = autoIdx % LEFTOVER_LINK_COLORS.length;
+          _autoLinkColorCache[groupId2] = colorIdx2;
+        }
+        usedColors[colorIdx2] = true;
+        _autoLinkGroups.push({
+          id: groupId2,
+          meal: mealId,
+          slots: [{p: p, d: d, s: s}],
+          colorIdx: colorIdx2,
+          auto: true
+        });
+        autoIdx++;
+      });
+    });
+  });
 }
 // Split pill: tap toggles skip, long press toggles shared
 // Left tap: normal ↔ skip-him. Right tap: normal ↔ skip-her.
@@ -3946,6 +4036,19 @@ function _syncEatOutsToSharedSchedule(){
   // grid and Apply runs. Treating grid 'skip-*' as eat-out (which it
   // semantically is) means it should supersede any prior Skip on the
   // affected side — same as the per-slot Eat Out pill.
+  // V69 (2026-05-07): when deleting a placeholder EAT_OUT (created by
+  // grid skip-* and never customized), also clear MANUAL_SET and
+  // USER_EDITED on that slot. Without this, a user who toggled
+  // eat-out via the per-slot pill (which sets MANUAL_SET +
+  // USER_EDITED via _applyEatOutOn) and then undid via the grid
+  // (which only deletes SHARED_SCHEDULE in edit mode, with sync
+  // deferred to Apply) would end up with an empty SHARED + no
+  // EAT_OUT but USER_EDITED + MANUAL_SET still true → the cell
+  // shows the "Set" indicator forever, despite the user explicitly
+  // tapping to make it normal again. Per user feedback: "instead of
+  // toggling eat out to normal it toggles set to not set." The fix
+  // centralizes the cleanup in sync — wherever placeholder EAT_OUT
+  // is removed, the user-state flags it brought along go too.
   DAYS.forEach(function(d){
     ['breakfast','lunch','dinner'].forEach(function(s){
       var state=SHARED_SCHEDULE[dk(d,s)]||'';
@@ -3956,12 +4059,16 @@ function _syncEatOutsToSharedSchedule(){
         delete SKIPPED[himK];
       } else if(EAT_OUT[himK] && !_isEatOutCustomized(himK)){
         delete EAT_OUT[himK];
+        delete MANUAL_SET[himK];   // V69
+        delete USER_EDITED[himK];  // V69
       }
       if(state==='skip-her'||state==='skip-both'){
         if(!EAT_OUT[herK]) EAT_OUT[herK]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
         delete SKIPPED[herK];
       } else if(EAT_OUT[herK] && !_isEatOutCustomized(herK)){
         delete EAT_OUT[herK];
+        delete MANUAL_SET[herK];   // V69
+        delete USER_EDITED[herK];  // V69
       }
     });
   });
