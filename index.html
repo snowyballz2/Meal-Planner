@@ -18954,6 +18954,83 @@ window.MPStress=(function(){
       undoScheduleEdit();
     }
 
+    else if(op==='editModeResetSuppressesShared'){
+      // V87 (2026-05-08): regression test for "Reset doesn't fully wipe
+      // the grid — shared cells still show after clearScheduleEdit."
+      // Per user feedback: "hitting reset doesnt wipe the grid.. still
+      // shows shared cells for some reason."
+      //
+      // Pre-V87 root cause: V76 isShared=mealsMatch reads getMealId
+      // which falls back to DEFAULTS when SEL is empty. After Reset,
+      // SEL is wiped but DEFAULTS still maps matching meals on Mon-Sun
+      // dinners → mealsMatch=true → cells render green.
+      //
+      // V87 fix: isShared force-false when _scheduleEditCleared is set.
+      // This test asserts: post-Reset, no schedule grid cell renders
+      // with the shared-green background, even when DEFAULTS would
+      // normally trigger mealsMatch.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'V87: only run on solo geometry'); return {checks:checks};
+      }
+      // Wipe state then plant a 'shared' cell with matching meals so
+      // the schedule grid DOES show green pre-Reset.
+      Object.keys(SHARED_SCHEDULE).forEach(k=>delete SHARED_SCHEDULE[k]);
+      Object.keys(EAT_OUT).forEach(k=>delete EAT_OUT[k]);
+      Object.keys(SKIPPED).forEach(k=>delete SKIPPED[k]);
+      Object.keys(MANUAL_SET).forEach(k=>delete MANUAL_SET[k]);
+      Object.keys(USER_EDITED).forEach(k=>delete USER_EDITED[k]);
+      var ersK = sk('him','Friday','dinner');
+      var ersR = sk('her','Friday','dinner');
+      stampSel(ersK, 'roast_chicken_din');
+      stampSel(ersR, 'roast_chicken_din');
+      SHARED_SCHEDULE['Friday_dinner'] = 'shared';
+      // Multiple Mon-Sun dinners get DEFAULTS-backed mealsMatch — leave
+      // SEL empty for those; they'll fall back to DEFAULTS in render.
+      invalidateLeftoverCache();
+      enterScheduleEditMode();
+      sharedSchedOpen = true;
+      renderMeals();
+      // Pre-Reset: ensure at least one cell shows green (Friday-dinner
+      // has matching SEL + SHARED='shared'). Render queries DOM via class.
+      function _hasGreenSharedAnyCell(){
+        var halves = document.querySelectorAll('.sched-pill-half');
+        for(var i=0; i<halves.length; i++){
+          var s = halves[i].getAttribute('style') || '';
+          // Shared green is rgba(52,211,153,...). Match without spaces;
+          // browsers may inject spaces in CSSOM but inline-style strings
+          // come back exactly as written.
+          if(s.indexOf('rgba(52,211,153') >= 0) return true;
+        }
+        return false;
+      }
+      add('ersr_pre_reset_has_green',
+        _hasGreenSharedAnyCell(),
+        'V87 pre-test: at least one cell should be green BEFORE Reset (sanity check the DOM probe works)');
+      // Now hit Reset
+      clearScheduleEdit();
+      add('ersr_cleared_flag_set',
+        _scheduleEditCleared === true,
+        'V87: clearScheduleEdit must set _scheduleEditCleared=true');
+      add('ersr_sel_wiped',
+        Object.keys(SEL).length === 0,
+        'V87: clearScheduleEdit must wipe SEL');
+      add('ersr_shared_wiped',
+        Object.keys(SHARED_SCHEDULE).length === 0,
+        'V87: clearScheduleEdit must wipe SHARED_SCHEDULE');
+      // CRITICAL: assert NO cell renders green-shared post-Reset.
+      // Pre-V87 the DEFAULTS fallback in getMealId would let mealsMatch
+      // = true → V76 isShared = true → green visual. V87 short-circuits
+      // via _scheduleEditCleared check.
+      add('ersr_no_green_post_reset',
+        !_hasGreenSharedAnyCell(),
+        'V87: post-Reset no cell should render shared-green even when DEFAULTS would mealsMatch');
+      // Cleanup: exit edit mode via Undo so subsequent tests aren't
+      // contaminated. Undo will restore from snapshot which was empty
+      // (we stamped meals before enterEditMode but Undo restores the
+      // pre-enter snap — so SEL stays empty, the stamping is gone).
+      undoScheduleEdit();
+    }
+
     else if(op==='gridSkipPlusPillSkip'){
       // Schedule grid skip-* + per-slot Skip pill on same person.
       // V34 (2026-05-07): toggleSkip ON now ALSO clears SHARED_SCHEDULE
@@ -19035,7 +19112,8 @@ window.MPStress=(function(){
              'editModeSchedTapDayCycleOrder',        // V83
              'editModeStaleSharedAutoRepair',        // V82a
              'editModeUntapShareCleansBothSides',    // V82d
-             'editModeIntentOverridesMealMatch'];    // V81
+             'editModeIntentOverridesMealMatch',     // V81
+             'editModeResetSuppressesShared'];       // V87
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -19054,7 +19132,8 @@ window.MPStress=(function(){
             editModeSchedTapDayCycleOrder:{p:0,f:0},
             editModeStaleSharedAutoRepair:{p:0,f:0},
             editModeUntapShareCleansBothSides:{p:0,f:0},
-            editModeIntentOverridesMealMatch:{p:0,f:0}},
+            editModeIntentOverridesMealMatch:{p:0,f:0},
+            editModeResetSuppressesShared:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
