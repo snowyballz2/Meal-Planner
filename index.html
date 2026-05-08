@@ -18198,6 +18198,93 @@ window.MPStress=(function(){
         'Her USER_EDITED must NOT be set by Him tap');
     }
 
+    else if(op==='editModeHimTapPreservesAllOther'){
+      // V72 (2026-05-07): comprehensive multi-cell version of the V71 test.
+      // Per user feedback: "all I did was click on him thursday dinner
+      // and it cleared her thursday dinner which was completely
+      // unrelated and it cleared all her meals associated with her
+      // thursday dinner. Thought you said this was fixed.. Can you have
+      // the slot mod test test for this error?"
+      //
+      // Pre-V71 the cell-level diff falsely flagged Her's slot when Him's
+      // SHARED changed → randomize re-rolled Her → leftover relationships
+      // (Her's Wed cook + Thu leftover) collapsed because Her's meals
+      // changed across days.
+      //
+      // V72 plants:
+      //   - Her: Wed dinner cook + Thu dinner leftover (same meal)
+      //   - Him: Tue dinner cook + Thu dinner leftover (different meal)
+      //   - Mon dinner Him: eat-out (matches user's screenshot)
+      // Then taps Him on Thu dinner. Asserts:
+      //   - Him's Thu dinner gets eat-out (target action)
+      //   - EVERY Her cell across the entire week keeps the same SEL
+      //   - Specifically: Her's Wed dinner + Thu dinner SEL preserved
+      //     (these are the cells the user reported "cleared")
+      // This test runs once per geometry but its assertions don't depend
+      // on `slot` — it always sets up Wed/Thu/Mon. Only runs on the first
+      // geometry per seed to avoid duplication.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'V72: only run on solo geometry'); return {checks:checks};
+      }
+      // Wipe state for clean reproduction
+      Object.keys(SHARED_SCHEDULE).forEach(k=>delete SHARED_SCHEDULE[k]);
+      Object.keys(EAT_OUT).forEach(k=>delete EAT_OUT[k]);
+      Object.keys(SKIPPED).forEach(k=>delete SKIPPED[k]);
+      Object.keys(MANUAL_SET).forEach(k=>delete MANUAL_SET[k]);
+      Object.keys(USER_EDITED).forEach(k=>delete USER_EDITED[k]);
+      Object.keys(_autoLinkColorCache).forEach(k=>delete _autoLinkColorCache[k]);
+      // Pick distinct meals
+      var herMeal = 'roast_chicken_din';
+      var himMeal = 'salmon_stir_fry_din';
+      var thirdMeal = 'lentil_soup_lean';
+      // Plant the layout
+      stampSel(sk('her','Wednesday','dinner'), herMeal);
+      stampSel(sk('her','Thursday','dinner'), herMeal);
+      stampSel(sk('him','Tuesday','dinner'), himMeal);
+      stampSel(sk('him','Thursday','dinner'), himMeal);
+      stampSel(sk('him','Monday','dinner'), thirdMeal);
+      invalidateLeftoverCache();
+      toggleEatOut('him','Monday','dinner'); // Mon dinner eat-out
+      invalidateLeftoverCache();
+      // Snapshot every Her slot SEL across the entire week
+      var preAll = {};
+      DAYS.forEach(function(dd){
+        ['breakfast','lunch','dinner','snack'].forEach(function(ss){
+          var hk = sk('her', dd, ss);
+          preAll[hk] = SEL[hk] || null;
+        });
+      });
+      // Tap Him on Thu dinner + Apply
+      enterScheduleEditMode();
+      schedTapLeft('Thursday','dinner');
+      applyScheduleEdit();
+      invalidateLeftoverCache();
+      // Compare every Her slot
+      var herChanged = [];
+      DAYS.forEach(function(dd){
+        ['breakfast','lunch','dinner','snack'].forEach(function(ss){
+          var hk = sk('her', dd, ss);
+          var nowSel = SEL[hk] || null;
+          if(preAll[hk] !== nowSel){
+            herChanged.push({slot:hk, before:preAll[hk], after:nowSel});
+          }
+        });
+      });
+      add('htpao_him_thu_eatout',
+        !!EAT_OUT[sk('him','Thursday','dinner')],
+        'Him Thu dinner should have EAT_OUT after Apply');
+      add('htpao_no_her_changes',
+        herChanged.length === 0,
+        'V72: tapping Him on Thu dinner must NOT change any Her SEL across the week. '+
+          'Changed: '+herChanged.length+' Her slot(s) — '+herChanged.slice(0,3).map(c=>c.slot+': '+c.before+'→'+c.after).join('; '));
+      add('htpao_her_wed_preserved',
+        SEL[sk('her','Wednesday','dinner')] === herMeal,
+        'Her Wed dinner SEL must be preserved (was '+herMeal+', now '+SEL[sk('her','Wednesday','dinner')]+')');
+      add('htpao_her_thu_preserved',
+        SEL[sk('her','Thursday','dinner')] === herMeal,
+        'Her Thu dinner SEL must be preserved (was '+herMeal+', now '+SEL[sk('her','Thursday','dinner')]+')');
+    }
+
     else if(op==='gridSkipPlusPillSkip'){
       // Schedule grid skip-* + per-slot Skip pill on same person.
       // V34 (2026-05-07): toggleSkip ON now ALSO clears SHARED_SCHEDULE
@@ -18264,7 +18351,12 @@ window.MPStress=(function(){
              'editModeSurgicalApply',
              // V71 (2026-05-07): regression test for "Him tap should not
              // change Her's unrelated meal" — per-side touched tracking.
-             'editModeHimTapPreservesHer'];
+             'editModeHimTapPreservesHer',
+             // V72 (2026-05-07): comprehensive multi-cell variant — plants
+             // Her's Wed-Thu leftover relationship + Him's Tue-Thu + Mon
+             // eat-out, then taps Him on Thu dinner. Asserts every Her
+             // SEL across the entire week is preserved.
+             'editModeHimTapPreservesAllOther'];
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -18276,7 +18368,8 @@ window.MPStress=(function(){
             editModeIngredientEdit:{p:0,f:0},editModeChangeMeal:{p:0,f:0},editModePaintAccept:{p:0,f:0},editModeConflictDetect:{p:0,f:0},
             editModeWeekSwitchGuard:{p:0,f:0},editModePaintModeInterop:{p:0,f:0},
             editModeSurgicalApply:{p:0,f:0},
-            editModeHimTapPreservesHer:{p:0,f:0}},
+            editModeHimTapPreservesHer:{p:0,f:0},
+            editModeHimTapPreservesAllOther:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
