@@ -7796,20 +7796,22 @@ function renderMeals(){
                          : herSkippedSlot ? SKIP_BG
                          : herEatOut ? red+'.4)'
                          : '';
-          // 2026-05-05: split center fires whenever both halves are highlighted
-          // with different "center colors" — backgrounds are typically
-          // transparent so we compare lCenterCol/rCenterCol directly. Same
-          // color → no split (continuous visual). Different → gradient overlay.
-          const useSplitCenter = bothHi && lCenterCol && rCenterCol && lCenterCol!==rCenterCol;
-          const lBdrRightFinal = useSplitCenter ? 'none'
-                               : (lOnlyHi?lBdr:(rOnlyHi?'none':(lBg!==rBg?'1.5px solid '+midCol:'none')));
-          const rBdrLeftFinal = useSplitCenter ? 'none' : (rOnlyHi?rBdr:'none');
-          // Split-center overlay: vertical bar at center, split horizontally
-          // into left half (Him's color) and right half (Her's color) via
-          // linear-gradient(to right). 3px total so each side gets 1.5px.
-          const splitCenter = useSplitCenter
-            ? '<div style="position:absolute;left:calc(50% - 1.5px);top:0;bottom:0;width:3px;background:linear-gradient(to right,'+lCenterCol+' 50%,'+rCenterCol+' 50%);pointer-events:none;z-index:1"></div>'
-            : '';
+          // V80 (2026-05-08): drop the split-center gradient overlay.
+          // Per user feedback: "these borders are a mess." The 2026-05-05
+          // 3px gradient stacked on top of half-borders + V68a inset
+          // shadows produced a visually noisy centerline. New approach:
+          // when both halves are highlighted with different colors, each
+          // half keeps its OWN full border (including the inner edge at
+          // center). Two adjacent borders meet cleanly at the centerline,
+          // each in its own color — no gradient overlay needed.
+          const bothHiDiff = bothHi && lCenterCol && rCenterCol && lCenterCol!==rCenterCol;
+          const lBdrRightFinal = bothHiDiff ? lBdr
+                               : (lOnlyHi?lBdr
+                               : (rOnlyHi?'none'
+                               : (lBg!==rBg?'1.5px solid '+midCol:'none')));
+          const rBdrLeftFinal = bothHiDiff ? rBdr
+                              : (rOnlyHi?rBdr:'none');
+          const splitCenter = ''; // V80: no overlay; half-borders handle it
           // Center is INVISIBLE absolute-positioned click overlay (above the
           // split-center bar, z-index:5). Halves abut directly (50/50 flex)
           // — their borders + the gradient overlay handle visuals.
