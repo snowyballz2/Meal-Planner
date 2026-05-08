@@ -3170,16 +3170,18 @@ function schedTapCenter(d,s){
     // current SEL.
     _scheduleEditPreserveSel[sk('him',d,s)] = true;
     _scheduleEditPreserveSel[sk('her',d,s)] = true;
+  } else if(/^eo-/.test(cur)){
+    // V83 (2026-05-08): center tap on an eo-* cell goes to NORMAL first
+    // (clears eat-out), not directly to shared. Per user feedback:
+    // "Change it to normal first and then eat out." Cycle from eo-*
+    // becomes: tap 1 → normal, tap 2 → shared. Pre-V83/V82b had eo-* →
+    // shared in one tap, which felt like skipping the natural "back
+    // to normal" step.
+    _v70UndoEatOutSide('him', d, s);
+    _v70UndoEatOutSide('her', d, s);
+    delete SHARED_SCHEDULE[k];
   } else {
-    // V82: tap to make shared. If cell was in eo-* state, clear the
-    // associated EAT_OUT flags on both sides — eat-out and shared are
-    // mutually exclusive (V41/V36). Pre-V82 the schedTapCenter wrote
-    // SHARED='shared' over an eo-* state without clearing EAT_OUT,
-    // leaving INV24 fires for shared-and-eatout-conflict.
-    if(/^eo-/.test(cur)){
-      _v70UndoEatOutSide('him', d, s);
-      _v70UndoEatOutSide('her', d, s);
-    }
+    // Normal → shared.
     SHARED_SCHEDULE[k]='shared';
   }
   _scheduleEditTouchedCells[k]=true;
@@ -3203,31 +3205,36 @@ function schedTapDay(d){
   slots.forEach(function(s){
     const k=dk(d,s);
     var prevState = SHARED_SCHEDULE[k] || '';
+    // V83 (2026-05-08): cycle order shared → normal → eo-both → shared.
+    // Per user feedback: "right now on tap the default order is current
+    // -> eo -> normal.. Change it to normal first and then eat out."
+    // Pre-V83 cycle was shared → eo-both → normal → shared (eo first).
+    // V83 cycle goes through normal between shared and eat-out:
+    //   - allShared → normal (clear shared)
+    //   - allEO → shared (eo wraps to shared)
+    //   - normal/mixed → eo-both (normal → eat-out)
+    // From a starting 'shared' cell: tap 1 → normal, tap 2 → eo,
+    // tap 3 → shared. Normal comes first.
     if(allShared){
-      SHARED_SCHEDULE[k]='eo-both';
-      // shared → eat-out: V70 cascade not needed since EAT_OUT
-      // placeholders will be created by sync later; SKIPPED clears
-      // are handled by setSchedule's eo-* branch at Apply.
-    }
-    else if(allEO){
-      // eo-both → normal: clear EAT_OUT + USER_EDITED + MANUAL_SET on
-      // both sides via V70 helper (also marks _scheduleEditPreserveSel
-      // so SEL is preserved through randomize at Apply).
-      _v70UndoEatOutSide('him', d, s);
-      _v70UndoEatOutSide('her', d, s);
       delete SHARED_SCHEDULE[k];
     }
+    else if(allEO){
+      // eo-both → shared: clear EAT_OUT first (V41/V36 mutual exclusion)
+      // then set shared.
+      _v70UndoEatOutSide('him', d, s);
+      _v70UndoEatOutSide('her', d, s);
+      SHARED_SCHEDULE[k]='shared';
+    }
     else {
-      // normal → shared. V82 (2026-05-08): if prev state was eo-*,
-      // clear EAT_OUT flags via V70 cascade — eat-out and shared are
-      // mutually exclusive (V41/V36). Pre-V82 schedTapDay wrote
-      // 'shared' over an eo-* state without clearing EAT_OUT, leaving
-      // INV24 fires.
+      // normal/mixed → eo-both. V82 (2026-05-08): if prev state was
+      // eo-*, clear EAT_OUT flags first (eat-out + shared mutual
+      // exclusion). For mixed states becoming eo-both, prior eat-out
+      // flags get cleaned via V70 cascade.
       if(/^eo-/.test(prevState)){
         _v70UndoEatOutSide('him', d, s);
         _v70UndoEatOutSide('her', d, s);
       }
-      SHARED_SCHEDULE[k]='shared';
+      SHARED_SCHEDULE[k]='eo-both';
     }
     _scheduleEditTouchedCells[k]=true;
     // V71: day-tap affects both sides for all 3 slots.
@@ -18687,6 +18694,19 @@ window.MPStress=(function(){
     };
     function freshRestore(snap){
       restore(JSON.parse(JSON.stringify(snap)));
+      // V83 (2026-05-08): also reset edit-mode state. Pre-V83 if a prior
+      // op left _scheduleEditMode=true or _scheduleEditTouchedCells/Sides
+      // populated, the next op started with stale edit-mode state →
+      // _buildAutoLinkGroups suppression fired falsely (V25/V74 reads
+      // touchedSides), making preCount < postCount in editModeEnterUndo
+      // and similar. The snapshot doesn't include edit-mode globals (they
+      // aren't user-data), so we clear them explicitly between ops.
+      _scheduleEditMode = false;
+      _scheduleEditCleared = false;
+      Object.keys(_scheduleEditTouchedCells).forEach(function(k){delete _scheduleEditTouchedCells[k];});
+      Object.keys(_scheduleEditTouchedSides).forEach(function(k){delete _scheduleEditTouchedSides[k];});
+      Object.keys(_scheduleEditPreserveSel).forEach(function(k){delete _scheduleEditPreserveSel[k];});
+      _scheduleEditSnapshot = null;
     }
     function _smWipeUserState(){
       Object.keys(OVERRIDES).forEach(function(k){
