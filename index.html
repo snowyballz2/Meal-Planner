@@ -7527,7 +7527,23 @@ function renderMeals(){
           // batches) also render green. _autoSharedCells is repopulated
           // every render by _buildAutoLinkGroups. Doesn't mutate
           // SHARED_SCHEDULE — preserves user-intent semantics.
-          const isShared=(state==='shared')||(state==='normal' && !!_autoSharedCells[dk(dd,ss)]);
+          // V76 (2026-05-08): require ACTUAL meal match to render shared
+          // green. Pre-V76 the cascade rendered green for any cell with
+          // SHARED_SCHEDULE='shared' regardless of whether him + her
+          // actually had the same meal. Stale 'shared' state (e.g., from
+          // a prior randomize where meals diverged, or DEFAULTS auto-
+          // initializing all dinners as 'shared') would keep showing
+          // green visual even though the cell was no longer truly shared.
+          // Per user feedback: "Mon/Tue/Fri/Sat/Sun Dinner cant possibly
+          // be shared and not be in the same cooks. Looks like the
+          // Shared green highlights are wrong."
+          // Now: green = actual meal match AND neither side eating out /
+          // skipped. SHARED_SCHEDULE='shared' becomes pure intent
+          // (influences randomize/setSchedule) but doesn't drive visuals.
+          var _v76_himId = getMealId('him', dd, ss);
+          var _v76_herId = getMealId('her', dd, ss);
+          var _v76_mealsMatch = !!_v76_himId && _v76_himId === _v76_herId;
+          const isShared = _v76_mealsMatch && !himSkip && !herSkip;
           const grn='rgba(52,211,153,';const red='rgba(239,68,68,';const prp='rgba(167,139,250,';const yel='rgba(245,158,11,';
           // V28: grey for full-skip (per-card Skip pill — no meal, no
           // replacement). Distinct from red (eat-out — meal accounted for
