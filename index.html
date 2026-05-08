@@ -1501,11 +1501,12 @@ const MEALS=[
   ]},
 
  {id:'yogurt_oat_bowl',label:'Protein yogurt & oat bowl',slots:['breakfast','snack'],
-  steps:['Warm oats (from rice cooker porridge setting) in a bowl.','Layer on top: yogurt, then banana slices and a drizzle of honey.'],
+  steps:['Warm oats (from rice cooker porridge setting) in a bowl.','Layer on top: yogurt, banana slices, chia seeds, and a drizzle of honey.'],
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',0.75,'protein'),
     I('oats',0.5,'carb'),
+    I('chia seeds',0.5,'fat'),
     I('banana',1,'fruit',false),
     I('honey tbsp',1,'condiment',false)
   ]},
@@ -2122,10 +2123,11 @@ const MEALS=[
   ]},
 
  {id:'spiced_chickpea_spinach',label:'Spiced chickpea & spinach bowl',slots:['snack'],
-  steps:['Warm the cooked chickpeas briefly (30 sec microwave or skillet).','Toss with baby spinach — the warmth wilts it slightly.','Season with cumin, lemon juice, and black pepper. Eat warm or chilled.'],
+  steps:['Warm the cooked chickpeas briefly (30 sec microwave or skillet).','Toss with baby spinach and tahini — the warmth wilts the spinach slightly.','Season with cumin, lemon juice, and black pepper. Eat warm or chilled.'],
   him:{},her:{},
   ingredients:[
     I('chickpeas cooked',0.5,'protein'),
+    I('tahini',0.5,'fat'),
     I('baby spinach',0.75,'veg'),
     I('cumin',0.25,'fixed',false),
     I('lemon',0.5,'fixed',false),
@@ -2460,12 +2462,13 @@ const MEALS=[
   ]},
 
  {id:'lentil_soup_lean',label:'Chicken & lentil vegetable soup',slots:['lunch','dinner'],
-  steps:['Dice chicken. Sauté carrots, celery, garlic in broth 3–4 min.','Add chicken and cook 4–5 min until no longer pink.','Add lentils (from Instant Pot), remaining broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min until wilted.','Stir in egg whites — they cook in ribbons in the hot soup. Season with salt and pepper.'],
+  steps:['Heat olive oil in pot. Sauté carrots, celery, garlic 2 min until fragrant.','Add diced chicken and cook 4–5 min until no longer pink.','Add lentils (from Instant Pot), broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min until wilted.','Stir in egg whites — they cook in ribbons in the hot soup. Season with salt and pepper.'],
   him:{},her:{},
   ingredients:[
     I('lentils cooked',1.25,'protein'),
     I('chicken breast',4,'protein'),
     I('egg white',0.5,'protein'),
+    I('olive oil',0.5,'fat'),
     I('kale',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('celery',0.5,'veg'),
@@ -2490,12 +2493,13 @@ const MEALS=[
   ]},
 
  {id:'cannellini_kale_soup',label:'Chicken, white bean & kale soup',slots:['lunch','dinner'],
-  steps:['Dice chicken. Sauté garlic, carrots, and celery in broth 3 min.','Add chicken and cook 4–5 min until no longer pink.','Add cannellini beans (from Instant Pot), broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min.','Stir in egg whites — they form ribbons in the hot soup. Season with salt, pepper, lemon juice.'],
+  steps:['Heat olive oil in pot. Sauté garlic, carrots, and celery 2 min until fragrant.','Add diced chicken and cook 4–5 min until no longer pink.','Add cannellini beans (from Instant Pot), broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min.','Stir in egg whites — they form ribbons in the hot soup. Season with salt, pepper, lemon juice.'],
   him:{},her:{},
   ingredients:[
     I('cannellini beans cooked',1.5,'protein'),
     I('chicken breast',4,'protein'),
     I('egg white',0.25,'protein'),
+    I('olive oil',0.5,'fat'),
     I('kale',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('celery',0.5,'veg'),
@@ -5386,23 +5390,25 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
       }
     }
 
-    // ── Priority 3c: fat% under 15 (V89b + V91, 2026-05-08) ──
-    // V91 "will-fix" grow guard, symmetric to V90 trim guard:
-    //   safeToGrow = (calGap0 > 0) || (cTrim && willFix)
+    // ── Priority 3c: fat% under 15 (V89b + V91 + V92, 2026-05-08) ──
+    // V92 (2026-05-08): relax willFix to "makes meaningful progress" so the
+    // balancer can chip away at structurally-low-fat days across multiple
+    // iterations. Strict "fully fixes" (V91) blocked partial progress and
+    // stalled convergence on days that needed 4-5 paired iters to reach 15%.
     //
     //   calGap0 > 0  →  day under kcal target, free to add kcal (pure boost)
-    //   calGap0 ≤ 0  →  day at/over target; require carb-trim pair AND
-    //                   verify the pair will actually bring fatPct ≥ 15%.
-    //
-    // Pre-V91 the over-target branch fired any paired add+trim it found,
-    // even if the resulting fatPct was still < 15% (futile, mirror of V90's
-    // case #1 pattern but for grow direction).
+    //   calGap0 ≤ 0  →  require carb-trim pair AND verify the pair brings
+    //                   fatPct meaningfully closer to 15% (fully fix OR
+    //                   ≥ 0.5pp improvement). Cap firing once already at
+    //                   fully-fixing rate prevents useless oscillation.
     if(mk >= 1 && fatPct < 0.15 - 0.001){
       const fatAdd = bestAdd('fat', null, CAL_SLOTS);
       if(fatAdd){
         const cTrim = bestTrim(['carb'], CAL_SLOTS);
-        const willFix = predictDayMacroPct(cTrim, fatAdd, 'fat') >= 0.15 - 0.001;
-        const safeToGrow = (calGap0 > 0) || (cTrim && willFix);
+        const newFatPct = predictDayMacroPct(cTrim, fatAdd, 'fat');
+        const fullyFixes = newFatPct >= 0.15 - 0.001;
+        const makesProgress = newFatPct > fatPct + 0.005; // ≥0.5pp gain
+        const safeToGrow = (calGap0 > 0) || (cTrim && (fullyFixes || makesProgress));
         if(safeToGrow){
           applyDelta(fatAdd.slot, fatAdd.idx, fatAdd.cur + incrementFor(fatAdd.db));
           // Pair carb trim only when at/over target (preserves day kcal).
@@ -12723,6 +12729,14 @@ function _randomizeWeekCore(randTarget){
         // worse than a chicken-breast alternative. Hard goal still 0.30 —
         // we accept a few more borderline misses in exchange for variety.
         var fatPenalty = fatPct > 0.31 ? (fatPct - 0.31) * 3000 : 0;
+        // V92 (2026-05-08): fat-LOW penalty — symmetric to high-fat penalty.
+        // Threshold 0.16 (not 0.15) matches the high side's 0.31-not-0.30
+        // headroom: avoids false rejection of combos that LAND at 15% but
+        // project lower in Phase 1's slot-budget approximation. Hard goal
+        // is 0.15 floor (V89b). Penalty 3000 per pp under 0.16 — same
+        // magnitude as the high-fat penalty so the scorer treats both
+        // boundaries symmetrically.
+        var fatLowPenalty = fatPct < 0.16 ? (0.16 - fatPct) * 3000 : 0;
         // Strong penalty per meal containing a discouraged ingredient (coconut milk).
         // 3000/meal dominates typical calDiff (0-500) so coconut meals only pick
         // when no reasonable alternative fits. Ratio-wise, coconut milk is fat-dense
@@ -12735,7 +12749,7 @@ function _randomizeWeekCore(randTarget){
           if (mm.ingredients.some(function(i){ return DISCOURAGED_INGREDIENTS.indexOf(i.dbKey) >= 0; })) discouragedCount++;
         });
         var discouragedPenalty = discouragedCount * 3000;
-        var score = calDiff + fatPenalty + discouragedPenalty;
+        var score = calDiff + fatPenalty + fatLowPenalty + discouragedPenalty;
 
         // Reject incomplete attempts (variety+used filter dead-end on
         // breakfast/lunch/dinner). Without this guard, the lowest-scoring
@@ -12750,7 +12764,8 @@ function _randomizeWeekCore(randTarget){
           // range got neither penalty nor early-exit, so the scorer relied
           // on calDiff alone. Aligning to <=0.31 makes the consistency
           // explicit — penalty triggers AT the same point early-exit refuses.
-          if (calDiff <= 100 && fatPct <= 0.31) break;
+          // V92: also gate on fat-low ≥ 0.16 (matches new fatLowPenalty).
+          if (calDiff <= 100 && fatPct <= 0.31 && fatPct >= 0.16) break;
         }
       }
 
