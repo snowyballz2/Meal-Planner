@@ -18714,6 +18714,238 @@ window.MPStress=(function(){
         'Her Thu dinner SEL must be preserved (was '+herMeal+', now '+SEL[sk('her','Thursday','dinner')]+')');
     }
 
+    else if(op==='editModeFirstTapClearsAllVisuals'){
+      // V85 (2026-05-08): regression test for "every first tap clears."
+      // Plant a fresh cell with each visual state in turn and assert
+      // tap 1 clears the visual; tap 2 sets eo. Covers V70/V73/V74/V75/
+      // V82/V83/V84/V85 unified clear semantics.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'V85: only run on solo geometry'); return {checks:checks};
+      }
+      // Wipe state
+      function _wipe(){
+        Object.keys(SHARED_SCHEDULE).forEach(k=>delete SHARED_SCHEDULE[k]);
+        Object.keys(EAT_OUT).forEach(k=>delete EAT_OUT[k]);
+        Object.keys(SKIPPED).forEach(k=>delete SKIPPED[k]);
+        Object.keys(MANUAL_SET).forEach(k=>delete MANUAL_SET[k]);
+        Object.keys(USER_EDITED).forEach(k=>delete USER_EDITED[k]);
+        if(typeof _autoLinkColorCache==='object') Object.keys(_autoLinkColorCache).forEach(k=>delete _autoLinkColorCache[k]);
+        if(LEFTOVER_LINKS && LEFTOVER_LINKS.length) LEFTOVER_LINKS.length=0;
+        if(typeof _scheduleEditClearedLinkSides==='object') Object.keys(_scheduleEditClearedLinkSides).forEach(k=>delete _scheduleEditClearedLinkSides[k]);
+        invalidateLeftoverCache();
+      }
+      var testD = 'Tuesday', testS = 'dinner';
+      var testK = sk('him', testD, testS);
+
+      // Scenario A: USER_EDITED purple alone
+      _wipe();
+      USER_EDITED[testK] = true;
+      MANUAL_SET[testK] = true;
+      enterScheduleEditMode();
+      schedTapLeft(testD, testS);
+      add('eftcav_a_userEdited_cleared', !USER_EDITED[testK] && !MANUAL_SET[testK],
+        'V85 scenario A: USER_EDITED purple should clear on first tap');
+      add('eftcav_a_no_eo_yet',
+        (SHARED_SCHEDULE[dk(testD,testS)]||'') !== 'eo-him',
+        'V85 scenario A: first tap should NOT set eo-him');
+      schedTapLeft(testD, testS);
+      add('eftcav_a_eo_after_2taps',
+        SHARED_SCHEDULE[dk(testD,testS)] === 'eo-him',
+        'V85 scenario A: second tap should set eo-him');
+      undoScheduleEdit();
+
+      // Scenario B: SKIPPED purple-darkened
+      _wipe();
+      SKIPPED[testK] = true;
+      MANUAL_SET[testK] = true;
+      USER_EDITED[testK] = true;
+      enterScheduleEditMode();
+      schedTapLeft(testD, testS);
+      add('eftcav_b_skipped_cleared', !SKIPPED[testK],
+        'V85 scenario B: SKIPPED should clear on first tap');
+      add('eftcav_b_no_eo_yet',
+        (SHARED_SCHEDULE[dk(testD,testS)]||'') !== 'eo-him',
+        'V85 scenario B: first tap should NOT set eo-him');
+      schedTapLeft(testD, testS);
+      add('eftcav_b_eo_after_2taps',
+        SHARED_SCHEDULE[dk(testD,testS)] === 'eo-him',
+        'V85 scenario B: second tap should set eo-him');
+      undoScheduleEdit();
+
+      // Scenario C: link-group cell (V84)
+      _wipe();
+      stampSel(sk('him','Wednesday','dinner'),'roast_chicken_din');
+      stampSel(sk('him','Thursday','dinner'),'roast_chicken_din');
+      invalidateLeftoverCache();
+      _buildAutoLinkGroups();
+      var lgK = sk('him','Wednesday','dinner');
+      enterScheduleEditMode();
+      schedTapLeft('Wednesday','dinner');
+      add('eftcav_c_link_visual_cleared',
+        !!_scheduleEditClearedLinkSides[lgK],
+        'V85 scenario C: link-group visual should clear on first tap');
+      add('eftcav_c_no_eo_yet',
+        (SHARED_SCHEDULE['Wednesday_dinner']||'') !== 'eo-him',
+        'V85 scenario C: first tap should NOT set eo-him');
+      schedTapLeft('Wednesday','dinner');
+      add('eftcav_c_eo_after_2taps',
+        SHARED_SCHEDULE['Wednesday_dinner'] === 'eo-him',
+        'V85 scenario C: second tap should set eo-him');
+      undoScheduleEdit();
+    }
+
+    else if(op==='editModeSchedTapDayCycleOrder'){
+      // V83 (2026-05-08): regression test for schedTapDay cycle order
+      // shared → normal → eo-both → shared. Per user feedback: "right
+      // now on tap the default order is current -> eo -> normal..
+      // Change it to normal first and then eat out."
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'V83: only run on solo geometry'); return {checks:checks};
+      }
+      Object.keys(SHARED_SCHEDULE).forEach(k=>delete SHARED_SCHEDULE[k]);
+      Object.keys(EAT_OUT).forEach(k=>delete EAT_OUT[k]);
+      Object.keys(SKIPPED).forEach(k=>delete SKIPPED[k]);
+      Object.keys(MANUAL_SET).forEach(k=>delete MANUAL_SET[k]);
+      Object.keys(USER_EDITED).forEach(k=>delete USER_EDITED[k]);
+      var dayD = 'Friday';
+      ['breakfast','lunch','dinner'].forEach(function(s){
+        SHARED_SCHEDULE[dayD+'_'+s] = 'shared';
+      });
+      enterScheduleEditMode();
+      // Tap 1: shared → normal (V83 — was eo-both pre-V83)
+      schedTapDay(dayD);
+      var tap1All = ['breakfast','lunch','dinner'].every(function(s){
+        return !SHARED_SCHEDULE[dayD+'_'+s];
+      });
+      add('emstdco_tap1_normal', tap1All,
+        'V83 schedTapDay tap 1 from all-shared should land on normal');
+      // Tap 2: normal → eo-both
+      schedTapDay(dayD);
+      var tap2All = ['breakfast','lunch','dinner'].every(function(s){
+        return SHARED_SCHEDULE[dayD+'_'+s] === 'eo-both';
+      });
+      add('emstdco_tap2_eoBoth', tap2All,
+        'V83 schedTapDay tap 2 from normal should land on eo-both');
+      // Tap 3: eo-both → shared (cycles back)
+      schedTapDay(dayD);
+      var tap3All = ['breakfast','lunch','dinner'].every(function(s){
+        return SHARED_SCHEDULE[dayD+'_'+s] === 'shared';
+      });
+      add('emstdco_tap3_shared', tap3All,
+        'V83 schedTapDay tap 3 from eo-both should cycle back to shared');
+      undoScheduleEdit();
+    }
+
+    else if(op==='editModeStaleSharedAutoRepair'){
+      // V82a (2026-05-08): regression test for setSchedule's auto-clear
+      // of stale SHARED='shared' when meals diverge AND the user did
+      // NOT actively touch the cell this edit session. Pre-V82a this
+      // would fire INV24 (schedSharedConsistency).
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'V82: only run on solo geometry'); return {checks:checks};
+      }
+      Object.keys(SHARED_SCHEDULE).forEach(k=>delete SHARED_SCHEDULE[k]);
+      Object.keys(EAT_OUT).forEach(k=>delete EAT_OUT[k]);
+      Object.keys(SKIPPED).forEach(k=>delete SKIPPED[k]);
+      Object.keys(MANUAL_SET).forEach(k=>delete MANUAL_SET[k]);
+      Object.keys(USER_EDITED).forEach(k=>delete USER_EDITED[k]);
+      Object.keys(_scheduleEditTouchedCells).forEach(k=>delete _scheduleEditTouchedCells[k]);
+      // Plant: SHARED='shared' but Him/Her have different meals.
+      var ssD = 'Wednesday', ssS = 'dinner';
+      SHARED_SCHEDULE[dk(ssD,ssS)] = 'shared';
+      stampSel(sk('him',ssD,ssS), 'roast_chicken_din');
+      stampSel(sk('her',ssD,ssS), 'salmon_lentils');
+      // Run setSchedule directly (Apply path); user did NOT touch this
+      // cell so wasTouched=false → V82a auto-clear should fire.
+      setSchedule();
+      add('emssar_shared_dropped',
+        (SHARED_SCHEDULE[dk(ssD,ssS)] || '') !== 'shared',
+        'V82a: stale shared+diverged should auto-clear at setSchedule');
+      add('emssar_him_sel_preserved',
+        SEL[sk('him',ssD,ssS)] === 'roast_chicken_din',
+        'V82a: Him SEL preserved');
+      add('emssar_her_sel_preserved',
+        SEL[sk('her',ssD,ssS)] === 'salmon_lentils',
+        'V82a: Her SEL preserved');
+    }
+
+    else if(op==='editModeUntapShareCleansBothSides'){
+      // V82d (2026-05-08): regression test for "tap to un-share clears
+      // USER_EDITED + MANUAL_SET on BOTH sides + sets preserveSel."
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'V82d: only run on solo geometry'); return {checks:checks};
+      }
+      Object.keys(SHARED_SCHEDULE).forEach(k=>delete SHARED_SCHEDULE[k]);
+      Object.keys(EAT_OUT).forEach(k=>delete EAT_OUT[k]);
+      Object.keys(SKIPPED).forEach(k=>delete SKIPPED[k]);
+      Object.keys(MANUAL_SET).forEach(k=>delete MANUAL_SET[k]);
+      Object.keys(USER_EDITED).forEach(k=>delete USER_EDITED[k]);
+      Object.keys(_scheduleEditPreserveSel).forEach(k=>delete _scheduleEditPreserveSel[k]);
+      var usD = 'Saturday', usS = 'dinner';
+      var hk = sk('him',usD,usS), rk = sk('her',usD,usS);
+      SHARED_SCHEDULE[dk(usD,usS)] = 'shared';
+      USER_EDITED[hk] = true; USER_EDITED[rk] = true;
+      MANUAL_SET[hk] = true; MANUAL_SET[rk] = true;
+      stampSel(hk, 'roast_chicken_din');
+      stampSel(rk, 'roast_chicken_din');
+      enterScheduleEditMode();
+      // Center tap to un-share
+      schedTapCenter(usD, usS);
+      add('emusbs_shared_cleared',
+        (SHARED_SCHEDULE[dk(usD,usS)] || '') !== 'shared',
+        'V82d: SHARED should clear after un-share tap');
+      add('emusbs_him_user_edited_cleared', !USER_EDITED[hk],
+        'V82d: Him USER_EDITED cleared');
+      add('emusbs_her_user_edited_cleared', !USER_EDITED[rk],
+        'V82d: Her USER_EDITED cleared');
+      add('emusbs_him_manual_cleared', !MANUAL_SET[hk],
+        'V82d: Him MANUAL_SET cleared');
+      add('emusbs_her_manual_cleared', !MANUAL_SET[rk],
+        'V82d: Her MANUAL_SET cleared');
+      add('emusbs_preserveSel_him', !!_scheduleEditPreserveSel[hk],
+        'V82d: Him preserveSel set so SEL stays through Apply');
+      add('emusbs_preserveSel_her', !!_scheduleEditPreserveSel[rk],
+        'V82d: Her preserveSel set so SEL stays through Apply');
+      undoScheduleEdit();
+    }
+
+    else if(op==='editModeIntentOverridesMealMatch'){
+      // V81 (2026-05-08): regression test for "in edit mode, user tap
+      // intent overrides V76 mealsMatch visual." Per user: "click off
+      // shared and stay off even if meals match."
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'V81: only run on solo geometry'); return {checks:checks};
+      }
+      Object.keys(SHARED_SCHEDULE).forEach(k=>delete SHARED_SCHEDULE[k]);
+      Object.keys(_scheduleEditTouchedCells).forEach(k=>delete _scheduleEditTouchedCells[k]);
+      var sM = 'Sunday', sSlot = 'dinner';
+      // Plant matching meals
+      stampSel(sk('him',sM,sSlot), 'roast_chicken_din');
+      stampSel(sk('her',sM,sSlot), 'roast_chicken_din');
+      SHARED_SCHEDULE[dk(sM,sSlot)] = 'shared';
+      enterScheduleEditMode();
+      // Tap center to un-share
+      schedTapCenter(sM, sSlot);
+      // After tap: SHARED=='', mealsMatch=true. V81 should make
+      // isShared visual = false (intent overrides).
+      // We can't directly read isShared (it's local in renderSchedulePill),
+      // but we can verify the underlying state and infer visual:
+      // - SHARED dropped to '' (intent cleared) ✓
+      // - touched flag set ✓
+      add('emiomm_shared_cleared',
+        (SHARED_SCHEDULE[dk(sM,sSlot)] || '') !== 'shared',
+        'V81: tap should clear SHARED state');
+      add('emiomm_touched_flag_set',
+        !!_scheduleEditTouchedCells[dk(sM,sSlot)],
+        'V81: cell should be marked touched (drives isShared intent-override)');
+      // Even though SEL still matches on both sides, render's V81 logic
+      // will treat this as "not shared" because cellTouched=true and
+      // state!=='shared'. V81 isShared formula:
+      //   cellTouched ? state==='shared' : mealsMatch
+      // → cellTouched=true && state==='' → isShared=false ✓
+      undoScheduleEdit();
+    }
+
     else if(op==='gridSkipPlusPillSkip'){
       // Schedule grid skip-* + per-slot Skip pill on same person.
       // V34 (2026-05-07): toggleSkip ON now ALSO clears SHARED_SCHEDULE
@@ -18789,7 +19021,13 @@ window.MPStress=(function(){
              // V74 (2026-05-07): regression test for "tapping Her on a
              // cell shouldn't dissolve Him's separate auto-link-group on
              // the same cell." Per-side (sk-keyed) touched check.
-             'editModeTapSidePreservesOtherSideGroup'];
+             'editModeTapSidePreservesOtherSideGroup',
+             // V81/V82/V83/V84/V85 coverage (2026-05-08).
+             'editModeFirstTapClearsAllVisuals',     // V85
+             'editModeSchedTapDayCycleOrder',        // V83
+             'editModeStaleSharedAutoRepair',        // V82a
+             'editModeUntapShareCleansBothSides',    // V82d
+             'editModeIntentOverridesMealMatch'];    // V81
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -18803,7 +19041,12 @@ window.MPStress=(function(){
             editModeSurgicalApply:{p:0,f:0},
             editModeHimTapPreservesHer:{p:0,f:0},
             editModeHimTapPreservesAllOther:{p:0,f:0},
-            editModeTapSidePreservesOtherSideGroup:{p:0,f:0}},
+            editModeTapSidePreservesOtherSideGroup:{p:0,f:0},
+            editModeFirstTapClearsAllVisuals:{p:0,f:0},
+            editModeSchedTapDayCycleOrder:{p:0,f:0},
+            editModeStaleSharedAutoRepair:{p:0,f:0},
+            editModeUntapShareCleansBothSides:{p:0,f:0},
+            editModeIntentOverridesMealMatch:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
