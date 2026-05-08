@@ -7661,6 +7661,27 @@ function renderMeals(){
             (herManual && (isShared || !!rGroup))
             || rGroupUserEdited
           );
+          // V78 (2026-05-08): in edit mode, USER_EDITED renders as INNER
+          // purple (box-shadow inset) instead of outer border. State
+          // colors (eat-out red, shared green, link-group color, default)
+          // remain on the OUTER border so taps to cycle SHARED_SCHEDULE
+          // are visible underneath the purple cue. Per user feedback:
+          // "I still want the purple to show up in edit mode for things
+          // we manually changed.. I just dont want the purple to add any
+          // restrictions or change the functionality of clicking on the
+          // tabs its coloring purple. nothing should ever be frozen or
+          // locked in edit mode.. not even if we add a new group or add
+          // a slot to a group.. (currently locks/freezes)" — by moving
+          // purple INSIDE, the cell never visually claims "locked"; it's
+          // just a hint that the user has touched this slot.
+          // Skip/eat-out still suppress the inner purple — their state
+          // already signals user-set (V56 rule).
+          const himShowEditPurple = _scheduleEditMode && !himSkip && (
+            himManual || lGroupUserEdited
+          );
+          const herShowEditPurple = _scheduleEditMode && !herSkip && (
+            herManual || rGroupUserEdited
+          );
           // Border cascade. V62 (2026-05-07): USER_EDITED purple is the
           // OUTERMOST border — overrides link group / shared / etc.
           // outlines per user feedback ("always make the purple border
@@ -7691,12 +7712,22 @@ function renderMeals(){
           // 2px outer border so the inner band reads as a clean second
           // layer rather than an outline. Skip/eat-out keep the inset
           // off — their state already signals user-edited (per V56).
-          const lInsetShadow = (himShowSetDot && lGroup && !himSkippedSlot && !himEatOut)
+          // V78 (2026-05-08): in edit mode, inset = purple (USER_EDITED
+          // indicator) so the visual cue still surfaces while the outer
+          // border shows live state changes. Outside edit mode the V68
+          // outer-purple + inner-group-color cascade is unchanged.
+          var _lInsetGroupColor = (himShowSetDot && lGroup && !himSkippedSlot && !himEatOut);
+          var _rInsetGroupColor = (herShowSetDot && rGroup && !herSkippedSlot && !herEatOut);
+          const lInsetShadow = _lInsetGroupColor
             ? 'inset 0 0 0 2px rgba('+lGroupRgb+',.85)'
-            : '';
-          const rInsetShadow = (herShowSetDot && rGroup && !herSkippedSlot && !herEatOut)
+            : (himShowEditPurple
+              ? 'inset 0 0 0 2px '+prp+'.85)'
+              : '');
+          const rInsetShadow = _rInsetGroupColor
             ? 'inset 0 0 0 2px rgba('+rGroupRgb+',.85)'
-            : '';
+            : (herShowEditPurple
+              ? 'inset 0 0 0 2px '+prp+'.85)'
+              : '');
           // Skip text gets a muted #ccc instead of full white, reinforcing
           // the "this slot is silenced" feel.
           // V73: skip text color = SKIP_TEXT (faded) instead of light grey.
