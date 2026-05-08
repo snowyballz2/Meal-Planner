@@ -3094,6 +3094,19 @@ function schedTapLeft(d,s){
   if(!_scheduleEditMode) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
+  // V84 (2026-05-08): first tap on a link-group cell with no SHARED
+  // state clears the link visual on Him's side (no eo, no SHARED
+  // change). Second tap sets eo. Per user feedback: "should always
+  // go normal before eo." Only fires once per side per edit session;
+  // subsequent taps fall into the standard eo cycle.
+  const himLGroupReal = getLinkGroupForSlot('him', d, s);
+  if(cur==='' && himLGroupReal && !_scheduleEditClearedLinkSides[sk('him',d,s)]){
+    _scheduleEditClearedLinkSides[sk('him',d,s)] = true;
+    _scheduleEditTouchedCells[k] = true;
+    _scheduleEditTouchedSides[sk('him',d,s)] = true;
+    updateSchedule();
+    return;
+  }
   // V71: tap on Him's side. Most transitions affect Him only (mark him's
   // side touched). Special case: 'shared' → '' un-shares both halves
   // (cell-level transition) → mark both sides.
@@ -3122,6 +3135,17 @@ function schedTapRight(d,s){
   if(!_scheduleEditMode) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
+  // V84: first tap on a link-group cell with no SHARED state clears
+  // Her's link visual without setting eo. See schedTapLeft for full
+  // rationale.
+  const herLGroupReal = getLinkGroupForSlot('her', d, s);
+  if(cur==='' && herLGroupReal && !_scheduleEditClearedLinkSides[sk('her',d,s)]){
+    _scheduleEditClearedLinkSides[sk('her',d,s)] = true;
+    _scheduleEditTouchedCells[k] = true;
+    _scheduleEditTouchedSides[sk('her',d,s)] = true;
+    updateSchedule();
+    return;
+  }
   var sharedBreak = (cur==='shared');
   if(cur==='shared'){
     delete SHARED_SCHEDULE[k];
@@ -7624,16 +7648,20 @@ function renderMeals(){
           // as group's earliest member (regardless of person). Leftover = otherwise.
           // V75 (2026-05-07): when in paint mode and editing the meal that
           // owns this slot's group, suppress the lGroup/rGroup so the cell
-          // renders without the underlying group color. The paint queue
-          // (orange/group-tinted highlight) drives the visual instead, and
-          // un-queued cells render as default ("paint removed" semantic).
-          // Per user feedback: "when I deselect a leftover it clears the
-          // paint, but then shows the color of the leftover beneath it
-          // which is confusing."
+          // renders without the underlying group color.
+          // V84 (2026-05-08): also suppress when the user has tapped this
+          // side in edit mode while it was in a link group. This gives a
+          // "normal first" tap step before the eo cycle.
           const lGroupOrig=getLinkGroupForSlot('him',dd,ss);
           const rGroupOrig=getLinkGroupForSlot('her',dd,ss);
-          const lGroup = (_paintMode && _paintMealId && lGroupOrig && lGroupOrig.meal === _paintMealId) ? null : lGroupOrig;
-          const rGroup = (_paintMode && _paintMealId && rGroupOrig && rGroupOrig.meal === _paintMealId) ? null : rGroupOrig;
+          const lGroup = (
+            (_paintMode && _paintMealId && lGroupOrig && lGroupOrig.meal === _paintMealId)
+            || (_scheduleEditMode && _scheduleEditClearedLinkSides[sk('him',dd,ss)])
+          ) ? null : lGroupOrig;
+          const rGroup = (
+            (_paintMode && _paintMealId && rGroupOrig && rGroupOrig.meal === _paintMealId)
+            || (_scheduleEditMode && _scheduleEditClearedLinkSides[sk('her',dd,ss)])
+          ) ? null : rGroupOrig;
           const lIsAnchor=lGroup?isLinkAnchor(lGroup,'him',dd,ss):false;
           const rIsAnchor=rGroup?isLinkAnchor(rGroup,'her',dd,ss):false;
           const lIsLeftover=lGroup&&!lIsAnchor;
@@ -10129,6 +10157,17 @@ var _scheduleEditPreserveSel = {};
 // Per user feedback: "Cycling him eat out should not change her
 // completely unrelated meal, but it currently does."
 var _scheduleEditTouchedSides = {};
+// V84 (2026-05-08): per-side flag to suppress link-group visual on a
+// cell after the user's FIRST tap on a link-group-colored side.
+// Pre-V84 tapping a link-group cell with no SHARED state went
+// directly to eo-* in one tap (skipped a "back to normal" step).
+// Per user feedback: "tapping on an assigned group still goes to
+// eo before normal.. should always go normal before eo." V84 makes
+// the first tap on a side that's currently in a link group (and has
+// no SHARED state) clear ONLY the link-group visual on that side
+// (no SHARED change, no eo). Second tap then sets eo as usual.
+// Reset on edit-mode entry/exit/clear/restore.
+var _scheduleEditClearedLinkSides = {};
 function _cloneScheduleState(){
   // V32 (2026-05-07): also snapshot ADJ_TARGETS + per-key timestamp maps.
   //   - ADJ_TARGETS: per-(person,day) checkboxes for kcal redistribution.
@@ -10250,6 +10289,7 @@ function enterScheduleEditMode(){
   _scheduleEditTouchedCells = {};
   _scheduleEditTouchedSides = {}; // V71
   _scheduleEditPreserveSel = {}; // V70
+  _scheduleEditClearedLinkSides = {}; // V84
   _scheduleEditSnapshot = _cloneScheduleState();
   renderMeals();
 }
@@ -10353,6 +10393,7 @@ function applyScheduleEdit(){
   _scheduleEditTouchedCells = {};
   _scheduleEditTouchedSides = {}; // V71
   _scheduleEditPreserveSel = {}; // V70
+  _scheduleEditClearedLinkSides = {}; // V84
   _scheduleEditSnapshot = null;
   // Use current `person` tab as the randomize target. If user is on Him tab,
   // only him's unlocked slots re-roll; her's stays. Variety filter is
@@ -10399,6 +10440,7 @@ function clearScheduleEdit(){
   _scheduleEditTouchedCells = {};
   _scheduleEditTouchedSides = {}; // V71
   _scheduleEditPreserveSel = {}; // V70
+  _scheduleEditClearedLinkSides = {}; // V84
   // Stay in edit mode — user is mid-restructure.
   invalidateLeftoverCache();
   renderMeals();
@@ -10412,6 +10454,7 @@ function undoScheduleEdit(){
   _scheduleEditTouchedCells = {};
   _scheduleEditTouchedSides = {}; // V71
   _scheduleEditPreserveSel = {}; // V70
+  _scheduleEditClearedLinkSides = {}; // V84
   _scheduleEditSnapshot = null;
   invalidateLeftoverCache();
   renderMeals();
@@ -16815,8 +16858,28 @@ window.MPStress=(function(){
     function _smGridTap(side, dd, ss){
       var prevEM = _scheduleEditMode;
       _scheduleEditMode = true;
-      if(side==='left') schedTapLeft(dd, ss);
-      else if(side==='right') schedTapRight(dd, ss);
+      if(side==='left'){
+        // V84 (2026-05-08): if first tap on a link-group cell only clears
+        // the visual (no SHARED change), call again to advance to eo-him.
+        // Test ops simulating user actions expect "tap = state change".
+        var preState = SHARED_SCHEDULE[dk(dd,ss)] || '';
+        var preCleared = !!_scheduleEditClearedLinkSides[sk('him',dd,ss)];
+        schedTapLeft(dd, ss);
+        var postState = SHARED_SCHEDULE[dk(dd,ss)] || '';
+        if(preState===postState && !preCleared && _scheduleEditClearedLinkSides[sk('him',dd,ss)]){
+          // First tap was the V84 clear step. Tap again to set eo-him.
+          schedTapLeft(dd, ss);
+        }
+      }
+      else if(side==='right'){
+        var preStateR = SHARED_SCHEDULE[dk(dd,ss)] || '';
+        var preClearedR = !!_scheduleEditClearedLinkSides[sk('her',dd,ss)];
+        schedTapRight(dd, ss);
+        var postStateR = SHARED_SCHEDULE[dk(dd,ss)] || '';
+        if(preStateR===postStateR && !preClearedR && _scheduleEditClearedLinkSides[sk('her',dd,ss)]){
+          schedTapRight(dd, ss);
+        }
+      }
       else if(side==='center') schedTapCenter(dd, ss);
       else if(side==='day') schedTapDay(dd);
       _scheduleEditMode = prevEM;
@@ -18565,9 +18628,11 @@ window.MPStress=(function(){
           preAll[hk] = SEL[hk] || null;
         });
       });
-      // Tap Him on Thu dinner + Apply
+      // Tap Him on Thu dinner + Apply.
+      // V84 (2026-05-08): use _smGridTap so the helper auto-handles the
+      // V84 first-tap-clears-link-visual step on link-group cells.
       enterScheduleEditMode();
-      schedTapLeft('Thursday','dinner');
+      _smGridTap('left', 'Thursday', 'dinner');
       applyScheduleEdit();
       invalidateLeftoverCache();
       // Compare every Her slot
@@ -18706,6 +18771,7 @@ window.MPStress=(function(){
       Object.keys(_scheduleEditTouchedCells).forEach(function(k){delete _scheduleEditTouchedCells[k];});
       Object.keys(_scheduleEditTouchedSides).forEach(function(k){delete _scheduleEditTouchedSides[k];});
       Object.keys(_scheduleEditPreserveSel).forEach(function(k){delete _scheduleEditPreserveSel[k];});
+      Object.keys(_scheduleEditClearedLinkSides).forEach(function(k){delete _scheduleEditClearedLinkSides[k];}); // V84
       _scheduleEditSnapshot = null;
     }
     function _smWipeUserState(){
