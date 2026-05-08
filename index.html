@@ -3034,6 +3034,23 @@ function schedEndPress(d,s,side){
   if(side==='left') schedTapLeft(d,s);
   else schedTapRight(d,s);
 }
+// V70 (2026-05-07): clear placeholder eat-out + per-slot Set state on a side
+// going from skip-* (eat-out) to normal via grid tap. Also marks the slot
+// for SEL preservation so Apply's diff doesn't randomize it. Cleans the
+// visual immediately on tap (vs. deferred sync at Apply) AND keeps the
+// original meal so auto-link-groups don't break. Per user feedback:
+// "instead of toggling eat out to normal it toggles set to not set."
+function _v70UndoEatOutSide(p, d, s){
+  const k = sk(p, d, s);
+  if(EAT_OUT[k] && !_isEatOutCustomized(k)){
+    delete EAT_OUT[k];
+  }
+  delete USER_EDITED[k];
+  delete MANUAL_SET[k];
+  delete SKIPPED[k];
+  if(typeof _bumpSlotTs === 'function') _bumpSlotTs(k);
+  _scheduleEditPreserveSel[k] = true;
+}
 function schedTapLeft(d,s){
   // V25 (2026-05-07): grid editing is edit-mode-only. Outside edit mode,
   // per-card pills (toggleSkip / toggleEatOut / toggleShared) handle state.
@@ -3044,10 +3061,12 @@ function schedTapLeft(d,s){
     delete SHARED_SCHEDULE[k];
   } else if(cur==='skip-him'){
     delete SHARED_SCHEDULE[k];
+    _v70UndoEatOutSide('him', d, s); // V70: clear eat-out + Set + mark preserve
   } else if(cur==='skip-her'){
     SHARED_SCHEDULE[k]='skip-both';
   } else if(cur==='skip-both'){
     SHARED_SCHEDULE[k]='skip-her';
+    _v70UndoEatOutSide('him', d, s); // V70: him goes from eat-out to normal
   } else {
     SHARED_SCHEDULE[k]='skip-him'; // him eats out
   }
@@ -3063,10 +3082,12 @@ function schedTapRight(d,s){
     delete SHARED_SCHEDULE[k];
   } else if(cur==='skip-her'){
     delete SHARED_SCHEDULE[k];
+    _v70UndoEatOutSide('her', d, s); // V70
   } else if(cur==='skip-him'){
     SHARED_SCHEDULE[k]='skip-both';
   } else if(cur==='skip-both'){
     SHARED_SCHEDULE[k]='skip-him';
+    _v70UndoEatOutSide('her', d, s); // V70: her goes from eat-out to normal
   } else {
     SHARED_SCHEDULE[k]='skip-her'; // her eats out
   }
@@ -9860,6 +9881,16 @@ var _scheduleEditCleared = false;
 // Apply, Undo, Reset. Also feeds applyScheduleEdit's surgical-randomize diff
 // (touched cells unlock for re-roll even if SEL/SHARED_SCHEDULE is unchanged).
 var _scheduleEditTouchedCells = {};
+// V70 (2026-05-07): per-slot keys (sk(p,d,s)) the user tapped to undo
+// eat-out (or skip) in edit mode. Apply's diff loop tempLocks these
+// unconditionally so randomize doesn't re-roll the slot — preserves
+// the SEL the user had before the eat-out was applied. Without this,
+// the SHARED state-change registers as "touched" → randomize replaces
+// the original meal with a new random one, breaking auto-link-groups
+// the user expects to remain. Per user feedback: "instead of toggling
+// eat out to normal it toggles set to not set." Reset on edit-mode
+// entry, Apply, Undo, Reset (same lifecycle as touchedCells).
+var _scheduleEditPreserveSel = {};
 function _cloneScheduleState(){
   // V32 (2026-05-07): also snapshot ADJ_TARGETS + per-key timestamp maps.
   //   - ADJ_TARGETS: per-(person,day) checkboxes for kcal redistribution.
@@ -9979,6 +10010,7 @@ function enterScheduleEditMode(){
   _scheduleEditMode = true;
   _scheduleEditCleared = false;
   _scheduleEditTouchedCells = {};
+  _scheduleEditPreserveSel = {}; // V70
   _scheduleEditSnapshot = _cloneScheduleState();
   renderMeals();
 }
@@ -10011,6 +10043,18 @@ function applyScheduleEdit(){
         ['him','her'].forEach(function(p){
           var k = sk(p,d,s);
           if(MANUAL_SET[k]) return; // already locked legitimately — don't touch
+          // V70 (2026-05-07): if user grid-tapped this slot to undo eat-out
+          // (skip-* → normal transition), preserve SEL — don't randomize.
+          // Without this short-circuit, the SHARED + EAT_OUT diff would
+          // mark the slot "touched" → randomize replaces the original meal
+          // (e.g., a chicken that was anchor of a 3-portion auto-link-group)
+          // with a random new meal, breaking the group. tempLock + bail
+          // BEFORE the touched-diff so SEL stays.
+          if(_scheduleEditPreserveSel[k]){
+            MANUAL_SET[k] = true;
+            tempLocked.push(k);
+            return;
+          }
           // V25: explicit grid taps mark _scheduleEditTouchedCells. Include as
           // a touched signal — covers the case where user taps a cell to
           // "un-share" (clearing the auto-shared visual) but ends up with the
@@ -10042,6 +10086,7 @@ function applyScheduleEdit(){
   _scheduleEditMode = false;
   _scheduleEditCleared = false;
   _scheduleEditTouchedCells = {};
+  _scheduleEditPreserveSel = {}; // V70
   _scheduleEditSnapshot = null;
   // Use current `person` tab as the randomize target. If user is on Him tab,
   // only him's unlocked slots re-roll; her's stays. Variety filter is
@@ -10086,6 +10131,7 @@ function clearScheduleEdit(){
   // gates auto-detection wholesale, so per-cell touched markers don't
   // matter visually until the user starts tapping again.
   _scheduleEditTouchedCells = {};
+  _scheduleEditPreserveSel = {}; // V70
   // Stay in edit mode — user is mid-restructure.
   invalidateLeftoverCache();
   renderMeals();
@@ -10097,6 +10143,7 @@ function undoScheduleEdit(){
   _scheduleEditMode = false;
   _scheduleEditCleared = false;
   _scheduleEditTouchedCells = {};
+  _scheduleEditPreserveSel = {}; // V70
   _scheduleEditSnapshot = null;
   invalidateLeftoverCache();
   renderMeals();
