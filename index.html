@@ -467,6 +467,14 @@ var NUTRI_DB = {
   'banana':                {kcal:105, pro:1.3,fat:0.4, carb:27,  unit:'each', cupsEach:1, minAmt:0.5, maxAmt:1},
   'apple':                 {kcal:95,  pro:0.5,fat:0.3, carb:25,  unit:'each', cupsEach:1.5, wholeOnly:true, minAmt:1, maxAmt:1},
   'orange':                {kcal:62,  pro:1.2,fat:0.2, carb:15,  unit:'each', cupsEach:0.75, minAmt:0.5, maxAmt:1},
+  // V89 (2026-05-08): more whole-fruit options for low-cal singular-fruit snacks.
+  'mango':                 {kcal:200, pro:2.7,fat:1.4, carb:50,  unit:'each', cupsEach:1.5, minAmt:0.5, maxAmt:1},
+  'grapefruit':            {kcal:104, pro:2,  fat:0.3, carb:26,  unit:'each', cupsEach:1.5, minAmt:0.5, maxAmt:1},
+  'pear':                  {kcal:100, pro:0.6,fat:0.3, carb:27,  unit:'each', cupsEach:1.25, minAmt:0.5, maxAmt:1},
+  'peach':                 {kcal:58,  pro:1.4,fat:0.4, carb:14,  unit:'each', cupsEach:0.75, minAmt:0.5, maxAmt:1},
+  'plum':                  {kcal:30,  pro:0.5,fat:0.2, carb:7.5, unit:'each', cupsEach:0.4, minAmt:0.5, maxAmt:2},
+  'kiwi':                  {kcal:42,  pro:0.8,fat:0.4, carb:10,  unit:'each', cupsEach:0.5, minAmt:0.5, maxAmt:2},
+  'nectarine':             {kcal:62,  pro:1.5,fat:0.5, carb:15,  unit:'each', cupsEach:0.75, minAmt:0.5, maxAmt:1},
   'mixed berries':         {kcal:70,  pro:1,  fat:0.5, carb:17,  unit:'cup', brand:'Giant', altUnits:{g:140}, minAmt:0.25, maxAmt:1.5},
   'acai':                  {kcal:70,  pro:1,  fat:1.5, carb:13,  unit:'cup', brand:'Sambazon', altUnits:{g:115}, minAmt:0.25, maxAmt:1},
   'lime':                  {kcal:20,  pro:0.5,fat:0.1, carb:7,   unit:'each', minAmt:0.25, maxAmt:1},
@@ -2154,6 +2162,46 @@ const MEALS=[
     I('celery',1,'veg'),
     I('apple',1,'fruit',false)
   ]},
+
+ // V89 (2026-05-08): single-whole-fruit snacks — very low-cal options
+ // for the rerollKcalOffSnacks pool. noRatioCheck because pure-fruit
+ // recipes are structurally extreme on macro ratios; that's the point.
+ {id:'snack_apple',label:'Apple',slots:['snack'],noRatioCheck:true,
+  steps:['Wash and eat.'],
+  him:{},her:{},
+  ingredients:[I('apple',1,'fruit',false)]},
+ {id:'snack_banana',label:'Banana',slots:['snack'],noRatioCheck:true,
+  steps:['Peel and eat.'],
+  him:{},her:{},
+  ingredients:[I('banana',1,'fruit',false)]},
+ {id:'snack_orange',label:'Orange',slots:['snack'],noRatioCheck:true,
+  steps:['Peel and eat.'],
+  him:{},her:{},
+  ingredients:[I('orange',1,'fruit',false)]},
+ {id:'snack_mango',label:'Mango',slots:['snack'],noRatioCheck:true,
+  steps:['Peel, slice, and eat.'],
+  him:{},her:{},
+  ingredients:[I('mango',1,'fruit',false)]},
+ {id:'snack_grapefruit',label:'Grapefruit',slots:['snack'],noRatioCheck:true,
+  steps:['Halve and scoop with a spoon.'],
+  him:{},her:{},
+  ingredients:[I('grapefruit',1,'fruit',false)]},
+ {id:'snack_pear',label:'Pear',slots:['snack'],noRatioCheck:true,
+  steps:['Wash and eat.'],
+  him:{},her:{},
+  ingredients:[I('pear',1,'fruit',false)]},
+ {id:'snack_peach',label:'Peach',slots:['snack'],noRatioCheck:true,
+  steps:['Wash and eat.'],
+  him:{},her:{},
+  ingredients:[I('peach',1,'fruit',false)]},
+ {id:'snack_kiwi',label:'Kiwi (×2)',slots:['snack'],noRatioCheck:true,
+  steps:['Slice in half and scoop with a spoon.'],
+  him:{},her:{},
+  ingredients:[I('kiwi',2,'fruit',false)]},
+ {id:'snack_nectarine',label:'Nectarine',slots:['snack'],noRatioCheck:true,
+  steps:['Wash and eat.'],
+  him:{},her:{},
+  ingredients:[I('nectarine',1,'fruit',false)]},
 
  {id:'cucumber_hummus_light',label:'Cucumber & hummus',slots:['snack'],
   steps:['Slice cucumber. Dip in hummus.'],
@@ -5157,13 +5205,14 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
 
     // Shared per-pass state — refreshed after every mutation so any priority
     // downstream reads current macros, never stale. All derived values
-    // (carbPct, fatPct, proGap, calGap0, vegGap) come from the same t/fv.
-    let t, mk, carbPct, fatPct, proGap, calGap0, fv, vegGap;
+    // (carbPct, fatPct, proPct, proGap, calGap0, vegGap) come from the same t/fv.
+    let t, mk, carbPct, fatPct, proPct, proGap, calGap0, fv, vegGap;
     function refreshMacros(){
       t = dailyMacros();
       mk = t.pro*4 + t.fat*9 + t.carb*4;
       carbPct = mk >= 1 ? (t.carb*4)/mk : 0;
       fatPct  = mk >= 1 ? (t.fat*9)/mk : 0;
+      proPct  = mk >= 1 ? (t.pro*4)/mk : 0; // V89b
       proGap = proTarget - t.pro;
       calGap0 = CAL_BASE[p] ? (CAL_BASE[p] - t.kcal) : 0;
       fv = dailyFV();
@@ -5227,25 +5276,83 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     // Trim carb; paired protein add is optional (trimming alone still helps
     // carbPct come down). Dead carbFloor safety check removed — carbPct
     // can't be ≤ carbFloor when it's > 55%.
+    // V89a (2026-05-08): "no make-worse" guard. Only trim if either
+    // (a) we can pair with a protein add (kcal-neutral),
+    // OR (b) day kcal is already over target (calGap0 < 0 — trimming
+    // brings us closer to target).
+    // Pre-V89a the balancer trimmed carb (e.g. oats) chasing carbPct
+    // even when day kcal was already under target, deepening the kcal
+    // deficit without resolving carb% (case #1 seed 12440 him Wed:
+    // oats trimmed to minAmt floor, carb% still 57.5%, day -173 kcal).
     if(mk >= 1 && carbPct - 0.55 > 0.001){
       const trim = bestTrim(['carb'], CAL_SLOTS);
       if(trim){
         const trimKcalStep = trim.dec * trim.item.db.kcal;
-        applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
         const pItem = bestAdd('protein', trimKcalStep, CAL_SLOTS);
-        if(pItem) applyDelta(pItem.slot, pItem.idx, pItem.cur + incrementFor(pItem.db));
+        const safeToTrim = !!pItem || calGap0 < 0; // V89a
+        if(safeToTrim){
+          applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
+          if(pItem) applyDelta(pItem.slot, pItem.idx, pItem.cur + incrementFor(pItem.db));
+        }
       }
     }
 
     // ── Priority 3: fat% over 30 ──
     // Trim fat; paired protein add is optional.
+    // V89a "no make-worse" guard (same rationale as Priority 2).
     if(mk >= 1 && fatPct - 0.30 > 0.001){
       const trim = bestTrim(['fat'], CAL_SLOTS);
       if(trim){
         const trimKcalStep = trim.dec * trim.item.db.kcal;
-        applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
         const pItem = bestAdd('protein', trimKcalStep, CAL_SLOTS);
-        if(pItem) applyDelta(pItem.slot, pItem.idx, pItem.cur + incrementFor(pItem.db));
+        const safeToTrim = !!pItem || calGap0 < 0; // V89a
+        if(safeToTrim){
+          applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
+          if(pItem) applyDelta(pItem.slot, pItem.idx, pItem.cur + incrementFor(pItem.db));
+        }
+      }
+    }
+
+    // ── Priority 3b: pro% over 40 (V89b, 2026-05-08) ──
+    // Trim protein; paired carb add preferred (cal-neutral). Uses same V89a
+    // "no make-worse" guard. proPct hoisted into refreshMacros.
+    if(mk >= 1 && proPct - 0.40 > 0.001){
+      const trim = bestTrim(['protein'], CAL_SLOTS);
+      if(trim){
+        const trimKcalStep = trim.dec * trim.item.db.kcal;
+        // Prefer carb add (cal-neutral, lowers proPct AND raises carbPct only
+        // up to recipe room before hitting carb 55% cap). Fall back to fat add.
+        const cItem = bestAdd('carb', trimKcalStep, CAL_SLOTS)
+                  || bestAdd('fat', trimKcalStep, CAL_SLOTS);
+        const safeToTrim = !!cItem || calGap0 < 0;
+        if(safeToTrim){
+          applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
+          if(cItem) applyDelta(cItem.slot, cItem.idx, cItem.cur + incrementFor(cItem.db));
+        }
+      }
+    }
+
+    // ── Priority 3c: fat% under 15 (V89b, 2026-05-08) ──
+    // Pure boost (no trim) — fat-low days mean macros are skewed protein/carb,
+    // so adding fat WITHOUT trimming pulls fatPct up at the cost of a small
+    // kcal bump. P0 will trim later if day goes over target. If day already
+    // over target (calGap0 < 0), prefer cal-neutral: paired carb trim.
+    if(mk >= 1 && fatPct < 0.15 - 0.001){
+      const fatAdd = bestAdd('fat', null, CAL_SLOTS);
+      if(fatAdd){
+        if(calGap0 < 0){
+          // Already over target — pair with carb trim so fat boost doesn't
+          // worsen kcal.
+          const fatKcalStep = incrementFor(fatAdd.db) * fatAdd.db.kcal;
+          const cTrim = bestTrim(['carb'], CAL_SLOTS);
+          if(cTrim){
+            applyDelta(fatAdd.slot, fatAdd.idx, fatAdd.cur + incrementFor(fatAdd.db));
+            applyDelta(cTrim.item.slot, cTrim.item.idx, cTrim.item.cur - cTrim.dec);
+          }
+        } else {
+          // Day under or at target — pure fat boost is fine.
+          applyDelta(fatAdd.slot, fatAdd.idx, fatAdd.cur + incrementFor(fatAdd.db));
+        }
       }
     }
 
@@ -11607,8 +11714,9 @@ function postBalanceWastePass(){
           var mk=t.pro*4+t.fat*9+t.carb*4;
           var fatPct=mk>0?(t.fat*9)/mk:0;
           var carbPct=mk>0?(t.carb*4)/mk:0;
+          var proPct=mk>0?(t.pro*4)/mk:0;
           var fv=computeDailyFV(ap,ad);
-          if(Math.abs(t.kcal-tgt)>100||t.pro<pm||carbPct>0.55||fatPct>0.30||fv.veg<2.75||fv.fruit<1){
+          if(Math.abs(t.kcal-tgt)>100||t.pro<pm||carbPct>0.55||fatPct>0.30||proPct>0.40||fatPct<0.15||fv.veg<2.75||fv.fruit<1){
             anyBroken=true;
           }
         });
@@ -11807,7 +11915,8 @@ function randomizeWeek(target, seed){
           const mk=t.pro*4+t.fat*9+t.carb*4;
           const carbPct=mk>0?(t.carb*4)/mk:0;
           const fatPct=mk>0?(t.fat*9)/mk:0;
-          const ok=(Math.abs(t.kcal-calT)<=100)&&(t.pro>=proT)&&(carbPct<=0.55)&&(fatPct<=0.30)&&(fv.veg>=2.75)&&(fv.fruit>=1);
+          const proPct=mk>0?(t.pro*4)/mk:0;
+          const ok=(Math.abs(t.kcal-calT)<=100)&&(t.pro>=proT)&&(carbPct<=0.55)&&(fatPct<=0.30)&&(proPct<=0.40)&&(fatPct>=0.15)&&(fv.veg>=2.75)&&(fv.fruit>=1);
           if(!ok)goalMisses++;
         });
       });
@@ -11948,7 +12057,8 @@ function rerollMissDays(randTarget){
       const mk=t.pro*4+t.fat*9+t.carb*4;
       const carbPct=mk>0?(t.carb*4)/mk:0;
       const fatPct=mk>0?(t.fat*9)/mk:0;
-      if(!(Math.abs(t.kcal-calT)<=100)||!(t.pro>=proT)||!(carbPct<=0.55)||!(fatPct<=0.30)||!(fv.veg>=2.75)||!(fv.fruit>=1))ok=false;
+      const proPct=mk>0?(t.pro*4)/mk:0;
+      if(!(Math.abs(t.kcal-calT)<=100)||!(t.pro>=proT)||!(carbPct<=0.55)||!(fatPct<=0.30)||!(proPct<=0.40)||!(fatPct>=0.15)||!(fv.veg>=2.75)||!(fv.fruit>=1))ok=false;
     });
     return ok;
   }
@@ -11964,10 +12074,13 @@ function rerollMissDays(randTarget){
       const mk=t.pro*4+t.fat*9+t.carb*4;
       const carbPct=mk>0?(t.carb*4)/mk:0;
       const fatPct=mk>0?(t.fat*9)/mk:0;
+      const proPct=mk>0?(t.pro*4)/mk:0;
       if(Math.abs(t.kcal-calT)>100)misses++;
       if(t.pro<proT)misses++;
       if(carbPct>0.55)misses++;
       if(fatPct>0.30)misses++;
+      if(proPct>0.40)misses++;
+      if(fatPct<0.15)misses++;
       if(fv.veg<2.75)misses++;
       if(fv.fruit<1)misses++;
     });
@@ -12102,13 +12215,40 @@ function rerollKcalOffSnacks(randTarget){
     const mk=t.pro*4+t.fat*9+t.carb*4;
     const carbPct=mk>0?(t.carb*4)/mk:0;
     const fatPct=mk>0?(t.fat*9)/mk:0;
+    const proPct=mk>0?(t.pro*4)/mk:0;
     if(Math.abs(t.kcal-calT)>100)misses++;
     if(t.pro<proT)misses++;
     if(carbPct>0.55)misses++;
     if(fatPct>0.30)misses++;
+    if(proPct>0.40)misses++;
+    if(fatPct<0.15)misses++;
     if(fv.veg<2.75)misses++;
     if(fv.fruit<1)misses++;
     return misses;
+  }
+  // V89c (2026-05-08): macro-aware miss SCORE — sums sqrt-magnitude of each
+  // breached threshold, so a 50-kcal-over day with all macros fine scores lower
+  // than a 100-kcal-over day with two macro failures. Sub-linear so a single
+  // catastrophic miss doesn't dwarf small wins on multiple axes.
+  function dayMissScore(p,d){
+    var calT=CAL_BASE[p], proT=PRO_TARGET[p];
+    var t=calcTotals(p,d);
+    var fv=computeDailyFV(p,d);
+    var mk=t.pro*4+t.fat*9+t.carb*4;
+    var carbPct=mk>0?(t.carb*4)/mk:0;
+    var fatPct=mk>0?(t.fat*9)/mk:0;
+    var proPct=mk>0?(t.pro*4)/mk:0;
+    var s=0;
+    var kd=t.kcal-calT;
+    if(Math.abs(kd)>100) s += Math.sqrt(Math.abs(kd)-100); // kcal off
+    if(t.pro<proT) s += Math.sqrt(proT-t.pro);             // pro low (g)
+    if(carbPct>0.55) s += Math.sqrt((carbPct-0.55)*100);   // carb high pp
+    if(fatPct>0.30) s += Math.sqrt((fatPct-0.30)*100);     // fat high pp
+    if(proPct>0.40) s += Math.sqrt((proPct-0.40)*100);     // pro high pp
+    if(fatPct<0.15) s += Math.sqrt((0.15-fatPct)*100);     // fat low pp
+    if(fv.veg<2.75) s += Math.sqrt(2.75-fv.veg);           // veg low (cups)
+    if(fv.fruit<1) s += Math.sqrt(1-fv.fruit);             // fruit low (cups)
+    return s;
   }
   // Rebuild just the snack slot's cache entry for a new snack id. Returns the
   // new ingredient list (ready to drop into _dayBalancedCache[pk].snack).
@@ -12187,8 +12327,13 @@ function rerollKcalOffSnacks(randTarget){
 
       const origSnackCache = cached.snack;
       const baselineMisses = dayMissCount(p,d);
+      const baselineScore = dayMissScore(p,d);
       let bestSwap = null;
-      let bestAbsDelta = Math.abs(curDelta);
+      // V89c: track best by macro-aware miss SCORE (lower = better day),
+      // not by raw kcal closeness. The kcal-closer swap that worsens
+      // proPct or fatPct gets passed over for one that improves overall.
+      let bestScore = baselineScore;
+      let bestMisses = baselineMisses;
 
       candidates.forEach(function(c){
         // Trial: swap SEL, rebuild snack cache entry, measure, revert.
@@ -12199,13 +12344,16 @@ function rerollKcalOffSnacks(randTarget){
         const newSnackCache = rebuildSnackCache(p,d);
         if(!newSnackCache){ SEL[key] = curId; return; }
         cached.snack = newSnackCache;
-        const newDelta = calcTotals(p,d).kcal - CAL_BASE[p];
-        const newAbsDelta = Math.abs(newDelta);
         const newMisses = dayMissCount(p,d);
+        const newScore = dayMissScore(p,d);
         // Waste + INV14 invariant: snack swap filters out pkg meals AND
         // snacks are exempt from 5-day repeat. So waste + inv14 can't change.
-        if(newAbsDelta < bestAbsDelta && newMisses <= baselineMisses){
-          bestAbsDelta = newAbsDelta;
+        // Accept lexicographically: fewer misses wins; on ties, lower score wins.
+        const better = (newMisses < bestMisses)
+                    || (newMisses === bestMisses && newScore < bestScore - 0.01);
+        if(better){
+          bestMisses = newMisses;
+          bestScore = newScore;
           bestSwap = c.id;
         }
         // Revert
@@ -12244,10 +12392,13 @@ function rerollInv14Violations(randTarget){
       const mk=t.pro*4+t.fat*9+t.carb*4;
       const carbPct=mk>0?(t.carb*4)/mk:0;
       const fatPct=mk>0?(t.fat*9)/mk:0;
+      const proPct=mk>0?(t.pro*4)/mk:0;
       if(Math.abs(t.kcal-calT)>100)misses++;
       if(t.pro<proT)misses++;
       if(carbPct>0.55)misses++;
       if(fatPct>0.30)misses++;
+      if(proPct>0.40)misses++;
+      if(fatPct<0.15)misses++;
       if(fv.veg<2.75)misses++;
       if(fv.fruit<1)misses++;
     });
@@ -14820,9 +14971,10 @@ window.MPStress=(function(){
     var mk=t.pro*4+t.fat*9+t.carb*4;
     var carbPct=mk>0?(t.carb*4)/mk:0;
     var fatPct=mk>0?(t.fat*9)/mk:0;
+    var proPct=mk>0?(t.pro*4)/mk:0;
     var kd=t.kcal-calT;
-    return{p:p,d:d,kcal:t.kcal,kcalDelta:kd,pro:t.pro,proDelta:t.pro-proT,carbPct:carbPct,fatPct:fatPct,veg:fv.veg,fruit:fv.fruit,
-      fails:{kcalLow:kd<-100?-kd:0,kcalHigh:kd>100?kd:0,pro:t.pro<proT?(proT-t.pro):0,carbPct:carbPct>0.55?(carbPct-0.55):0,fatPct:fatPct>0.30?(fatPct-0.30):0,veg:fv.veg<2.75?(2.75-fv.veg):0,fruit:fv.fruit<1?(1-fv.fruit):0}};
+    return{p:p,d:d,kcal:t.kcal,kcalDelta:kd,pro:t.pro,proDelta:t.pro-proT,carbPct:carbPct,fatPct:fatPct,proPct:proPct,veg:fv.veg,fruit:fv.fruit,
+      fails:{kcalLow:kd<-100?-kd:0,kcalHigh:kd>100?kd:0,pro:t.pro<proT?(proT-t.pro):0,carbPct:carbPct>0.55?(carbPct-0.55):0,fatPct:fatPct>0.30?(fatPct-0.30):0,proPct:proPct>0.40?(proPct-0.40):0,fatLow:fatPct<0.15?(0.15-fatPct):0,veg:fv.veg<2.75?(2.75-fv.veg):0,fruit:fv.fruit<1?(1-fv.fruit):0}};
   }
 
   function collectVegCeilings(){
@@ -15013,9 +15165,11 @@ window.MPStress=(function(){
 
   function aggregate(runs){
     var total=0,hits=0;
-    var missCounts={kcalLow:0,kcalHigh:0,pro:0,carbPct:0,fatPct:0,veg:0,fruit:0};
+    var missCounts={kcalLow:0,kcalHigh:0,pro:0,carbPct:0,fatPct:0,proPct:0,fatLow:0,veg:0,fruit:0};
     var kcalBins={'<-150':0,'-150..-120':0,'-120..-100':0,'+100..+120':0,'+120..+150':0,'>+150':0};
     var fatBins={'30.0-30.2':0,'30.2-30.5':0,'30.5-31.0':0,'31.0-32.0':0,'>32.0':0};
+    var fatLowBins={'14.5-15.0':0,'14.0-14.5':0,'13.0-14.0':0,'<13.0':0};
+    var proPctBins={'40.0-42.0':0,'42.0-45.0':0,'45.0-50.0':0,'>50.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
     var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0,INV24:0};
     var mealMisses={};
@@ -15084,6 +15238,20 @@ window.MPStress=(function(){
           else if(fp<=0.310)fatBins['30.5-31.0']++;
           else if(fp<=0.320)fatBins['31.0-32.0']++;
           else fatBins['>32.0']++;
+        }
+        // V89b: fat-low bins (<15%) and pro-pct-high bins (>40%).
+        if(fp<0.15){
+          if(fp>=0.145)fatLowBins['14.5-15.0']++;
+          else if(fp>=0.140)fatLowBins['14.0-14.5']++;
+          else if(fp>=0.130)fatLowBins['13.0-14.0']++;
+          else fatLowBins['<13.0']++;
+        }
+        var pp=day.proPct||0;
+        if(pp>0.40){
+          if(pp<=0.420)proPctBins['40.0-42.0']++;
+          else if(pp<=0.450)proPctBins['42.0-45.0']++;
+          else if(pp<=0.500)proPctBins['45.0-50.0']++;
+          else proPctBins['>50.0']++;
         }
         var vg=day.veg;
         if(vg<3){
@@ -15170,7 +15338,7 @@ window.MPStress=(function(){
       nRuns:runs.length,nPersonDays:total,
       primaryHitRate:total>0?(hits/total):0,
       missCounts:missCounts,
-      kcalBins:kcalBins,fatBins:fatBins,vegBins:vegBins,
+      kcalBins:kcalBins,fatBins:fatBins,fatLowBins:fatLowBins,proPctBins:proPctBins,vegBins:vegBins,
       invTotals:invTotals,
       invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV21'&&k!=='INV22'&&invTotals[k]>0;}), // INV19/INV20 hard — count toward "any fail". INV20Soft/INV21/22 tracking-only.
       // INV13 fires per-ingredient that has db.minAmt/maxAmt defined; ingredients without those are exempt by construction.
@@ -16055,13 +16223,16 @@ window.MPStress=(function(){
       return out.join(', ');
     }
     var kb=nonzero(a.kcalBins), fb=nonzero(a.fatBins), vb=nonzero(a.vegBins);
-    if(kb||fb||vb){
+    var flb=nonzero(a.fatLowBins||{}), ppb=nonzero(a.proPctBins||{});
+    if(kb||fb||flb||ppb||vb){
       lines.push('### Miss Severity');
       lines.push('');
       lines.push('| Bucket | Distribution |');
       lines.push('|---|---|');
       if(kb)lines.push('| kcal Δ | '+kb+' |');
       if(fb)lines.push('| fat% over 30 | '+fb+' |');
+      if(flb)lines.push('| fat% under 15 | '+flb+' |');
+      if(ppb)lines.push('| pro% over 40 | '+ppb+' |');
       if(vb)lines.push('| veg under 3c | '+vb+' |');
       lines.push('');
     }
@@ -16160,6 +16331,8 @@ window.MPStress=(function(){
         if(f.pro>0)missTypes.push('pro');
         if(f.carbPct>0)missTypes.push('carbPct');
         if(f.fatPct>0)missTypes.push('fatPct');
+        if(f.proPct>0)missTypes.push('proPct');
+        if(f.fatLow>0)missTypes.push('fatLow');
         if(f.veg>0)missTypes.push('veg');
         if(f.fruit>0)missTypes.push('fruit');
         if(missTypes.length===0)return;
