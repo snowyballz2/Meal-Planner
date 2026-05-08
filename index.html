@@ -16427,6 +16427,34 @@ window.MPStress=(function(){
     return {ok:problems.length===0, msg:problems.length?problems[0]+(problems.length>1?' (+'+(problems.length-1)+' more)':''):''};
   }
 
+  // V76 (2026-05-08): SHARED_SCHEDULE='shared' on a cell should imply
+  // SEL[him] === SEL[her] (actual meal match). Pre-V76 the schedule
+  // grid rendered green for any 'shared' state regardless of actual
+  // meals, so stale 'shared' from prior randomize/setSchedule could
+  // visually claim "shared" even when meals had diverged. Per user
+  // feedback: "shared meals that arent in the same cook? This
+  // shouldnt be possible." This check asserts the underlying state
+  // is coherent — if 'shared' is set but meals differ, that's a
+  // contradiction the slot mod test surfaces directly.
+  function _smCheckSchedSharedConsistency(){
+    var problems=[];
+    DAYS.forEach(function(d){
+      ['breakfast','lunch','dinner'].forEach(function(s){
+        var state=SHARED_SCHEDULE[dk(d,s)]||'';
+        if(state !== 'shared') return;
+        var himId = SEL[sk('him',d,s)];
+        var herId = SEL[sk('her',d,s)];
+        // Empty SEL on either side is acceptable in test harness state
+        // (slot may not have been seeded yet); only flag the case where
+        // BOTH sides have meals but they differ.
+        if(himId && herId && himId !== herId){
+          problems.push(d+'/'+s+' SHARED=shared but SEL diverge: him='+himId+' her='+herId);
+        }
+      });
+    });
+    return {ok:problems.length===0, msg:problems.length?problems[0]+(problems.length>1?' (+'+(problems.length-1)+' more)':''):''};
+  }
+
   // Cross-cutting: every MANUAL_SET[k]=true should have an identifiable user
   // action behind it (Skip pill, Eat Out pill, schedule shared/skip-*, link
   // group, user override pin, or changeMeal-modified SEL). Catches code that
@@ -16729,7 +16757,8 @@ window.MPStress=(function(){
       var r=_smCheckSchedEatOutConsistency();
       add('schedEatOutConsistency', r.ok, r.msg);
     }
-    // 2026-05-06+: 3 cross-cutting coherence INVs run alongside schedEatOut.
+    // 2026-05-06+: 4 cross-cutting coherence INVs run alongside schedEatOut.
+    // V76 (2026-05-08): added schedSharedConsistency.
     function checkCoherence(){
       var ms=_smCheckManualSetCoherence();
       add('manualSetCoherence', ms.ok, ms.msg);
@@ -16737,6 +16766,8 @@ window.MPStress=(function(){
       add('selCoherence', sel.ok, sel.msg);
       var ov=_smCheckOverrideUserSetCoherence();
       add('overrideUserSetCoherence', ov.ok, ov.msg);
+      var ss=_smCheckSchedSharedConsistency();
+      add('schedSharedConsistency', ss.ok, ss.msg);
     }
     function checkRowSum(){
       var sums=_smRowSums(p,d,s, baseline.cookServings);
