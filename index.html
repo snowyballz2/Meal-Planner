@@ -2871,7 +2871,14 @@ function _buildAutoLinkGroups(){
       // mode, respect their intent — don't auto-paint shared-green over
       // their choice. Same-meal him/her is the AUTO trigger; user tap is
       // the override.
-      if(_scheduleEditMode && _scheduleEditTouchedCells[dk(anchorD, anchorS)]) return;
+      // V74 (2026-05-07): per-side check (sk-keyed _scheduleEditTouchedSides
+      // instead of dk-keyed _scheduleEditTouchedCells). Pure same-day-shared
+      // cooks involve BOTH halves at the anchor cell, so suppress only when
+      // EITHER side was tapped (auto-shared visual affects both halves).
+      if(_scheduleEditMode && (
+        _scheduleEditTouchedSides[sk('him', anchorD, anchorS)] ||
+        _scheduleEditTouchedSides[sk('her', anchorD, anchorS)]
+      )) return;
       _autoSharedCells[dk(anchorD, anchorS)] = true;
       return;
     }
@@ -2884,9 +2891,15 @@ function _buildAutoLinkGroups(){
     // V25: same override for auto-link-groups — if any portion's cell has
     // been user-tapped in edit mode, don't paint the group. (User's grid
     // edit takes precedence over auto-detection of cook+leftover batches.)
+    // V74 (2026-05-07): per-side check (sk-keyed instead of dk-keyed).
+    // Pre-V74 the cell-level check meant tapping HER on a cell that Him
+    // had a link-group on (e.g., Her side was a separate grey link-group
+    // and Him's side was an unrelated yellow link-group) would suppress
+    // BOTH groups because the cell was flagged. Per-side gives Him's
+    // group a chance to survive when only Her's side was tapped.
     if(_scheduleEditMode){
       var anyTouched = validPortions.some(function(pt){
-        return _scheduleEditTouchedCells[dk(pt.d, pt.s)];
+        return _scheduleEditTouchedSides[sk(pt.p, pt.d, pt.s)];
       });
       if(anyTouched) return;
     }
@@ -2956,8 +2969,8 @@ function _buildAutoLinkGroups(){
         if(manualSlotKeys[anchorK]) return; // manual wins
         var mealId = getMealId(p, d, s);
         if(!mealId) return;
-        // Same V25 edit-mode override.
-        if(_scheduleEditMode && _scheduleEditTouchedCells[dk(d, s)]) return;
+        // Same V25 edit-mode override. V74: per-side (sk-keyed).
+        if(_scheduleEditMode && _scheduleEditTouchedSides[sk(p, d, s)]) return;
         // To qualify as the "would-be anchor", THIS slot must be the
         // earliest same-meal slot in the batch window (so an actual
         // anchor that's still alive remains the anchor; this prevents
@@ -18228,6 +18241,84 @@ window.MPStress=(function(){
         'Her USER_EDITED must NOT be set by Him tap');
     }
 
+    else if(op==='editModeTapSidePreservesOtherSideGroup'){
+      // V74 (2026-05-07): regression test for "tapping Her on a cell
+      // shouldn't dissolve Him's separate auto-link-group on the same
+      // cell." Per user feedback: "clicked the thursday her lunch and
+      // it cleared the group for thursday him lunch. I dont care if
+      // the meal is still the same.. it shouldnt change the unrelated
+      // him slot's group assignment, color, etc."
+      //
+      // Pre-V74: V25 used cell-level _scheduleEditTouchedCells (dk-keyed)
+      // to suppress auto-link-groups on user-tapped cells. Tapping Her
+      // marked the cell touched → both Her's group AND Him's separate
+      // group on the same cell were suppressed (visual disappeared).
+      //
+      // V74 fix: switch the V25 suppression to per-side
+      // _scheduleEditTouchedSides (sk-keyed). Now tapping Her only
+      // suppresses groups containing Her's side; Him's separate group
+      // on the same cell survives.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'V74: only run on solo geometry'); return {checks:checks};
+      }
+      // Wipe state for clean reproduction
+      Object.keys(SHARED_SCHEDULE).forEach(k=>delete SHARED_SCHEDULE[k]);
+      Object.keys(EAT_OUT).forEach(k=>delete EAT_OUT[k]);
+      Object.keys(SKIPPED).forEach(k=>delete SKIPPED[k]);
+      Object.keys(MANUAL_SET).forEach(k=>delete MANUAL_SET[k]);
+      Object.keys(USER_EDITED).forEach(k=>delete USER_EDITED[k]);
+      Object.keys(_autoLinkColorCache).forEach(k=>delete _autoLinkColorCache[k]);
+      // Plant: Him has a Thu-lunch + Fri-dinner same-meal pair (his own group).
+      //         Her has a Thu-lunch + Fri-dinner same-meal pair (her own group, different meal).
+      // Each pair forms an independent auto-link-group on Thu lunch (Him's group
+      // includes him_Thu_lunch + him_Fri_dinner; Her's group includes
+      // her_Thu_lunch + her_Fri_dinner). They share the Thu lunch CELL but
+      // have different SIDES.
+      var himGroupMeal = 'salmon_stir_fry_din';
+      var herGroupMeal = 'roast_chicken_din';
+      stampSel(sk('him','Thursday','lunch'), himGroupMeal);
+      stampSel(sk('him','Friday','dinner'), himGroupMeal);
+      stampSel(sk('her','Thursday','lunch'), herGroupMeal);
+      stampSel(sk('her','Friday','dinner'), herGroupMeal);
+      invalidateLeftoverCache();
+      _buildAutoLinkGroups();
+      // Verify both groups exist before tap
+      var preHimGroup = getLinkGroupForSlot('him','Thursday','lunch');
+      var preHerGroup = getLinkGroupForSlot('her','Thursday','lunch');
+      add('tspog_pre_him_group', !!preHimGroup,
+        'Pre-tap: Him should be in an auto-link-group on Thu lunch');
+      add('tspog_pre_her_group', !!preHerGroup,
+        'Pre-tap: Her should be in an auto-link-group on Thu lunch');
+      add('tspog_pre_different_groups',
+        !!preHimGroup && !!preHerGroup && preHimGroup.id !== preHerGroup.id,
+        'Pre-tap: Him and Her groups should be DIFFERENT (different meals)');
+      var preHimColorIdx = preHimGroup ? preHimGroup.colorIdx : null;
+      // Enter edit mode + tap HER side on Thu lunch
+      enterScheduleEditMode();
+      schedTapRight('Thursday','lunch');
+      // Crucially: do NOT call applyScheduleEdit yet — check the visual
+      // state IN edit mode (which is when the user is observing the bug).
+      _buildAutoLinkGroups();
+      var postHimGroupTap = getLinkGroupForSlot('him','Thursday','lunch');
+      var postHerGroupTap = getLinkGroupForSlot('her','Thursday','lunch');
+      add('tspog_him_group_survives_tap',
+        !!postHimGroupTap,
+        'V74: Him’s group on Thu lunch must survive after tapping Her’s side. Pre-V74 the cell-level touched check suppressed BOTH groups.');
+      add('tspog_him_color_preserved',
+        !!postHimGroupTap && postHimGroupTap.colorIdx === preHimColorIdx,
+        'Him’s group color should stay the same (was '+preHimColorIdx+', got '+(postHimGroupTap?postHimGroupTap.colorIdx:'null')+')');
+      // Apply (clean exit)
+      applyScheduleEdit();
+      _buildAutoLinkGroups();
+      var postHimGroupApply = getLinkGroupForSlot('him','Thursday','lunch');
+      add('tspog_him_group_survives_apply',
+        !!postHimGroupApply,
+        'V74: Him’s group should still exist after Apply (Her’s tap shouldn’t affect Him’s SEL or group)');
+      add('tspog_him_sel_preserved',
+        SEL[sk('him','Thursday','lunch')] === himGroupMeal,
+        'Him’s SEL on Thu lunch must be preserved (was '+himGroupMeal+', got '+SEL[sk('him','Thursday','lunch')]+')');
+    }
+
     else if(op==='editModeHimTapPreservesAllOther'){
       // V72 (2026-05-07): comprehensive multi-cell version of the V71 test.
       // Per user feedback: "all I did was click on him thursday dinner
@@ -18386,7 +18477,11 @@ window.MPStress=(function(){
              // Her's Wed-Thu leftover relationship + Him's Tue-Thu + Mon
              // eat-out, then taps Him on Thu dinner. Asserts every Her
              // SEL across the entire week is preserved.
-             'editModeHimTapPreservesAllOther'];
+             'editModeHimTapPreservesAllOther',
+             // V74 (2026-05-07): regression test for "tapping Her on a
+             // cell shouldn't dissolve Him's separate auto-link-group on
+             // the same cell." Per-side (sk-keyed) touched check.
+             'editModeTapSidePreservesOtherSideGroup'];
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -18399,7 +18494,8 @@ window.MPStress=(function(){
             editModeWeekSwitchGuard:{p:0,f:0},editModePaintModeInterop:{p:0,f:0},
             editModeSurgicalApply:{p:0,f:0},
             editModeHimTapPreservesHer:{p:0,f:0},
-            editModeHimTapPreservesAllOther:{p:0,f:0}},
+            editModeHimTapPreservesAllOther:{p:0,f:0},
+            editModeTapSidePreservesOtherSideGroup:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
