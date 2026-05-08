@@ -5253,34 +5253,23 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
       }
     }
 
-    // ── Priority 1: protein shortfall ──
-    // Cal-neutral swap (+pro / -fat or -carb). 7g threshold — smaller gaps
-    // are acceptable variance; balancer effort on borderline cases often
-    // spikes fat% or kcal without closing the gap meaningfully.
-    if(mk >= 1 && proGap > 7){
-      const trimRoles = (carbPct <= carbFloor) ? ['fat'] : ['fat','carb'];
-      const trim = bestTrim(trimRoles, CAL_SLOTS);
-      if(trim){
-        const trimKcalStep = trim.dec * trim.item.db.kcal;
-        const pItem = bestAdd('protein', trimKcalStep, CAL_SLOTS);
-        // Both required — don't trim without a paired protein add,
-        // otherwise we'd just be dropping kcal without raising pro.
-        if(pItem){
-          applyDelta(pItem.slot, pItem.idx, pItem.cur + incrementFor(pItem.db));
-          applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
-        }
-      }
-    }
-
-    // V90 (2026-05-08): predict the post-trim+pair macro % for the WHOLE DAY.
-    // Lets each trim guard short-circuit when the trim is futile (won't bring
-    // the offending macro under threshold). Operates on day macros (t.carb,
-    // t.pro, t.fat from dailyMacros()) so all evaluations are whole-day.
+    // V90 + V91 (2026-05-08): predict post-action macro % for the WHOLE DAY.
+    // Lets each trim/grow guard short-circuit when the action is futile.
+    // V91 generalizes V90: trim and pairItem are both optional. Either or
+    // both can be present.
+    //   trim only:           pure trim (kcal goes down)
+    //   pairItem only:       pure grow (kcal goes up)
+    //   trim + pairItem:     cal-neutral swap (trim/grow paired)
+    // Operates on day macros (t.carb, t.pro, t.fat from dailyMacros()) so
+    // all evaluations are whole-day.
     function predictDayMacroPct(trim, pairItem, macro){
-      const tdb = trim.item.db;
-      let dCarb = -trim.dec * (tdb.carb || 0);
-      let dPro  = -trim.dec * (tdb.pro || 0);
-      let dFat  = -trim.dec * (tdb.fat || 0);
+      let dCarb = 0, dPro = 0, dFat = 0;
+      if(trim){
+        const tdb = trim.item.db;
+        dCarb -= trim.dec * (tdb.carb || 0);
+        dPro  -= trim.dec * (tdb.pro || 0);
+        dFat  -= trim.dec * (tdb.fat || 0);
+      }
       if(pairItem){
         const inc = incrementFor(pairItem.db);
         const pdb = pairItem.db;
@@ -5297,6 +5286,41 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
       if(macro === 'fat')  return (nFat*9)/nMk;
       if(macro === 'pro')  return (nPro*4)/nMk;
       return 0;
+    }
+
+    // ── Priority 1: protein shortfall ──
+    // Cal-neutral swap (+pro / -fat or -carb). 7g threshold — smaller gaps
+    // are acceptable variance.
+    // V91 (2026-05-08) "no make-worse" grow guard. P1's pair is cal-neutral
+    // by construction so calGap0 doesn't gate. Guards on the OTHER macro
+    // make-worse axis: skip if grow would push proPct over its 40% cap
+    // AND the grow won't make meaningful progress on proGap.
+    if(mk >= 1 && proGap > 7){
+      const trimRoles = (carbPct <= carbFloor) ? ['fat'] : ['fat','carb'];
+      const trim = bestTrim(trimRoles, CAL_SLOTS);
+      if(trim){
+        const trimKcalStep = trim.dec * trim.item.db.kcal;
+        const pItem = bestAdd('protein', trimKcalStep, CAL_SLOTS);
+        if(pItem){
+          // dPro = grams of protein this pair adds to the day (positive ⇒
+          // proGap shrinks). "Meaningful progress" = ≥ 1g pro gain.
+          const inc = incrementFor(pItem.db);
+          const dPro = inc * (pItem.db.pro || 0)
+                     - trim.dec * (trim.item.db.pro || 0);
+          const willMakeProgress = dPro >= 1.0;
+          // Make-worse via OTHER macro: pair could push proPct > 40%.
+          const newProPct = predictDayMacroPct(trim, pItem, 'pro');
+          const wouldBreakProCap = newProPct > 0.40 + 0.001;
+          // Skip if: won't make progress AND would break the proPct cap.
+          // Allow partial progress (< full fix) since proGap fixes need
+          // multiple grid steps; strict will-fix would stall convergence.
+          const safeToGrow = willMakeProgress && !wouldBreakProCap;
+          if(safeToGrow){
+            applyDelta(pItem.slot, pItem.idx, pItem.cur + inc);
+            applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
+          }
+        }
+      }
     }
 
     // ── Priority 2: carb% over 55 ──
@@ -5362,26 +5386,31 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
       }
     }
 
-    // ── Priority 3c: fat% under 15 (V89b, 2026-05-08) ──
-    // Pure boost (no trim) — fat-low days mean macros are skewed protein/carb,
-    // so adding fat WITHOUT trimming pulls fatPct up at the cost of a small
-    // kcal bump. P0 will trim later if day goes over target. If day already
-    // over target (calGap0 < 0), prefer cal-neutral: paired carb trim.
+    // ── Priority 3c: fat% under 15 (V89b + V91, 2026-05-08) ──
+    // V91 "will-fix" grow guard, symmetric to V90 trim guard:
+    //   safeToGrow = (calGap0 > 0) || (cTrim && willFix)
+    //
+    //   calGap0 > 0  →  day under kcal target, free to add kcal (pure boost)
+    //   calGap0 ≤ 0  →  day at/over target; require carb-trim pair AND
+    //                   verify the pair will actually bring fatPct ≥ 15%.
+    //
+    // Pre-V91 the over-target branch fired any paired add+trim it found,
+    // even if the resulting fatPct was still < 15% (futile, mirror of V90's
+    // case #1 pattern but for grow direction).
     if(mk >= 1 && fatPct < 0.15 - 0.001){
       const fatAdd = bestAdd('fat', null, CAL_SLOTS);
       if(fatAdd){
-        if(calGap0 < 0){
-          // Already over target — pair with carb trim so fat boost doesn't
-          // worsen kcal.
-          const fatKcalStep = incrementFor(fatAdd.db) * fatAdd.db.kcal;
-          const cTrim = bestTrim(['carb'], CAL_SLOTS);
-          if(cTrim){
-            applyDelta(fatAdd.slot, fatAdd.idx, fatAdd.cur + incrementFor(fatAdd.db));
+        const cTrim = bestTrim(['carb'], CAL_SLOTS);
+        const willFix = predictDayMacroPct(cTrim, fatAdd, 'fat') >= 0.15 - 0.001;
+        const safeToGrow = (calGap0 > 0) || (cTrim && willFix);
+        if(safeToGrow){
+          applyDelta(fatAdd.slot, fatAdd.idx, fatAdd.cur + incrementFor(fatAdd.db));
+          // Pair carb trim only when at/over target (preserves day kcal).
+          // When under target, leave it as a pure boost — calGap0 closes
+          // toward target naturally.
+          if(calGap0 <= 0 && cTrim){
             applyDelta(cTrim.item.slot, cTrim.item.idx, cTrim.item.cur - cTrim.dec);
           }
-        } else {
-          // Day under or at target — pure fat boost is fine.
-          applyDelta(fatAdd.slot, fatAdd.idx, fatAdd.cur + incrementFor(fatAdd.db));
         }
       }
     }
