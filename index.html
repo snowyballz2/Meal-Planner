@@ -1321,7 +1321,7 @@ function computeAdjustedMacros(ingredients, targetDelta, slot, macroHints, mealT
 
 const MEALS=[
  {id:'his_shake',label:'Protein, creatine & banana berry oat shake',slots:['shake'],
-  steps:['Add water to blender first.','Add banana, berries, oats, protein, creatine, cinnamon.','Blend 30–45 sec until smooth.','Drink immediately before workout.'],
+  steps:['Add water to the blender first.','Peel banana and add to the blender along with mixed berries, oats, protein powder, creatine, and cinnamon.','Blend on high for 30–45 seconds until completely smooth.','Pour into a glass and drink immediately before your workout.'],
   him:{},her:null,
   ingredients:[
     I('protein powder',1,'protein',false),
@@ -1335,7 +1335,7 @@ const MEALS=[
   fatBoost:{dbKey:'almond butter', amt:0.5}},
 
  {id:'her_shake',label:'Protein, creatine & acai oat shake',slots:['shake'],
-  steps:['Add cashew milk to blender first.','Add banana, acai, oats, protein, creatine.','Blend 30–45 sec. Optional: add 1 tbsp peanut butter.'],
+  steps:['Add cashew milk to the blender first.','Peel banana and add to the blender along with acai, oats, protein powder, and creatine.','Blend on high for 30–45 seconds until smooth. Optional: add 1 tbsp peanut butter for extra richness.'],
   him:null,her:{},
   ingredients:[
     I('protein powder',1,'protein',false),
@@ -1349,7 +1349,7 @@ const MEALS=[
   fatBoost:{dbKey:'almond butter', amt:0.5}},
 
  {id:'egg_scramble',label:'Egg white scramble & toast',slots:['breakfast'],
-  steps:['Heat non-stick pan over medium heat with light oil spray.','Add diced bell pepper and cook 2 min, stirring occasionally.','Add spinach and stir until just wilted, about 1 min.','Whisk egg whites and whole egg together with a pinch of garlic powder and black pepper.','Pour eggs over the veg. Let set 10 sec, then gently fold and scramble until just cooked, 3–4 min. Remove from heat while still slightly glossy — they carry-over cook.','Toast bread. Plate everything together.'],
+  steps:['Heat a non-stick pan over medium heat with a light oil spray.','Add diced bell pepper and sauté for 2 minutes, stirring occasionally, until tender-crisp.','Add roughly chopped spinach and stir until just wilted, about 1 minute.','Whisk egg whites and whole egg together in a bowl with a pinch of garlic powder and black pepper.','Pour eggs over the veg. Let set for 10 seconds, then gently fold and scramble until just cooked, 3–4 minutes. Remove from heat while still slightly glossy — they will carry-over cook.','Toast the bread. Plate everything together.'],
   him:{},her:{},
   ingredients:[
     I('egg white',0.75,'protein'),
@@ -1363,7 +1363,7 @@ const MEALS=[
   fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
  {id:'yogurt_bowl_sweet',label:'Sweet Greek yogurt bowl with berries',slots:['breakfast','snack'],noLeftover:true,
-  steps:['Warm cooked oats in a bowl.','Spoon Greek yogurt alongside the oats (don\'t mix — keep them separate for texture contrast).','Top with mixed berries and chia seeds. Drizzle with honey.'],
+  steps:['Warm the cooked oats in a bowl.','Spoon Greek yogurt alongside the oats (don\'t mix — keep them separate for texture contrast).','Top with mixed berries and a sprinkle of chia seeds. Drizzle with honey.'],
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',1,'protein'),
@@ -1374,7 +1374,7 @@ const MEALS=[
   ]},
 
  {id:'overnight_oats',label:'Overnight oats with berries',slots:['breakfast'],
-  steps:['The night before: combine oats, water, and chia seeds in a jar or container. Stir well, seal, and refrigerate overnight.','In the morning: give it a good stir — it will have thickened considerably.','Top with mixed berries and almond butter. Eat cold straight from the jar, or microwave 60–90 sec if you prefer it warm.'],
+  steps:['The night before: combine oats, water, and chia seeds in a jar or container. Stir well, seal, and refrigerate overnight.','In the morning, give the oats a good stir — they will have thickened considerably.','Top with mixed berries and a dollop of almond butter. Eat cold straight from the jar, or microwave for 60–90 seconds if you prefer it warm.'],
   him:{},her:{},
   ingredients:[
     I('oats',0.75,'carb'),
@@ -1385,7 +1385,7 @@ const MEALS=[
   ]},
 
  {id:'protein_pancakes',label:'Protein pancakes',slots:['breakfast'],
-  steps:['In a bowl, whisk together oat flour, protein powder, cinnamon, and baking powder.','Add egg whites and water. Whisk until smooth — batter will be thick. Let rest 2 min.','Heat a non-stick pan over medium heat. Pour ¼ cup portions onto the pan. Cook 2–3 min per side.','Stack and top with mixed berries and a drizzle of maple syrup.'],
+  steps:['In a bowl, whisk together oat flour, protein powder, cinnamon, and baking powder.','Add egg whites and water. Whisk until smooth — the batter will be thick. Let rest for 2 minutes.','Heat a non-stick pan over medium heat with a light oil spray. Pour ¼-cup portions onto the pan. Cook 2–3 minutes per side, until golden and set through.','Stack the pancakes on a plate. Top with mixed berries and a drizzle of maple syrup.'],
   him:{},her:{},
   ingredients:[
     I('oat flour',0.5,'carb'),
@@ -1400,7 +1400,7 @@ const MEALS=[
   fatBoost:{dbKey:'peanut butter', amt:1}},
 
  {id:'tuna_scramble',label:'Tuna scramble & toast',slots:['breakfast'],
-  steps:['Drain tuna thoroughly and break into flakes with a fork.','Heat avocado oil in a non-stick pan over medium heat. Add diced bell pepper, cook 2 min.','Add kale and stir until wilted, about 1 min.','Whisk egg whites and whole egg together. Pour over the veg.','Add flaked tuna. Fold and scramble gently 3–4 min until just set.','Season with garlic powder and black pepper. Serve with toast.'],
+  steps:['Drain tuna thoroughly and break into flakes with a fork.','Heat avocado oil in a non-stick pan over medium heat. Add diced bell pepper and sauté for 2 minutes until tender-crisp.','Add roughly chopped kale and stir until wilted, about 1 minute.','Whisk egg whites and whole egg together in a bowl. Pour over the veg.','Scatter flaked tuna across the top. Fold and scramble gently for 3–4 minutes until just set.','Season with garlic powder and black pepper. Toast the bread and serve alongside.'],
   him:{},her:{},
   ingredients:[
     I('canned tuna',5,'protein'),
@@ -1415,7 +1415,7 @@ const MEALS=[
   ]},
 
  {id:'egg_omelet',label:'Egg & kale omelet with toast',slots:['breakfast'],
-  steps:['Whisk eggs together with garlic powder, black pepper.','Heat non-stick pan over medium heat with light oil spray. Add bell pepper 2 min.','Add kale, stir until wilted.','Pour egg mixture over veg. Let cook undisturbed 1–2 min.','When center is almost set, fold omelet in half.','Serve immediately with toast.'],
+  steps:['Whisk whole eggs and egg whites together in a bowl with garlic powder and black pepper.','Heat a non-stick pan over medium heat with a light oil spray. Add diced bell pepper and sauté for 2 minutes until tender-crisp.','Add roughly chopped kale and stir until wilted, about 1 minute.','Pour the egg mixture over the veg. Let cook undisturbed for 1–2 minutes until the edges set.','When the center is almost set, fold the omelet in half and slide onto a plate.','Toast the bread and serve immediately alongside.'],
   him:{},her:{},
   ingredients:[
     I('egg whole',2,'protein'),
@@ -1428,7 +1428,7 @@ const MEALS=[
   ]},
 
  {id:'korean_egg_bowl',label:'Korean-style egg & veggie rice bowl',slots:['breakfast'],
-  steps:['Warm cooked rice in a bowl.','Fry eggs: heat a small pan over medium heat with a drop of sesame oil. Crack eggs in, cover with a lid for 2 min for runny yolk.','In the same pan, sauté spinach and shredded carrots in sesame oil for 1–2 min.','Assemble the bowl: rice base, veg on top, eggs on top of that.','Drizzle with soy sauce and rice vinegar. Add gochujang to taste. Sprinkle sesame seeds.'],
+  steps:['Warm the cooked white rice in a bowl.','Fry eggs: heat a small pan over medium heat with a drop of sesame oil. Crack eggs in and cover with a lid for 2 minutes for a runny yolk.','In the same pan, add roughly chopped spinach and shredded carrots. Sauté in the remaining sesame oil for 1–2 minutes until just tender.','Assemble the bowl: rice base, veg on top, fried eggs on top of that.','Drizzle with soy sauce and rice vinegar. Add gochujang to taste. Sprinkle with sesame seeds.'],
   him:{},her:{},
   ingredients:[
     I('egg whole',2,'protein'),
@@ -1460,7 +1460,7 @@ const MEALS=[
   ]},
 
  {id:'viet_noodle_bowl',label:'Vietnamese egg & noodle bowl',slots:['breakfast'],
-  steps:['Soft-boil eggs: simmer 6–7 min, ice bath, peel.','Soak ~0.625 cup dry rice vermicelli per serving (= 1.25 cup cooked) in hot water 5 min. Drain.','Wilt spinach + carrots in a non-stick pan 1–2 min.','Assemble: noodles, veg, halved eggs. Drizzle soy, vinegar.'],
+  steps:['Soft-boil whole eggs: simmer for 6–7 minutes, transfer to an ice bath for 2 minutes, then peel.','Soak ~0.625 cup dry rice vermicelli per serving (= 1.25 cup cooked) in hot water for 5 minutes. Drain and rinse with cold water.','Heat a non-stick pan over medium heat with a light oil spray. Add roughly chopped spinach and shredded carrots and wilt for 1–2 minutes.','Assemble bowls: noodles as the base, wilted veg on top, halved eggs alongside. Drizzle with soy sauce and rice vinegar. Top with crushed peanuts.'],
   him:{},her:{},
   ingredients:[
     I('egg whole',2,'protein',false),
@@ -1473,7 +1473,7 @@ const MEALS=[
   fatBoost:{dbKey:'peanuts', amt:2}},
 
  {id:'korean_juk',label:'Korean egg & rice porridge (Juk)',slots:['breakfast'],
-  steps:['Combine cooked white rice with 2 cups water in a pot. Simmer 8–10 min, stirring often, until the rice breaks down into a creamy porridge.','Stir in chopped kale 2 min.','Whisk eggs, slowly stir into porridge for silky ribbons. Cook 1 min.','Season with soy sauce and sesame oil. Top with sesame seeds.'],
+  steps:['Combine cooked white rice with 2 cups water in a pot. Bring to a gentle simmer over medium heat and cook 8–10 minutes, stirring often, until the rice breaks down into a creamy porridge.','Stir in roughly chopped kale and cook 2 minutes until wilted.','Whisk whole egg and egg whites together in a small bowl. Slowly drizzle into the porridge while stirring gently for silky ribbons. Cook 1 minute until set.','Season with soy sauce and a drizzle of sesame oil. Top with sesame seeds.'],
   him:{},her:{},
   ingredients:[
     I('white rice cooked',1,'carb'),
@@ -1490,7 +1490,7 @@ const MEALS=[
  // ── Additional lean breakfasts ──────────────────────────────
 
  {id:'chicken_breakfast_wrap',label:'Chicken & egg breakfast wrap',slots:['breakfast'],
-  steps:['Season chicken breast with garlic powder, black pepper. Pan-sear 5–6 min per side. Slice thin.','Whisk whole egg and egg whites together. Scramble in the same pan 1–2 min until just set.','Warm tortilla. Layer spinach, scrambled eggs, chicken, bell pepper, salsa.','Roll tightly. Cut in half.'],
+  steps:['Season chicken breast with garlic powder and black pepper. Heat a non-stick pan over medium-high heat with a light oil spray and pan-sear chicken for 5–6 minutes per side until 165°F internal. Rest 3 minutes, then slice thin.','Whisk whole egg and egg whites together in a bowl. Scramble in the same pan over medium heat for 1–2 minutes until just set.','Warm tortilla in a dry pan for 30 seconds per side. Layer with roughly chopped spinach, scrambled eggs, sliced chicken, diced bell pepper, and salsa.','Roll tightly, tucking in the sides. Cut in half on the diagonal.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',6,'protein'),
@@ -1505,7 +1505,7 @@ const MEALS=[
   ]},
 
  {id:'sweet_potato_egg_hash',label:'Sweet potato & egg hash',slots:['breakfast'],
-  steps:['Dice sweet potato small. Cook in non-stick pan with oil spray over medium heat, covered, 8–10 min until tender.','Add diced bell pepper, cook 2 min. Stir in spinach and wilt 1 min.','Push hash to one side. Crack whole eggs + pour egg whites on the other side, scramble 2–3 min.','Mix together. Season with garlic powder, black pepper. Serve with toast.'],
+  steps:['Dice sweet potato small. Cook in a non-stick pan with a light oil spray over medium heat, covered, for 8–10 minutes until tender, stirring occasionally.','Add diced bell pepper and sauté for 2 minutes until tender-crisp. Stir in roughly chopped spinach and wilt for 1 minute.','Push the hash to one side of the pan. Crack whole eggs and pour egg whites onto the cleared side. Scramble for 2–3 minutes until just set.','Fold the eggs into the hash. Season with garlic powder and black pepper. Toast the bread and serve alongside.'],
   him:{},her:{},
   ingredients:[
     I('egg whole',2,'protein'),
@@ -1520,7 +1520,7 @@ const MEALS=[
   fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
  {id:'yogurt_oat_bowl',label:'Protein yogurt & oat bowl',slots:['breakfast','snack'],
-  steps:['Warm cooked oats in a bowl.','Layer on top: yogurt, then banana slices and a drizzle of honey.'],
+  steps:['Warm the cooked oats in a bowl.','Spoon Greek yogurt on top. Slice the banana and arrange the slices over the yogurt. Drizzle with honey.'],
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',0.75,'protein'),
@@ -1531,7 +1531,7 @@ const MEALS=[
   fatBoost:{dbKey:'chia seeds', amt:1}},
 
  {id:'turkey_egg_scramble',label:'Ground turkey & egg white scramble',slots:['breakfast'],
-  steps:['Brown ground turkey in non-stick pan, breaking into crumbles.','Add spinach and bell pepper, cook 2 min.','Pour in egg whites, scramble everything together 2–3 min.','Season with garlic powder, black pepper. Serve with toast.'],
+  steps:['Heat a non-stick pan over medium-high heat with a light oil spray. Add ground turkey and brown for ~5 minutes, breaking into crumbles, until cooked through.','Add roughly chopped spinach and diced bell pepper. Sauté for 2 minutes until the spinach is wilted and the pepper is tender-crisp.','Whisk egg whites in a small bowl, then pour into the pan and scramble everything together for 2–3 minutes until just set.','Season with garlic powder and black pepper. Toast the bread and serve alongside.'],
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',4,'protein'),
@@ -1544,7 +1544,7 @@ const MEALS=[
   ]},
 
  {id:'banana_protein_oats',label:'Banana protein oatmeal',slots:['breakfast'],
-  steps:['Warm cooked oats. Stir in protein powder while hot.','Top with sliced banana and mixed berries.','Drizzle with maple syrup.'],
+  steps:['Warm the cooked oats in a bowl. Stir in protein powder while hot until fully dissolved.','Top with sliced banana and mixed berries.','Drizzle with maple syrup and serve.'],
   him:{},her:{},
   ingredients:[
     I('oats',0.75,'carb'),
@@ -1557,7 +1557,7 @@ const MEALS=[
   fatBoost:{dbKey:'peanut butter', amt:1}},
 
  {id:'quinoa_breakfast_bowl',label:'Quinoa & egg breakfast bowl',slots:['breakfast'],
-  steps:['Warm cooked quinoa in a bowl.','Sauté kale and bell pepper in non-stick pan 2 min.','Add egg whites, scramble with veg.','Serve over quinoa. Season with salt, pepper.'],
+  steps:['Warm the cooked quinoa in a bowl.','Heat a non-stick pan over medium heat with a light oil spray. Add roughly chopped kale and diced bell pepper. Sauté for 2 minutes until the kale is wilted and the pepper is tender-crisp.','Whisk whole egg and egg whites together in a small bowl. Pour into the pan and scramble with the veg for 2–3 minutes until just set.','Spoon the egg-veg scramble over the quinoa. Season with salt and black pepper.'],
   him:{},her:{},
   ingredients:[
     I('quinoa cooked',0.75,'carb'),
@@ -1584,7 +1584,7 @@ const MEALS=[
   ]},
 
  {id:'shakshuka',label:'Shakshuka with toast',slots:['breakfast'],
-  steps:['Sauté bell pepper in non-stick skillet 3 min.','Add marinara + spinach, simmer 3 min until spinach wilts.','Make wells in sauce, crack egg(s) into each + pour in egg whites. Cover, simmer 5–7 min until whites set.','Season with black pepper. Serve with toasted bread for dipping.'],
+  steps:['Heat a non-stick skillet over medium heat with a light oil spray. Add diced bell pepper and sauté for 3 minutes until tender-crisp.','Pour in marinara and add roughly chopped spinach. Simmer 3 minutes until the spinach wilts and the sauce is heated through.','Make wells in the sauce. Crack whole egg(s) into the wells, then pour in egg whites around them. Cover and simmer 5–7 minutes until the whites set but the yolks remain runny.','Season with black pepper. Toast the bread and serve alongside for dipping.'],
   him:{},her:{},
   ingredients:[
     I('egg whole',2,'protein'),
@@ -1597,7 +1597,7 @@ const MEALS=[
   ]},
 
  {id:'chia_pudding',label:'Berry chia pudding',slots:['breakfast'],
-  steps:['Whisk chia, milk, protein powder, cinnamon in a jar until combined.','Refrigerate at least 4 hours (or overnight) to thicken.','Top with mixed berries before serving.'],
+  steps:['Whisk chia seeds, milk, protein powder, oats, and cinnamon together in a jar until combined.','Seal and refrigerate at least 4 hours (or overnight) until thickened to pudding consistency.','Stir well, then top with mixed berries before serving.'],
   him:{},her:{},
   ingredients:[
     I('chia seeds',2,'fat'),
@@ -1623,7 +1623,7 @@ const MEALS=[
   ]},
 
  {id:'silken_tofu_smoothie',label:'Silken tofu berry smoothie',slots:['breakfast'],
-  steps:['Add silken tofu, mixed berries, banana, protein powder, and milk to a blender.','Blend until smooth. Pour and drink.'],
+  steps:['Add silken tofu, mixed berries, peeled banana, protein powder, and milk to a blender.','Blend on high for 30–45 seconds until completely smooth. Pour into a glass and drink.'],
   him:{},her:{},
   ingredients:[
     I('silken tofu',7,'protein'),
@@ -1634,7 +1634,7 @@ const MEALS=[
   ]},
 
  {id:'savory_congee',label:'Chicken congee',slots:['breakfast'],
-  steps:['Combine cooked jasmine rice with chicken broth in a pot. Simmer 8–10 min, stirring, until the rice breaks down and the congee thickens.','Shred cooked chicken breast and stir in.','Add ginger and spinach, simmer 2 min.','Whisk whole egg + egg whites. Slowly stir in for silky ribbons. Cook 1 min until set.','Top with scallions and black pepper.'],
+  steps:['Combine cooked jasmine rice with chicken broth in a pot. Bring to a simmer over medium heat and cook 8–10 minutes, stirring often, until the rice breaks down and the congee thickens.','Shred cooked chicken breast and stir into the congee.','Add grated ginger and roughly chopped spinach. Simmer 2 minutes until the spinach wilts.','Whisk whole egg and egg whites together in a small bowl. Slowly drizzle into the congee while stirring gently for silky ribbons. Cook 1 minute until just set.','Top with sliced scallions and a few grinds of black pepper.'],
   him:{},her:{},
   ingredients:[
     I('jasmine rice cooked',0.75,'carb'),
@@ -1650,7 +1650,7 @@ const MEALS=[
   fatBoost:{dbKey:'sesame oil', amt:0.5}},
 
  {id:'shrimp_coconut_curry',label:'Shrimp coconut curry with jasmine rice',slots:['lunch','dinner'],noRandomize:true,
-  steps:['Sauté bell pepper in non-stick skillet 2 min. Remove and set aside.','Add ginger and garlic to the same pan, cook 30 sec.','Add red curry paste and press against the pan. Fry 30–60 sec, stirring constantly — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 2–3 min to thicken.','Return bell pepper. Add shrimp, cook 3 min until pink.','Stir in spinach until wilted. Squeeze lime.','Serve over warm cooked jasmine rice.'],
+  steps:['Heat a non-stick skillet over medium heat with a light oil spray. Add diced bell pepper and sauté for 2 minutes until tender-crisp. Remove and set aside.','Add grated ginger and minced garlic to the same pan and cook 30 seconds until fragrant.','Add red curry paste and press against the pan. Fry 30–60 seconds, stirring constantly — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 2–3 minutes to thicken.','Return the bell pepper. Add shrimp and cook 3 minutes until pink (or use pre-cooked frozen, thawed — add at the end and warm through).','Stir in roughly chopped spinach until wilted, ~1 minute. Squeeze lime over the top.','Serve over warm cooked jasmine rice.'],
   him:{},her:{},
   ingredients:[
     I('shrimp',7,'protein'),
@@ -1665,7 +1665,7 @@ const MEALS=[
   ]},
 
  {id:'smoothie_bowl',label:'Berry smoothie bowl',slots:['breakfast'],
-  steps:['Blend frozen mixed berries, banana, yogurt, and protein powder until thick.','Pour into bowl.','Top with granola.'],
+  steps:['Add frozen mixed berries, peeled banana, Greek yogurt, and protein powder to a blender. Blend on high until thick and smooth (add a splash of water only if needed to move).','Pour into a bowl.','Top with granola and serve immediately.'],
   him:{},her:{},
   ingredients:[
     I('mixed berries',0.5,'fruit',false),
@@ -1676,7 +1676,7 @@ const MEALS=[
   ]},
 
  {id:'turkey_sweet_potato_hash',label:'Turkey & sweet potato hash',slots:['breakfast'],
-  steps:['Cube sweet potato small. Roast at 425°F 18–20 min (or pan-sauté covered 10 min).','Brown ground turkey in non-stick pan, breaking into crumbles.','Add bell pepper, cook 2 min.','Stir in sweet potato.','Whisk egg + egg whites together, pour into pan, scramble through the hash. Season with black pepper.'],
+  steps:['Cube sweet potato small and toss with a light oil spray. Roast at 425°F for 18–20 minutes until tender (or pan-sauté covered for 10 minutes, stirring occasionally).','Heat a non-stick pan over medium-high heat with a light oil spray. Add ground turkey and brown for ~5 minutes, breaking into crumbles.','Add diced bell pepper and sauté for 2 minutes until tender-crisp.','Stir in the roasted sweet potato along with roughly chopped spinach. Cook 1 minute until the spinach wilts.','Whisk whole egg and egg whites together in a small bowl. Pour into the pan and scramble through the hash for 2–3 minutes until just set. Season with black pepper.'],
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',6,'protein'),
@@ -1689,7 +1689,7 @@ const MEALS=[
   ]},
 
  {id:'apple_cinnamon_oats',label:'Apple cinnamon protein oats',slots:['breakfast'],
-  steps:['Combine oats, milk, protein powder, cinnamon in a jar.','Dice apple, stir half into the oats.','Refrigerate overnight (or eat warm — microwave 90s).','Top with remaining apple before serving.'],
+  steps:['Combine oats, milk, protein powder, and cinnamon in a jar. Stir well to dissolve the protein powder.','Dice the apple. Stir half of the diced apple into the oats. Reserve the rest for topping.','Seal and refrigerate overnight to thicken (or eat warm — microwave 90 seconds, stirring halfway).','Top with the reserved diced apple before serving.'],
   him:{},her:{},
   ingredients:[
     I('oats',0.375,'carb'),
@@ -1700,7 +1700,7 @@ const MEALS=[
   ]},
 
  {id:'quinoa_bowl',label:'Grilled chicken & quinoa bowl',slots:['lunch','dinner'],
-  steps:['Warm cooked quinoa in a bowl.','Season chicken with garlic powder, onion powder, black pepper. Grill or pan-sear 5–6 min per side until 165°F. Rest 3 min, slice.','Roast broccoli at 400°F 18–20 min.','Whisk avocado oil + vinegar for dressing. Assemble bowl.'],
+  steps:['Warm the cooked quinoa in a bowl.','Season chicken breast with garlic powder, onion powder, and black pepper. Grill or pan-sear over medium-high heat for 5–6 minutes per side until 165°F internal. Rest 3 minutes, then slice thin.','Toss broccoli florets and shredded carrots with a light oil spray and a pinch of salt. Roast at 400°F for 18–20 minutes until edges are browned.','Whisk avocado oil and red wine vinegar together for the dressing. Assemble the bowl with quinoa as the base, sliced chicken on top, and roasted veg alongside. Drizzle with dressing.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',7,'protein'),
@@ -1727,7 +1727,7 @@ const MEALS=[
   ]},
 
  {id:'shrimp_bowl',label:'Shrimp & rice bowl',slots:['lunch','dinner'],
-  steps:['Pat shrimp dry. Season with cumin, garlic powder, black pepper.','Heat avocado oil. Cook shrimp 1–2 min per side. Remove immediately.','Stir-fry broccoli and bell pepper 3–4 min.','Assemble: warm cooked brown rice as base, veg, shrimp on top. Add avocado, salsa, lime.'],
+  steps:['Pat shrimp dry and season with cumin, garlic powder, and black pepper.','Heat avocado oil in a non-stick pan over medium-high heat. Add shrimp and pan-sear 1–2 minutes per side until pink (or use pre-cooked frozen, thawed — warm through 1 minute). Remove immediately to prevent overcooking.','In the same pan, add broccoli florets and diced bell pepper. Stir-fry 3–4 minutes until tender-crisp.','Assemble bowls: warm cooked brown rice as the base, stir-fried veg, shrimp on top. Add sliced avocado, a spoonful of salsa, and a squeeze of lime.'],
   him:{},her:{},
   ingredients:[
     I('shrimp',6,'protein'),
@@ -1886,7 +1886,7 @@ const MEALS=[
   fatBoost:{dbKey:'sesame oil', amt:0.5}},
 
  {id:'rxbar_apple',label:'RX Bar + apple',slots:['snack'],
-  steps:['No prep needed.'],
+  steps:['Unwrap the RX Bar. Wash the apple. Eat together.'],
   him:{},her:{},
   ingredients:[
     I('rxbar',1,'protein'),
@@ -1894,7 +1894,7 @@ const MEALS=[
   ]},
 
  {id:'rxbar_orange',label:'RX Bar + orange',slots:['snack'],
-  steps:['No prep needed.'],
+  steps:['Unwrap the RX Bar. Peel the orange. Eat together.'],
   him:{},her:{},
   ingredients:[
     I('rxbar',1,'protein'),
@@ -1905,7 +1905,7 @@ const MEALS=[
   // noRatioCheck: yogurt-dominant meal, only fruit is locked — scaling yogurt
   // to budget mechanically inflates P:C. Ratio drift is by design.
   noRatioCheck:true,
-  steps:['Spoon Greek yogurt into a bowl. Top with diced apple and a generous sprinkle of cinnamon.'],
+  steps:['Spoon Greek yogurt into a bowl. Dice the apple and arrange over the yogurt. Finish with a generous sprinkle of cinnamon.'],
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',1,'protein'),
@@ -1916,7 +1916,7 @@ const MEALS=[
  {id:'yogurt_banana_honey',label:'Greek yogurt with banana & honey',slots:['breakfast','snack'],
   // noRatioCheck: yogurt-dominant meal, no scalable carb source — ratio drift is design.
   noRatioCheck:true,
-  steps:['Spoon Greek yogurt into a bowl. Slice banana on top. Drizzle honey.'],
+  steps:['Spoon Greek yogurt into a bowl. Slice the banana over the top. Drizzle with honey.'],
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',0.75,'protein'),
@@ -1925,7 +1925,7 @@ const MEALS=[
   ]},
 
  {id:'tuna_crackers_apple',label:'Tuna pouch + crackers + apple',slots:['snack'],
-  steps:['Open tuna pouch. Eat with crackers and apple.'],
+  steps:['Open the tuna pouch and turn out onto a plate. Wash the apple and slice into wedges. Serve alongside the crackers.'],
   him:{},her:{},
   ingredients:[
     I('tuna pouch',1,'protein'),
@@ -1934,7 +1934,7 @@ const MEALS=[
   ]},
 
  {id:'tuna_crackers_orange',label:'Tuna pouch + crackers + orange',slots:['snack'],
-  steps:['Open pouch. Eat with crackers and orange.'],
+  steps:['Open the tuna pouch and turn out onto a plate. Peel the orange and break into segments. Serve alongside the crackers.'],
   him:{},her:{},
   ingredients:[
     I('tuna pouch',1,'protein'),
@@ -1947,7 +1947,7 @@ const MEALS=[
   // Oats added 2026-05-02 so the recipe can scale to breakfast budget — without a scalable
   // carb, ingredient maxAmts capped achievable kcal at 339, well below him breakfast 512.
   noRatioCheck:true,
-  steps:['Spoon yogurt into bowl. Top with oats and berries. Drizzle honey.'],
+  steps:['Spoon Greek yogurt into a bowl. Top with oats and mixed berries. Drizzle with honey.'],
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',1,'protein'),
@@ -1958,7 +1958,7 @@ const MEALS=[
   fatBoost:{dbKey:'chia seeds', amt:1}},
 
  {id:'salmon_lentils',label:'Baked salmon, lentils & sautéed spinach',slots:['lunch','dinner'],
-  steps:['Preheat oven to 400°F. Pat salmon dry. Season with lemon, dill, pepper. Roast 12–15 min (salmon renders enough of its own fat — no oil needed).','Sauté spinach with garlic in a non-stick pan (no oil) 2–3 min, finishing with a squeeze of lemon.','Warm cooked rice and cooked lentils together.','Plate: rice + lentils, salmon on top, spinach alongside.'],
+  steps:['Preheat oven to 400°F. Pat salmon dry. Season with a squeeze of lemon, dried dill, and black pepper. Roast on a foil-lined sheet 12–15 minutes until just cooked through (salmon renders enough of its own fat — no oil needed).','Heat a non-stick pan over medium heat. Add roughly chopped spinach with minced garlic and sauté 2–3 minutes until wilted, finishing with a squeeze of lemon.','Warm cooked brown rice and cooked lentils together in a small pot or microwave.','Plate: rice and lentils as the base, salmon on top, sautéed spinach alongside.'],
   him:{},her:{},
   ingredients:[
     I('salmon',6,'protein'),
@@ -2025,7 +2025,7 @@ const MEALS=[
   ]},
 
  {id:'turkey_meatballs_din',label:'Turkey meatballs, zucchini noodles & pasta',slots:['lunch','dinner'],
-  steps:['Preheat oven to 400°F. Mix turkey, egg white, oat flour, Italian seasoning. Roll into balls. Bake 18–20 min.','Cook ~0.375 cup dry whole wheat pasta per serving (= 0.75 cup cooked). Add zucchini noodles to boiling water for last 2 min. Drain.','Heat marinara. Toss meatballs. Sauté kale. Plate.'],
+  steps:['Preheat oven to 400°F. In a bowl, mix ground turkey with egg white, oat flour, Italian seasoning, and minced garlic until combined. Roll into 1-inch meatballs. Place on a foil-lined sheet pan and bake 18–20 minutes until 165°F internal.','Cook ~0.375 cup dry whole wheat pasta per serving (= 0.75 cup cooked) per package directions. Spiralize zucchini and add to the boiling water for the last 2 minutes. Drain.','Heat marinara in a small pot. Add the baked meatballs and toss to coat.','Heat a non-stick pan over medium heat. Add roughly chopped kale and sauté 2 minutes until wilted.','Plate the pasta and zucchini noodles. Top with sauced meatballs and the sautéed kale alongside.'],
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
@@ -2082,7 +2082,7 @@ const MEALS=[
   ]},
 
  {id:'miso_edamame',label:'Miso soup with edamame & egg white',slots:['snack'],
-  steps:['Bring water to a simmer. Lower heat — do NOT boil miso (kills probiotics).','Whisk miso into a ladle of hot water until smooth, then stir into pot.','Add silken tofu cubes and shelled edamame. Simmer 2 min.','Slowly drizzle whisked egg whites into the broth while stirring gently — forms soft ribbons.','Top with sliced scallion.'],
+  steps:['Bring water to a gentle simmer in a small pot, then lower the heat — do NOT boil miso (boiling kills the probiotics).','Whisk white miso into a ladle of the hot water until smooth, then stir back into the pot.','Cube the silken tofu and add along with shelled edamame. Simmer 2 minutes until heated through.','Slowly drizzle whisked egg whites into the broth while stirring gently — they form soft ribbons.','Ladle into a bowl and top with sliced scallion.'],
   him:{},her:{},
   ingredients:[
     I('water',1,'liquid'),
@@ -2094,7 +2094,7 @@ const MEALS=[
   ]},
 
  {id:'miso_tofu',label:'Miso soup & tofu',slots:['snack'],
-  steps:['Dissolve miso in hot water. Add tofu. Top with seeds.'],
+  steps:['Bring water to a gentle simmer in a small pot, then lower the heat (do NOT boil miso). Whisk white miso into a ladle of the hot water until smooth, then stir back in.','Cube the silken tofu and add to the broth. Simmer 1 minute until heated through.','Ladle into a bowl. Sprinkle sesame seeds over the top.'],
   him:{},her:{},
   ingredients:[
     I('water',1,'liquid'),
@@ -2104,7 +2104,7 @@ const MEALS=[
   ]},
 
  {id:'yogurt_parfait_eve',label:'Greek yogurt parfait',slots:['breakfast','snack'],
-  steps:['Layer yogurt, granola, berries. Drizzle honey.'],
+  steps:['Spoon Greek yogurt into the bottom of a bowl or jar. Layer granola on top, then mixed berries. Drizzle with honey.'],
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',1,'protein'),
@@ -2116,7 +2116,7 @@ const MEALS=[
  // ── Lighter snacks (130-170 kcal range, designed for her budget) ──
 
  {id:'tuna_crackers_light',label:'Tuna pouch + crackers',slots:['snack'],
-  steps:['Open tuna pouch. Eat with crackers.'],
+  steps:['Open the tuna pouch and turn out onto a plate. Serve alongside the crackers.'],
   him:{},her:{},
   ingredients:[
     I('tuna pouch',1,'protein',false),
@@ -2163,7 +2163,7 @@ const MEALS=[
   fatBoost:{dbKey:'tahini', amt:1}},
 
  {id:'celery_yogurt_dip',label:'Celery & yogurt dip',slots:['snack'],
-  steps:['Cut celery into sticks.','Stir garlic powder, dill, black pepper, and a squeeze of lemon into the Greek yogurt.','Dip celery in the yogurt.'],
+  steps:['Cut celery into 4-inch sticks.','Stir garlic powder, dried dill, black pepper, and a squeeze of lemon into the Greek yogurt until evenly combined.','Serve the celery sticks alongside the yogurt dip.'],
   him:{},her:{},
   ingredients:[
     I('celery',1,'veg'),
@@ -2186,7 +2186,7 @@ const MEALS=[
   ]},
 
  {id:'celery_apple_plate',label:'Celery & apple plate',slots:['snack'],
-  steps:['Cut celery into sticks and slice the apple.','Arrange on a plate.'],
+  steps:['Cut celery into 4-inch sticks. Wash and slice the apple into wedges.','Arrange on a plate and eat together.'],
   him:{},her:{},
   ingredients:[
     I('celery',1,'veg'),
@@ -2197,44 +2197,44 @@ const MEALS=[
  // for the rerollKcalOffSnacks pool. noRatioCheck because pure-fruit
  // recipes are structurally extreme on macro ratios; that's the point.
  {id:'snack_apple',label:'Apple',slots:['snack'],noRatioCheck:true,
-  steps:['Wash and eat.'],
+  steps:['Wash the apple and eat whole, or slice into wedges.'],
   him:{},her:{},
   ingredients:[I('apple',1,'fruit',false)]},
  {id:'snack_banana',label:'Banana',slots:['snack'],noRatioCheck:true,
-  steps:['Peel and eat.'],
+  steps:['Peel the banana and eat.'],
   him:{},her:{},
   ingredients:[I('banana',1,'fruit',false)]},
  {id:'snack_orange',label:'Orange',slots:['snack'],noRatioCheck:true,
-  steps:['Peel and eat.'],
+  steps:['Peel the orange and break into segments.'],
   him:{},her:{},
   ingredients:[I('orange',1,'fruit',false)]},
  {id:'snack_mango',label:'Mango',slots:['snack'],noRatioCheck:true,
-  steps:['Peel, slice, and eat.'],
+  steps:['Peel the mango, slice the flesh away from the pit, and cube.'],
   him:{},her:{},
   ingredients:[I('mango',1,'fruit',false)]},
  {id:'snack_grapefruit',label:'Grapefruit',slots:['snack'],noRatioCheck:true,
-  steps:['Halve and scoop with a spoon.'],
+  steps:['Halve the grapefruit across the equator. Scoop the segments out with a spoon.'],
   him:{},her:{},
   ingredients:[I('grapefruit',1,'fruit',false)]},
  {id:'snack_pear',label:'Pear',slots:['snack'],noRatioCheck:true,
-  steps:['Wash and eat.'],
+  steps:['Wash the pear and eat whole, or slice into wedges.'],
   him:{},her:{},
   ingredients:[I('pear',1,'fruit',false)]},
  {id:'snack_peach',label:'Peach',slots:['snack'],noRatioCheck:true,
-  steps:['Wash and eat.'],
+  steps:['Wash the peach and eat whole, or slice off the pit.'],
   him:{},her:{},
   ingredients:[I('peach',1,'fruit',false)]},
  {id:'snack_kiwi',label:'Kiwi (×2)',slots:['snack'],noRatioCheck:true,
-  steps:['Slice in half and scoop with a spoon.'],
+  steps:['Slice each kiwi in half lengthwise. Scoop the flesh out with a spoon.'],
   him:{},her:{},
   ingredients:[I('kiwi',2,'fruit',false)]},
  {id:'snack_nectarine',label:'Nectarine',slots:['snack'],noRatioCheck:true,
-  steps:['Wash and eat.'],
+  steps:['Wash the nectarine and eat whole, or slice off the pit.'],
   him:{},her:{},
   ingredients:[I('nectarine',1,'fruit',false)]},
 
  {id:'cucumber_hummus_light',label:'Cucumber & hummus',slots:['snack'],
-  steps:['Slice cucumber. Dip in hummus.'],
+  steps:['Slice cucumber into ¼-inch rounds.','Spoon hummus into a small bowl. Serve cucumber slices alongside for dipping.'],
   him:{},her:{},
   ingredients:[
     I('cucumber',1.5,'veg'),
@@ -2248,7 +2248,7 @@ const MEALS=[
   // dominates and the P/C ratio drops 65% from base. Acknowledged design
   // limitation — INV6 skip prevents the noise. Same pattern as yogurt_snack.
   noRatioCheck:true,
-  steps:['Slice apple into wedges.','Serve with peanut butter for dipping.'],
+  steps:['Wash the apple and slice into wedges, removing the core.','Spoon peanut butter into a small bowl. Serve the apple wedges alongside for dipping.'],
   him:{},her:{},
   ingredients:[
     I('apple',1,'fruit',false),
@@ -2259,7 +2259,7 @@ const MEALS=[
   // noRatioCheck: same as pb_apple_slices — banana is fixed wholeOnly,
   // PB is the only scalable. Her budget pushes PB to floor, P/C drops 58%.
   noRatioCheck:true,
-  steps:['Slice banana lengthwise.','Spread peanut butter across the slices.'],
+  steps:['Peel the banana and slice in half lengthwise.','Spread peanut butter evenly across the cut sides. Eat as-is or sandwich the halves back together.'],
   him:{},her:{},
   ingredients:[
     I('banana',1,'fruit',false),
@@ -2267,7 +2267,7 @@ const MEALS=[
   ]},
 
  {id:'edamame_salted',label:'Edamame with sea salt & lime',slots:['snack'],
-  steps:['Steam or microwave edamame 3 min until warm.','Squeeze lime over the pods, sprinkle with flaky salt.'],
+  steps:['Steam or microwave shelled edamame for 3 minutes until warm.','Transfer to a bowl. Squeeze lime over the top and sprinkle with flaky salt. Toss to coat.'],
   him:{},her:{},
   ingredients:[
     I('edamame',1,'protein'),
@@ -2276,7 +2276,7 @@ const MEALS=[
   ]},
 
  {id:'white_bean_chicken_chili',label:'White Bean Chicken Chili with Poblano & Cheddar',slots:['lunch','dinner'],
-  steps:['Prep: dice poblano, slice scallions, quarter lime.','Cook diced poblano and scallion whites in avocado oil 3–4 min.','Add tomatillo sauce and cooked cannellini beans with a splash of water. Mash lightly.','Add broth concentrate and ½ cup water. Simmer 4–5 min.','Add pulled chicken. Simmer 2–3 min. Season.','Stir in Greek yogurt off heat for creaminess (don\'t boil — yogurt will split).','Top with cheese, scallion greens, lime.'],
+  steps:['Prep: dice poblano, slice scallions (whites and greens separated), and quarter the lime.','Heat avocado oil in a pot over medium heat. Add diced poblano and scallion whites and cook 3–4 minutes until softened.','Add tomatillo sauce and cooked cannellini beans with a splash of water. Mash lightly with a wooden spoon for body.','Add broth concentrate and ½ cup water. Simmer 4–5 minutes to meld flavors.','Shred or pull cooked chicken breast and stir in. Simmer 2–3 minutes to warm through. Season with salt and pepper.','Off heat, stir in Greek yogurt for creaminess (don\'t boil — yogurt will split).','Ladle into bowls. Top with shredded cheddar jack, scallion greens, and a squeeze of lime.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',8,'protein'),
@@ -2332,7 +2332,7 @@ const MEALS=[
   ]},
 
  {id:'spicy_tofu_chicken_noodles',label:'Spicy tofu & chicken noodles',slots:['lunch','dinner'],
-  steps:['Make sauce: blend silken tofu, tahini, soy sauce, miso, gochugaru, and rice vinegar until smooth. Set aside.','Cook chicken mince in a hot pan until coloured. Deglaze with mirin, add soy sauce, oyster sauce, ginger, garlic. Cook a few more min.','Cook ~0.5 cup dry udon per serving (= 1 cup cooked) per package.','Julienne spring onions and slice cucumber.','Plate: noodles on bottom, pour sauce over, chicken on one side, cucumber salad on the other. Top with sesame seeds.'],
+  steps:['Make the sauce: blend silken tofu, tahini, soy sauce, white miso, gochugaru, and rice vinegar until completely smooth. Set aside.','Heat a non-stick pan over medium-high heat with a light oil spray. Add ground chicken and cook 5 minutes, breaking into crumbles, until browned. Deglaze with mirin, then add soy sauce, oyster sauce, grated ginger, and minced garlic. Cook 2–3 minutes more until fragrant.','Cook ~0.5 cup dry udon per serving (= 1 cup cooked) per package directions. Drain and rinse with cold water.','Julienne scallions and slice cucumber thinly.','Plate: noodles on the bottom, pour the sauce over the top, chicken on one side, cucumber and scallion salad on the other. Sprinkle with sesame seeds.'],
   him:{},her:{},
   ingredients:[
     I('ground chicken',6,'protein'),
@@ -2390,7 +2390,7 @@ const MEALS=[
   ]},
 
  {id:'chicken_sweet_potato_bowl',label:'Chicken, sweet potato & lentil bowl',slots:['lunch','dinner'],
-  steps:['Preheat oven to 400°F. Cube sweet potato, toss with garlic powder and black pepper.','Roast sweet potato 20–25 min. Season chicken breast with cumin and salt.','Pan-sear chicken 5–6 min per side. Rest 3 min, slice.','Warm cooked lentils.','Assemble: sweet potato + lentil base, chicken on top, spinach, salsa.'],
+  steps:['Preheat oven to 400°F. Cube sweet potato and toss with a light oil spray, garlic powder, and black pepper. Spread on a sheet pan.','Roast sweet potato 20–25 minutes until tender and edges are browned. Meanwhile, season chicken breast with cumin and salt.','Heat a non-stick pan over medium-high heat. Pan-sear chicken 5–6 minutes per side until 165°F internal. Rest 3 minutes, then slice thin.','Warm the cooked lentils in a small pot or microwave.','Assemble bowls: sweet potato and lentils as the base, sliced chicken on top, roughly chopped spinach alongside, finished with a spoonful of salsa.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',9,'protein'),
@@ -2405,7 +2405,7 @@ const MEALS=[
   ]},
 
  {id:'lentil_chicken_bowl',label:'Lentil & grilled chicken bowl',slots:['lunch','dinner'],
-  steps:['Warm cooked lentils.','Season chicken with garlic powder, cumin, salt. Pan-sear in avocado oil 5–6 min per side.','Slice chicken. Sauté kale with garlic 2 min in the remaining pan oil.','Assemble: lentils, chicken, kale. Squeeze lemon over top.'],
+  steps:['Warm the cooked lentils in a small pot or microwave.','Season chicken breast with garlic powder, cumin, and salt. Heat avocado oil in a non-stick pan over medium-high heat and pan-sear chicken 5–6 minutes per side until 165°F internal. Rest 3 minutes.','Slice chicken thin. In the same pan with the remaining oil, add roughly chopped kale and minced garlic. Sauté 2 minutes until wilted.','Assemble bowls: lentils as the base, sliced chicken on top, sautéed kale alongside. Squeeze lemon over the top.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',8,'protein'),
@@ -2464,7 +2464,7 @@ const MEALS=[
   ]},
 
  {id:'ground_chicken_stir_fry',label:'Ground chicken & veggie stir-fry',slots:['lunch','dinner'],
-  steps:['Heat a wide non-stick pan or wok over medium-high. Add avocado oil (ground chicken is lean and will stick otherwise).','Brown ground chicken, breaking into crumbles, ~5 min.','Add broccoli, bell pepper, and carrots. Stir-fry 4–5 min until tender-crisp.','Add soy sauce, grated ginger, and minced garlic. Toss 1 min.','Serve over warm cooked brown rice.'],
+  steps:['Heat a wide non-stick pan or wok over medium-high heat. Add avocado oil (ground chicken is lean and will stick otherwise).','Add ground chicken and brown for ~5 minutes, breaking into crumbles, until cooked through.','Add broccoli florets, diced bell pepper, and shredded carrots. Stir-fry 4–5 minutes until tender-crisp.','Add soy sauce, grated ginger, and minced garlic. Toss 1 minute until fragrant.','Spoon over warm cooked brown rice and serve.'],
   him:{},her:{},
   ingredients:[
     I('ground chicken',7,'protein'),
@@ -2479,7 +2479,7 @@ const MEALS=[
   ]},
 
  {id:'shrimp_quinoa_bowl',label:'Shrimp & quinoa with roasted veg',slots:['lunch','dinner'],
-  steps:['Toss broccoli and zucchini with avocado oil, roast at 425°F for 15 min.','Season shrimp with garlic powder and black pepper. Pan-sear 1–2 min per side.','Assemble: warm cooked quinoa as base, roasted veg, shrimp. Squeeze lemon.'],
+  steps:['Toss broccoli florets and diced zucchini with avocado oil and a pinch of salt. Spread on a sheet pan and roast at 425°F for 15 minutes until edges are browned.','Pat shrimp dry and season with garlic powder and black pepper. Heat a non-stick pan over medium-high heat and pan-sear 1–2 minutes per side until pink (or use pre-cooked frozen, thawed — warm through 1 minute).','Assemble bowls: warm cooked quinoa as the base, roasted veg alongside, shrimp on top. Squeeze lemon over the top.'],
   him:{},her:{},
   ingredients:[
     I('shrimp',10,'protein'),
@@ -2493,7 +2493,7 @@ const MEALS=[
   ]},
 
  {id:'lentil_soup_lean',label:'Chicken & lentil vegetable soup',slots:['lunch','dinner'],
-  steps:['Dice chicken. Sauté carrots, celery, garlic in broth 3–4 min.','Add chicken and cook 4–5 min until no longer pink.','Add cooked lentils, remaining broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min until wilted.','Stir in egg whites — they cook in ribbons in the hot soup. Season with salt and pepper.'],
+  steps:['Dice chicken breast into bite-sized pieces. Bring a splash of chicken broth to a simmer in a pot. Add diced carrots, diced celery, and minced garlic. Sauté 3–4 minutes until softened.','Add diced chicken and cook 4–5 minutes until no longer pink.','Add cooked lentils, the remaining chicken broth, and Italian seasoning. Bring to a simmer over medium heat and cook 8–10 minutes to meld flavors.','Add roughly chopped kale and cook 3 minutes until wilted.','Slowly drizzle whisked egg whites into the simmering soup while stirring gently — they form silky ribbons. Season with salt and black pepper.'],
   him:{},her:{},
   ingredients:[
     I('lentils cooked',1.25,'protein'),
@@ -2511,7 +2511,7 @@ const MEALS=[
   fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
  {id:'turkey_zucchini_boats',label:'Turkey-stuffed zucchini boats with pasta',slots:['lunch','dinner'],
-  steps:['Preheat oven to 375°F. Halve zucchini lengthwise, scoop out centers.','Brown ground turkey with garlic, Italian seasoning, salt.','Stir in marinara and diced zucchini centers.','Fill boats. Bake 20 min.','Meanwhile, cook ~0.5 cup dry whole wheat pasta per serving (= 1 cup cooked) per package. Serve boats over pasta.'],
+  steps:['Preheat oven to 375°F. Halve zucchini lengthwise and scoop out the centers with a spoon, leaving ¼-inch walls. Dice the scooped centers and reserve.','Heat a non-stick pan over medium-high heat with a light oil spray. Add ground turkey and brown for ~5 minutes, breaking into crumbles. Stir in minced garlic, Italian seasoning, and salt and cook 1 minute until fragrant.','Stir in marinara and the reserved diced zucchini centers. Simmer 2 minutes to meld.','Arrange the zucchini boat halves on a foil-lined sheet pan. Fill each with the turkey-marinara mixture. Bake 20 minutes until the zucchini is tender and the filling is bubbling.','Meanwhile, cook ~0.5 cup dry whole wheat pasta per serving (= 1 cup cooked) per package directions. Drain. Serve the boats over the pasta.'],
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
@@ -2524,7 +2524,7 @@ const MEALS=[
   ]},
 
  {id:'cannellini_kale_soup',label:'Chicken, white bean & kale soup',slots:['lunch','dinner'],
-  steps:['Dice chicken. Sauté garlic, carrots, and celery in broth 3 min.','Add chicken and cook 4–5 min until no longer pink.','Add cooked cannellini beans, broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min.','Stir in egg whites — they form ribbons in the hot soup. Season with salt, pepper, lemon juice.'],
+  steps:['Dice chicken breast into bite-sized pieces. Bring a splash of chicken broth to a simmer in a pot. Add minced garlic, diced carrots, and diced celery. Sauté 3 minutes until softened.','Add diced chicken and cook 4–5 minutes until no longer pink.','Add cooked cannellini beans, the remaining chicken broth, and Italian seasoning. Bring to a simmer over medium heat and cook 8–10 minutes to meld flavors.','Add roughly chopped kale and cook 3 minutes until wilted.','Slowly drizzle whisked egg whites into the simmering soup while stirring gently — they form silky ribbons. Season with salt, black pepper, and a squeeze of lemon.'],
   him:{},her:{},
   ingredients:[
     I('cannellini beans cooked',1.5,'protein'),
