@@ -12831,6 +12831,7 @@ function _randomizeWeekCore(randTarget){
 
         var totalFatCal = 0;
         var totalPro = 0;
+        var totalCarbCal = 0; // V116 (2026-05-09): carbPct prediction
         var incomplete = false;
 
         SLOTS.forEach(function(s) {
@@ -12850,6 +12851,7 @@ function _randomizeWeekCore(randTarget){
                 totalKcal += lEff;
                 totalFatCal += lmm.fat * 9 * lScale;
                 totalPro += lmm.pro * lScale;
+                totalCarbCal += (lmm.carb||0) * 4 * lScale;
               }
             }
             return;
@@ -12925,6 +12927,7 @@ function _randomizeWeekCore(randTarget){
             totalKcal += effKcal;
             totalFatCal += pm.fat * 9 * macroScale;
             totalPro += pm.pro * macroScale;
+            totalCarbCal += (pm.carb||0) * 4 * macroScale;
           }
         });
 
@@ -12944,6 +12947,21 @@ function _randomizeWeekCore(randTarget){
         // 15%. Phase 1 picks freely on calDiff/fatPenalty/discouraged;
         // retry selector's goalMisses count (which already includes fatLow)
         // catches days that even fat-boost couldn't fix.
+        // V116 (2026-05-09): Phase 1 prediction → measurement audit found
+        // 8 of 9 misses (in 504-sample run) were goals Phase 1 didn't even
+        // track: pro / proPct / carbPct. kcal correlation was already 0.994
+        // and fatPct 0.78 — predictor was nailing what it scored, blind to
+        // the rest. These cheap macro-from-recipe predictions cover the
+        // gap. carbPct uses 0.56 threshold (not 0.55) for the same headroom
+        // logic as fatPenalty's 0.31 vs 0.30 — borderline picks shouldn't
+        // get systematically excluded.
+        var proT = (typeof PRO_TARGET !== 'undefined' && PRO_TARGET[p]) ? PRO_TARGET[p] : (p==='him'?180:120);
+        var proGap = totalPro < proT ? (proT - totalPro) : 0;
+        var proAbsPenalty = proGap * 50; // each gram below target costs 50 score
+        var proPct = totalKcal > 0 ? (totalPro * 4) / totalKcal : 0;
+        var proPctPenalty = proPct > 0.41 ? (proPct - 0.41) * 3000 : 0;
+        var carbPct = totalKcal > 0 ? totalCarbCal / totalKcal : 0;
+        var carbPctPenalty = carbPct > 0.56 ? (carbPct - 0.56) * 3000 : 0;
         // Strong penalty per meal containing a discouraged ingredient (coconut milk).
         // 3000/meal dominates typical calDiff (0-500) so coconut meals only pick
         // when no reasonable alternative fits. Ratio-wise, coconut milk is fat-dense
@@ -12956,7 +12974,7 @@ function _randomizeWeekCore(randTarget){
           if (mm.ingredients.some(function(i){ return DISCOURAGED_INGREDIENTS.indexOf(i.dbKey) >= 0; })) discouragedCount++;
         });
         var discouragedPenalty = discouragedCount * 3000;
-        var score = calDiff + fatPenalty + discouragedPenalty;
+        var score = calDiff + fatPenalty + proAbsPenalty + proPctPenalty + carbPctPenalty + discouragedPenalty;
 
         // Reject incomplete attempts (variety+used filter dead-end on
         // breakfast/lunch/dinner). Without this guard, the lowest-scoring
@@ -12966,7 +12984,7 @@ function _randomizeWeekCore(randTarget){
         if (score < bestScore) {
           bestScore = score;
           bestSel = trySel;
-          // Early-exit ceiling aligned with fatPenalty threshold (>0.31). Was
+          // Early-exit ceiling aligned with all penalty thresholds. Was
           // <=0.30, which created a 0.301-0.31 blind spot: attempts in that
           // range got neither penalty nor early-exit, so the scorer relied
           // on calDiff alone. Aligning to <=0.31 makes the consistency
@@ -12974,7 +12992,10 @@ function _randomizeWeekCore(randTarget){
           // V93: low-fat exit guard reverted (was V92). Auto-fat-boost runs
           // post-Phase-1 and addresses low-fat days structurally — Phase 1
           // shouldn't penalize on a metric that downstream will fix.
-          if (calDiff <= 100 && fatPct <= 0.31) break;
+          // V116 (2026-05-09): also gate on proGap/proPct/carbPct — same
+          // pattern as fatPct. Don't bail early on a winner that's still
+          // missing other goals.
+          if (calDiff <= 100 && fatPct <= 0.31 && proGap <= 0 && proPct <= 0.41 && carbPct <= 0.56) break;
         }
       }
 
