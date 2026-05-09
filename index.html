@@ -526,6 +526,7 @@ var NUTRI_DB = {
   'cumin':                 {kcal:9,   pro:0.3,fat:0.3, carb:1.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'italian seasoning':     {kcal:3,   pro:0,  fat:0,   carb:0.6, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'taco seasoning':        {kcal:10,  pro:0.5,fat:0.5, carb:2,   unit:'tbsp', brand:'Siete mild', halfSnap:true, minAmt:0.25, maxAmt:1.5},
+  'tajin':                 {kcal:5,   pro:0,  fat:0,   carb:1,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'dill':                  {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'dried oregano':         {kcal:5,   pro:0.2,fat:0.2, carb:1,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'parsley':               {kcal:1,   pro:0.1,fat:0,   carb:0.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
@@ -1779,7 +1780,7 @@ const MEALS=[
   ]},
 
  {id:'street_corn_bowl',label:'Mexican street corn turkey bowl',slots:['lunch','dinner'],
-  steps:['Preheat oven to 425°F. Peel and cube sweet potatoes. Toss with avocado oil and salt on a sheet pan. Roast 20–25 minutes, flipping halfway, until tender and caramelized at the edges.','Meanwhile make the corn dip: blend cottage cheese in a small food processor or with an immersion blender until smooth and creamy.','In a bowl, combine the blended cottage cheese with thawed corn, minced jalapeño, chopped cilantro, crumbled cotija, and a squeeze of lime juice with the zest. Stir to combine.','Heat avocado oil in a non-stick pan over medium-high heat. Add ground turkey and brown for ~5 minutes, breaking into crumbles, until cooked through.','Stir taco seasoning and a splash of water into the turkey. Cook 1–2 minutes until evenly coated and thickened.','Assemble bowls: roasted sweet potato as the base, ground turkey on top, generous spoonful of corn dip alongside. Garnish with extra cilantro and a lime wedge.'],
+  steps:['Preheat oven to 425°F. Peel and cube sweet potatoes. Toss with avocado oil and salt on a sheet pan. Roast 20–25 minutes, flipping halfway, until tender and caramelized at the edges.','Meanwhile make the corn dip: blend cottage cheese in a small food processor or with an immersion blender until smooth and creamy.','In a bowl, combine the blended cottage cheese with thawed corn, minced jalapeño, chopped cilantro, crumbled cotija, and a squeeze of lime juice with the zest. Stir to combine.','Heat avocado oil in a non-stick pan over medium-high heat. Add ground turkey and brown for ~5 minutes, breaking into crumbles, until cooked through.','Stir taco seasoning and a splash of water into the turkey. Cook 1–2 minutes until evenly coated and thickened.','Assemble bowls: roasted sweet potato as the base, ground turkey on top, generous spoonful of corn dip alongside. Garnish with extra cilantro, a sprinkle of Tajín, and a lime wedge.'],
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',4,'protein'),
@@ -1791,7 +1792,8 @@ const MEALS=[
     I('jalapeño',0.125,'veg',false),
     I('cilantro',1,'fixed',false),
     I('lime',0.25,'condiment',false),
-    I('taco seasoning',0.625,'fixed',false),
+    I('taco seasoning',0.5,'fixed',false),
+    I('tajin',0.125,'fixed',false),
     I('salt',0.125,'fixed',false)
   ],
   fatBoost:{dbKey:'avocado', amt:0.25}},
@@ -4000,7 +4002,7 @@ function fmtQty(q){
 
 // ── Shopping list builder ────────────────────────────────────
 var SHOP_CAT_MAP={
-  spices:['salt','black pepper','dried rosemary','dried thyme','cinnamon','cumin','garlic powder','onion powder','italian seasoning','dill','chili flake','red pepper flake','gochugaru','garlic','ginger','lemongrass','taco seasoning'],
+  spices:['salt','black pepper','dried rosemary','dried thyme','cinnamon','cumin','garlic powder','onion powder','italian seasoning','dill','chili flake','red pepper flake','gochugaru','garlic','ginger','lemongrass','taco seasoning','tajin'],
   sauces:['soy sauce','fish sauce','gochujang','rice vinegar','balsamic vinegar','red wine vinegar','oyster sauce','dark soy sauce','mirin','red curry paste','marinara','salsa','tomatillo sauce','tahini','broth concentrate','white miso'],
   oils:['avocado oil','sesame oil','olive oil'],
   supplements:['protein powder','creatine'],
@@ -4050,7 +4052,7 @@ var SHOP_DISPLAY_NAMES={
   'lentils cooked':'Lentils, cooked',
   'chickpeas cooked':'Chickpeas, cooked',
   'cottage cheese':'Cottage cheese','cotija cheese':'Cotija cheese',
-  'jalapeño':'Jalapeño','frozen corn':'Frozen corn','taco seasoning':'Taco seasoning'
+  'jalapeño':'Jalapeño','frozen corn':'Frozen corn','taco seasoning':'Taco seasoning','tajin':'Tajín'
 };
 
 // Epsilon-tolerant ceil for "how many packages/wholes do we need?" counts.
