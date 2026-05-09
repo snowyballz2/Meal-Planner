@@ -939,6 +939,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
       // any value, so they bypass min/max clamps. Pipeline shouldn't
       // override what the user picked.
       if(i._userSet === true) return {ing:i,newAmt:i.amt};
+      // V93 (2026-05-08): skip auto fat-boost ingredients. _autoApplyFatBoosts
+      // sets the amount based on recipe metadata; clamping would alter intent.
+      if(i._fatBoost === true) return {ing:i,newAmt:i.amt};
       // Skip FREEZE-pinned items only (scalable:false AND in ROUND_PKG_ITEMS
       // / ROUND_PRODUCE_ITEMS). Clamping these can silently violate the
       // freeze contract on early-return rebuilds. Other scalable:false items
@@ -1283,6 +1286,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
   return ingredients.map(function(ing, idx) {
     var amt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
     if(ing._userSet === true) return { ing:ing, newAmt:amt };
+    // V93 (2026-05-08): auto fat-boost ingredients also bypass min/max.
+    // The boost amount is set by _autoApplyFatBoosts based on recipe metadata.
+    if(ing._fatBoost === true) return { ing:ing, newAmt:amt };
     var db = NUTRI_DB[ing.dbKey];
     if (db) {
       var mn = _effMin(db);
@@ -1350,7 +1356,8 @@ const MEALS=[
     I('whole wheat toast',2,'carb'),
     I('garlic powder',0.5,'fixed',false),
     I('black pepper',0.5,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
  {id:'yogurt_bowl_sweet',label:'Sweet Greek yogurt bowl with berries',slots:['breakfast','snack'],noLeftover:true,
   steps:['Warm oats (from rice cooker porridge setting) in a bowl.','Spoon Greek yogurt alongside the oats (don\'t mix — keep them separate for texture contrast).','Top with mixed berries and chia seeds. Drizzle with honey.'],
@@ -1386,7 +1393,8 @@ const MEALS=[
     I('maple syrup',0.5,'carb'),
     I('cinnamon',0.5,'fixed',false),
     I('baking powder',0.5,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'peanut butter', amt:1}},
 
  {id:'tuna_scramble',label:'Tuna scramble & toast',slots:['breakfast'],
   steps:['Drain tuna thoroughly and break into flakes with a fork.','Heat avocado oil in a non-stick pan over medium heat. Add diced bell pepper, cook 2 min.','Add kale and stir until wilted, about 1 min.','Whisk egg whites and whole egg together. Pour over the veg.','Add flaked tuna. Fold and scramble gently 3–4 min until just set.','Season with garlic powder and black pepper. Serve with toast.'],
@@ -1430,7 +1438,8 @@ const MEALS=[
     I('rice vinegar',1,'condiment',false),
     I('sesame oil',0.125,'fat'),
     I('sesame seeds',0.25,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'sesame oil', amt:0.5}},
 
  {id:'thai_tofu_scramble',label:'Thai-spiced tofu scramble & toast',slots:['breakfast'],
   steps:['Press tofu and crumble. Heat non-stick pan with light oil spray. Sauté carrots 2 min.','Add crumbled tofu. Cook 4–5 min until golden.','Add spinach, soy sauce. Stir until wilted. Serve with toast.'],
@@ -1453,7 +1462,8 @@ const MEALS=[
     I('carrots',0.5,'veg'),
     I('soy sauce',1,'condiment',false),
     I('rice vinegar',1,'condiment',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'peanuts', amt:2}},
 
  {id:'korean_juk',label:'Korean egg & rice porridge (Juk)',slots:['breakfast'],
   steps:['Combine cooked white rice (from rice cooker) with 2 cups water in a pot. Simmer 8–10 min, stirring often, until the rice breaks down into a creamy porridge.','Stir in chopped kale 2 min.','Whisk eggs, slowly stir into porridge for silky ribbons. Cook 1 min.','Season with soy sauce and sesame oil. Top with sesame seeds.'],
@@ -1467,7 +1477,8 @@ const MEALS=[
     I('soy sauce',0.33,'condiment',false),
     I('sesame oil',0.125,'fat'),
     I('sesame seeds',0.25,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'sesame oil', amt:0.5}},
 
  // ── Additional lean breakfasts ──────────────────────────────
 
@@ -1498,18 +1509,19 @@ const MEALS=[
     I('whole wheat toast',1,'carb'),
     I('garlic powder',0.5,'fixed',false),
     I('black pepper',0.5,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
  {id:'yogurt_oat_bowl',label:'Protein yogurt & oat bowl',slots:['breakfast','snack'],
-  steps:['Warm oats (from rice cooker porridge setting) in a bowl.','Layer on top: yogurt, banana slices, chia seeds, and a drizzle of honey.'],
+  steps:['Warm oats (from rice cooker porridge setting) in a bowl.','Layer on top: yogurt, then banana slices and a drizzle of honey.'],
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',0.75,'protein'),
     I('oats',0.5,'carb'),
-    I('chia seeds',0.5,'fat'),
     I('banana',1,'fruit',false),
     I('honey tbsp',1,'condiment',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'chia seeds', amt:1}},
 
  {id:'turkey_egg_scramble',label:'Ground turkey & egg white scramble',slots:['breakfast'],
   steps:['Brown ground turkey in non-stick pan, breaking into crumbles.','Add spinach and bell pepper, cook 2 min.','Pour in egg whites, scramble everything together 2–3 min.','Season with garlic powder, black pepper. Serve with toast.'],
@@ -1534,7 +1546,8 @@ const MEALS=[
     I('mixed berries',0.25,'fruit',false),
     I('maple syrup',0.5,'condiment',false),
     I('water',1.5,'liquid')
-  ]},
+  ],
+  fatBoost:{dbKey:'peanut butter', amt:1}},
 
  {id:'quinoa_breakfast_bowl',label:'Quinoa & egg breakfast bowl',slots:['breakfast'],
   steps:['Warm quinoa (from rice cooker) in a bowl.','Sauté kale and bell pepper in non-stick pan 2 min.','Add egg whites, scramble with veg.','Serve over quinoa. Season with salt, pepper.'],
@@ -1626,7 +1639,8 @@ const MEALS=[
     I('ginger',1,'condiment',false),
     I('baby spinach',0.75,'veg'),
     I('black pepper',0.5,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'sesame oil', amt:0.5}},
 
  {id:'shrimp_coconut_curry',label:'Shrimp coconut curry with jasmine rice',slots:['lunch','dinner'],noRandomize:true,
   steps:['Sauté bell pepper in non-stick skillet 2 min. Remove and set aside.','Add ginger and garlic to the same pan, cook 30 sec.','Add red curry paste and press against the pan. Fry 30–60 sec, stirring constantly — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 2–3 min to thicken.','Return bell pepper. Add shrimp, cook 3 min until pink.','Stir in spinach until wilted. Squeeze lime.','Serve over warm jasmine rice (from rice cooker).'],
@@ -1723,7 +1737,7 @@ const MEALS=[
   ]},
 
  {id:'tuna_white_bean',label:'Tuna & white bean salad bowl',slots:['lunch','dinner'],
-  steps:['Drain tuna and flake. Use cannellini beans cooked from Instant Pot (drained).','Combine tuna, beans, kale, zucchini, carrots.','Whisk avocado oil + vinegar + black pepper. Pour over and toss.'],
+  steps:['Drain tuna and flake. Use cannellini beans cooked from Instant Pot (drained).','Combine tuna, beans, kale, zucchini, carrots.','Whisk olive oil + vinegar + black pepper. Pour over and toss.'],
   him:{},her:{},
   ingredients:[
     I('canned tuna',6,'protein'),
@@ -1731,10 +1745,11 @@ const MEALS=[
     I('kale',1.5,'veg'),
     I('zucchini',0.5,'veg'),
     I('carrots',0.5,'veg'),
-    I('avocado oil',1,'fat'),
+    I('olive oil',1,'fat'),
     I('red wine vinegar',1,'condiment',false),
     I('black pepper',0.5,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'olive oil', amt:0.5}},
 
  {id:'burrito_bowl',label:'Chicken burrito bowl',slots:['lunch','dinner'],
   steps:['Warm rice, beans, and chicken together.','Massage kale with lime juice + salt 30 sec.','Assemble: rice base, beans, chicken, kale, salsa, avocado, Greek yogurt.'],
@@ -1829,7 +1844,8 @@ const MEALS=[
     I('sesame oil',1,'fat'),
     I('soy sauce',1,'condiment',false),
     I('gochujang',1,'condiment',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'sesame oil', amt:0.5}},
 
  {id:'red_curry',label:'Crispy tofu red curry with jasmine rice',slots:['lunch','dinner'],noRandomize:true,
   steps:['Press tofu: wrap in paper towels and press under a heavy object 10 min. Cut into 1-inch cubes.','Dry-sear tofu cubes in a hot non-stick pan 3–4 min per side until golden and crispy. Remove and set aside.','Add red curry paste to the pan and press against the surface. Fry 30–60 sec, stirring constantly — the paste has embedded oil that releases and blooms the aromatics.','Whisk in coconut milk a splash at a time into the paste to emulsify, then add ~6 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1 min.','Add broccoli and bell pepper. Simmer 6–8 min until veg is tender.','Add kale, edamame, and return tofu to the pan. Cook 2 min until kale is wilted.','Serve over warm jasmine rice (from rice cooker).'],
@@ -1858,7 +1874,8 @@ const MEALS=[
     I('soy sauce',1,'condiment',false),
     I('sesame oil',0.5,'fat'),
     I('lime',0.5,'condiment',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'sesame oil', amt:0.5}},
 
  {id:'rxbar_apple',label:'RX Bar + apple',slots:['snack'],
   steps:['No prep needed.'],
@@ -1929,7 +1946,8 @@ const MEALS=[
     I('oats',0.25,'carb'),
     I('mixed berries',0.5,'fruit',false),
     I('honey tbsp',0.5,'condiment')
-  ]},
+  ],
+  fatBoost:{dbKey:'chia seeds', amt:1}},
 
  {id:'salmon_lentils',label:'Baked salmon, lentils & sautéed spinach',slots:['lunch','dinner'],
   steps:['Preheat oven to 400°F. Pat salmon dry. Season with lemon, dill, pepper. Roast 12–15 min (salmon renders enough of its own fat — no oil needed).','Sauté spinach with garlic in a non-stick pan (no oil) 2–3 min, finishing with a squeeze of lemon.','Warm rice (from rice cooker) and lentils (from Instant Pot) together.','Plate: rice + lentils, salmon on top, spinach alongside.'],
@@ -2120,19 +2138,20 @@ const MEALS=[
     I('lemon',0.5,'fixed',false),
     I('dill',0.5,'fixed',false),
     I('black pepper',0.25,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'tahini', amt:1}},
 
  {id:'spiced_chickpea_spinach',label:'Spiced chickpea & spinach bowl',slots:['snack'],
-  steps:['Warm the cooked chickpeas briefly (30 sec microwave or skillet).','Toss with baby spinach and tahini — the warmth wilts the spinach slightly.','Season with cumin, lemon juice, and black pepper. Eat warm or chilled.'],
+  steps:['Warm the cooked chickpeas briefly (30 sec microwave or skillet).','Toss with baby spinach — the warmth wilts it slightly.','Season with cumin, lemon juice, and black pepper. Eat warm or chilled.'],
   him:{},her:{},
   ingredients:[
     I('chickpeas cooked',0.5,'protein'),
-    I('tahini',0.5,'fat'),
     I('baby spinach',0.75,'veg'),
     I('cumin',0.25,'fixed',false),
     I('lemon',0.5,'fixed',false),
     I('black pepper',0.25,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'tahini', amt:1}},
 
  {id:'celery_yogurt_dip',label:'Celery & yogurt dip',slots:['snack'],
   steps:['Cut celery into sticks.','Stir garlic powder, dill, black pepper, and a squeeze of lemon into the Greek yogurt.','Dip celery in the yogurt.'],
@@ -2340,7 +2359,8 @@ const MEALS=[
     I('black pepper',0.5,'fixed',false),
     I('dried rosemary',0.5,'fixed',false),
     I('dried thyme',0.5,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
  // ── Lean recipes (low fat, high protein) ──────────────────
 
@@ -2402,7 +2422,8 @@ const MEALS=[
     I('cumin',0.5,'fixed',false),
     I('garlic powder',0.5,'fixed',false),
     I('lime',0.5,'condiment',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
  {id:'chickpea_curry_bowl',label:'Chickpea & spinach curry',slots:['lunch','dinner'],noRandomize:true,
   steps:['Warm hot brown rice (from rice cooker) with the edamame stirred through. Set aside as the bowl base.','Heat a dry pan over medium. Add red curry paste and press against the pan. Fry 30–60 sec, stirring — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1–2 min to thicken.','Add chickpeas (from Instant Pot) and spinach. Simmer 5–6 min until spinach wilts and chickpeas are heated through.','Spoon curry over the rice-edamame base.'],
@@ -2462,13 +2483,12 @@ const MEALS=[
   ]},
 
  {id:'lentil_soup_lean',label:'Chicken & lentil vegetable soup',slots:['lunch','dinner'],
-  steps:['Heat olive oil in pot. Sauté carrots, celery, garlic 2 min until fragrant.','Add diced chicken and cook 4–5 min until no longer pink.','Add lentils (from Instant Pot), broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min until wilted.','Stir in egg whites — they cook in ribbons in the hot soup. Season with salt and pepper.'],
+  steps:['Dice chicken. Sauté carrots, celery, garlic in broth 3–4 min.','Add chicken and cook 4–5 min until no longer pink.','Add lentils (from Instant Pot), remaining broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min until wilted.','Stir in egg whites — they cook in ribbons in the hot soup. Season with salt and pepper.'],
   him:{},her:{},
   ingredients:[
     I('lentils cooked',1.25,'protein'),
     I('chicken breast',4,'protein'),
     I('egg white',0.5,'protein'),
-    I('olive oil',0.5,'fat'),
     I('kale',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('celery',0.5,'veg'),
@@ -2477,7 +2497,8 @@ const MEALS=[
     I('italian seasoning',0.5,'fixed',false),
     I('salt',0.5,'fixed',false),
     I('black pepper',0.5,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
  {id:'turkey_zucchini_boats',label:'Turkey-stuffed zucchini boats with pasta',slots:['lunch','dinner'],
   steps:['Preheat oven to 375°F. Halve zucchini lengthwise, scoop out centers.','Brown ground turkey with garlic, Italian seasoning, salt.','Stir in marinara and diced zucchini centers.','Fill boats. Bake 20 min.','Meanwhile, cook ~0.5 cup dry whole wheat pasta per serving (= 1 cup cooked) per package. Serve boats over pasta.'],
@@ -2493,13 +2514,12 @@ const MEALS=[
   ]},
 
  {id:'cannellini_kale_soup',label:'Chicken, white bean & kale soup',slots:['lunch','dinner'],
-  steps:['Heat olive oil in pot. Sauté garlic, carrots, and celery 2 min until fragrant.','Add diced chicken and cook 4–5 min until no longer pink.','Add cannellini beans (from Instant Pot), broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min.','Stir in egg whites — they form ribbons in the hot soup. Season with salt, pepper, lemon juice.'],
+  steps:['Dice chicken. Sauté garlic, carrots, and celery in broth 3 min.','Add chicken and cook 4–5 min until no longer pink.','Add cannellini beans (from Instant Pot), broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min.','Stir in egg whites — they form ribbons in the hot soup. Season with salt, pepper, lemon juice.'],
   him:{},her:{},
   ingredients:[
     I('cannellini beans cooked',1.5,'protein'),
     I('chicken breast',4,'protein'),
     I('egg white',0.25,'protein'),
-    I('olive oil',0.5,'fat'),
     I('kale',0.75,'veg'),
     I('carrots',0.5,'veg'),
     I('celery',0.5,'veg'),
@@ -2509,7 +2529,8 @@ const MEALS=[
     I('italian seasoning',0.5,'fixed',false),
     I('salt',0.5,'fixed',false),
     I('black pepper',0.5,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
 ];
 
@@ -3441,7 +3462,7 @@ function _hasUserOverrides(p,d,s){
   if(!ov||!ov.length)return false;
   // 2026-05-04: rely on explicit _userSet flag. User-driven overrides
   // (onIngrAmt / onIngrSwap) tag entries with _userSet:true. Freeze pins
-  // never set this flag.
+  // and V93 auto fat-boost overrides never set this flag.
   return ov.some(function(o){return o._userSet===true;});
 }
 // Clear all freeze-written overrides (scalable:false) across every slot.
@@ -3462,14 +3483,137 @@ function _clearFreezeOverrides(){
     // 2026-05-04: clear FREEZE-origin entries only (scalable:false AND no
     // _userSet). User pins (also scalable:false but with _userSet:true) are
     // preserved across randomize cycles.
+    // V93 (2026-05-08): also clear _fatBoost-origin entries (auto-managed by
+    // _autoApplyFatBoosts each randomize — we re-apply based on current SEL).
     var filtered = ov.filter(function(o){
       if(o.scalable !== false) return true; // not freeze-marked
       if(o._userSet === true) return true; // user pin, keep
+      if(o._fatBoost === true) return false; // auto fat-boost, drop & re-apply
       return false; // freeze-only, drop
     });
     if(filtered.length === 0) delete OVERRIDES[k];
     else if(filtered.length !== ov.length) OVERRIDES[k] = filtered;
   });
+}
+
+// V93 (2026-05-08): auto fat-boost — when a day's projected fatPct < 15%,
+// inject recipe-defined fatBoost ingredients as overrides so the day reaches
+// the 15% goal floor. Balancer (P0/P3c) compensates kcal by trimming
+// carb/pro elsewhere.
+//
+// _estimateDayFatPct(p,d): quick base-recipe + slot-budget approximation,
+// no cache dependency. Used to decide whether to auto-apply boost. Mirrors
+// Phase 1's MAX_UP_SCALE=Infinity scoring approach.
+function _estimateDayFatPct(p, d){
+  var totalKcal = 0, totalFat = 0;
+  var budgets = (typeof computeSlotBudgets === 'function')
+    ? computeSlotBudgets(p, d) : {};
+  ['shake','breakfast','lunch','snack','dinner','late_snack'].forEach(function(s){
+    var k = sk(p, d, s);
+    if(SKIPPED[k]) return;
+    if(EAT_OUT[k]){
+      var eo = EAT_OUT[k];
+      if(eo && typeof eo === 'object' && eo.kcal !== undefined){
+        totalKcal += eo.kcal;
+        totalFat += eo.fat || 0;
+      }
+      return;
+    }
+    if(s === 'late_snack'){
+      var ls = LATE_SNACK[pk(p,d)];
+      if(ls && ls.kcal !== undefined){
+        totalKcal += ls.kcal;
+        totalFat += ls.fat || 0;
+      }
+      return;
+    }
+    var mid = SEL[k];
+    if(!mid) return;
+    var m = getMeal(mid);
+    if(!m || !m[p]) return;
+    var pm = getPortMacros(m[p]);
+    var budget = budgets[s] || 0;
+    var scale;
+    if(s === 'shake' || !budget){
+      scale = 1; // shake doesn't scale
+    } else {
+      scale = pm.kcal > 0 ? (budget / pm.kcal) : 1;
+    }
+    totalKcal += pm.kcal * scale;
+    totalFat += pm.fat * scale;
+  });
+  return totalKcal > 0 ? (totalFat * 9) / totalKcal : 0;
+}
+
+// _autoApplyFatBoosts(target): for each (p,d) in target, if projected day
+// fatPct < 15%, inject the recipe's fatBoost ingredient into eligible slots.
+// Eligible = main slot (breakfast/lunch/snack/dinner), not SKIPPED/EAT_OUT,
+// not MANUAL_SET, meal has fatBoost field, and the boost ingredient isn't
+// already user-pinned.
+//
+// Boost flow:
+//   1. If recipe already has the fatBoost dbKey at index i: override at i with
+//      amt = recipe.amt + boost.amt (extends existing).
+//   2. If recipe doesn't have it: append override at idx = recipe.length
+//      (new ingredient pattern, same as confirmTempIngredient).
+// All overrides marked _fatBoost:true + scalable:false so balancer doesn't
+// re-scale them, _clampThresh skips bounds, INV13 verifier skips checks.
+function _autoApplyFatBoosts(target){
+  var persons = target === 'shared' ? ['him','her']
+              : (target === 'him' || target === 'her') ? [target]
+              : ['him','her'];
+  persons.forEach(function(p){
+    if(p !== 'him' && p !== 'her') return;
+    DAYS.forEach(function(d){
+      var estFatPct = _estimateDayFatPct(p, d);
+      // V93: trigger threshold 0.18 — gives 3pp margin above the hard 0.15
+      // floor. Phase 1 estimate uses base recipe + slot-budget scaling, but
+      // post-pipeline drift (snap, freeze, balancer trim) can shift fat by
+      // 1-2pp. Days projecting at 17% can land at 14.5% post-pipeline. Boost
+      // fires more aggressively to give downstream pipeline ample headroom.
+      if(estFatPct >= 0.18) return; // day projects ≥ 18% naturally; no boost
+      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+        var skk = sk(p, d, s);
+        if(SKIPPED[skk] || EAT_OUT[skk]) return;
+        if(MANUAL_SET[skk]) return;
+        var mid = SEL[skk];
+        if(!mid) return;
+        var m = getMeal(mid);
+        if(!m || !m.fatBoost) return;
+        var port = m[p];
+        if(!port || !port.ingredients) return;
+        var boost = m.fatBoost;
+        // Has user already pinned this ingredient? If so, leave alone.
+        var userPinnedIdx = -1;
+        var ovr = OVERRIDES[skk] || [];
+        for(var oi = 0; oi < ovr.length; oi++){
+          if(ovr[oi].dbKey === boost.dbKey && ovr[oi]._userSet === true){
+            userPinnedIdx = oi; break;
+          }
+        }
+        if(userPinnedIdx >= 0) return;
+        // Find existing recipe ingredient with this dbKey.
+        var existIdx = -1;
+        var existAmt = 0;
+        for(var ri = 0; ri < port.ingredients.length; ri++){
+          if(port.ingredients[ri].dbKey === boost.dbKey){
+            existIdx = ri;
+            existAmt = port.ingredients[ri].amt || 0;
+            break;
+          }
+        }
+        var newAmt = existAmt + boost.amt;
+        var writeIdx = existIdx >= 0 ? existIdx : port.ingredients.length;
+        // Write override entry. Mark _fatBoost:true + scalable:false.
+        setOverride(p, d, s, writeIdx, 'dbKey', boost.dbKey);
+        setOverride(p, d, s, writeIdx, 'amt', newAmt);
+        setOverride(p, d, s, writeIdx, 'role', 'fat');
+        setOverride(p, d, s, writeIdx, 'scalable', false);
+        setOverride(p, d, s, writeIdx, '_fatBoost', true);
+      });
+    });
+  });
+  invalidateLeftoverCache();
 }
 
 // Apply overrides to a port's ingredients, returns new array
@@ -3492,11 +3636,15 @@ function applyOverrides(port,p,d,s){
     // distinguish user-pinned amounts from freeze-pinned ones. User pins
     // bypass min/max clamps so users can set arbitrary values.
     if(o._userSet===true)newIng._userSet=true;
+    // V93 (2026-05-08): forward _fatBoost flag so downstream code (clamp,
+    // INV13, _hasUserOverrides) can distinguish auto-boosted ingredients.
+    if(o._fatBoost===true)newIng._fatBoost=true;
     return newIng;
   });
   // 2026-05-05+: append USER-ADDED ingredients (overrides at idx >= recipe
-  // length, written by `confirmTempIngredient`). Without this the temp-
-  // ingredient feature was a no-op — override existed but was never read.
+  // length, written by `confirmTempIngredient` or _autoApplyFatBoosts).
+  // Without this the temp-ingredient feature was a no-op — override existed
+  // but was never read.
   const recipeLen = port.ingredients.length;
   ovr.filter(function(o){return o.idx >= recipeLen && o.dbKey;})
      .sort(function(a,b){return a.idx - b.idx;})
@@ -3508,6 +3656,7 @@ function applyOverrides(port,p,d,s){
          scalable: o.scalable !== undefined ? o.scalable : false
        };
        if(o._userSet===true) ing._userSet=true;
+       if(o._fatBoost===true) ing._fatBoost=true;
        result.push(ing);
      });
   return result;
@@ -6106,15 +6255,23 @@ function verifyInvariants(){
         var isSoloSlot=!slotLo;
         // 2026-05-05: detect USER pins on this slot — user-set overrides
         // bypass min/max checks so users can pick arbitrary values.
+        // V93 (2026-05-08): also detect _fatBoost overrides — auto-applied
+        // by recipe metadata, bypass min/max same as user pins.
         const _slotOv = OVERRIDES[sk(p,d,s)] || [];
         const _userIdxs = {};
-        _slotOv.forEach(function(o){if(o._userSet===true)_userIdxs[o.idx]=true;});
+        _slotOv.forEach(function(o){
+          if(o._userSet===true) _userIdxs[o.idx]=true;
+          if(o._fatBoost===true) _userIdxs[o.idx]=true;
+        });
         bal.forEach(function(bi,_ix){
           var db=NUTRI_DB[bi.dbKey];if(!db)return;
           // Skip zero / near-zero amounts (ingredient effectively absent).
           if(bi.amt<0.001)return;
-          // Skip user pins — they're allowed any value.
+          // Skip user pins / fat-boost overrides — both allowed any value.
           if(_userIdxs[_ix])return;
+          // V93: also skip if the ingredient itself carries _fatBoost (added
+          // beyond recipe.length, no idx-based detection).
+          if(bi._fatBoost===true)return;
           var effMinCheck=(isSoloSlot && typeof db.minAmtSolo==='number')
             ? db.minAmtSolo
             : (db.minAmt!=null ? db.minAmt : null);
@@ -12042,6 +12199,13 @@ function randomizeWeek(target, seed){
     rerollInv14Violations(randTarget);
     cacheFromWinner = false;
   }
+  // V93 (2026-05-08): auto-apply fat-boost on lean days. Runs AFTER all
+  // SEL-changing passes (Phase 1-4, rerollMissDays, rerollInv14Violations)
+  // so it sees stable meal selections, BEFORE the freeze + balance passes
+  // so they can compensate kcal via P0 trim. Invalidates cache so freeze
+  // and balancer see the boosted state.
+  _autoApplyFatBoosts(randTarget);
+  cacheFromWinner = false; // boost overrides need balancer to compensate
   if (!cacheFromWinner) {
     runBalanceAdjusters();
     freezeTripTotals(randTarget, true);
@@ -12729,14 +12893,12 @@ function _randomizeWeekCore(randTarget){
         // worse than a chicken-breast alternative. Hard goal still 0.30 —
         // we accept a few more borderline misses in exchange for variety.
         var fatPenalty = fatPct > 0.31 ? (fatPct - 0.31) * 3000 : 0;
-        // V92 (2026-05-08): fat-LOW penalty — symmetric to high-fat penalty.
-        // Threshold 0.16 (not 0.15) matches the high side's 0.31-not-0.30
-        // headroom: avoids false rejection of combos that LAND at 15% but
-        // project lower in Phase 1's slot-budget approximation. Hard goal
-        // is 0.15 floor (V89b). Penalty 3000 per pp under 0.16 — same
-        // magnitude as the high-fat penalty so the scorer treats both
-        // boundaries symmetrically.
-        var fatLowPenalty = fatPct < 0.16 ? (0.16 - fatPct) * 3000 : 0;
+        // V93 (2026-05-08): V92's fatLowPenalty REMOVED. Auto-fat-boost
+        // (post-pipeline) handles low-fat days structurally — applying
+        // recipe-defined boost ingredients only when day projects below
+        // 15%. Phase 1 picks freely on calDiff/fatPenalty/discouraged;
+        // retry selector's goalMisses count (which already includes fatLow)
+        // catches days that even fat-boost couldn't fix.
         // Strong penalty per meal containing a discouraged ingredient (coconut milk).
         // 3000/meal dominates typical calDiff (0-500) so coconut meals only pick
         // when no reasonable alternative fits. Ratio-wise, coconut milk is fat-dense
@@ -12749,7 +12911,7 @@ function _randomizeWeekCore(randTarget){
           if (mm.ingredients.some(function(i){ return DISCOURAGED_INGREDIENTS.indexOf(i.dbKey) >= 0; })) discouragedCount++;
         });
         var discouragedPenalty = discouragedCount * 3000;
-        var score = calDiff + fatPenalty + fatLowPenalty + discouragedPenalty;
+        var score = calDiff + fatPenalty + discouragedPenalty;
 
         // Reject incomplete attempts (variety+used filter dead-end on
         // breakfast/lunch/dinner). Without this guard, the lowest-scoring
@@ -12764,8 +12926,10 @@ function _randomizeWeekCore(randTarget){
           // range got neither penalty nor early-exit, so the scorer relied
           // on calDiff alone. Aligning to <=0.31 makes the consistency
           // explicit — penalty triggers AT the same point early-exit refuses.
-          // V92: also gate on fat-low ≥ 0.16 (matches new fatLowPenalty).
-          if (calDiff <= 100 && fatPct <= 0.31 && fatPct >= 0.16) break;
+          // V93: low-fat exit guard reverted (was V92). Auto-fat-boost runs
+          // post-Phase-1 and addresses low-fat days structurally — Phase 1
+          // shouldn't penalize on a metric that downstream will fix.
+          if (calDiff <= 100 && fatPct <= 0.31) break;
         }
       }
 
@@ -14817,6 +14981,19 @@ function renderRecipesView(){
             }
           });
           html+='</div>';
+        }
+        // V93 (2026-05-08): note about auto fat-boost — shown below ingredient
+        // list when this meal has a fatBoost defined. Informs user that on
+        // low-fat days the boost ingredient is automatically added to the slot.
+        if(m.fatBoost && m.fatBoost.dbKey){
+          const fbDb=NUTRI_DB[m.fatBoost.dbKey];
+          const fbUnit=fbDb?fbDb.unit:'';
+          const fbAmtLabel=fmtFrac(m.fatBoost.amt);
+          const fbName=(window.SHOP_DISPLAY_NAMES&&SHOP_DISPLAY_NAMES[m.fatBoost.dbKey])||m.fatBoost.dbKey;
+          html+='<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:var(--text-mid);line-height:1.4">'
+            +'<span style="color:#F59E0B;font-weight:700">⚡ Auto fat-boost:</span> '
+            +'+'+fbAmtLabel+' '+fbUnit+' '+fbName+' added on days projecting under 15% fat.'
+            +'</div>';
         }
         if(m.steps&&m.steps.length){
           html+='<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:4px">Steps</div>';
