@@ -1330,7 +1330,8 @@ const MEALS=[
     I('oats tbsp',1,'carb',false),
     I('water',1.25,'liquid'),
     I('cinnamon',0.5,'fixed',false)
-  ]},
+  ],
+  fatBoost:{dbKey:'almond butter', amt:0.5}},
 
  {id:'her_shake',label:'Protein, creatine & acai oat shake',slots:['shake'],
   steps:['Add cashew milk to blender first.','Add banana, acai, oats, protein, creatine.','Blend 30–45 sec. Optional: add 1 tbsp peanut butter.'],
@@ -1343,7 +1344,8 @@ const MEALS=[
     I('peanut butter',0,'fat'),
     I('oats tbsp',1,'carb'),
     I('cashew milk (sweetened)',0.5,'liquid')
-  ]},
+  ],
+  fatBoost:{dbKey:'almond butter', amt:0.5}},
 
  {id:'egg_scramble',label:'Egg white scramble & toast',slots:['breakfast'],
   steps:['Heat non-stick pan over medium heat with light oil spray.','Add diced bell pepper and cook 2 min, stirring occasionally.','Add spinach and stir until just wilted, about 1 min.','Whisk egg whites and whole egg together with a pinch of garlic powder and black pepper.','Pour eggs over the veg. Let set 10 sec, then gently fold and scramble until just cooked, 3–4 min. Remove from heat while still slightly glossy — they carry-over cook.','Toast bread. Plate everything together.'],
@@ -3505,6 +3507,13 @@ function _clearFreezeOverrides(){
 // no cache dependency. Used to decide whether to auto-apply boost. Mirrors
 // Phase 1's MAX_UP_SCALE=Infinity scoring approach.
 function _estimateDayFatPct(p, d){
+  var m = _estimateDayMacros(p, d);
+  return m.kcal > 0 ? (m.fat * 9) / m.kcal : 0;
+}
+
+// Returns {kcal, fat} estimate for a day from base recipes + slot-budget scaling.
+// No cache dependency. Used by _autoApplyFatBoosts to compute fat deficit.
+function _estimateDayMacros(p, d){
   var totalKcal = 0, totalFat = 0;
   var budgets = (typeof computeSlotBudgets === 'function')
     ? computeSlotBudgets(p, d) : {};
@@ -3542,7 +3551,7 @@ function _estimateDayFatPct(p, d){
     totalKcal += pm.kcal * scale;
     totalFat += pm.fat * scale;
   });
-  return totalKcal > 0 ? (totalFat * 9) / totalKcal : 0;
+  return {kcal: totalKcal, fat: totalFat};
 }
 
 // _autoApplyFatBoosts(target): for each (p,d) in target, if projected day
@@ -3565,23 +3574,40 @@ function _autoApplyFatBoosts(target){
   persons.forEach(function(p){
     if(p !== 'him' && p !== 'her') return;
     DAYS.forEach(function(d){
-      var estFatPct = _estimateDayFatPct(p, d);
-      // V93: trigger threshold 0.18 — gives 3pp margin above the hard 0.15
-      // floor. Phase 1 estimate uses base recipe + slot-budget scaling, but
-      // post-pipeline drift (snap, freeze, balancer trim) can shift fat by
-      // 1-2pp. Days projecting at 17% can land at 14.5% post-pipeline. Boost
-      // fires more aggressively to give downstream pipeline ample headroom.
-      if(estFatPct >= 0.18) return; // day projects ≥ 18% naturally; no boost
-      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+      // V93 INTELLIGENT BOOST (2026-05-08, refactored to measure not predict):
+      // Iterate shake → breakfast → lunch → snack → dinner. Before each
+      // potential boost, READ actual current day fatPct via calcTotals
+      // (lazy-builds cache through applyOverrides → adjustIngredients, so
+      // it reflects the real post-adjustment state). Apply boost, invalidate
+      // the affected slot's cache, re-read on next iteration. Stop as soon
+      // as actual fatPct ≥ 0.18.
+      //
+      // Target 0.18 (not 0.15): downstream pipeline (balancer P0 kcal-trim,
+      // freeze passes, snap to grid) shaves 1-2pp off day fat as it trims
+      // scalable items to fit budgets. Targeting 18% post-boost typically
+      // settles to 15.5-17% post-pipeline. No predictor drift since we
+      // MEASURE between each boost — but we still need margin for the
+      // mutations the pipeline makes AFTER us.
+      function readDayFatPct(){
+        var t = calcTotals(p, d);
+        var mk = t.pro*4 + t.fat*9 + t.carb*4;
+        return mk > 0 ? (t.fat * 9) / mk : 0;
+      }
+      // First measurement: skip whole day if already at/above target.
+      if(readDayFatPct() >= 0.18) return;
+      var slotOrder = ['shake','breakfast','lunch','snack','dinner'];
+      for(var si = 0; si < slotOrder.length; si++){
+        if(readDayFatPct() >= 0.18) break; // re-measured each iter
+        var s = slotOrder[si];
         var skk = sk(p, d, s);
-        if(SKIPPED[skk] || EAT_OUT[skk]) return;
-        if(MANUAL_SET[skk]) return;
+        if(SKIPPED[skk] || EAT_OUT[skk]) continue;
+        if(MANUAL_SET[skk]) continue;
         var mid = SEL[skk];
-        if(!mid) return;
+        if(!mid) continue;
         var m = getMeal(mid);
-        if(!m || !m.fatBoost) return;
+        if(!m || !m.fatBoost) continue;
         var port = m[p];
-        if(!port || !port.ingredients) return;
+        if(!port || !port.ingredients) continue;
         var boost = m.fatBoost;
         // Has user already pinned this ingredient? If so, leave alone.
         var userPinnedIdx = -1;
@@ -3591,7 +3617,7 @@ function _autoApplyFatBoosts(target){
             userPinnedIdx = oi; break;
           }
         }
-        if(userPinnedIdx >= 0) return;
+        if(userPinnedIdx >= 0) continue;
         // Find existing recipe ingredient with this dbKey.
         var existIdx = -1;
         var existAmt = 0;
@@ -3610,7 +3636,13 @@ function _autoApplyFatBoosts(target){
         setOverride(p, d, s, writeIdx, 'role', 'fat');
         setOverride(p, d, s, writeIdx, 'scalable', false);
         setOverride(p, d, s, writeIdx, '_fatBoost', true);
-      });
+        // Invalidate just THIS slot's cache so the next readDayFatPct sees
+        // the boost applied. Avoids invalidating the whole day cache for
+        // every boost (which would force expensive rebuilds).
+        if(typeof _dayBalancedCache !== 'undefined' && _dayBalancedCache[pk(p,d)]){
+          delete _dayBalancedCache[pk(p,d)][s];
+        }
+      }
     });
   });
   invalidateLeftoverCache();
