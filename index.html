@@ -12757,12 +12757,20 @@ function _randomizeWeekCore(randTarget){
       // the adjuster scales each slot to its budget, so a low-base meal is
       // NOT actually worse than a high-base one — it just gets scaled up.
       var slotBudgets = computeSlotBudgets(p, d);
-      // MAX_UP_SCALE: the actual adjuster (adjustIngredients) has no hard
-      // scale cap — only per-ingredient minAmt/maxAmt clamps. Setting this
-      // to Infinity lets Phase 1 score a small-base meal as equally fillable
-      // for a large budget, freeing small-kcal recipes (many breakfasts)
-      // to compete instead of losing on calDiff. Per-ingredient maxAmt still
-      // governs final amounts.
+      // MAX_UP_SCALE: stays at Infinity. V96 audit (2026-05-08) measured
+      // actual achievable scale across 5600 (run, person, day, slot) combos:
+      //   p99 = 2.02×, max = 2.37×, avg of ideal>2× combos was 1.31×.
+      // So Phase 1's prediction (using Infinity) is OFTEN absolutely wrong —
+      // small-base meals (fruit snacks etc.) get scored as if they fill the
+      // budget when they actually deliver 1× of base. BUT the A/B test of
+      // Cap=2.0 vs Infinity showed Cap=2.0 REGRESSED primary 95.14→92.57%.
+      // Mechanism: capping shifts Phase 1's preference AWAY from small-base
+      // meals (which can still scale ~1.5×) toward larger-base meals — but
+      // this reduces variety in the 60-attempt pool. Retry selector's
+      // measured goalMisses already corrects for prediction errors, so
+      // tightening the predictor just hurts diversity without helping
+      // accuracy. Cap=3.0 matched Infinity (95.14% both), confirming there's
+      // no meaningful improvement here. Leaving as Infinity.
       var MAX_UP_SCALE = Infinity;
 
       for (var a = 0; a < attempts; a++) {
