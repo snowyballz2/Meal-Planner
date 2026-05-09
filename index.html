@@ -3498,64 +3498,18 @@ function _clearFreezeOverrides(){
   });
 }
 
-// V93 (2026-05-08): auto fat-boost — when a day's projected fatPct < 15%,
-// inject recipe-defined fatBoost ingredients as overrides so the day reaches
-// the 15% goal floor. Balancer (P0/P3c) compensates kcal by trimming
-// carb/pro elsewhere.
+// V93 (2026-05-08): auto fat-boost — when a day's MEASURED fatPct is below
+// the target (16-18%), inject recipe-defined fatBoost ingredients as overrides
+// so the day reaches the 15% hard goal floor. Balancer (P0/P3c) compensates
+// kcal by trimming carb/pro elsewhere.
 //
-// _estimateDayFatPct(p,d): quick base-recipe + slot-budget approximation,
-// no cache dependency. Used to decide whether to auto-apply boost. Mirrors
-// Phase 1's MAX_UP_SCALE=Infinity scoring approach.
-function _estimateDayFatPct(p, d){
-  var m = _estimateDayMacros(p, d);
-  return m.kcal > 0 ? (m.fat * 9) / m.kcal : 0;
-}
+// V94 (2026-05-08): refactored from prediction-based to MEASUREMENT-based.
+// Uses calcTotals(p,d) directly instead of estimating from base recipes.
+// V93's _estimateDayFatPct/_estimateDayMacros helpers were orphaned and
+// removed in V95.
 
-// Returns {kcal, fat} estimate for a day from base recipes + slot-budget scaling.
-// No cache dependency. Used by _autoApplyFatBoosts to compute fat deficit.
-function _estimateDayMacros(p, d){
-  var totalKcal = 0, totalFat = 0;
-  var budgets = (typeof computeSlotBudgets === 'function')
-    ? computeSlotBudgets(p, d) : {};
-  ['shake','breakfast','lunch','snack','dinner','late_snack'].forEach(function(s){
-    var k = sk(p, d, s);
-    if(SKIPPED[k]) return;
-    if(EAT_OUT[k]){
-      var eo = EAT_OUT[k];
-      if(eo && typeof eo === 'object' && eo.kcal !== undefined){
-        totalKcal += eo.kcal;
-        totalFat += eo.fat || 0;
-      }
-      return;
-    }
-    if(s === 'late_snack'){
-      var ls = LATE_SNACK[pk(p,d)];
-      if(ls && ls.kcal !== undefined){
-        totalKcal += ls.kcal;
-        totalFat += ls.fat || 0;
-      }
-      return;
-    }
-    var mid = SEL[k];
-    if(!mid) return;
-    var m = getMeal(mid);
-    if(!m || !m[p]) return;
-    var pm = getPortMacros(m[p]);
-    var budget = budgets[s] || 0;
-    var scale;
-    if(s === 'shake' || !budget){
-      scale = 1; // shake doesn't scale
-    } else {
-      scale = pm.kcal > 0 ? (budget / pm.kcal) : 1;
-    }
-    totalKcal += pm.kcal * scale;
-    totalFat += pm.fat * scale;
-  });
-  return {kcal: totalKcal, fat: totalFat};
-}
-
-// _autoApplyFatBoosts(target): for each (p,d) in target, if projected day
-// fatPct < 15%, inject the recipe's fatBoost ingredient into eligible slots.
+// _autoApplyFatBoosts(target): for each (p,d) in target, if measured day
+// fatPct < target, inject the recipe's fatBoost ingredient into eligible slots.
 // Eligible = main slot (breakfast/lunch/snack/dinner), not SKIPPED/EAT_OUT,
 // not MANUAL_SET, meal has fatBoost field, and the boost ingredient isn't
 // already user-pinned.
