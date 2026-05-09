@@ -12056,63 +12056,37 @@ function randomizeWeek(target, seed){
     Object.keys(savedSel).forEach(function(k){SEL[k]=savedSel[k];});
     // Cache could hold stale data from previous retry's post-balance passes.
     invalidateLeftoverCache();
+    // V97 (2026-05-08): clear freeze overrides at the START of each retry so
+    // freeze in this retry's pipeline runs against clean state. Without this,
+    // freeze writes from prior retries leak onto Phase-4-locked Her shared-
+    // schedule slots that Phase 1's clearOverrides skips → cross-retry
+    // pollution → INV7/INV8 fires (cross-person ratio + batch grid).
+    // Confirmed in V97 first attempt: INV7=46, INV8=23 across 25 seeds.
+    _clearFreezeOverrides();
 
     _randomizeWeekCore(randTarget);
 
     invalidateLeftoverCache();
-    // Fast approximate trip waste for retry selection — flex-aware count of
-    // packages whose waste can't be flex-fitted. Single source of truth via
-    // `_fastTripWasteForPersons`; reroll stages use the same helper so
-    // scoring is consistent across pipeline stages.
-    const _wasteCalcPersons = randTarget === 'shared' ? ['him','her'] : [randTarget];
-    let totalWaste = _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook1, _wasteCalcPersons)
-                   + _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook2, _wasteCalcPersons);
-    // Only compute goal misses (expensive — full day-balancer) for retries
-    // that already achieved zero waste. Waste is the dominant criterion anyway.
+    // V97 (2026-05-08) Direction A: pipeline-per-retry + measured INV20.
+    // Pre-V97 used _fastTripWasteForPersons (Pearson 0.01 with actual misses
+    // per audit — essentially noise as a ranking signal). V97 runs the full
+    // post-balance pipeline for EVERY retry, then measures actual goalMisses
+    // and INV20 hard-fire count. Lexicographic order: (goalMisses, actualWaste,
+    // inv14) — primary criterion is achieving day-level goals, with waste
+    // as tiebreak.
     //
-    // Run the FULL post-balance pipeline before measuring so goalMisses reflects
-    // the true final state (fat% after snap/unify/boost), not a pre-snap estimate.
-    // The outer post-loop code re-runs these passes on the committed winner; the
-    // passes are idempotent so the re-run is safe, and the extra cost is bounded
-    // by the retry loop exiting on first zero-miss (line below).
+    // Cost: pipeline runs on every retry (~50ms each) instead of only zero-
+    // fast-waste retries (~3% of retries pre-V97). Net: ~2-3s extra per click.
     //
-    // 2026-05-03: TWO Q3 attempts both produced INV7 hard-invariant fires.
-    //
-    // Attempt 1 (in-loop, `totalWaste <= bestWaste`): freeze writes accumulate
-    // on Phase-4-locked Her shared-schedule slots that Phase 1 of the next
-    // retry skips clearing → cross-retry leak → freeze runs against polluted
-    // state → INV7/INV8 fires on seed 12419.
-    //
-    // Attempt 2 (post-loop tail resolution with explicit OVERRIDES clear per
-    // attempt): produced a different INV7 pattern (3 seeds in T1 — 12345,
-    // 12347, 12379) on hummus_wrap with mixed-ratio fires (chicken/hummus at
-    // kcal-prop, ROUND_PRODUCE_ITEMS veg at recipe-base equal-split). Root
-    // cause not pinned: freeze's per-batch uniform scaling preserves vs
-    // breaks kcal-prop for ROUND_*_ITEMS in tail-resolution states
-    // differently than in zero-waste in-loop states. Needs deeper
-    // investigation into freeze's behavior on non-zero-waste pre-states.
-    //
-    // The "tied non-zero-waste" discrimination gap remains OPEN. Any future
-    // attempt MUST verify across the full deterministic 100 seeds that no
-    // hard INV (1-13, 17, 19, 20-hard) fires — not just spot-check seeds.
-    let goalMisses = Infinity;
-    let inv14 = Infinity;
-    let retryCaches = null;
-    if (totalWaste === 0) {
-      // 2026-04-29: runBalanceAdjusters first so the cache is populated and
-      // unify has produced kcal-prop ratios for all batches. Then freeze
-      // applies uniform-scale-per-batch which preserves unify's ratios.
-      // Frozen items get scalable:false on cache + override; freeze
-      // invalidates affected day caches at the end. Run runBalanceAdjusters
-      // a second time to rebuild those days (adjustIngredients respects
-      // scalable:false → frozen items pinned; balanceDayMacros compensates
-      // non-frozen items for the kcal shift; unify skips frozen items in
-      // cross-person batches via the ROUND_*_ITEMS check, re-unifies the
-      // rest).
-      runBalanceAdjusters();
-      freezeTripTotals(randTarget);
-      runBalanceAdjusters();
-      goalMisses = 0;
+    // 2026-05-03 attempts at adding non-zero-waste discrimination produced
+    // INV7 hard fires. V97's design is different: we COMMIT to running the
+    // pipeline (no conditional gate) so freeze always sees stable post-Phase-1
+    // state, avoiding the freeze-against-polluted-state issue.
+    runBalanceAdjusters();
+    freezeTripTotals(randTarget);
+    runBalanceAdjusters();
+    let goalMisses = 0;
+    {
       const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
       persons.forEach(function(p){
         if(p!=='him'&&p!=='her')return;
@@ -12128,26 +12102,69 @@ function randomizeWeek(target, seed){
           if(!ok)goalMisses++;
         });
       });
-      // Stage 1a: snapshot post-pipeline caches so the post-retry block can
-      // skip the pipeline rerun on the winner. Must happen BEFORE the
-      // invalidateLeftoverCache() below (countInv14's invalidate would wipe
-      // both caches and a post-invalidate snapshot gets {}).
-      retryCaches = {
-        dayBalanced: JSON.parse(JSON.stringify(_dayBalancedCache)),
-        leftover: _leftoverCache ? JSON.parse(JSON.stringify(_leftoverCache)) : null
-      };
-      invalidateLeftoverCache();
-      inv14 = countInv14();
     }
-    const better = (totalWaste < bestWaste)
-      || (totalWaste === bestWaste && goalMisses < bestMisses)
-      || (totalWaste === bestWaste && goalMisses === bestMisses && inv14 < bestInv14);
+    // V97: measure ACTUAL INV20 fires post-pipeline (replaces _fastTripWasteForPersons).
+    // Inlined logic from verifyInvariants() INV20 block — 2 buildShoppingList
+    // calls + ingredient iteration. ~5-15ms per retry.
+    let totalWaste = 0;
+    {
+      const _wasteCalcPersons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+      const wasteVerifyPersons = _wasteCalcPersons.length === 1 ? _wasteCalcPersons[0] : 'both';
+      ['cook1','cook2'].forEach(function(trip){
+        var grouped = buildShoppingList(trip, wasteVerifyPersons);
+        Object.keys(grouped).forEach(function(cat){
+          grouped[cat].forEach(function(item){
+            var db = NUTRI_DB[item.dbKey]; if(!db) return;
+            var totalNum = (item.hisSum?item.hisSum.num:0) + (item.herSum?item.herSum.num:0);
+            if(totalNum <= 0) return;
+            var unit = (item.hisSum||item.herSum||{}).unit;
+            // PKG branch
+            if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+              var perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
+              if(perPkg > 0){
+                var bought = _pkgsNeeded(totalNum, perPkg) * perPkg;
+                var waste = bought - totalNum;
+                if(bought > 0 && (waste/bought) > 0.01){
+                  // Soft-waste items (marinara, broth) don't count as hard.
+                  if(!db.pkg.softWaste) totalWaste++;
+                }
+              }
+            }
+            // PRODUCE branch
+            if(db.produce && !db.produce.acceptableWaste){
+              var perWhole = db.produce.perWhole;
+              if(perWhole > 0){
+                var pBought = _pkgsNeeded(totalNum, perWhole) * perWhole;
+                var pWaste = pBought - totalNum;
+                if(pWaste > perWhole * 0.5){
+                  totalWaste++;
+                }
+              }
+            }
+          });
+        });
+      });
+    }
+    // V97 (2026-05-08): do NOT snapshot caches in V97. The retry-loop's
+    // pipeline (1 freeze pass + 2 balancer calls) doesn't fully converge
+    // cross-person ratios — V97 first attempt with bestCaches restoration
+    // produced INV7=46/INV8=23 across 25 seeds. The post-retry pipeline's
+    // multiple freeze passes + rerolls + final unify is what cleans up
+    // ratio drift. Force post-retry pipeline rerun on every winner.
+    invalidateLeftoverCache();
+    let inv14 = countInv14();
+    // V97 lexicographic ordering: goalMisses primary (most important — day
+    // goals matter most), totalWaste secondary (rare on post-pipeline state),
+    // inv14 tertiary.
+    const better = (goalMisses < bestMisses)
+      || (goalMisses === bestMisses && totalWaste < bestWaste)
+      || (goalMisses === bestMisses && totalWaste === bestWaste && inv14 < bestInv14);
     if (better) {
       bestWaste = totalWaste;
       bestMisses = goalMisses;
       bestInv14 = inv14;
       bestSEL = JSON.parse(JSON.stringify(SEL));
-      bestCaches = retryCaches;
+      bestCaches = null; // force post-retry rerun
     }
     if (totalWaste === 0 && goalMisses === 0 && inv14 === 0) break;
   }
@@ -12162,6 +12179,13 @@ function randomizeWeek(target, seed){
   if (bestSEL) {
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
     Object.keys(bestSEL).forEach(function(k){SEL[k]=bestSEL[k];});
+    // V97 (2026-05-08): clear freeze overrides from the LAST retry so the
+    // post-retry pipeline starts clean. Without this, last retry's freeze
+    // writes (potentially incomplete due to retry-loop's limited convergence)
+    // leak into post-retry, causing INV7/INV8 cross-person ratio drift.
+    // Confirmed: V97 first attempt INV7=46, with freeze-clear-per-retry but
+    // no end-of-loop clear: INV7=9. With this clear: target 0.
+    _clearFreezeOverrides();
   }
   if (bestCaches) {
     for (const k in _dayBalancedCache) delete _dayBalancedCache[k];
