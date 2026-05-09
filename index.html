@@ -448,7 +448,7 @@ var NUTRI_DB = {
   // (no minAmtSolo override needed — _effMin falls back to minAmt).
   'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, maxAmt:2.5, dampScale:0.5},
   'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, maxAmt:2.5, dampScale:0.5},
-  'lettuce':               {kcal:10,  pro:0.7,fat:0.2, carb:1.8, unit:'cup', produce:{perWhole:3,label:'romaine heart'}, minAmt:0.5, maxAmt:3, dampScale:0.5},
+  'lettuce':               {kcal:10,  pro:0.7,fat:0.2, carb:1.8, unit:'cup', produce:{perWhole:3,label:'romaine heart',acceptableWaste:true}, minAmt:0.5, maxAmt:3, dampScale:0.5},
   'broccoli':              {kcal:31,  pro:2.6,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'head broccoli'}, minAmt:0.25, maxAmt:2.0},
   'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, maxAmt:2.0},
   'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.25, maxAmt:2.0},
@@ -1363,7 +1363,7 @@ const MEALS=[
   fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
  {id:'yogurt_bowl_sweet',label:'Sweet Greek yogurt bowl with berries',slots:['breakfast','snack'],noLeftover:true,
-  steps:['Warm oats (from rice cooker porridge setting) in a bowl.','Spoon Greek yogurt alongside the oats (don\'t mix — keep them separate for texture contrast).','Top with mixed berries and chia seeds. Drizzle with honey.'],
+  steps:['Warm cooked oats in a bowl.','Spoon Greek yogurt alongside the oats (don\'t mix — keep them separate for texture contrast).','Top with mixed berries and chia seeds. Drizzle with honey.'],
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',1,'protein'),
@@ -1428,7 +1428,7 @@ const MEALS=[
   ]},
 
  {id:'korean_egg_bowl',label:'Korean-style egg & veggie rice bowl',slots:['breakfast'],
-  steps:['Warm rice (from rice cooker) in a bowl.','Fry eggs: heat a small pan over medium heat with a drop of sesame oil. Crack eggs in, cover with a lid for 2 min for runny yolk.','In the same pan, sauté spinach and shredded carrots in sesame oil for 1–2 min.','Assemble the bowl: rice base, veg on top, eggs on top of that.','Drizzle with soy sauce and rice vinegar. Add gochujang to taste. Sprinkle sesame seeds.'],
+  steps:['Warm cooked rice in a bowl.','Fry eggs: heat a small pan over medium heat with a drop of sesame oil. Crack eggs in, cover with a lid for 2 min for runny yolk.','In the same pan, sauté spinach and shredded carrots in sesame oil for 1–2 min.','Assemble the bowl: rice base, veg on top, eggs on top of that.','Drizzle with soy sauce and rice vinegar. Add gochujang to taste. Sprinkle sesame seeds.'],
   him:{},her:{},
   ingredients:[
     I('egg whole',2,'protein'),
@@ -1473,7 +1473,7 @@ const MEALS=[
   fatBoost:{dbKey:'peanuts', amt:2}},
 
  {id:'korean_juk',label:'Korean egg & rice porridge (Juk)',slots:['breakfast'],
-  steps:['Combine cooked white rice (from rice cooker) with 2 cups water in a pot. Simmer 8–10 min, stirring often, until the rice breaks down into a creamy porridge.','Stir in chopped kale 2 min.','Whisk eggs, slowly stir into porridge for silky ribbons. Cook 1 min.','Season with soy sauce and sesame oil. Top with sesame seeds.'],
+  steps:['Combine cooked white rice with 2 cups water in a pot. Simmer 8–10 min, stirring often, until the rice breaks down into a creamy porridge.','Stir in chopped kale 2 min.','Whisk eggs, slowly stir into porridge for silky ribbons. Cook 1 min.','Season with soy sauce and sesame oil. Top with sesame seeds.'],
   him:{},her:{},
   ingredients:[
     I('white rice cooked',1,'carb'),
@@ -1520,7 +1520,7 @@ const MEALS=[
   fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
  {id:'yogurt_oat_bowl',label:'Protein yogurt & oat bowl',slots:['breakfast','snack'],
-  steps:['Warm oats (from rice cooker porridge setting) in a bowl.','Layer on top: yogurt, then banana slices and a drizzle of honey.'],
+  steps:['Warm cooked oats in a bowl.','Layer on top: yogurt, then banana slices and a drizzle of honey.'],
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',0.75,'protein'),
@@ -1544,7 +1544,7 @@ const MEALS=[
   ]},
 
  {id:'banana_protein_oats',label:'Banana protein oatmeal',slots:['breakfast'],
-  steps:['Warm oats (from rice cooker porridge setting). Stir in protein powder while hot.','Top with sliced banana and mixed berries.','Drizzle with maple syrup.'],
+  steps:['Warm cooked oats. Stir in protein powder while hot.','Top with sliced banana and mixed berries.','Drizzle with maple syrup.'],
   him:{},her:{},
   ingredients:[
     I('oats',0.75,'carb'),
@@ -1557,7 +1557,7 @@ const MEALS=[
   fatBoost:{dbKey:'peanut butter', amt:1}},
 
  {id:'quinoa_breakfast_bowl',label:'Quinoa & egg breakfast bowl',slots:['breakfast'],
-  steps:['Warm quinoa (from rice cooker) in a bowl.','Sauté kale and bell pepper in non-stick pan 2 min.','Add egg whites, scramble with veg.','Serve over quinoa. Season with salt, pepper.'],
+  steps:['Warm cooked quinoa in a bowl.','Sauté kale and bell pepper in non-stick pan 2 min.','Add egg whites, scramble with veg.','Serve over quinoa. Season with salt, pepper.'],
   him:{},her:{},
   ingredients:[
     I('quinoa cooked',0.75,'carb'),
@@ -1570,7 +1570,7 @@ const MEALS=[
   ]},
 
  {id:'breakfast_burrito',label:'Breakfast burrito with black beans',slots:['breakfast'],
-  steps:['Warm tortilla in dry pan 30s per side.','Sauté bell pepper 2 min in non-stick pan with oil spray.','Add black beans (from Instant Pot) and spinach. Warm through and let spinach wilt, ~1 min.','Pour in egg whites + whole egg, scramble with veg 2–3 min until just set.','Spoon into tortilla, top with salsa, roll tightly.'],
+  steps:['Warm tortilla in dry pan 30s per side.','Sauté bell pepper 2 min in non-stick pan with oil spray.','Add cooked black beans and spinach. Warm through and let spinach wilt, ~1 min.','Pour in egg whites + whole egg, scramble with veg 2–3 min until just set.','Spoon into tortilla, top with salsa, roll tightly.'],
   him:{},her:{},
   ingredients:[
     I('whole wheat tortilla',1,'carb'),
@@ -1609,7 +1609,7 @@ const MEALS=[
   ]},
 
  {id:'white_bean_scramble',label:'White bean & spinach scramble',slots:['breakfast'],
-  steps:['Heat avocado oil in a non-stick pan over medium. Add cannellini beans (from Instant Pot) and warm 1 min, mashing lightly.','Add spinach, cook 1–2 min until wilted.','Pour in egg whites + whole egg, scramble 2–3 min.','Crush garlic and stir in at the end. Season with black pepper. Serve with toast.'],
+  steps:['Heat avocado oil in a non-stick pan over medium. Add cooked cannellini beans and warm 1 min, mashing lightly.','Add spinach, cook 1–2 min until wilted.','Pour in egg whites + whole egg, scramble 2–3 min.','Crush garlic and stir in at the end. Season with black pepper. Serve with toast.'],
   him:{},her:{},
   ingredients:[
     I('cannellini beans cooked',1,'protein'),
@@ -1634,7 +1634,7 @@ const MEALS=[
   ]},
 
  {id:'savory_congee',label:'Chicken congee',slots:['breakfast'],
-  steps:['Combine cooked jasmine rice (from rice cooker) with chicken broth in a pot. Simmer 8–10 min, stirring, until the rice breaks down and the congee thickens.','Shred cooked chicken breast and stir in.','Add ginger and spinach, simmer 2 min.','Whisk whole egg + egg whites. Slowly stir in for silky ribbons. Cook 1 min until set.','Top with scallions and black pepper.'],
+  steps:['Combine cooked jasmine rice with chicken broth in a pot. Simmer 8–10 min, stirring, until the rice breaks down and the congee thickens.','Shred cooked chicken breast and stir in.','Add ginger and spinach, simmer 2 min.','Whisk whole egg + egg whites. Slowly stir in for silky ribbons. Cook 1 min until set.','Top with scallions and black pepper.'],
   him:{},her:{},
   ingredients:[
     I('jasmine rice cooked',0.75,'carb'),
@@ -1650,7 +1650,7 @@ const MEALS=[
   fatBoost:{dbKey:'sesame oil', amt:0.5}},
 
  {id:'shrimp_coconut_curry',label:'Shrimp coconut curry with jasmine rice',slots:['lunch','dinner'],noRandomize:true,
-  steps:['Sauté bell pepper in non-stick skillet 2 min. Remove and set aside.','Add ginger and garlic to the same pan, cook 30 sec.','Add red curry paste and press against the pan. Fry 30–60 sec, stirring constantly — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 2–3 min to thicken.','Return bell pepper. Add shrimp, cook 3 min until pink.','Stir in spinach until wilted. Squeeze lime.','Serve over warm jasmine rice (from rice cooker).'],
+  steps:['Sauté bell pepper in non-stick skillet 2 min. Remove and set aside.','Add ginger and garlic to the same pan, cook 30 sec.','Add red curry paste and press against the pan. Fry 30–60 sec, stirring constantly — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 2–3 min to thicken.','Return bell pepper. Add shrimp, cook 3 min until pink.','Stir in spinach until wilted. Squeeze lime.','Serve over warm cooked jasmine rice.'],
   him:{},her:{},
   ingredients:[
     I('shrimp',7,'protein'),
@@ -1700,7 +1700,7 @@ const MEALS=[
   ]},
 
  {id:'quinoa_bowl',label:'Grilled chicken & quinoa bowl',slots:['lunch','dinner'],
-  steps:['Warm quinoa (from rice cooker) in a bowl.','Season chicken with garlic powder, onion powder, black pepper. Grill or pan-sear 5–6 min per side until 165°F. Rest 3 min, slice.','Roast broccoli at 400°F 18–20 min.','Whisk avocado oil + vinegar for dressing. Assemble bowl.'],
+  steps:['Warm cooked quinoa in a bowl.','Season chicken with garlic powder, onion powder, black pepper. Grill or pan-sear 5–6 min per side until 165°F. Rest 3 min, slice.','Roast broccoli at 400°F 18–20 min.','Whisk avocado oil + vinegar for dressing. Assemble bowl.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',7,'protein'),
@@ -1727,7 +1727,7 @@ const MEALS=[
   ]},
 
  {id:'shrimp_bowl',label:'Shrimp & rice bowl',slots:['lunch','dinner'],
-  steps:['Pat shrimp dry. Season with cumin, garlic powder, black pepper.','Heat avocado oil. Cook shrimp 1–2 min per side. Remove immediately.','Stir-fry broccoli and bell pepper 3–4 min.','Assemble: warm brown rice (from rice cooker) as base, veg, shrimp on top. Add avocado, salsa, lime.'],
+  steps:['Pat shrimp dry. Season with cumin, garlic powder, black pepper.','Heat avocado oil. Cook shrimp 1–2 min per side. Remove immediately.','Stir-fry broccoli and bell pepper 3–4 min.','Assemble: warm cooked brown rice as base, veg, shrimp on top. Add avocado, salsa, lime.'],
   him:{},her:{},
   ingredients:[
     I('shrimp',6,'protein'),
@@ -1744,7 +1744,7 @@ const MEALS=[
   ]},
 
  {id:'tuna_white_bean',label:'Tuna & white bean salad bowl',slots:['lunch','dinner'],
-  steps:['Drain tuna and flake. Use cannellini beans (from Instant Pot, drained).','Massage kale with a pinch of salt 30 sec until tender. Slice zucchini thin or shave with a peeler so it eats well raw.','Combine tuna, beans, kale, zucchini, carrots in a large bowl.','Whisk olive oil + vinegar + black pepper. Pour over and toss.'],
+  steps:['Drain tuna and flake. Use cooked cannellini beans (drained).','Massage kale with a pinch of salt 30 sec until tender. Slice zucchini thin or shave with a peeler so it eats well raw.','Combine tuna, beans, kale, zucchini, carrots in a large bowl.','Whisk olive oil + vinegar + black pepper. Pour over and toss.'],
   him:{},her:{},
   ingredients:[
     I('canned tuna',6,'protein'),
@@ -1759,7 +1759,7 @@ const MEALS=[
   fatBoost:{dbKey:'olive oil', amt:0.5}},
 
  {id:'burrito_bowl',label:'Chicken burrito bowl',slots:['lunch','dinner'],
-  steps:['Season chicken with salt, pepper, and a pinch of cumin. Pan-sear over medium-high heat 5–6 min per side until 165°F internal. Rest 3 min, then dice or shred.','Warm rice (from rice cooker) and black beans (from Instant Pot).','Massage kale with lime juice + salt 30 sec until tender.','Assemble: rice base, beans, chicken, kale, salsa, avocado, Greek yogurt.'],
+  steps:['Season chicken with salt, pepper, and a pinch of cumin. Pan-sear over medium-high heat 5–6 min per side until 165°F internal. Rest 3 min, then dice or shred.','Warm cooked rice and cooked black beans.','Massage kale with lime juice + salt 30 sec until tender.','Assemble: rice base, beans, chicken, kale, salsa, avocado, Greek yogurt.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',6,'protein'),
@@ -1790,7 +1790,7 @@ const MEALS=[
   ]},
 
  {id:'korean_rice_bowl',label:'Korean-inspired chicken & rice bowl',slots:['lunch','dinner'],
-  steps:['Make sauce: whisk soy sauce, sesame oil, gochujang, honey, rice vinegar.','Season chicken with salt and pepper. Pan-sear over medium-high heat 5–6 min per side until 165°F. Rest 3 min, then slice thin.','Warm white rice (from rice cooker) and edamame.','Assemble: rice, chicken, peppers, carrots, edamame. Drizzle sauce. Top with sesame seeds.'],
+  steps:['Make sauce: whisk soy sauce, sesame oil, gochujang, honey, rice vinegar.','Season chicken with salt and pepper. Pan-sear over medium-high heat 5–6 min per side until 165°F. Rest 3 min, then slice thin.','Warm cooked white rice and edamame.','Assemble: rice, chicken, peppers, carrots, edamame. Drizzle sauce. Top with sesame seeds.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',5,'protein'),
@@ -1839,7 +1839,7 @@ const MEALS=[
   ]},
 
  {id:'bibimbap',label:'Korean bibimbap-style bowl',slots:['lunch','dinner'],
-  steps:['Make sauce: whisk soy sauce and gochujang.','Season chicken with salt and pepper. Pan-sear over medium-high heat 5–6 min per side until 165°F. Rest 3 min, slice thin.','Warm white rice (from rice cooker). Sauté kale, carrots, zucchini in sesame oil 2–3 min until just tender.','Fry egg sunny-side up.','Assemble: rice center, veg and chicken around it, egg on top. Drizzle sauce. Mix before eating.'],
+  steps:['Make sauce: whisk soy sauce and gochujang.','Season chicken with salt and pepper. Pan-sear over medium-high heat 5–6 min per side until 165°F. Rest 3 min, slice thin.','Warm cooked white rice. Sauté kale, carrots, zucchini in sesame oil 2–3 min until just tender.','Fry egg sunny-side up.','Assemble: rice center, veg and chicken around it, egg on top. Drizzle sauce. Mix before eating.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',5,'protein'),
@@ -1855,7 +1855,7 @@ const MEALS=[
   fatBoost:{dbKey:'sesame oil', amt:0.5}},
 
  {id:'red_curry',label:'Crispy tofu red curry with jasmine rice',slots:['lunch','dinner'],noRandomize:true,
-  steps:['Press tofu: wrap in paper towels and press under a heavy object 10 min. Cut into 1-inch cubes.','Dry-sear tofu cubes in a hot non-stick pan 3–4 min per side until golden and crispy. Remove and set aside.','Add red curry paste to the pan and press against the surface. Fry 30–60 sec, stirring constantly — the paste has embedded oil that releases and blooms the aromatics.','Whisk in coconut milk a splash at a time into the paste to emulsify, then add ~6 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1 min.','Add broccoli and bell pepper. Simmer 6–8 min until veg is tender.','Add kale, edamame, and return tofu to the pan. Cook 2 min until kale is wilted.','Serve over warm jasmine rice (from rice cooker).'],
+  steps:['Press tofu: wrap in paper towels and press under a heavy object 10 min. Cut into 1-inch cubes.','Dry-sear tofu cubes in a hot non-stick pan 3–4 min per side until golden and crispy. Remove and set aside.','Add red curry paste to the pan and press against the surface. Fry 30–60 sec, stirring constantly — the paste has embedded oil that releases and blooms the aromatics.','Whisk in coconut milk a splash at a time into the paste to emulsify, then add ~6 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1 min.','Add broccoli and bell pepper. Simmer 6–8 min until veg is tender.','Add kale, edamame, and return tofu to the pan. Cook 2 min until kale is wilted.','Serve over warm cooked jasmine rice.'],
   him:{},her:{},
   ingredients:[
     I('tofu firm',8,'protein'),
@@ -1869,7 +1869,7 @@ const MEALS=[
   ]},
 
  {id:'viet_tofu_soup',label:'Vietnamese tofu & noodle soup',slots:['lunch','dinner'],
-  steps:['Bring chicken broth to a simmer in a medium pot over medium heat.','Add sliced carrots and diced zucchini. Cook 3 min until beginning to soften.','Add sliced tofu, spinach, and soy sauce. Simmer 2 min until spinach is wilted and tofu is heated through.','Slowly drizzle whisked egg whites into the simmering broth while stirring gently — forms soft ribbons.','Add cooked rice vermicelli (warm from rice cooker, or soaked from dry: ~0.75 cup dry per serving in hot water 5 min). Stir gently to combine.','Drizzle with sesame oil. Serve with a squeeze of lime and fresh herbs.'],
+  steps:['Bring chicken broth to a simmer in a medium pot over medium heat.','Add sliced carrots and diced zucchini. Cook 3 min until beginning to soften.','Add sliced tofu, spinach, and soy sauce. Simmer 2 min until spinach is wilted and tofu is heated through.','Slowly drizzle whisked egg whites into the simmering broth while stirring gently — forms soft ribbons.','Add cooked rice vermicelli (or soak from dry: ~0.75 cup dry per serving in hot water 5 min, drain). Stir gently to combine.','Drizzle with sesame oil. Serve with a squeeze of lime and fresh herbs.'],
   him:{},her:{},
   ingredients:[
     I('tofu firm',8,'protein'),
@@ -1958,7 +1958,7 @@ const MEALS=[
   fatBoost:{dbKey:'chia seeds', amt:1}},
 
  {id:'salmon_lentils',label:'Baked salmon, lentils & sautéed spinach',slots:['lunch','dinner'],
-  steps:['Preheat oven to 400°F. Pat salmon dry. Season with lemon, dill, pepper. Roast 12–15 min (salmon renders enough of its own fat — no oil needed).','Sauté spinach with garlic in a non-stick pan (no oil) 2–3 min, finishing with a squeeze of lemon.','Warm rice (from rice cooker) and lentils (from Instant Pot) together.','Plate: rice + lentils, salmon on top, spinach alongside.'],
+  steps:['Preheat oven to 400°F. Pat salmon dry. Season with lemon, dill, pepper. Roast 12–15 min (salmon renders enough of its own fat — no oil needed).','Sauté spinach with garlic in a non-stick pan (no oil) 2–3 min, finishing with a squeeze of lemon.','Warm cooked rice and cooked lentils together.','Plate: rice + lentils, salmon on top, spinach alongside.'],
   him:{},her:{},
   ingredients:[
     I('salmon',6,'protein'),
@@ -1972,7 +1972,7 @@ const MEALS=[
   ]},
 
  {id:'salmon_stir_fry_din',label:'Salmon stir-fry with brown rice & veg',slots:['lunch','dinner'],
-  steps:['Make glaze: whisk soy sauce, honey, rice vinegar, minced garlic, grated ginger.','Heat a heavy oven-safe pan over medium-high. Pat salmon dry. Sear 2–3 min skin-side first, flip, brush with glaze. Transfer to 400°F oven 6–8 min until just cooked through.','Stir-fry broccoli and bell pepper in sesame oil 3–4 min until tender-crisp.','Plate over warm brown rice (from rice cooker). Drizzle remaining glaze.'],
+  steps:['Make glaze: whisk soy sauce, honey, rice vinegar, minced garlic, grated ginger.','Heat a heavy oven-safe pan over medium-high. Pat salmon dry. Sear 2–3 min skin-side first, flip, brush with glaze. Transfer to 400°F oven 6–8 min until just cooked through.','Stir-fry broccoli and bell pepper in sesame oil 3–4 min until tender-crisp.','Plate over warm cooked brown rice. Drizzle remaining glaze.'],
   him:{},her:{},
   ingredients:[
     I('salmon',6,'protein'),
@@ -1990,7 +1990,7 @@ const MEALS=[
  {id:'salmon_bowl',label:'Salmon rice bowl with soy-honey glaze',slots:['lunch','dinner'],
   steps:['Make glaze: whisk soy sauce, rice vinegar, sesame oil, honey, minced garlic, grated ginger, sesame seeds, sliced scallion.',
          'Cube salmon. Heat non-stick pan over medium-high. Sear 3–4 min, tossing. Pour in half the glaze and toss until coated.',
-         'Plate: warm jasmine rice (from rice cooker) as base, glazed salmon on top, shredded carrots and sliced cucumber alongside. Drizzle remaining glaze.'],
+         'Plate: warm cooked jasmine rice as base, glazed salmon on top, shredded carrots and sliced cucumber alongside. Drizzle remaining glaze.'],
   him:{},her:{},
   ingredients:[
     I('salmon',6,'protein'),
@@ -2010,7 +2010,7 @@ const MEALS=[
  {id:'sticky_miso_salmon_bowl',label:'Sticky miso salmon bowl',slots:['lunch','dinner'],
   steps:['Whisk white miso, honey, avocado oil, grated ginger, grapefruit zest (~1/2 tsp per serving), and grapefruit juice in a large bowl. Season salmon lightly with salt, add to bowl, gently toss to coat. Marinate at room temp ~15 min.',
          'Place a rack ~5 inches from the broiler element; set broiler to high. Arrange salmon on a foil-lined sheet, leaving the marinade on and spreading any excess on top of the fillets (helps browning). Broil until glossy and charred in spots — ~5 min for medium-rare, ~7 for medium.',
-         'Fluff warm rice (from rice cooker) with salt and a few grinds of pepper. Plate: rice, salmon on top, scallions and sliced cucumber alongside. Optional toppings: kimchi, chile crisp, toasted nori.'],
+         'Fluff warm cooked rice with salt and a few grinds of pepper. Plate: rice, salmon on top, scallions and sliced cucumber alongside. Optional toppings: kimchi, chile crisp, toasted nori.'],
   him:{},her:{},
   ingredients:[
     I('salmon',6,'protein'),
@@ -2040,7 +2040,7 @@ const MEALS=[
   ]},
 
  {id:'halibut_farro_din',label:'Baked halibut, farro & roasted asparagus',slots:['lunch','dinner'],
-  steps:['Preheat oven to 425°F. Pat halibut dry. Season with lemon zest, dill, salt, pepper, and minced garlic.','Toss asparagus and zucchini with avocado oil and a pinch of salt. Spread on a sheet pan, place halibut on top.','Roast 12–15 min until halibut flakes easily and veg is tender.','Serve halibut over warm farro (from rice cooker) with veg alongside.'],
+  steps:['Preheat oven to 425°F. Pat halibut dry. Season with lemon zest, dill, salt, pepper, and minced garlic.','Toss asparagus and zucchini with avocado oil and a pinch of salt. Spread on a sheet pan, place halibut on top.','Roast 12–15 min until halibut flakes easily and veg is tender.','Serve halibut over warm cooked farro with veg alongside.'],
   him:{},her:{},
   ingredients:[
     I('halibut',8,'protein'),
@@ -2067,7 +2067,7 @@ const MEALS=[
   ]},
 
  {id:'roast_chicken_din',label:'Roast chicken, farro & Brussels sprouts',slots:['lunch','dinner'],
-  steps:['Preheat oven to 425°F. Halve Brussels sprouts and slice carrots. Toss with avocado oil, salt, pepper, and minced garlic. Spread on a sheet pan.','Pat chicken dry. Season with lemon zest, dried rosemary, dried thyme, salt, pepper. Place on the same sheet pan with the veg (or separate if pan is crowded).','Roast 20–25 min until chicken is 165°F internal and veg is browned at edges. Rest chicken 3 min, slice.','Plate: warm farro (from rice cooker), veg, sliced chicken.'],
+  steps:['Preheat oven to 425°F. Halve Brussels sprouts and slice carrots. Toss with avocado oil, salt, pepper, and minced garlic. Spread on a sheet pan.','Pat chicken dry. Season with lemon zest, dried rosemary, dried thyme, salt, pepper. Place on the same sheet pan with the veg (or separate if pan is crowded).','Roast 20–25 min until chicken is 165°F internal and veg is browned at edges. Rest chicken 3 min, slice.','Plate: warm cooked farro, veg, sliced chicken.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',9,'protein'),
@@ -2139,7 +2139,7 @@ const MEALS=[
   ]},
 
  {id:'chickpea_cucumber_salad',label:'Cold chickpea & cucumber salad',slots:['snack'],
-  steps:['Use chickpeas (from Instant Pot, drained). Toss with diced cucumber.','Dress with lemon juice, a sprinkle of dill, and black pepper.'],
+  steps:['Use cooked chickpeas (drained). Toss with diced cucumber.','Dress with lemon juice, a sprinkle of dill, and black pepper.'],
   him:{},her:{},
   ingredients:[
     I('chickpeas cooked',0.5,'protein'),
@@ -2151,7 +2151,7 @@ const MEALS=[
   fatBoost:{dbKey:'tahini', amt:1}},
 
  {id:'spiced_chickpea_spinach',label:'Spiced chickpea & spinach bowl',slots:['snack'],
-  steps:['Warm chickpeas (from Instant Pot) briefly — 30 sec microwave or skillet.','Toss warm chickpeas with baby spinach so the warmth slightly wilts the leaves.','Season with cumin, lemon juice, and black pepper. Eat warm or chilled.'],
+  steps:['Warm cooked chickpeas briefly — 30 sec microwave or skillet.','Toss warm chickpeas with baby spinach so the warmth slightly wilts the leaves.','Season with cumin, lemon juice, and black pepper. Eat warm or chilled.'],
   him:{},her:{},
   ingredients:[
     I('chickpeas cooked',0.5,'protein'),
@@ -2276,7 +2276,7 @@ const MEALS=[
   ]},
 
  {id:'white_bean_chicken_chili',label:'White Bean Chicken Chili with Poblano & Cheddar',slots:['lunch','dinner'],
-  steps:['Prep: dice poblano, slice scallions, quarter lime.','Cook diced poblano and scallion whites in avocado oil 3–4 min.','Add tomatillo sauce and cannellini beans (from Instant Pot) with a splash of water. Mash lightly.','Add broth concentrate and ½ cup water. Simmer 4–5 min.','Add pulled chicken. Simmer 2–3 min. Season.','Stir in Greek yogurt off heat for creaminess (don\'t boil — yogurt will split).','Top with cheese, scallion greens, lime.'],
+  steps:['Prep: dice poblano, slice scallions, quarter lime.','Cook diced poblano and scallion whites in avocado oil 3–4 min.','Add tomatillo sauce and cooked cannellini beans with a splash of water. Mash lightly.','Add broth concentrate and ½ cup water. Simmer 4–5 min.','Add pulled chicken. Simmer 2–3 min. Season.','Stir in Greek yogurt off heat for creaminess (don\'t boil — yogurt will split).','Top with cheese, scallion greens, lime.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',8,'protein'),
@@ -2292,7 +2292,7 @@ const MEALS=[
   ]},
 
  {id:'coconut_turkey_curry',label:'Coconut turkey curry with jasmine rice',slots:['lunch','dinner'],noRandomize:true,
-  steps:['Heat avocado oil in a large skillet over medium heat. Add shallots and cook 5 min until softened.','Add ginger and garlic, cook 2 min until fragrant.','Push aromatics to the side. Add red curry paste to the cleared space and press against the pan. Fry 30–60 sec, stirring — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1–2 min to thicken.','Add bell peppers and sauté 2–3 min. Add ground turkey and cook 7–8 min until no longer pink.','Add zucchini and simmer 5 min until tender.','Stir in spinach until wilted. Serve over warm jasmine rice (from rice cooker). Garnish with cilantro, lime wedges, red pepper flakes.'],
+  steps:['Heat avocado oil in a large skillet over medium heat. Add shallots and cook 5 min until softened.','Add ginger and garlic, cook 2 min until fragrant.','Push aromatics to the side. Add red curry paste to the cleared space and press against the pan. Fry 30–60 sec, stirring — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1–2 min to thicken.','Add bell peppers and sauté 2–3 min. Add ground turkey and cook 7–8 min until no longer pink.','Add zucchini and simmer 5 min until tender.','Stir in spinach until wilted. Serve over warm cooked jasmine rice. Garnish with cilantro, lime wedges, red pepper flakes.'],
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
@@ -2312,7 +2312,7 @@ const MEALS=[
   ]},
 
  {id:'lemongrass_chicken_thigh',label:'Lemongrass chicken thighs with rice',slots:['lunch','dinner'],
-  steps:['Make marinade: combine lemongrass, avocado oil, garlic, soy sauce, fish sauce, oyster sauce, dark soy sauce, and maple syrup. Reserve ~2 tbsp BEFORE adding chicken (this clean portion is for the veg later — never reuse marinade that touched raw chicken).','Marinate chicken thighs in the rest at least 30 min (overnight is best). Discard the chicken marinade after — do not reuse.','Cook chicken in a hot pan or grill until charred and cooked through, about 5–6 min per side until 165°F internal.','Quickly sauté bok choy and bean sprouts with the reserved clean marinade until bright green and just tender, 2–3 min.','Make dipping sauce: mix fish sauce, water, lime juice, garlic, and maple syrup.','Serve chicken over warm jasmine rice (from rice cooker) with sautéed veg and dipping sauce on the side.'],
+  steps:['Make marinade: combine lemongrass, avocado oil, garlic, soy sauce, fish sauce, oyster sauce, dark soy sauce, and maple syrup. Reserve ~2 tbsp BEFORE adding chicken (this clean portion is for the veg later — never reuse marinade that touched raw chicken).','Marinate chicken thighs in the rest at least 30 min (overnight is best). Discard the chicken marinade after — do not reuse.','Cook chicken in a hot pan or grill until charred and cooked through, about 5–6 min per side until 165°F internal.','Quickly sauté bok choy and bean sprouts with the reserved clean marinade until bright green and just tender, 2–3 min.','Make dipping sauce: mix fish sauce, water, lime juice, garlic, and maple syrup.','Serve chicken over warm cooked jasmine rice with sautéed veg and dipping sauce on the side.'],
   him:{},her:{},
   ingredients:[
     I('chicken thigh',8,'protein'),
@@ -2374,7 +2374,7 @@ const MEALS=[
  // ── Lean recipes (low fat, high protein) ──────────────────
 
  {id:'turkey_lettuce_wraps',label:'Ground turkey lettuce wraps',slots:['lunch','dinner'],
-  steps:['Wash and separate lettuce leaves into "cup" shapes. Pat dry and set aside.','Brown ground turkey in a non-stick pan over medium-high heat, breaking into crumbles, ~5 min.','Add soy sauce, ginger, and garlic. Cook 1 min until fragrant.','Add diced bell pepper and carrots. Cook 3–4 min until tender-crisp.','Stir in warm brown rice (from rice cooker) to combine.','Spoon turkey-rice-veg mixture into lettuce cups. Top with scallion and sesame seeds. Eat by hand.'],
+  steps:['Wash and separate lettuce leaves into "cup" shapes. Pat dry and set aside.','Brown ground turkey in a non-stick pan over medium-high heat, breaking into crumbles, ~5 min.','Add soy sauce, ginger, and garlic. Cook 1 min until fragrant.','Add diced bell pepper and carrots. Cook 3–4 min until tender-crisp.','Stir in warm cooked brown rice to combine.','Spoon turkey-rice-veg mixture into lettuce cups. Top with scallion and sesame seeds. Eat by hand.'],
   him:{},her:{},
   ingredients:[
     I('ground turkey 93',8,'protein'),
@@ -2390,7 +2390,7 @@ const MEALS=[
   ]},
 
  {id:'chicken_sweet_potato_bowl',label:'Chicken, sweet potato & lentil bowl',slots:['lunch','dinner'],
-  steps:['Preheat oven to 400°F. Cube sweet potato, toss with garlic powder and black pepper.','Roast sweet potato 20–25 min. Season chicken breast with cumin and salt.','Pan-sear chicken 5–6 min per side. Rest 3 min, slice.','Warm lentils (from Instant Pot).','Assemble: sweet potato + lentil base, chicken on top, spinach, salsa.'],
+  steps:['Preheat oven to 400°F. Cube sweet potato, toss with garlic powder and black pepper.','Roast sweet potato 20–25 min. Season chicken breast with cumin and salt.','Pan-sear chicken 5–6 min per side. Rest 3 min, slice.','Warm cooked lentils.','Assemble: sweet potato + lentil base, chicken on top, spinach, salsa.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',9,'protein'),
@@ -2405,7 +2405,7 @@ const MEALS=[
   ]},
 
  {id:'lentil_chicken_bowl',label:'Lentil & grilled chicken bowl',slots:['lunch','dinner'],
-  steps:['Warm lentils (from Instant Pot).','Season chicken with garlic powder, cumin, salt. Pan-sear in avocado oil 5–6 min per side.','Slice chicken. Sauté kale with garlic 2 min in the remaining pan oil.','Assemble: lentils, chicken, kale. Squeeze lemon over top.'],
+  steps:['Warm cooked lentils.','Season chicken with garlic powder, cumin, salt. Pan-sear in avocado oil 5–6 min per side.','Slice chicken. Sauté kale with garlic 2 min in the remaining pan oil.','Assemble: lentils, chicken, kale. Squeeze lemon over top.'],
   him:{},her:{},
   ingredients:[
     I('chicken breast',8,'protein'),
@@ -2420,7 +2420,7 @@ const MEALS=[
   ]},
 
  {id:'black_bean_rice_bowl',label:'Black bean & rice bowl',slots:['lunch','dinner'],
-  steps:['Warm brown rice (from rice cooker) and black beans (from Instant Pot). Stir cumin and garlic powder into the warm beans.','Heat a non-stick pan over medium with oil spray (or a little avocado oil). Sauté bell pepper 2 min, then add kale and cook 1–2 min until just wilted.','Assemble: rice, beans, veg. Top with salsa and a squeeze of lime.'],
+  steps:['Warm cooked brown rice and cooked black beans. Stir cumin and garlic powder into the warm beans.','Heat a non-stick pan over medium with oil spray (or a little avocado oil). Sauté bell pepper 2 min, then add kale and cook 1–2 min until just wilted.','Assemble: rice, beans, veg. Top with salsa and a squeeze of lime.'],
   him:{},her:{},
   ingredients:[
     I('black beans cooked',1,'protein'),
@@ -2435,7 +2435,7 @@ const MEALS=[
   fatBoost:{dbKey:'avocado oil', amt:0.5}},
 
  {id:'chickpea_curry_bowl',label:'Chickpea & spinach curry',slots:['lunch','dinner'],noRandomize:true,
-  steps:['Warm hot brown rice (from rice cooker) with the edamame stirred through. Set aside as the bowl base.','Heat a dry pan over medium. Add red curry paste and press against the pan. Fry 30–60 sec, stirring — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1–2 min to thicken.','Add chickpeas (from Instant Pot) and spinach. Simmer 5–6 min until spinach wilts and chickpeas are heated through.','Spoon curry over the rice-edamame base.'],
+  steps:['Warm cooked brown rice with the edamame stirred through. Set aside as the bowl base.','Heat a dry pan over medium. Add red curry paste and press against the pan. Fry 30–60 sec, stirring — the paste\'s embedded oil releases and blooms the aromatics.','Whisk in coconut milk a splash at a time to emulsify with the paste, then add ~4 tbsp water to loosen into a smooth, spoonable sauce. Simmer 1–2 min to thicken.','Add cooked chickpeas and spinach. Simmer 5–6 min until spinach wilts and chickpeas are heated through.','Spoon curry over the rice-edamame base.'],
   him:{},her:{},
   ingredients:[
     I('chickpeas cooked',0.75,'protein'),
@@ -2447,7 +2447,7 @@ const MEALS=[
   ]},
 
  {id:'mediterranean_chickpea_salad',label:'Mediterranean chickpea salad',slots:['lunch','dinner'],
-  steps:['Use chickpeas cooked from Instant Pot. Quarter grape tomatoes. Seed and chop cucumber. Dice bell pepper and red onion. Roughly chop parsley.','Whisk olive oil, lemon juice, oregano, salt, and pepper in a small bowl.','Combine chickpeas and veg in a larger bowl. Pour dressing over the top. Toss to coat.','Best after chilling 20 min to let flavors meld (fridge-stable 2–3 days).'],
+  steps:['Use cooked chickpeas. Quarter grape tomatoes. Seed and chop cucumber. Dice bell pepper and red onion. Roughly chop parsley.','Whisk olive oil, lemon juice, oregano, salt, and pepper in a small bowl.','Combine chickpeas and veg in a larger bowl. Pour dressing over the top. Toss to coat.','Best after chilling 20 min to let flavors meld (fridge-stable 2–3 days).'],
   him:{},her:{},
   ingredients:[
     I('chickpeas cooked',2.1,'protein'),
@@ -2464,7 +2464,7 @@ const MEALS=[
   ]},
 
  {id:'ground_chicken_stir_fry',label:'Ground chicken & veggie stir-fry',slots:['lunch','dinner'],
-  steps:['Heat a wide non-stick pan or wok over medium-high. Add avocado oil (ground chicken is lean and will stick otherwise).','Brown ground chicken, breaking into crumbles, ~5 min.','Add broccoli, bell pepper, and carrots. Stir-fry 4–5 min until tender-crisp.','Add soy sauce, grated ginger, and minced garlic. Toss 1 min.','Serve over warm brown rice (from rice cooker).'],
+  steps:['Heat a wide non-stick pan or wok over medium-high. Add avocado oil (ground chicken is lean and will stick otherwise).','Brown ground chicken, breaking into crumbles, ~5 min.','Add broccoli, bell pepper, and carrots. Stir-fry 4–5 min until tender-crisp.','Add soy sauce, grated ginger, and minced garlic. Toss 1 min.','Serve over warm cooked brown rice.'],
   him:{},her:{},
   ingredients:[
     I('ground chicken',7,'protein'),
@@ -2479,7 +2479,7 @@ const MEALS=[
   ]},
 
  {id:'shrimp_quinoa_bowl',label:'Shrimp & quinoa with roasted veg',slots:['lunch','dinner'],
-  steps:['Toss broccoli and zucchini with avocado oil, roast at 425°F for 15 min.','Season shrimp with garlic powder and black pepper. Pan-sear 1–2 min per side.','Assemble: warm quinoa (from rice cooker) as base, roasted veg, shrimp. Squeeze lemon.'],
+  steps:['Toss broccoli and zucchini with avocado oil, roast at 425°F for 15 min.','Season shrimp with garlic powder and black pepper. Pan-sear 1–2 min per side.','Assemble: warm cooked quinoa as base, roasted veg, shrimp. Squeeze lemon.'],
   him:{},her:{},
   ingredients:[
     I('shrimp',10,'protein'),
@@ -2493,7 +2493,7 @@ const MEALS=[
   ]},
 
  {id:'lentil_soup_lean',label:'Chicken & lentil vegetable soup',slots:['lunch','dinner'],
-  steps:['Dice chicken. Sauté carrots, celery, garlic in broth 3–4 min.','Add chicken and cook 4–5 min until no longer pink.','Add lentils (from Instant Pot), remaining broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min until wilted.','Stir in egg whites — they cook in ribbons in the hot soup. Season with salt and pepper.'],
+  steps:['Dice chicken. Sauté carrots, celery, garlic in broth 3–4 min.','Add chicken and cook 4–5 min until no longer pink.','Add cooked lentils, remaining broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min until wilted.','Stir in egg whites — they cook in ribbons in the hot soup. Season with salt and pepper.'],
   him:{},her:{},
   ingredients:[
     I('lentils cooked',1.25,'protein'),
@@ -2524,7 +2524,7 @@ const MEALS=[
   ]},
 
  {id:'cannellini_kale_soup',label:'Chicken, white bean & kale soup',slots:['lunch','dinner'],
-  steps:['Dice chicken. Sauté garlic, carrots, and celery in broth 3 min.','Add chicken and cook 4–5 min until no longer pink.','Add cannellini beans (from Instant Pot), broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min.','Stir in egg whites — they form ribbons in the hot soup. Season with salt, pepper, lemon juice.'],
+  steps:['Dice chicken. Sauté garlic, carrots, and celery in broth 3 min.','Add chicken and cook 4–5 min until no longer pink.','Add cooked cannellini beans, broth, Italian seasoning. Simmer 8–10 min to meld flavors.','Add kale. Cook 3 min.','Stir in egg whites — they form ribbons in the hot soup. Season with salt, pepper, lemon juice.'],
   him:{},her:{},
   ingredients:[
     I('cannellini beans cooked',1.5,'protein'),
@@ -9155,7 +9155,6 @@ const PRODUCE_FLEX_CONFIG = {
   // Leafy bagged (perWhole 5/3 for spinach/kale): wider flex, very low kcal/cup
   'baby spinach':   {maxUp:1.0,  maxDown:0.5,  kcalCap:200},
   'kale':           {maxUp:1.0,  maxDown:0.5,  kcalCap:200},
-  'lettuce':        {maxUp:1.0,  maxDown:0.5,  kcalCap:200},
   // Higher kcal/cup — slightly tighter than standard veg
   'carrots':        {maxUp:0.5,  maxDown:0.25, kcalCap:150},
   'sweet potato':   {maxUp:0.5,  maxDown:0.25, kcalCap:300},
@@ -9207,7 +9206,7 @@ var ROUND_PKG_ITEMS = ['tofu firm','silken tofu','ground turkey 93','ground chic
 // ROUND_PKG_ITEMS, just a different per-unit value. Parallel structure to
 // ROUND_PKG_ITEMS — keeps the freeze function symmetric across pkg + produce.
 // 2026-04-29.
-var ROUND_PRODUCE_ITEMS = ['baby spinach','kale','lettuce','broccoli','bell pepper','carrots','grape tomatoes','red onion','zucchini','asparagus','bok choy','cucumber','sweet potato','yukon potato','celery'];
+var ROUND_PRODUCE_ITEMS = ['baby spinach','kale','broccoli','bell pepper','carrots','grape tomatoes','red onion','zucchini','asparagus','bok choy','cucumber','sweet potato','yukon potato','celery'];
 
 // freezeTripTotals — runs after the per-slot adjuster + day-balancer have
 // populated the cache (stages 1+2). For each trip × eligible item:
