@@ -3688,7 +3688,7 @@ function applyOverrides(port,p,d,s){
 
 
 // Items to always put in "If Low" section
-var IF_LOW_ITEMS=['avocado oil','sesame oil','rice vinegar','soy sauce','fish sauce','honey','cinnamon','garlic powder','onion powder','black pepper','salt','cumin','italian seasoning','rosemary','thyme','dill','gochujang','lemongrass','chili flake','red pepper flake','peanut butter','almond butter','chia','protein powder','creatine','baking powder','oat flour','maple syrup','balsamic','cashew milk','oats','granola','rice','mixed berries','edamame','acai','taco seasoning','frozen corn'];
+var IF_LOW_ITEMS=['avocado oil','sesame oil','rice vinegar','soy sauce','fish sauce','honey','cinnamon','garlic powder','onion powder','black pepper','salt','cumin','italian seasoning','rosemary','thyme','dill','gochujang','lemongrass','chili flake','red pepper flake','peanut butter','almond butter','chia','protein powder','creatine','baking powder','oat flour','maple syrup','balsamic','cashew milk','oats','granola','rice','mixed berries','edamame','acai','taco seasoning','tajin','frozen corn'];
 
 function isIfLow(name){const n=name.toLowerCase();return IF_LOW_ITEMS.some(function(k){return n.indexOf(k)>=0})}
 
@@ -4142,6 +4142,16 @@ function shopQtyWithCount(dbKey,qtyObj){
     }
   }
 
+  // V122 (2026-05-09): each-unit items round UP to whole in shopping. You
+  // can't buy ½ a banana / ¼ an avocado / ½ a jalapeño at the store. Recipe
+  // amounts can be fractional (½ banana per smoothie serving = correct
+  // recipe data); shopping just rounds up the trip total. Skips produce-
+  // and pkg-flagged items (handled above with their own conversions).
+  if(qtyObj.unit==='each' && qtyObj.num>0){
+    const whole=Math.ceil(qtyObj.num-1e-9);
+    return whole+' each';
+  }
+
   return base;
 }
 function shopDisplayName(dbKey){return SHOP_DISPLAY_NAMES[dbKey]||(dbKey.charAt(0).toUpperCase()+dbKey.slice(1));}
@@ -4333,8 +4343,11 @@ function buildShoppingList(trip,who){
   Object.keys(grouped).forEach(function(c){
     grouped[c].sort(function(a,b){return a.name.toLowerCase()<b.name.toLowerCase()?-1:a.name.toLowerCase()>b.name.toLowerCase()?1:0;});
     grouped[c].forEach(function(item){
-      item.hisQty=item.hisSum?fmtQty(item.hisSum):item.hisRaw;
-      item.herQty=item.herSum?fmtQty(item.herSum):item.herRaw;
+      // V122 (2026-05-09): route per-person displays through shopQtyWithCount
+      // too so each-unit items round up to whole (½ banana → 1 banana) in
+      // Him/Her tabs, not just Both. Pkg/produce/dry conversions also apply.
+      item.hisQty=item.hisSum?shopQtyWithCount(item.dbKey,item.hisSum):item.hisRaw;
+      item.herQty=item.herSum?shopQtyWithCount(item.dbKey,item.herSum):item.herRaw;
       // Combined total with produce count conversion for Both view
       if(item.hisSum&&item.herSum&&item.hisSum.unit===item.herSum.unit){
         item.bothQty=shopQtyWithCount(item.dbKey,{num:item.hisSum.num+item.herSum.num,unit:item.hisSum.unit});
