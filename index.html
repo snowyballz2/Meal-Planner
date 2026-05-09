@@ -410,6 +410,8 @@ var NUTRI_DB = {
   'cashew milk (sweetened)':{kcal:130, pro:4,  fat:10,  carb:8,   unit:'cup', brand:'Elmhurst', altUnits:{floz:8,ml:240}, minAmt:0.25, maxAmt:2},
   'heavy cream':           {kcal:52,  pro:0.3,fat:5.5, carb:0.4, unit:'tbsp', minAmt:0.25, maxAmt:2},
   'cheddar jack':          {kcal:110, pro:7,  fat:9,   carb:0.5, unit:'oz', minAmt:0.25, maxAmt:2},
+  'cottage cheese':        {kcal:160, pro:24, fat:5,   carb:6,   unit:'cup', brand:'Good Culture 2%', minAmt:0.25, maxAmt:2},
+  'cotija cheese':         {kcal:120, pro:7,  fat:9.5, carb:1,   unit:'oz', minAmt:0.25, maxAmt:2},
   'butter':{kcal:102,pro:0,fat:11.5,carb:0,unit:'tbsp', minAmt:0.25, maxAmt:2},
   // Grains & starches (ALL COOKED values per cup)
   'oats':                  {kcal:300, pro:10, fat:5,   carb:54,  unit:'cup', brand:'365', altUnits:{g:80}, minAmt:0.25, maxAmt:1},
@@ -458,6 +460,8 @@ var NUTRI_DB = {
   'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.25, maxAmt:2.0},
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.25, maxAmt:2.0},
   'celery':                {kcal:12,  pro:0.6,fat:0.2, carb:2.4, unit:'cup', produce:{perWhole:0.5,label:'stalk celery'}, minAmt:0.125, minAmtSolo:0.5, maxAmt:2},
+  'jalapeño':              {kcal:4,   pro:0.2,fat:0.1, carb:0.9, unit:'each', cupsEach:0.07, minAmt:0.125, maxAmt:1},
+  'frozen corn':           {kcal:134, pro:5,  fat:1.3, carb:31,  unit:'cup', brand:'Trader Joe\'s fire-roasted', minAmt:0.25, maxAmt:1.5},
   'egg noodles cooked':    {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', note:'cooked; macros match USDA cooked egg noodles (~221 kcal/cup); ~1 cup dry yields ~2.5 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
   'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:3,pkg:{size:32,unit:'oz',cups:4,type:'carton',softWaste:true}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75, minAmt:0.5, minAmtSolo:1, maxAmt:2},
@@ -521,6 +525,7 @@ var NUTRI_DB = {
   'onion powder':          {kcal:9,   pro:0.3,fat:0,   carb:2.1, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'cumin':                 {kcal:9,   pro:0.3,fat:0.3, carb:1.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'italian seasoning':     {kcal:3,   pro:0,  fat:0,   carb:0.6, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
+  'taco seasoning':        {kcal:10,  pro:0.5,fat:0.5, carb:2,   unit:'tbsp', brand:'Siete mild', halfSnap:true, minAmt:0.25, maxAmt:1.5},
   'dill':                  {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'dried oregano':         {kcal:5,   pro:0.2,fat:0.2, carb:1,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'parsley':               {kcal:1,   pro:0.1,fat:0,   carb:0.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
@@ -1772,6 +1777,24 @@ const MEALS=[
     I('salt',0.5,'fixed',false),
     I('lime',0.5,'condiment',false)
   ]},
+
+ {id:'street_corn_bowl',label:'Mexican street corn turkey bowl',slots:['lunch','dinner'],
+  steps:['Preheat oven to 425°F. Peel and cube sweet potatoes. Toss with avocado oil and salt on a sheet pan. Roast 20–25 minutes, flipping halfway, until tender and caramelized at the edges.','Meanwhile make the corn dip: blend cottage cheese in a small food processor or with an immersion blender until smooth and creamy.','In a bowl, combine the blended cottage cheese with thawed corn, minced jalapeño, chopped cilantro, crumbled cotija, and a squeeze of lime juice with the zest. Stir to combine.','Heat avocado oil in a non-stick pan over medium-high heat. Add ground turkey and brown for ~5 minutes, breaking into crumbles, until cooked through.','Stir taco seasoning and a splash of water into the turkey. Cook 1–2 minutes until evenly coated and thickened.','Assemble bowls: roasted sweet potato as the base, ground turkey on top, generous spoonful of corn dip alongside. Garnish with extra cilantro and a lime wedge.'],
+  him:{},her:{},
+  ingredients:[
+    I('ground turkey 93',4,'protein'),
+    I('sweet potato',0.625,'carb'),
+    I('frozen corn',0.5,'carb'),
+    I('cottage cheese',0.25,'protein'),
+    I('cotija cheese',0.25,'fat'),
+    I('avocado oil',0.5,'fat'),
+    I('jalapeño',0.125,'veg',false),
+    I('cilantro',1,'fixed',false),
+    I('lime',0.25,'condiment',false),
+    I('taco seasoning',0.625,'fixed',false),
+    I('salt',0.125,'fixed',false)
+  ],
+  fatBoost:{dbKey:'avocado', amt:0.25}},
 
  {id:'viet_vermicelli',label:'Vietnamese chicken & vermicelli salad',slots:['lunch','dinner'],
   steps:['Soak ~0.5 cup dry rice vermicelli per serving (= 1 cup cooked) in hot water 5 min. Drain and rinse cold.','Season chicken with garlic powder, salt, pepper. Grill or pan-sear over medium-high heat 5–6 min per side until 165°F. Rest 3 min, then slice thin.','Make dressing: whisk fish sauce, lime juice, honey, garlic, pepper flakes.','Combine noodles, spinach, carrots, bell pepper. Top with chicken and crushed peanuts. Drizzle dressing. Toss and eat immediately.'],
@@ -3659,7 +3682,7 @@ function applyOverrides(port,p,d,s){
 
 
 // Items to always put in "If Low" section
-var IF_LOW_ITEMS=['avocado oil','sesame oil','rice vinegar','soy sauce','fish sauce','honey','cinnamon','garlic powder','onion powder','black pepper','salt','cumin','italian seasoning','rosemary','thyme','dill','gochujang','lemongrass','chili flake','red pepper flake','peanut butter','almond butter','chia','protein powder','creatine','baking powder','oat flour','maple syrup','balsamic','cashew milk','oats','granola','rice','mixed berries','edamame','acai'];
+var IF_LOW_ITEMS=['avocado oil','sesame oil','rice vinegar','soy sauce','fish sauce','honey','cinnamon','garlic powder','onion powder','black pepper','salt','cumin','italian seasoning','rosemary','thyme','dill','gochujang','lemongrass','chili flake','red pepper flake','peanut butter','almond butter','chia','protein powder','creatine','baking powder','oat flour','maple syrup','balsamic','cashew milk','oats','granola','rice','mixed berries','edamame','acai','taco seasoning','frozen corn'];
 
 function isIfLow(name){const n=name.toLowerCase();return IF_LOW_ITEMS.some(function(k){return n.indexOf(k)>=0})}
 
@@ -3977,13 +4000,13 @@ function fmtQty(q){
 
 // ── Shopping list builder ────────────────────────────────────
 var SHOP_CAT_MAP={
-  spices:['salt','black pepper','dried rosemary','dried thyme','cinnamon','cumin','garlic powder','onion powder','italian seasoning','dill','chili flake','red pepper flake','gochugaru','garlic','ginger','lemongrass'],
+  spices:['salt','black pepper','dried rosemary','dried thyme','cinnamon','cumin','garlic powder','onion powder','italian seasoning','dill','chili flake','red pepper flake','gochugaru','garlic','ginger','lemongrass','taco seasoning'],
   sauces:['soy sauce','fish sauce','gochujang','rice vinegar','balsamic vinegar','red wine vinegar','oyster sauce','dark soy sauce','mirin','red curry paste','marinara','salsa','tomatillo sauce','tahini','broth concentrate','white miso'],
   oils:['avocado oil','sesame oil','olive oil'],
   supplements:['protein powder','creatine'],
   pantry:['chicken broth','egg noodles cooked','oat flour','chia seeds','granola','granola strawberry','granola cinnamon','granola kind zero','rxbar','triscuit','udon noodles','whole wheat pasta cooked','baking powder','honey tbsp','maple syrup','peanut butter','almond butter','cashew milk (sweetened)','sugar','coconut milk','black beans canned','black beans cooked','cannellini beans canned','cannellini beans cooked','lentils cooked','chickpeas cooked'],
-  dairy:['greek yogurt 0%','mozzarella','feta','butter','cheddar jack','1% milk'],
-  frozen:['mixed berries','edamame','acai'],
+  dairy:['greek yogurt 0%','mozzarella','feta','butter','cheddar jack','1% milk','cottage cheese','cotija cheese'],
+  frozen:['mixed berries','edamame','acai','frozen corn'],
   meat:['chicken breast','chicken thigh','ground turkey 93','ground chicken','filet mignon','shrimp','egg whole','egg white','hard boiled egg'],
   seafood:['salmon','halibut','canned tuna','tuna pouch']
 };
@@ -4025,7 +4048,9 @@ var SHOP_DISPLAY_NAMES={
   'black beans canned':'Black beans, canned','black beans cooked':'Black beans, cooked',
   'cannellini beans canned':'Cannellini beans, canned','cannellini beans cooked':'Cannellini beans, cooked',
   'lentils cooked':'Lentils, cooked',
-  'chickpeas cooked':'Chickpeas, cooked'
+  'chickpeas cooked':'Chickpeas, cooked',
+  'cottage cheese':'Cottage cheese','cotija cheese':'Cotija cheese',
+  'jalapeño':'Jalapeño','frozen corn':'Frozen corn','taco seasoning':'Taco seasoning'
 };
 
 // Epsilon-tolerant ceil for "how many packages/wholes do we need?" counts.
