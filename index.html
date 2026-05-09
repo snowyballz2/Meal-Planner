@@ -411,7 +411,7 @@ var NUTRI_DB = {
   'heavy cream':           {kcal:52,  pro:0.3,fat:5.5, carb:0.4, unit:'tbsp', minAmt:0.25, maxAmt:2},
   'cheddar jack':          {kcal:110, pro:7,  fat:9,   carb:0.5, unit:'oz', minAmt:0.25, maxAmt:2},
   'cottage cheese':        {kcal:180, pro:32, fat:4,   carb:8,   unit:'cup', brand:'Good Culture 2%', altUnits:{g:225}, minAmt:0.25, maxAmt:2},
-  'cotija cheese':         {kcal:120, pro:7,  fat:9.5, carb:1,   unit:'oz', minAmt:0.25, maxAmt:2},
+  'cotija cheese':         {kcal:480, pro:28, fat:38,  carb:4,   unit:'cup', minAmt:0.0625, maxAmt:0.5},
   'butter':{kcal:102,pro:0,fat:11.5,carb:0,unit:'tbsp', minAmt:0.25, maxAmt:2},
   // Grains & starches (ALL COOKED values per cup)
   'oats':                  {kcal:300, pro:10, fat:5,   carb:54,  unit:'cup', brand:'365', altUnits:{g:80}, minAmt:0.25, maxAmt:1},
@@ -593,6 +593,7 @@ function fmtFrac(n) {
   const snaps = [
     [1/3,'⅓'],[2/3,'⅔'],
     [1+1/3,'1⅓'],[1+2/3,'1⅔'],
+    [1/16,'1/16'],
     [1/8,'⅛'],[3/8,'⅜'],[5/8,'⅝'],[7/8,'⅞'],
     [1+1/8,'1⅛'],[1+3/8,'1⅜'],[1+5/8,'1⅝'],[1+7/8,'1⅞'],
     [0,'0'],[1/4,'¼'],[1/2,'½'],[3/4,'¾'],
@@ -686,8 +687,10 @@ function buildQtyOptions(unit, currentAmt, wholeOnly, minAmt, cookServings) {
 
   // Determine step pattern based on unit
   if (u === 'cup') {
-    // Cups: ¼, ⅓, ½, ⅔, ¾, 1, 1¼, 1⅓, 1½, 1⅔, 1¾, 2 ...
+    // Cups: 1/16, ⅛, ¼, ⅓, ½, ⅔, ¾, 1, 1¼, 1⅓, 1½, 1⅔, 1¾, 2 ...
+    // 1/16 + ⅛ included for sprinkly items like cotija (minAmt 0.0625).
     const cupFracs = [
+      {val:0.0625,label:'1/16'},{val:0.125,label:'⅛'},
       {val:0.25,label:'¼'},{val:0.33,label:'⅓'},{val:0.5,label:'½'},
       {val:0.67,label:'⅔'},{val:0.75,label:'¾'}
     ];
@@ -1787,7 +1790,7 @@ const MEALS=[
     I('sweet potato',1.25,'carb'),
     I('frozen corn',0.75,'carb'),
     I('cottage cheese',0.5,'protein'),
-    I('cotija cheese',0.125,'fat'),
+    I('cotija cheese',0.0625,'fat'),
     I('avocado oil',0.25,'fat'),
     I('jalapeño',0.125,'veg',false),
     I('cilantro',1,'fixed',false),
@@ -6075,12 +6078,14 @@ function verifyInvariants(){
   // Batch leftover per-serving is exempt — it's intentionally fractional
   // (kcal-proportional split) and displays as 1-decimal rounded text.
   function isClean(v){
-    // Accepts 2-decimal values OR eighth-fractions (0.125, 0.375, 0.625, 0.875)
-    // OR thirds (1/3, 2/3, 1+1/3, etc.). INV8's purpose is DISPLAY quality —
-    // not hiding weird 7.701-style numbers. Clean fractions are cookable and
-    // display as familiar symbols (⅛, ⅜, ⅓, ⅔, etc.) via fmtFrac.
+    // Accepts 2-decimal values OR sixteenth-fractions (0.0625, 0.1875, ...)
+    // OR eighth-fractions (0.125, 0.375, 0.625, 0.875) OR thirds (1/3, 2/3,
+    // 1+1/3, etc.). INV8's purpose is DISPLAY quality — not hiding weird
+    // 7.701-style numbers. Clean fractions are cookable and display as
+    // familiar symbols (1/16, ⅛, ⅜, ⅓, ⅔, etc.) via fmtFrac.
+    // 1/16 grid added 2026-05-09 for cotija (sprinkly cup-measured items).
     if (Math.abs(v - Math.round(v*100)/100) < 0.001) return true;  // 2-decimal
-    if (Math.abs(v - Math.round(v*8)/8) < 0.001) return true;      // 1/8 grid
+    if (Math.abs(v - Math.round(v*16)/16) < 0.001) return true;    // 1/16 grid (covers 1/8)
     if (Math.abs(v*3 - Math.round(v*3)) < 0.003) return true;      // thirds grid
     return false;
   }
