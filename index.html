@@ -12274,6 +12274,15 @@ function randomizeWeek(target, seed){
   cacheFromWinner = false; // boost overrides need balancer to compensate
   if (!cacheFromWinner) {
     runBalanceAdjusters();
+    // V102 (2026-05-09): early snack swap, immediately after first balancer.
+    // Pre-V102 only ran late (post-snap, pre-final-freeze). Adding an early
+    // pass catches obvious kcal-off snacks BEFORE freeze pins their pkg
+    // co-contributors. Late call still runs to catch anything the balancer
+    // smoothing introduced. A/B test 25-seed Test 1:
+    //   late-only (baseline): 98.00% primary
+    //   early-only:           98.00%
+    //   both (V102):          98.29% (+0.29pp, ~equal timing)
+    rerollKcalOffSnacks(randTarget);
     freezeTripTotals(randTarget, true);
     runBalanceAdjusters();
   } else {
@@ -12294,12 +12303,11 @@ function randomizeWeek(target, seed){
   // amounts sub-grid (honey 6.7586 tbsp etc). Runs last so the cache reaches
   // verifyInvariants with clean per-serving amounts.
   snapSoloSlotAmountsToGrid();
-  // Post-pipeline snack swap: for any day off kcal target by >100 AFTER all
-  // batch ops (unify, snap, waste, boost), swap the snack to tighten the
-  // delta. Runs here (not at step 3 anymore) because the earlier position
-  // saw pre-pipeline numbers that drifted post-pipeline. Cache-preserving:
-  // only mutates the snack slot's cache entry, never the whole day's cache
-  // (snacks are never batch members so this is safe).
+  // V102 (2026-05-09): late snack swap. Catches kcal-off days that the
+  // balancer's compensation moved (e.g. day starts on-target, freeze shifts
+  // pkg amounts, balancer trims to compensate, snack ends up off). Pairs
+  // with the early call above; both fire only on days where day kcal is
+  // off target by >100, so there's no double-application overhead.
   rerollKcalOffSnacks(randTarget);
   // Pass 3 (no swap) — rerollKcalOffSnacks may have swapped a snack to/from
   // a meal that uses ROUND_PKG_ITEMS or ROUND_PRODUCE_ITEMS (e.g. swap to
