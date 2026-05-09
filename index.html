@@ -25,7 +25,7 @@
 --text:#F1F5F9;--text-mid:#CBD5E1;--text-dim:#94A3B8}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);max-width:480px;margin:0 auto;min-height:100vh}
 .hdr{background:var(--bg-card);padding:12px 14px 0;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
-.hdr-title{font-size:18px;font-weight:800}
+.hdr-title{font-size:18px;font-weight:800;white-space:nowrap;flex-shrink:0}
 .top-tabs{display:flex;gap:0;margin-top:8px}
 .top-tab{flex:1;text-align:center;padding:8px 4px;font-size:12px;font-weight:700;color:var(--gray);border-bottom:2.5px solid transparent;cursor:pointer}
 .top-tab.on-meals{color:var(--his);border-bottom-color:var(--his)}
@@ -101,7 +101,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .note-pill{font-size:11px;color:#FBBF24;background:rgba(251,191,36,.12);border-radius:8px;padding:3px 10px;margin:0 12px 6px;display:inline-block;font-weight:600}
 .week-bar{display:flex;gap:0;align-items:center}
 .week-toggle{display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden}
-.week-pill{padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;color:var(--gray);background:var(--bg-card);white-space:nowrap;transition:all .15s}
+.week-pill{padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;color:var(--gray);background:var(--bg-card);white-space:nowrap;transition:all .15s}
 .week-pill.on{color:#000}
 .week-pill.on-him{background:var(--his)}
 .week-pill.on-her{background:var(--her)}
@@ -362,7 +362,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="hdr">
   <div class="hdr-row">
     <div class="hdr-title">Meal Planner</div>
-    <div id="weekBar" class="week-bar" style="flex:1;margin:0 10px;justify-content:center"></div>
+    <div id="weekBar" class="week-bar" style="flex:1;margin:0 6px;justify-content:center"></div>
     <button class="sync-icon-btn" id="syncToggleBtn" onclick="toggleSyncPanel()">☁️</button>
   </div>
   <div class="top-tabs">
