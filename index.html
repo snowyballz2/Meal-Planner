@@ -9612,26 +9612,74 @@ function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
   var lastWk = (mu.s==='lunch'||mu.s==='dinner') ? getLastWeekMealIds() : [];
   var sharedSlot = SHARED_SCHEDULE[dk(mu.d, mu.s)] === 'shared';
 
-  var candidates = getMealsForSlot(mu.s).filter(function(m){
-    if(m.id === mu.mealId) return false;
-    if(!m[mu.p]) return false;
-    if(noRandomizeIds[m.id]) return false;
-    if(mealUsesDiscouraged(m)) return false;
-    if(mealUsesPkg(m.id)) return false;
-    if(sharedSlot && (!m.him || !m.her)) return false;
-    // Variety filter STRICTER than other phases: reject ALL recent matches,
-    // even if they could leftover-extend an existing anchor. Reason:
-    // leftover-extending would CREATE a new cross-person batch (cook anchor
-    // + new leftover) that may bind at maxAmt and trigger INV7.
-    if(mu.s==='lunch' || mu.s==='dinner'){
-      if(lastWk.indexOf(m.id) >= 0) return false;
-      if(recent.indexOf(m.id) >= 0) return false;
-    }
-    var cBase = 0;
-    m.ingredients.forEach(function(i){var idb = NUTRI_DB[i.dbKey]; if(idb) cBase += idb.kcal*(i.amt||0);});
-    if(slotBudget > 0 && (cBase < slotBudget * 0.35 || cBase > slotBudget * 2.5)) return false;
-    return true;
-  });
+  // V98 (2026-05-08): fallback cascade for candidate filtering. Pre-V98 had
+  // a single strict filter; if zero candidates passed, swap returned null →
+  // INV20 hard fire. Test 2 V97 audit: seed 80005 her/Sun/lunch
+  // spicy_tofu_chicken_noodles solo had 0 surviving candidates because Test
+  // 2's random prior-week SEL kicked 23 of 37 lunch meals out via variety.
+  //
+  // Cascade levels (each more permissive):
+  //   L0: full strict filter (4-day variety + non-pkg + kcal band)
+  //   L1: drop 4-day variety to INV11-only (≤1-day gap protection)
+  //       — accepts INV14 risk (gap 2-4d) but blocks INV11 (gap 0-1d)
+  //   L2: drop kcal band (allow off-budget candidates)
+  //   L3: allow pkg meals — transferring pkg pressure beats INV20 fire
+  // Each level: keep core constraints (self, no-her, noRandom, discouraged,
+  // shared-slot pair check). Stop at first level that yields ≥1 candidate.
+  //
+  // V98 (2026-05-08) initial attempt with blanket variety drop at L1
+  // produced an INV11 fire (seed 80019, shrimp_quinoa_bowl Thu→Fri gap=0).
+  // INV11-aware L1 keeps gap<2 protection while letting gap 2-4d through.
+  //
+  // Build a set of meals to STRICTLY reject for INV11 protection: any meal
+  // already cooked within 2 days of mu.d (calendar gap < 2 = adjacent days).
+  var inv11Blocked = {};
+  if(mu.s === 'lunch' || mu.s === 'dinner'){
+    // Look at days [dayIdx-1, dayIdx, dayIdx+1] — any cook within these 3
+    // days of mu.d would have gap_days <= 1 → INV11 fire if same meal here.
+    [-1, 0, 1].forEach(function(off){
+      var checkIdx = dayIdx + off;
+      if(checkIdx < 0 || checkIdx >= DAYS.length) return;
+      var checkDay = DAYS[checkIdx];
+      ['him','her'].forEach(function(cp){
+        ['lunch','dinner'].forEach(function(cs){
+          var cmid = SEL[sk(cp, checkDay, cs)];
+          if(cmid) inv11Blocked[cmid] = true;
+        });
+      });
+    });
+  }
+  function _filterCandidates(level){
+    return getMealsForSlot(mu.s).filter(function(m){
+      if(m.id === mu.mealId) return false;
+      if(!m[mu.p]) return false;
+      if(noRandomizeIds[m.id]) return false;
+      if(mealUsesDiscouraged(m)) return false;
+      if(sharedSlot && (!m.him || !m.her)) return false;
+      // L3 allows pkg meals
+      if(level < 3 && mealUsesPkg(m.id)) return false;
+      // L0: strict 4-day variety. L1+: INV11-only (≤1-day gap) protection.
+      if(mu.s === 'lunch' || mu.s === 'dinner'){
+        if(level < 1){
+          if(lastWk.indexOf(m.id) >= 0) return false;
+          if(recent.indexOf(m.id) >= 0) return false;
+        } else {
+          // L1+ still blocks INV11 fire candidates.
+          if(inv11Blocked[m.id]) return false;
+        }
+      }
+      var cBase = 0;
+      m.ingredients.forEach(function(i){var idb = NUTRI_DB[i.dbKey]; if(idb) cBase += idb.kcal*(i.amt||0);});
+      // L2+ drops kcal band
+      if(level < 2 && slotBudget > 0 && (cBase < slotBudget * 0.35 || cBase > slotBudget * 2.5)) return false;
+      return true;
+    });
+  }
+  var candidates = [];
+  for(var lv = 0; lv <= 3; lv++){
+    candidates = _filterCandidates(lv);
+    if(candidates.length > 0) break;
+  }
   if(!candidates.length) return null;
 
   var best = null, bestDiff = Infinity;
