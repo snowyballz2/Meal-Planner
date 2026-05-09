@@ -7385,7 +7385,9 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
     if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
       perUnit = (db.pkg.drained && (db.unit==='cup'||db.unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
       label = db.pkg.type || 'pkg';
-    } else if(db.produce){
+    } else if(db.produce && !db.produce.acceptableWaste){
+      // V115b (2026-05-09): mirror INV20/_smExpectedWaste — skip acceptableWaste
+      // produce items (e.g. lettuce/romaine, single-heart fresh-buy model).
       perUnit = db.produce.perWhole;
       label = db.produce.label || 'unit';
     } else return '';
@@ -9193,24 +9195,6 @@ const PRODUCE_FLEX_CONFIG = {
   'red onion':      {maxUp:0.25, maxDown:0.25, kcalCap:100}
 };
 
-// Returns true if `amount` for ingredient `dbKey` can be flex-nudged to
-// hit a perUnit-boundary multiple within its flex range. Used by the
-// retry-loop waste check to avoid pessimistically counting flex-fixable
-// waste as "bad waste". Handles both pkg (perPkg = drained/cups) and
-// produce (perUnit = perWhole) — caller passes whichever is appropriate.
-function canFlexFitToBoundary(dbKey, amount, perUnit) {
-  const cfg = PKG_FLEX_CONFIG[dbKey] || PRODUCE_FLEX_CONFIG[dbKey];
-  if (!cfg || amount <= 0 || perUnit <= 0) return false;
-  const minReach = amount * (1 - (cfg.maxDown||0));
-  const maxReach = amount * (1 + (cfg.maxUp||0));
-  const floorMult = Math.floor(amount / perUnit) * perUnit;
-  const ceilMult = Math.ceil(amount / perUnit) * perUnit;
-  // Either boundary reachable counts as flex-fixable.
-  if (floorMult > 0 && floorMult >= minReach - 0.0001) return true;
-  if (ceilMult <= maxReach + 0.0001) return true;
-  return false;
-}
-
 // Items that get the "round trip total to nearest perPkg multiple" freeze
 // treatment. For each item per trip:
 //   1. Compute trip total X (sum of estimated per-portion balanced amounts
@@ -9968,80 +9952,65 @@ function _tradeBatchesAndSolos(Y, soloSnapSum, newSolos, batches, basicResult, c
   return {solos: solosOut, batches: batchPlan};
 }
 
-// Cold-path trip-waste estimator shared by `rerollMissDays` and
-// `rerollInv14Violations`. The retry loop also calls this. Iterates over
-// (Mon-Wed, Thu-Sun) trips separately, summing flex-aware waste counts.
-// Returns the number of (pkg + produce) ingredients with non-flex-resolvable
-// waste in `days`. Produce waste added 2026-04-27 to mirror PKG's full
-// integration — Phase 1 retry-tie-breaker, rerolls, and Phase 3 swap stages
-// all use this metric.
-function _fastTripWasteForPersons(days, persons){
-  const pkgTotals={};
-  const produceTotals={};
-  days.forEach(function(d){
-    persons.forEach(function(p){
-      if(p!=='him'&&p!=='her')return;
-      SLOTS.forEach(function(s){
-        if(s==='late_snack')return;
-        const key=sk(p,d,s);
-        if(SKIPPED[key]||EAT_OUT[key])return;
-        const mealId=getMealId(p,d,s); if(!mealId)return;
-        const lo=(_leftoverCache||computeLeftovers())[key];
-        if(lo&&lo.isLeftover)return;
-        const lMult=(lo&&!lo.isLeftover&&lo.servings>1)?lo.servings:1;
-        const m=getMeal(mealId); if(!m||!m.ingredients)return;
-        let scale=1;
-        if(s!=='shake'&&SLOT_BUDGET[s]){
-          let bk=0;
-          m.ingredients.forEach(function(i){const db=NUTRI_DB[i.dbKey]; if(db) bk+=db.kcal*(i.amt||0);});
-          if(bk>0) scale=getSlotBudget(p,d,s)/bk;
+// Measured trip-waste counter — replaces _fastTripWasteForPersons (V115,
+// 2026-05-09). Mirrors the INV20 hard-fire logic from verifyInvariants():
+// reads the post-pipeline shopping list via buildShoppingList(trip,who) +
+// counts pkg/produce items whose waste exceeds threshold. Returns count of
+// hard INV20 fires across BOTH trips (cook1+cook2) for the given persons.
+//
+// Why measured > predicted: pre-V115 _fastTripWasteForPersons used
+// recipe.amt × estimated slot scale × leftover multiplier, never running
+// the actual pipeline. Audit measured Pearson 0.01 correlation with the
+// real INV20 fire count — essentially noise as a ranking signal. V97
+// already replaced fastTrip in the retry loop with measured INV20; V115
+// extends the same fix to rerollMissDays + rerollInv14Violations and
+// deletes fastTrip entirely.
+//
+// Cost: ~5-15ms per call (2× buildShoppingList + ingredient iteration).
+// Reroll callers invalidate the leftover cache between candidates anyway,
+// so buildShoppingList's lazy rebuild doesn't add overhead vs the prior
+// state-read flow.
+//
+// Args: persons — array like ['him'], ['her'], or ['him','her']. Maps to
+// buildShoppingList's `who` parameter as 'him'/'her'/'both' respectively.
+function _measuredTripWasteForPersons(persons){
+  const who = persons.length === 1 ? persons[0] : 'both';
+  let total = 0;
+  ['cook1','cook2'].forEach(function(trip){
+    const grouped = buildShoppingList(trip, who);
+    Object.keys(grouped).forEach(function(cat){
+      grouped[cat].forEach(function(item){
+        const db = NUTRI_DB[item.dbKey]; if(!db) return;
+        const totalNum = (item.hisSum?item.hisSum.num:0) + (item.herSum?item.herSum.num:0);
+        if(totalNum <= 0) return;
+        const unit = (item.hisSum||item.herSum||{}).unit;
+        // PKG branch — matches verifyInvariants() INV20 exactly.
+        if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+          const perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
+          if(perPkg > 0){
+            const bought = _pkgsNeeded(totalNum, perPkg) * perPkg;
+            const waste = bought - totalNum;
+            if(bought > 0 && (waste/bought) > 0.01){
+              // Soft-waste items (marinara, broth) don't count as hard.
+              if(!db.pkg.softWaste) total++;
+            }
+          }
         }
-        m.ingredients.forEach(function(ing){
-          const db=NUTRI_DB[ing.dbKey];
-          if(!db)return;
-          const eff=(ing.scalable===false)?(ing.amt||0):(ing.amt||0)*scale;
-          if(db.pkg && !db.pkg.longShelfLife){
-            pkgTotals[ing.dbKey]=(pkgTotals[ing.dbKey]||0)+eff*lMult;
+        // PRODUCE branch — matches verifyInvariants() INV20 exactly.
+        if(db.produce && !db.produce.acceptableWaste){
+          const perWhole = db.produce.perWhole;
+          if(perWhole > 0){
+            const pBought = _pkgsNeeded(totalNum, perWhole) * perWhole;
+            const pWaste = pBought - totalNum;
+            if(pWaste > perWhole * 0.5){
+              total++;
+            }
           }
-          if(db.produce){
-            produceTotals[ing.dbKey]=(produceTotals[ing.dbKey]||0)+eff*lMult;
-          }
-        });
+        }
       });
     });
   });
-  let w=0;
-  Object.keys(pkgTotals).forEach(function(k){
-    const db=NUTRI_DB[k]; if(!db||!db.pkg) return;
-    const perPkg=(db.pkg.drained&&(db.unit==='cup'||db.unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
-    if(perPkg<=0) return;
-    const waste=_pkgsNeeded(pkgTotals[k], perPkg)*perPkg - pkgTotals[k];
-    // Fix A (2026-04-27): count ALL pkg waste >0.01 in the retry-loop
-    // estimate. The previous version skipped waste that canFlexFitToBoundary
-    // predicted as flex-fixable — but the predicate checks one ingredient's
-    // flex bounds in isolation, ignoring per-day kcal budgets, INV13 maxAmt
-    // caps, and per-usage day-goal-break reverts. Optimistic skipping let
-    // the retry loop pick combos that *predicted* zero waste but the actual
-    // pipeline couldn't deliver. Counting honestly: -35% pkg-waste fires
-    // across 100 seeds (382 → 248 — measured against then-INV20, now INV21),
-    // +0.43pp primary hit rate, no closed-off meals (all 124 picked meals
-    // still get picked, just rebalanced frequencies).
-    if(waste>0.01) w++;
-  });
-  Object.keys(produceTotals).forEach(function(k){
-    const db=NUTRI_DB[k]; if(!db||!db.produce) return;
-    const perWhole=db.produce.perWhole;
-    if(perWhole<=0) return;
-    const waste=_pkgsNeeded(produceTotals[k], perWhole)*perWhole - produceTotals[k];
-    // Threshold matches the shopping-list waste warning: only count "real"
-    // waste of >50% of one whole produce. Smaller fractional waste is
-    // unavoidable noise on every produce item.
-    if(waste>perWhole*0.5){
-      if(canFlexFitToBoundary(k, produceTotals[k], perWhole)) return;
-      w++;
-    }
-  });
-  return w;
+  return total;
 }
 
 // Uniform-random pick from a non-empty array. Used by Phase 1 meal selection
@@ -12188,48 +12157,11 @@ function randomizeWeek(target, seed){
         });
       });
     }
-    // V97: measure ACTUAL INV20 fires post-pipeline (replaces _fastTripWasteForPersons).
-    // Inlined logic from verifyInvariants() INV20 block — 2 buildShoppingList
-    // calls + ingredient iteration. ~5-15ms per retry.
-    let totalWaste = 0;
-    {
-      const _wasteCalcPersons = randTarget === 'shared' ? ['him','her'] : [randTarget];
-      const wasteVerifyPersons = _wasteCalcPersons.length === 1 ? _wasteCalcPersons[0] : 'both';
-      ['cook1','cook2'].forEach(function(trip){
-        var grouped = buildShoppingList(trip, wasteVerifyPersons);
-        Object.keys(grouped).forEach(function(cat){
-          grouped[cat].forEach(function(item){
-            var db = NUTRI_DB[item.dbKey]; if(!db) return;
-            var totalNum = (item.hisSum?item.hisSum.num:0) + (item.herSum?item.herSum.num:0);
-            if(totalNum <= 0) return;
-            var unit = (item.hisSum||item.herSum||{}).unit;
-            // PKG branch
-            if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
-              var perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
-              if(perPkg > 0){
-                var bought = _pkgsNeeded(totalNum, perPkg) * perPkg;
-                var waste = bought - totalNum;
-                if(bought > 0 && (waste/bought) > 0.01){
-                  // Soft-waste items (marinara, broth) don't count as hard.
-                  if(!db.pkg.softWaste) totalWaste++;
-                }
-              }
-            }
-            // PRODUCE branch
-            if(db.produce && !db.produce.acceptableWaste){
-              var perWhole = db.produce.perWhole;
-              if(perWhole > 0){
-                var pBought = _pkgsNeeded(totalNum, perWhole) * perWhole;
-                var pWaste = pBought - totalNum;
-                if(pWaste > perWhole * 0.5){
-                  totalWaste++;
-                }
-              }
-            }
-          });
-        });
-      });
-    }
+    // V97: measure ACTUAL INV20 fires post-pipeline (replaces fastTripWaste).
+    // V115 (2026-05-09): extracted to shared helper _measuredTripWasteForPersons.
+    const totalWaste = _measuredTripWasteForPersons(
+      randTarget === 'shared' ? ['him','her'] : [randTarget]
+    );
     // V97 (2026-05-08): do NOT snapshot caches in V97. The retry-loop's
     // pipeline (1 freeze pass + 2 balancer calls) doesn't fully converge
     // cross-person ratios — V97 first attempt with bestCaches restoration
@@ -12374,9 +12306,11 @@ function rerollMissDays(randTarget){
   var noRandomizeIds={};
   MEALS.forEach(function(m){if(m.noRandomize)noRandomizeIds[m.id]=true;});
   const rerollPersons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  // V115 (2026-05-09): measured INV20 instead of predicted fastTripWaste.
+  // Pre-V115's predictor had ~0% correlation with real INV20 fires; the
+  // shared helper reads buildShoppingList's actual post-balance amounts.
   function totalWaste(){
-    return _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook1, rerollPersons)
-         + _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook2, rerollPersons);
+    return _measuredTripWasteForPersons(rerollPersons);
   }
   function dayAllOk(d, persons){
     let ok = true;
@@ -12710,9 +12644,9 @@ function rerollInv14Violations(randTarget){
   MEALS.forEach(function(m){if(m.noRandomize)noRandomizeIds[m.id]=true;});
   const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
 
+  // V115 (2026-05-09): measured INV20 instead of predicted fastTripWaste.
   function totalWaste(){
-    return _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook1, persons)
-         + _fastTripWasteForPersons(TRIP_DAYS_STATIC.cook2, persons);
+    return _measuredTripWasteForPersons(persons);
   }
   function dayMissCount(d){
     let misses=0;
