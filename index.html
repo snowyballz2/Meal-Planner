@@ -418,28 +418,28 @@ var NUTRI_DB = {
   // Grains & starches (ALL COOKED values per cup)
   'oats':                  {kcal:300, pro:10, fat:5,   carb:54,  unit:'cup', brand:'365', altUnits:{g:80}, minAmt:0.25, maxAmt:1},
   'oats tbsp':             {kcal:19,  pro:0.6,fat:0.3, carb:3.4, unit:'tbsp', brand:'365', minAmt:1, maxAmt:8},
-  'brown rice cooked':            {kcal:216, pro:5,  fat:1.8, carb:45,  unit:'cup', note:'cooked; 1 dry cup = 2.5 cups cooked', altUnits:{g:195}, minAmt:0.25, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
-  'quinoa cooked':                {kcal:222, pro:8,  fat:3.6, carb:39,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:185}, minAmt:0.25, maxAmt:2, dry:{ratio:0.33, label:'cup dry'}},
-  'farro cooked':                 {kcal:170, pro:7,  fat:1,   carb:37,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', altUnits:{g:170}, minAmt:0.25, maxAmt:2, dry:{ratio:0.33, label:'cup dry'}},
-  'whole wheat pasta cooked':     {kcal:174, pro:7.5,fat:0.8, carb:37,  unit:'cup', note:'cooked; ~2 oz dry per cup cooked', altUnits:{g:137}, minAmt:0.25, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
+  'brown rice cooked':            {kcal:216, pro:5,  fat:1.8, carb:45,  unit:'cup', note:'cooked; 1 dry cup = 2.25-2.75 cups cooked', altUnits:{g:195}, minAmt:0.25, maxAmt:2, dry:{ratio:0.4, cookedRange:[2.25, 2.75], label:'cup dry'}},
+  'quinoa cooked':                {kcal:222, pro:8,  fat:3.6, carb:39,  unit:'cup', note:'cooked; 1 dry cup = 2.75-3 cups cooked', altUnits:{g:185}, minAmt:0.25, maxAmt:2, dry:{ratio:0.33, cookedRange:[2.75, 3.0], label:'cup dry'}},
+  'farro cooked':                 {kcal:170, pro:7,  fat:1,   carb:37,  unit:'cup', note:'cooked; 1 dry cup = 2.75-3 cups cooked', altUnits:{g:170}, minAmt:0.25, maxAmt:2, dry:{ratio:0.33, cookedRange:[2.75, 3.0], label:'cup dry'}},
+  'whole wheat pasta cooked':     {kcal:174, pro:7.5,fat:0.8, carb:37,  unit:'cup', note:'cooked; 1 dry cup = 2.25-2.75 cups cooked', altUnits:{g:137}, minAmt:0.25, maxAmt:2, dry:{ratio:0.4, cookedRange:[2.25, 2.75], label:'cup dry'}},
   // wholeOnly: per-portion amounts must be whole numbers (no half-slices/half-tortillas).
   // minAmt:1 and minAmtSolo:1 match — even in shared batches, each person gets ≥1 whole.
   // unifyCrossPersonRatios rounds per-portion to whole for wholeOnly items instead of
   // preserving strict kcal ratios (physical serving reality).
   'whole wheat toast':     {kcal:70,  pro:3.6,fat:1,   carb:12,  unit:'slice', wholeOnly:true, minAmt:1, minAmtSolo:1, maxAmt:3},
   'whole wheat tortilla':  {kcal:130, pro:4,  fat:3,   carb:22,  unit:'each', wholeOnly:true, minAmt:1, minAmtSolo:1, maxAmt:3},
-  'rice vermicelli cooked':       {kcal:190, pro:3.2,fat:0.4, carb:44,  unit:'cup', note:'cooked; rice vermicelli ~doubles cooked, 1 cup cooked = ~0.5 cup dry', minAmt:0.25, maxAmt:2, dry:{ratio:0.5, label:'cup dry'}},
-  'udon noodles cooked':   {kcal:210, pro:7,  fat:1,   carb:42,  unit:'cup', note:'cooked; udon ~doubles cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.5, label:'cup dry'}},
+  'rice vermicelli cooked':       {kcal:190, pro:3.2,fat:0.4, carb:44,  unit:'cup', note:'cooked; rice vermicelli ~doubles cooked (1 dry cup = 1.75-2.25 cups cooked)', minAmt:0.25, maxAmt:2, dry:{ratio:0.5, cookedRange:[1.75, 2.25], label:'cup dry'}},
+  'udon noodles cooked':   {kcal:210, pro:7,  fat:1,   carb:42,  unit:'cup', note:'cooked; udon ~doubles cooked (1 dry cup = 1.75-2.25 cups cooked)', minAmt:0.25, maxAmt:2, dry:{ratio:0.5, cookedRange:[1.75, 2.25], label:'cup dry'}},
   'oat flour':             {kcal:520, pro:20, fat:10,  carb:88,  unit:'cup', brand:'One Degree', altUnits:{g:132}, minAmt:0.125, maxAmt:0.5},
   'sweet potato':          {kcal:114, pro:2.1,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1.25,label:'large sweet potato'}, minAmt:0.25, maxAmt:2},
   'yukon potato':          {kcal:118, pro:2.5,fat:0.1, carb:27,  unit:'cup', produce:{perWhole:1,label:'medium potato'}, minAmt:0.25, maxAmt:2},
   // Beans & legumes (cooked/canned values)
   'black beans canned':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'canned, drained',minAmt:0.5,maxAmt:2,pkg:{size:15.5,unit:'oz',drained:1.75}},
-  'black beans cooked':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can); 1 dry cup = 3 cups cooked',minAmt:0.5,maxAmt:2,dry:{ratio:0.33, label:'cup dry'}},
+  'black beans cooked':{kcal:227,pro:15,fat:0.9,carb:41,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can); 1 dry cup = 2.5-3 cups cooked',minAmt:0.5,maxAmt:2,dry:{ratio:0.33, cookedRange:[2.5, 3.0], label:'cup dry'}},
   'cannellini beans canned':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',brand:'Goya',altUnits:{g:244},minAmt:0.5,maxAmt:2,pkg:{size:15.5,unit:'oz',drained:1.75}},
-  'cannellini beans cooked':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can); 1 dry cup = 3 cups cooked',minAmt:0.5,maxAmt:2,dry:{ratio:0.33, label:'cup dry'}},
-  'lentils cooked':               {kcal:230, pro:18, fat:0.8, carb:40,  unit:'cup', note:'cooked; 1 dry cup = ~2.5 cups cooked', altUnits:{g:198}, minAmt:0.5, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
-  'chickpeas cooked':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can); 1 dry cup = 3 cups cooked. Roasted-chickpea snack: roast cooked chickpeas in oven.',minAmt:0.5,maxAmt:2,dry:{ratio:0.33, label:'cup dry'}},
+  'cannellini beans cooked':{kcal:200,pro:14,fat:0,carb:38,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can); 1 dry cup = 2.5-3 cups cooked',minAmt:0.5,maxAmt:2,dry:{ratio:0.33, cookedRange:[2.5, 3.0], label:'cup dry'}},
+  'lentils cooked':               {kcal:230, pro:18, fat:0.8, carb:40,  unit:'cup', note:'cooked; 1 dry cup = 2.0-2.5 cups cooked', altUnits:{g:198}, minAmt:0.5, maxAmt:2, dry:{ratio:0.4, cookedRange:[2.0, 2.5], label:'cup dry'}},
+  'chickpeas cooked':{kcal:220,pro:14,fat:2,carb:40,unit:'cup',note:'cooked; heaping ½ cup dried = 1¾ cups cooked (≈ 1 can); 1 dry cup = 2.75-3 cups cooked. Roasted-chickpea snack: roast cooked chickpeas in oven.',minAmt:0.5,maxAmt:2,dry:{ratio:0.33, cookedRange:[2.75, 3.0], label:'cup dry'}},
   'edamame':               {kcal:188, pro:18, fat:8,   carb:14,  unit:'cup', minAmt:0.5, maxAmt:2},
   'hummus':                {kcal:25,  pro:1.2,fat:1.4, carb:2,   unit:'tbsp', minAmt:1, maxAmt:6},
   // Vegetables — minAmt / maxAmt per serving (3c absolute cap also enforced in snap passes)
@@ -464,7 +464,7 @@ var NUTRI_DB = {
   'celery':                {kcal:12,  pro:0.6,fat:0.2, carb:2.4, unit:'cup', produce:{perWhole:0.5,label:'stalk celery'}, minAmt:0.125, minAmtSolo:0.5, maxAmt:2},
   'jalapeño':              {kcal:4,   pro:0.2,fat:0.1, carb:0.9, unit:'each', cupsEach:0.07, produce:{perWhole:1,label:'jalapeño',softWaste:true}, minAmt:0.5, maxAmt:2},
   'frozen corn':           {kcal:134, pro:5,  fat:1.3, carb:31,  unit:'cup', brand:'Trader Joe\'s fire-roasted', minAmt:0.25, maxAmt:1.5},
-  'egg noodles cooked':    {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', note:'cooked; macros match USDA cooked egg noodles (~221 kcal/cup); ~1 cup dry yields ~2.5 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.4, label:'cup dry'}},
+  'egg noodles cooked':    {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', note:'cooked; macros match USDA cooked egg noodles (~221 kcal/cup); 1 dry cup = 2.25-2.75 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.4, cookedRange:[2.25, 2.75], label:'cup dry'}},
   'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:3,pkg:{size:32,unit:'oz',cups:4,type:'carton',softWaste:true}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75, minAmt:0.5, minAmtSolo:1, maxAmt:2},
   'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each', cupsEach:0.125, wholeWhenSolo:true, minAmt:0.5, minAmtSolo:1, maxAmt:4},
@@ -550,8 +550,8 @@ var NUTRI_DB = {
   'shallot':               {kcal:30,  pro:1,  fat:0,   carb:7,   unit:'each', cupsEach:0.25, minAmt:1, maxAmt:3},
   'cucumber':              {kcal:11,  pro:0.5,fat:0.1, carb:2.4, unit:'cup', produce:{perWhole:1.5,label:'cucumber'}, minAmt:0.25, maxAmt:2.0},
   'red curry paste':{kcal:20,pro:0,fat:0,carb:4,unit:'tbsp',brand:'Maesri',minAmt:0.25,maxAmt:1},
-  'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', note:'cooked; 1 dry cup = ~3 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.33, label:'cup dry'}},
-  'white rice cooked':     {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', note:'short-grain / sushi-style white rice, cooked; 1 dry cup = ~3 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.33, label:'cup dry'}},
+  'jasmine rice cooked':   {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', note:'cooked; 1 dry cup = 2.75-3 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.33, cookedRange:[2.75, 3.0], label:'cup dry'}},
+  'white rice cooked':     {kcal:205, pro:4.2,fat:0.4, carb:45,  unit:'cup', note:'short-grain / sushi-style white rice, cooked; 1 dry cup = 2.75-3 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.33, cookedRange:[2.75, 3.0], label:'cup dry'}},
   // Packaged / grab-and-go
   'rxbar':{kcal:180,pro:12,fat:6,carb:24,unit:'each',brand:'RXBar',altUnits:{g:52},wholeOnly:true,minAmt:1,maxAmt:2},
   'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz',type:'pouch'},wholeOnly:true,minAmt:1,maxAmt:1},
@@ -4144,6 +4144,87 @@ function shopQtyWithCount(dbKey,qtyObj){
 
   return base;
 }
+
+// V124 (2026-05-09): bought-amount helpers — same branches as
+// shopQtyWithCount but return numbers instead of display strings.
+// Used by strict INV3 to verify "what user buys" = "what recipes use",
+// closing the display-vs-raw divergence that the existing INV3 raw-sum
+// check is blind to (e.g. coconut milk display "1 can" = 1.5 cups
+// while raw sum is 1.25 cups; INV3 raw-vs-balanced doesn't fire).
+//
+// shopQtyAsCacheUnits(dbKey, qtyObj) — what the user buys, in the same
+// unit as qtyObj (cups/oz/each). Mirrors shopQtyWithCount's branches:
+//   - leafy oz (spinach/kale): roundtrip through Math.ceil(...*2)/2 oz
+//   - produce: _pkgsNeeded × perWhole
+//   - longShelfLife pkg (egg white): qtyObj.num (no over-buy on carry)
+//   - dry-conversion: returns DRY-cup amount (different unit from qtyObj
+//     which is in COOKED cups). Caller must use cookedRange tolerance.
+//   - pkg drained/cups: _pkgsNeeded × perPkg
+//   - fall-through: qtyObj.num (no rounding)
+function shopQtyAsCacheUnits(dbKey, qtyObj){
+  if(!qtyObj || qtyObj.num <= 0) return 0;
+  const db = NUTRI_DB[dbKey];
+  if(!db) return qtyObj.num;
+  // Leafy oz (spinach/kale): display rounds to 0.5oz; bought-in-cups =
+  // ozTotal / ozPerCup. Tiny over-buy (~0.14 cup typical).
+  if((dbKey==='baby spinach' || dbKey==='kale') && db.produce && db.produce.perWhole>0){
+    const ozPerCup = 3.5/db.produce.perWhole;
+    const ozTotal = Math.ceil(qtyObj.num * ozPerCup * 2)/2;
+    return ozTotal / ozPerCup;
+  }
+  // Produce — round up to whole units, multiply back to cache unit.
+  if(db.produce){
+    const count = _pkgsNeeded(qtyObj.num, db.produce.perWhole);
+    return Math.max(count, 1) * db.produce.perWhole;
+  }
+  // longShelfLife pkg (egg white) — carton carries between trips, no
+  // over-buy applied; bought = exactly what was used.
+  if(db.pkg && db.pkg.longShelfLife){
+    return qtyObj.num;
+  }
+  // Dry-conversion — cooked-cup → dry-cup. Returns DRY-cup amount.
+  // Caller (strict INV3) must use cookedRange tolerance to compare
+  // dry-bought × cooked-per-dry vs raw cooked sum.
+  if(db.dry && qtyObj.unit==='cup'){
+    const dryAmt = qtyObj.num * db.dry.ratio;
+    const rounded = Math.ceil(dryAmt*4)/4;
+    return Math.max(rounded, 0.25);
+  }
+  // Pkg conversion (cans, jars, cartons, pouches, containers).
+  if(db.pkg){
+    const pkg = db.pkg;
+    if(pkg.drained && (qtyObj.unit==='cup' || qtyObj.unit==='oz')){
+      return Math.ceil(qtyObj.num/pkg.drained) * pkg.drained;
+    }
+    if(pkg.cups && qtyObj.unit==='cup'){
+      return Math.ceil(qtyObj.num/pkg.cups) * pkg.cups;
+    }
+  }
+  // Fall-through: each-unit non-pkg/produce items, or anything else.
+  // Display path (shopQtyWithCount) returns base = fmtQty unchanged,
+  // so bought = qtyObj.num (no rounding). This is the post-V122 state
+  // for items like rxbar (each, no pkg/produce, wholeOnly already
+  // makes raw whole anyway).
+  return qtyObj.num;
+}
+
+// shopWasteAsCacheUnits(dbKey, qtyObj) — the WASTE the user sees in
+// the displayed warning, in cache units. Equals bought - sum (= waste
+// shown in "X unused" labels) for items that produce a warning, 0 for
+// items that don't. Used by strict INV3's softWaste branch:
+//   bought - waste = sum (what the user mentally computes from the row).
+function shopWasteAsCacheUnits(dbKey, qtyObj){
+  if(!qtyObj || qtyObj.num <= 0) return 0;
+  const db = NUTRI_DB[dbKey];
+  if(!db) return 0;
+  const bought = shopQtyAsCacheUnits(dbKey, qtyObj);
+  // For dry-conversion, "waste" doesn't have the same meaning (different
+  // unit between bought and sum). INV3 dry path uses tolerance, not
+  // waste subtraction.
+  if(db.dry && qtyObj.unit==='cup') return 0;
+  return Math.max(0, bought - qtyObj.num);
+}
+
 function shopDisplayName(dbKey){return SHOP_DISPLAY_NAMES[dbKey]||(dbKey.charAt(0).toUpperCase()+dbKey.slice(1));}
 
 function addShopIngredient(items,dbKey,amt,p){
