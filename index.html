@@ -4233,6 +4233,73 @@ function shopWasteAsCacheUnits(dbKey, qtyObj){
   return Math.max(0, bought - qtyObj.num);
 }
 
+// V126b (2026-05-09): reverse-parse a shopping display string back into the
+// bought-amount in cache units. Used by INV3's display-helper coherence
+// check to verify shopQtyWithCount and shopQtyAsCacheUnits never diverge.
+// Mirrors shopQtyWithCount's branches; for each, parses the leading count
+// and multiplies by perPkg/perWhole/conversion as appropriate.
+//
+// Display formats handled:
+//   "14 oz"                     → leafy oz roundtrip (spinach/kale)
+//   "2 romaine hearts"          → produce: 2 × perWhole
+//   "1 can (13.5oz)"            → pkg drained: 1 × pkg.drained
+//   "3 cups (4 cups)"           → longShelfLife: 3 (this trip's amount)
+//   "1.5 cups dry chickpeas"    → dry-conversion: 1.5 (dry-cup amount)
+//   "0.5 each", "½ each", "¾ cup" → fall-through: parse leading number/fraction
+function _parseShopDisplayToCache(displayed, dbKey, unit){
+  if(!displayed || displayed === '—') return 0;
+  const db = NUTRI_DB[dbKey];
+  if(!db) return parseFloat(displayed) || 0;
+  // Leafy oz: "14 oz" → ozTotal / ozPerCup = cups
+  if((dbKey === 'baby spinach' || dbKey === 'kale') && db.produce && db.produce.perWhole > 0){
+    const m = displayed.match(/^([\d.]+)\s*oz/);
+    if(m){
+      const ozTotal = parseFloat(m[1]);
+      const ozPerCup = 3.5 / db.produce.perWhole;
+      return ozTotal / ozPerCup;
+    }
+  }
+  // Produce: "N <label>(s)" → N × perWhole (count is always integer from _pkgsNeeded)
+  if(db.produce){
+    const m = displayed.match(/^(\d+)\s/);
+    if(m) return parseInt(m[1], 10) * db.produce.perWhole;
+  }
+  // longShelfLife pkg: "N <unit>(s) (M cups)" — leading N is "this trip's" amount,
+  // parens are the container size reference. We want the leading N (matches helper).
+  if(db.pkg && db.pkg.longShelfLife){
+    const m = displayed.match(/^([\d.]+)\s/);
+    if(m) return parseFloat(m[1]);
+  }
+  // Dry-conversion: "N cup(s) dry [label]" — leading N is dry-cup amount
+  if(db.dry && unit === 'cup'){
+    const m = displayed.match(/^([\d.]+)\s/);
+    if(m) return parseFloat(m[1]);
+  }
+  // Pkg drained/cups: "N <label>(s) (size unit)" → N × perPkg
+  if(db.pkg){
+    const pkg = db.pkg;
+    const m = displayed.match(/^(\d+)\s/);
+    if(m){
+      const n = parseInt(m[1], 10);
+      const perPkg = (pkg.drained && (unit === 'cup' || unit === 'oz')) ? pkg.drained : (pkg.cups || 0);
+      if(perPkg > 0) return n * perPkg;
+    }
+  }
+  // Fall-through: fmtFrac output ("½", "1¼", "¾") + unit. Parse fraction symbol.
+  const fracMap = {'½':0.5, '¼':0.25, '¾':0.75, '⅓':1/3, '⅔':2/3,
+    '⅛':0.125, '⅜':0.375, '⅝':0.625, '⅞':0.875, '1/16':0.0625};
+  const fracMatch = displayed.match(/^(\d+)?\s*([½¼¾⅓⅔⅛⅜⅝⅞]|1\/16)?/);
+  if(fracMatch && (fracMatch[1] || fracMatch[2])){
+    let n = fracMatch[1] ? parseInt(fracMatch[1], 10) : 0;
+    if(fracMatch[2]) n += fracMap[fracMatch[2]] || 0;
+    if(n > 0) return n;
+  }
+  // Plain decimal fall-through
+  const decMatch = displayed.match(/^([\d.]+)/);
+  if(decMatch) return parseFloat(decMatch[1]);
+  return 0;
+}
+
 function shopDisplayName(dbKey){return SHOP_DISPLAY_NAMES[dbKey]||(dbKey.charAt(0).toUpperCase()+dbKey.slice(1));}
 
 function addShopIngredient(items,dbKey,amt,p){
@@ -5929,6 +5996,23 @@ function verifyInvariants(){
         const unit=(item.hisSum||item.herSum||{}).unit;
         const qtyObj={num:sum, unit:unit};
         const bought=shopQtyAsCacheUnits(item.dbKey, qtyObj);
+        // V126b (2026-05-09): display-helper coherence check.
+        // shopQtyWithCount (display string) and shopQtyAsCacheUnits (helper
+        // number) are TWIN functions — they MUST agree on the bought count
+        // by construction. If a future edit modifies one without updating
+        // the other, the strict-INV3 check below would silently use the
+        // helper's value while the display lies. This catches that drift.
+        // Reverse-parse the display via _parseShopDisplayToCache and
+        // compare to helper's number. Tolerance 0.001 (exact equality).
+        const displayed = shopQtyWithCount(item.dbKey, qtyObj);
+        const parsedFromDisplay = _parseShopDisplayToCache(displayed, item.dbKey, unit);
+        if(Math.abs(parsedFromDisplay - bought) > 0.001){
+          violations.push('INV3 display-helper drift: '+trip+' '+item.dbKey
+            +' display="'+displayed+'"'
+            +' parsedAsCache='+parsedFromDisplay.toFixed(3)+unit
+            +' helperBought='+bought.toFixed(3)+unit
+            +' diff='+(parsedFromDisplay-bought).toFixed(3));
+        }
         // Soft-waste: bought - waste = sum (the user-visible row math)
         if((db.pkg && db.pkg.softWaste) || (db.produce && db.produce.softWaste)){
           const waste=shopWasteAsCacheUnits(item.dbKey, qtyObj);
