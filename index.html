@@ -14037,39 +14037,43 @@ function toggleCheck(k){
   CHECKS[k]=!CHECKS[k];if(!CHECKS[k])delete CHECKS[k];
   renderShop();
 }
-// V120b (2026-05-09): bulk operations push ONE undo entry per item so
-// undo unwinds one item per click. User: "we want it to undo actions
-// one at a time."
+// V129b (2026-05-09): undo granularity matches the action's
+// granularity. A single-tap toggle pushes 1 entry → 1 undo click
+// reverts that 1 item. A bulk-check (whole category, full list, or
+// clearAll) is ONE user action → undo reverts the whole bulk in 1
+// click, NOT N clicks. Walks back the prior V120b/V121 per-item
+// granularity for bulk operations, which forced 19 Undo clicks to
+// reverse a single category-tap.
 function clearAll(){
+  var changes=[];
   Object.keys(CHECKS).forEach(function(k){
     if(k.indexOf(shopTrip+'_')===0){
-      _pushShopUndo([{key:k, prevValue:true}]);
+      changes.push({key:k, prevValue:true});
       delete CHECKS[k];
     }
   });
+  _pushShopUndo(changes);
   renderShop();
 }
 function checkAll(){
   const grouped=buildShoppingList(shopTrip,shopPerson);
+  var changes=[];
   Object.keys(grouped).forEach(function(cat){grouped[cat].forEach(function(item){
     var k=shopTrip+'_'+cat+'_'+item.name.toLowerCase();
-    if(!CHECKS[k]){
-      _pushShopUndo([{key:k, prevValue:false}]);
-      CHECKS[k]=true;
-    }
+    if(!CHECKS[k]){changes.push({key:k, prevValue:false}); CHECKS[k]=true;}
   });});
+  _pushShopUndo(changes);
   renderShop();
 }
 function checkCategory(cat){
   const grouped=buildShoppingList(shopTrip,shopPerson);
   if(!grouped[cat])return;
+  var changes=[];
   grouped[cat].forEach(function(item){
     var k=shopTrip+'_'+cat+'_'+item.name.toLowerCase();
-    if(!CHECKS[k]){
-      _pushShopUndo([{key:k, prevValue:false}]);
-      CHECKS[k]=true;
-    }
+    if(!CHECKS[k]){changes.push({key:k, prevValue:false}); CHECKS[k]=true;}
   });
+  _pushShopUndo(changes);
   renderShop();
 }
 function renderShop(){
