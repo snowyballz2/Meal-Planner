@@ -6231,6 +6231,66 @@ function verifyInvariants(){
     });
   });
 
+  // ── Invariant 25: Card ingredient amount display coherence ──
+  // V128 (2026-05-09). The cooking-action surface analog of INV3's
+  // shopping-action protections. INV3 ensures "what you BUY = what
+  // recipes use." INV25 ensures "what you COOK FROM = what recipes use."
+  //
+  // Concern: a future change creates a card-display function that shows
+  // amounts diverging from the underlying balanced cache. User cooks
+  // based on the lying display → uses different amounts than what was
+  // purchased (per INV3 contract) → macros drift, leftovers don't match,
+  // shopping list is "wrong" relative to actual usage.
+  //
+  // Today: buildIngrEditRow renders a SELECT dropdown. The visible
+  // option is the one with `Math.abs(option.val - amt) < 0.02`. If
+  // amt doesn't match any preset option (e.g., post-pipeline value
+  // ended up at 0.43 cup but options are ¼/⅓/½/⅔/¾), no option gets
+  // `selected` and the browser defaults to the first option — user
+  // sees ¼ when amt is actually 0.43. That's a display lie.
+  //
+  // Scope: solo slots + cook-anchor combined-batch view (where amt is
+  // expected to be on grid post-INV8). Skips:
+  //   - leftover slots (lo.isLeftover) — per-portion intentionally
+  //     fractional, INV8 exempts; user doesn't cook from leftover view
+  //   - shared/sameDayShared anchor (per-portion view, fractional by
+  //     kcal-prop split design)
+  // Tolerance 0.02 matches buildIngrEditRow's `selected` matcher.
+  ['him','her'].forEach(function(p){
+    DAYS.forEach(function(d){
+      ['breakfast','lunch','snack','dinner'].forEach(function(s2){
+        if(SKIPPED[sk(p,d,s2)] || EAT_OUT[sk(p,d,s2)]) return;
+        var bal25 = getBalancedSlotIngredients(p,d,s2);
+        if(!bal25) return;
+        var lo25 = leftovers[sk(p,d,s2)];
+        // Skip leftover/shared/sameDayShared per-portion fractional displays.
+        if(lo25 && (lo25.isLeftover || lo25.shared || lo25.sameDayShared)) return;
+        // Compute cookServings the same way computeCardMacros does for
+        // the combined-view dropdown amount (anchorBatch shows N×).
+        var cs25 = (lo25 && !lo25.isLeftover && (lo25.servings>1||lo25.crossPersonCook) && !(lo25.shared||lo25.sameDayShared))
+                  ? (lo25.totalServings||lo25.servings||1) : 1;
+        bal25.forEach(function(bi25, idx25){
+          if(bi25.amt < 0.001) return; // ingredient effectively absent
+          var db25 = NUTRI_DB[bi25.dbKey]; if(!db25) return;
+          var displayAmt = bi25.amt * cs25; // what buildIngrEditRow receives
+          var qtyOpts25 = buildQtyOptions(db25.unit, displayAmt, db25.wholeOnly, db25.minAmt, cs25);
+          // Find any option whose value matches displayAmt within 0.02.
+          // If found, user sees the correct amount; if not, dropdown
+          // defaults to first option (display lies).
+          var matched = false;
+          for(var k25=0; k25<qtyOpts25.length; k25++){
+            if(Math.abs(qtyOpts25[k25].val - displayAmt) < 0.02){ matched = true; break; }
+          }
+          if(!matched){
+            violations.push('INV25 card-amount-no-match: '+p+' '+d+'/'+s2+' '+bi25.dbKey
+              +' displayAmt='+displayAmt.toFixed(3)+(db25.unit||'')
+              +' (no dropdown option within 0.02 — card defaults to first option, display lies)');
+          }
+        });
+      });
+    });
+  });
+
   // ── Invariant 6: Per-meal Protein/Carb ratio change <50% ──
   // The balanced P/C ratio shouldn't deviate more than 50% from the
   // original recipe ratio. Catches the day balancer distorting meal identity.
@@ -15678,7 +15738,7 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0,INV24:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
     violations.forEach(function(v){
       // Match INV20Soft first (longer suffix); fall back to INV<digits>.
       var ms=v.match(/^(INV20Soft)\b/);
@@ -15852,7 +15912,7 @@ window.MPStress=(function(){
     var fatLowBins={'14.5-15.0':0,'14.0-14.5':0,'13.0-14.0':0,'<13.0':0};
     var proPctBins={'40.0-42.0':0,'42.0-45.0':0,'45.0-50.0':0,'>50.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0,INV24:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
@@ -16725,7 +16785,7 @@ window.MPStress=(function(){
     lines.push('');
 
     // ── HARD INVARIANTS ─────────────────────────────────────────
-    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20','INV23','INV24'];
+    var hardKeys=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20','INV23','INV24','INV25'];
     // INV20 hard-count subtracts soft-waste fires (marinara, chicken broth)
     // so the "Hard Invariants" line reflects only items that actually need
     // attention.
@@ -16837,7 +16897,7 @@ window.MPStress=(function(){
     // INVs (6,14,15,16,18) get their own delta rows.
     if(baseline && baseline.invTotals){
       var changedInvs=[];
-      ['INV1','INV2','INV3','INV4','INV5','INV6','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV14','INV15','INV16','INV17','INV18','INV19','INV20','INV21','INV22','INV23'].forEach(function(k){
+      ['INV1','INV2','INV3','INV4','INV5','INV6','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV14','INV15','INV16','INV17','INV18','INV19','INV20','INV21','INV22','INV23','INV24','INV25'].forEach(function(k){
         var bv=baseline.invTotals[k]||0;
         var cv=a.invTotals[k]||0;
         if(bv!==cv){
@@ -17432,7 +17492,7 @@ window.MPStress=(function(){
   // ~/.claude/projects/-Users-chris-Desktop-Meal-Planner/memory/reference_slot_mod_test.md
   // for full spec. 5 geometries × 5 ops × 12 assertions per scenario.
 
-  var _SM_HARD_KEYS=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20','INV23','INV24'];
+  var _SM_HARD_KEYS=['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9','INV10','INV11','INV12','INV13','INV17','INV19','INV20','INV23','INV24','INV25'];
   function _smHardCount(){
     var inv=verifyInvariants();
     var hardCount=inv.filter(function(v){return _SM_HARD_KEYS.some(function(k){return v.indexOf(k+' ')===0||v.indexOf(k+':')===0;});}).length;
