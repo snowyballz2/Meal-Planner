@@ -4125,19 +4125,25 @@ function shopQtyWithCount(dbKey,qtyObj){
   }
 
   // Package conversion (cans, cartons, pouches, containers, jars).
+  // V125 (2026-05-09): use _pkgsNeeded (with 1e-9 epsilon tolerance)
+  // instead of raw Math.ceil. Float precision in unify can leave a sum
+  // at e.g. 14.000000000000002oz when freeze pinned 14oz exactly. Raw
+  // Math.ceil(14.000000000000002/14) = 2 → over-buys a whole container.
+  // _pkgsNeeded handles this correctly. Same fix applied to
+  // shopQtyAsCacheUnits below for consistency.
   if(db.pkg){
     const pkg=db.pkg;
     const label=pkg.type||'can';
     if(pkg.drained&&qtyObj.unit==='cup'){
-      const cans=Math.ceil(qtyObj.num/pkg.drained);
+      const cans=_pkgsNeeded(qtyObj.num, pkg.drained);
       return cans+' '+label+(cans>1?'s':'')+' ('+pkg.size+pkg.unit+')';
     }
     if(pkg.cups&&qtyObj.unit==='cup'){
-      const units=Math.ceil(qtyObj.num/pkg.cups);
+      const units=_pkgsNeeded(qtyObj.num, pkg.cups);
       return units+' '+label+(units>1?'s':'')+' ('+pkg.size+pkg.unit+')';
     }
     if(pkg.drained&&qtyObj.unit==='oz'){
-      const cans=Math.ceil(qtyObj.num/pkg.drained);
+      const cans=_pkgsNeeded(qtyObj.num, pkg.drained);
       return cans+' '+label+(cans>1?'s':'')+' ('+pkg.size+pkg.unit+')';
     }
   }
@@ -4191,13 +4197,15 @@ function shopQtyAsCacheUnits(dbKey, qtyObj){
     return Math.max(rounded, 0.25);
   }
   // Pkg conversion (cans, jars, cartons, pouches, containers).
+  // V125: _pkgsNeeded for float-tolerance (matches shopQtyWithCount above
+  // and the INV20 verifier — keeps display, helper, and INV in sync).
   if(db.pkg){
     const pkg = db.pkg;
     if(pkg.drained && (qtyObj.unit==='cup' || qtyObj.unit==='oz')){
-      return Math.ceil(qtyObj.num/pkg.drained) * pkg.drained;
+      return _pkgsNeeded(qtyObj.num, pkg.drained) * pkg.drained;
     }
     if(pkg.cups && qtyObj.unit==='cup'){
-      return Math.ceil(qtyObj.num/pkg.cups) * pkg.cups;
+      return _pkgsNeeded(qtyObj.num, pkg.cups) * pkg.cups;
     }
   }
   // Fall-through: each-unit non-pkg/produce items, or anything else.
@@ -5888,6 +5896,88 @@ function verifyInvariants(){
         violations.push('INV3 expected-not-in-shop: '+trip+' '+dbKey
           +' him='+exp.him.toFixed(3)+' her='+exp.her.toFixed(3));
       }
+    });
+    // V125 (2026-05-09) STRICT — third INV3 check: the displayed bought
+    // amount must equal what recipes actually use. The existing forward
+    // check (raw shop = balanced) compares hisSum.num + herSum.num to the
+    // balanced reconstruction — both derived from the same data, so it's
+    // mostly tautological / catches cache-rebuild bugs but NOT the
+    // "display lies vs raw" gap (e.g. coconut milk display "1 can" =
+    // 1.5 cups while raw = 1.25 cups). Strict check closes that gap.
+    //
+    // Carve-outs:
+    //   - acceptableWaste (lettuce, coconut milk): silent, skip entirely
+    //   - softWaste (banana/avocado/lemon/lime/orange/jalapeño + marinara/
+    //     chicken broth): require bought - waste = sum (user-visible math)
+    //   - dry-conversion (rice/beans/lentils/pasta/noodles): tolerance
+    //     band per cookedRange — bought_dry × range[0] ≤ sum_cooked ≤
+    //     bought_dry × range[1]
+    //   - leafy oz (spinach/kale, hardcoded): skip — Math.ceil(...*2)/2
+    //     oz creates ~0.14 cup over-buy; negligible for low-kcal greens
+    //   - default: bought = sum exactly
+    Object.keys(shopList).forEach(function(cat){
+      shopList[cat].forEach(function(item){
+        const sum=(item.hisSum?item.hisSum.num:0)+(item.herSum?item.herSum.num:0);
+        if(sum<=0.001)return;
+        const db=NUTRI_DB[item.dbKey];
+        if(!db)return;
+        // Silent acceptableWaste — explicit "ignore this divergence"
+        if(db.pkg && db.pkg.acceptableWaste) return;
+        if(db.produce && db.produce.acceptableWaste) return;
+        // Leafy oz hardcoded skip (ceil-to-0.5oz over-buy is rounding noise)
+        if(item.dbKey==='baby spinach' || item.dbKey==='kale') return;
+        const unit=(item.hisSum||item.herSum||{}).unit;
+        const qtyObj={num:sum, unit:unit};
+        const bought=shopQtyAsCacheUnits(item.dbKey, qtyObj);
+        // Soft-waste: bought - waste = sum (the user-visible row math)
+        if((db.pkg && db.pkg.softWaste) || (db.produce && db.produce.softWaste)){
+          const waste=shopWasteAsCacheUnits(item.dbKey, qtyObj);
+          if(Math.abs((bought-waste)-sum) > 0.001){
+            violations.push('INV3 soft display-vs-sum: '+trip+' '+item.dbKey
+              +' bought='+bought.toFixed(3)+unit
+              +' waste='+waste.toFixed(3)+unit
+              +' sum='+sum.toFixed(3)+unit
+              +' diff='+(bought-waste-sum).toFixed(3));
+          }
+          return;
+        }
+        // Dry-conversion: sufficiency + loose over-buy guardrail.
+        // Two bounds:
+        //   (1) Sufficiency: bought × max_yield ≥ sum  — catch under-buy
+        //       (you bought too little dry to produce enough cooked).
+        //   (2) Over-buy guardrail: bought × min_yield ≤ sum + GROSS_SLOP
+        //       (catches gross errors like 3× over-buy from helper/data
+        //       bugs). Worst-case rounding over-buy is 0.25 dry × max_yield
+        //       (~0.75 cup cooked); 1.0 cup slop tolerates that + a bit
+        //       more for natural rounding noise. Anything past 1.0 cup
+        //       cooked equivalent of over-buy is real divergence.
+        if(db.dry && unit==='cup'){
+          const range = db.dry.cookedRange || [1/db.dry.ratio - 0.1, 1/db.dry.ratio + 0.1];
+          const GROSS_SLOP = 1.0; // cup cooked
+          const minProducible = bought * range[0]; // pessimistic cooked yield
+          const maxProducible = bought * range[1]; // optimistic cooked yield
+          if(sum > maxProducible + 0.001){
+            violations.push('INV3 dry under-bought: '+trip+' '+item.dbKey
+              +' boughtDry='+bought.toFixed(3)+'cup'
+              +' sumCooked='+sum.toFixed(3)+'cup'
+              +' maxProducible='+maxProducible.toFixed(3)+'cup');
+          } else if(minProducible > sum + GROSS_SLOP + 0.001){
+            violations.push('INV3 dry gross over-buy: '+trip+' '+item.dbKey
+              +' boughtDry='+bought.toFixed(3)+'cup'
+              +' sumCooked='+sum.toFixed(3)+'cup'
+              +' minProducible='+minProducible.toFixed(3)+'cup'
+              +' overBy='+(minProducible-sum).toFixed(3)+'cup (slop='+GROSS_SLOP+')');
+          }
+          return;
+        }
+        // Default strict: bought = sum
+        if(Math.abs(bought-sum) > 0.001){
+          violations.push('INV3 display-vs-sum: '+trip+' '+item.dbKey
+            +' bought='+bought.toFixed(3)+unit
+            +' sum='+sum.toFixed(3)+unit
+            +' diff='+(bought-sum).toFixed(3));
+        }
+      });
     });
   });
 
