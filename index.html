@@ -5941,19 +5941,28 @@ function verifyInvariants(){
           }
           return;
         }
-        // Dry-conversion: sufficiency + loose over-buy guardrail.
+        // Dry-conversion: sufficiency + per-item over-buy guardrail.
         // Two bounds:
         //   (1) Sufficiency: bought × max_yield ≥ sum  — catch under-buy
         //       (you bought too little dry to produce enough cooked).
-        //   (2) Over-buy guardrail: bought × min_yield ≤ sum + GROSS_SLOP
-        //       (catches gross errors like 3× over-buy from helper/data
-        //       bugs). Worst-case rounding over-buy is 0.25 dry × max_yield
-        //       (~0.75 cup cooked); 1.0 cup slop tolerates that + a bit
-        //       more for natural rounding noise. Anything past 1.0 cup
-        //       cooked equivalent of over-buy is real divergence.
+        //   (2) Over-buy guardrail: bought × min_yield ≤ sum + slop, where
+        //       slop is computed PER ITEM as `dry_grid_step × min_yield +
+        //       buffer`. This is the maximum cooked-equivalent over-buy
+        //       achievable from rounding bought_dry up by one 0.25-cup
+        //       grid step, plus 0.1 cup buffer for float noise. Tighter
+        //       than a flat 1.0-cup slop — eliminates the hide-window
+        //       between "rounding noise" (~0.7 cup) and "real over-buy."
+        //   Per-item bounds (range[0] = pessimistic cooked yield):
+        //     - chickpea/cannellini/black bean (range 2.5-2.75): slop ~0.73-0.79
+        //     - rice/quinoa/farro (range 2.75): slop ~0.79
+        //     - lentils (range 2.0): slop ~0.60
+        //     - vermicelli/udon (range 1.75): slop ~0.54
+        //     - pasta/egg noodles (range 2.25): slop ~0.66
+        //   Anything past per-item slop is a real divergence (helper bug,
+        //   freeze pinning the wrong amount, recipe summing inconsistently).
         if(db.dry && unit==='cup'){
           const range = db.dry.cookedRange || [1/db.dry.ratio - 0.1, 1/db.dry.ratio + 0.1];
-          const GROSS_SLOP = 1.0; // cup cooked
+          const PER_ITEM_SLOP = 0.25 * range[0] + 0.1; // cup cooked
           const minProducible = bought * range[0]; // pessimistic cooked yield
           const maxProducible = bought * range[1]; // optimistic cooked yield
           if(sum > maxProducible + 0.001){
@@ -5961,12 +5970,12 @@ function verifyInvariants(){
               +' boughtDry='+bought.toFixed(3)+'cup'
               +' sumCooked='+sum.toFixed(3)+'cup'
               +' maxProducible='+maxProducible.toFixed(3)+'cup');
-          } else if(minProducible > sum + GROSS_SLOP + 0.001){
+          } else if(minProducible > sum + PER_ITEM_SLOP + 0.001){
             violations.push('INV3 dry gross over-buy: '+trip+' '+item.dbKey
               +' boughtDry='+bought.toFixed(3)+'cup'
               +' sumCooked='+sum.toFixed(3)+'cup'
               +' minProducible='+minProducible.toFixed(3)+'cup'
-              +' overBy='+(minProducible-sum).toFixed(3)+'cup (slop='+GROSS_SLOP+')');
+              +' overBy='+(minProducible-sum).toFixed(3)+'cup (slop='+PER_ITEM_SLOP.toFixed(3)+')');
           }
           return;
         }
@@ -6627,10 +6636,15 @@ function verifyInvariants(){
   // useless — the user buys dry product or cans, not cooked cups.
   //
   // Symmetrically, every entry whose key contains "dry"/"dried"/"uncooked"
-  // AND uses `cup` unit must have a corresponding "cooked" or "canned"
-  // sibling. Restricted to cup-unit so dried spices/herbs (tbsp halfSnap
-  // items like `dried rosemary`/`dried thyme`/`dried oregano`) — which are
-  // shopped/stored/used in dried form by definition — don't false-fire.
+  // must have a corresponding "cooked" or "canned" sibling — UNLESS marked
+  // `dryOnly:true` (item is naturally consumed in dried form, e.g. dried
+  // spices/herbs). V125 (2026-05-09): replaced the prior `unit==='cup'`
+  // heuristic with an explicit flag — relying on unit==='tbsp' to skip
+  // herbs would silently false-fire if a future bulk-cup dried herb is
+  // added. Currently no items use dryOnly:true (all dried herbs use
+  // unit:'tbsp' which still naturally skips this regex check via the
+  // halfSnap exclusion below), but the flag is the documented exemption
+  // mechanism going forward.
   // Catches grain/legume orphans like the deleted `lentils dried`.
   Object.keys(NUTRI_DB).forEach(function(k){
     var db = NUTRI_DB[k];
@@ -6642,13 +6656,18 @@ function verifyInvariants(){
           +' (cooked entry needs `pkg` or `dry` so shopping shows real units)');
       }
     }
-    if(/\b(dry|dried|uncooked)\b/.test(k) && db.unit==='cup'){
+    if(/\b(dry|dried|uncooked)\b/.test(k)){
+      // Skip naturally-dried items: explicit dryOnly flag OR halfSnap-grid
+      // tbsp-measured spices/herbs (the practical convention for "this is
+      // a spice/herb, no cooked sibling expected").
+      if(db.dryOnly === true) return;
+      if(db.halfSnap === true) return;
       var base = k.replace(/\b(dry|dried|uncooked)\b/g, '').replace(/\s+/g, ' ').trim();
       var cookedSibling = base + ' cooked';
       var cannedSibling = base + ' canned';
       if(!NUTRI_DB[cookedSibling] && !NUTRI_DB[cannedSibling]){
         violations.push('INV19 dry-no-cooked: '+k
-          +' (no `'+cookedSibling+'` or `'+cannedSibling+'` sibling for the eaten form)');
+          +' (no `'+cookedSibling+'` or `'+cannedSibling+'` sibling for the eaten form — or mark with dryOnly:true if intentional)');
       }
     }
   });
@@ -9741,6 +9760,17 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
 // last-resort swap-out path. User preference: marinara jar + chicken broth
 // carton waste is acceptable when no pairing exists.
 // 2026-04-29 (late): added marinara. 2026-04-30: added chicken broth.
+//
+// Two-gate pattern (clarified V125, 2026-05-09):
+// SWAP_OUT_EXCLUDE and INV20/INV21 fire at DIFFERENT thresholds for
+// DIFFERENT purposes — keep both in mind:
+//   • INV20/INV21 verifier:   waste > 1% of pkg → fires (visibility metric)
+//   • SWAP_OUT_EXCLUDE swap:  waste > 25% of pkg → swap-out triggers
+// INV20 reports early to surface ALL waste (subtracted from hardFail via
+// INV20Soft for these soft-waste items so it doesn't break tests).
+// Swap pass uses the higher threshold so we don't aggressively swap out
+// meals over small waste — only meals causing egregious package waste get
+// swap-replaced. Both gates are intentional; do not "align" them.
 var SWAP_OUT_EXCLUDE = {'marinara':true, 'chicken broth':true};
 
 function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
