@@ -462,8 +462,10 @@ var NUTRI_DB = {
   'zucchini':              {kcal:20,  pro:1.5,fat:0.2, carb:3.5, unit:'cup', produce:{perWhole:1.5,label:'medium zucchini'}, minAmt:0.25, maxAmt:2.0},
   'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.25, maxAmt:2.0},
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.25, maxAmt:2.0},
+  'green beans':           {kcal:31,  pro:1.8,fat:0.2, carb:7,   unit:'cup', produce:{perWhole:3,label:'12oz bag green beans',softWaste:true}, minAmt:0.5, maxAmt:2.0},
   'celery':                {kcal:12,  pro:0.6,fat:0.2, carb:2.4, unit:'cup', produce:{perWhole:0.5,label:'stalk celery'}, minAmt:0.125, minAmtSolo:0.5, maxAmt:2},
   'jalapeño':              {kcal:4,   pro:0.2,fat:0.1, carb:0.9, unit:'each', cupsEach:0.07, produce:{perWhole:1,label:'jalapeño',softWaste:true}, minAmt:0.5, maxAmt:2},
+  'thai chili':            {kcal:2,   pro:0.1,fat:0,   carb:0.4, unit:'each', produce:{perWhole:1,label:'thai chili',softWaste:true}, minAmt:1, maxAmt:5},
   'frozen corn':           {kcal:134, pro:5,  fat:1.3, carb:31,  unit:'cup', brand:'Trader Joe\'s fire-roasted', minAmt:0.25, maxAmt:1.5},
   'egg noodles cooked':    {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', note:'cooked; macros match USDA cooked egg noodles (~221 kcal/cup); 1 dry cup = 2.25-2.75 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.4, cookedRange:[2.25, 2.75], label:'cup dry'}},
   'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:3,pkg:{size:32,unit:'oz',cups:4,type:'carton',softWaste:true}},
@@ -508,6 +510,7 @@ var NUTRI_DB = {
   'baking powder':         {kcal:6,   pro:0,  fat:0,   carb:3,   unit:'tbsp', halfSnap:true},
   // Sauces & seasonings
   'soy sauce':             {kcal:9,   pro:0.9,fat:0,   carb:1,   unit:'tbsp', minAmt:0.5, maxAmt:3},
+  'dark soy sauce':        {kcal:11,  pro:1,  fat:0,   carb:2,   unit:'tbsp', minAmt:0.25, maxAmt:2},
   'fish sauce':            {kcal:6,   pro:1,  fat:0,   carb:0.7, unit:'tbsp', minAmt:0.5, maxAmt:2},
   'gochujang':             {kcal:30,  pro:0.9,fat:0.3, carb:6,   unit:'tbsp', halfSnap:true, minAmt:0.5, maxAmt:2},
   'rice vinegar':          {kcal:3,   pro:0,  fat:0,   carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.5, maxAmt:2},
@@ -533,6 +536,7 @@ var NUTRI_DB = {
   'dill':                  {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'dried oregano':         {kcal:5,   pro:0.2,fat:0.2, carb:1,   unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'parsley':               {kcal:1,   pro:0.1,fat:0,   carb:0.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
+  'thai basil':            {kcal:6,   pro:0.6,fat:0.1, carb:0.7, unit:'cup', produce:{perWhole:0.5,label:'bunch thai basil',softWaste:true}, minAmt:0.125, maxAmt:1},
   'cilantro':              {kcal:1,   pro:0.1,fat:0,   carb:0.1, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'chili flake':           {kcal:6,   pro:0.3,fat:0.3, carb:0.9, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'red pepper flake':      {kcal:6,   pro:0.3,fat:0.3, carb:0.9, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
@@ -1802,6 +1806,22 @@ const MEALS=[
     I('salt',0.125,'fixed',false)
   ],
   fatBoost:{dbKey:'avocado', amt:0.25}},
+
+ {id:'thai_basil_turkey',label:'Thai basil ground turkey',slots:['lunch','dinner'],
+  steps:['Trim green beans and cut into ~1.5-inch pieces.','Mince garlic. Slice thai chilies thinly (remove seeds for less heat — leave for full kick).','Whisk dark soy, oyster sauce, fish sauce, and maple syrup together in a small bowl.','Heat a non-stick wok or wide pan over medium-high heat. Add ground turkey and brown for ~5 minutes, breaking into crumbles, until cooked through.','Push turkey to one side. Add garlic and chilies to the cleared space, stir 20-30 seconds until fragrant. Toss with the turkey.','Add green beans and stir-fry 2-3 minutes until tender-crisp.','Pour in the sauce mixture, toss to coat everything evenly. Cook 1 minute until glossy.','Turn off heat. Add thai basil leaves and toss until just wilted (residual heat is enough — basil bruises if overcooked).','Serve over warm cooked brown rice.'],
+  him:{},her:{},
+  ingredients:[
+    I('ground turkey 93',6,'protein'),
+    I('brown rice cooked',1,'carb'),
+    I('green beans',1.5,'veg'),
+    I('thai basil',0.5,'veg',false),
+    I('garlic',2,'condiment',false),
+    I('thai chili',2,'fixed',false),
+    I('dark soy sauce',0.5,'condiment',false),
+    I('oyster sauce',0.5,'condiment',false),
+    I('maple syrup',0.5,'condiment',false),
+    I('fish sauce',0.5,'condiment',false)
+  ]},
 
  {id:'viet_vermicelli',label:'Vietnamese chicken & vermicelli salad',slots:['lunch','dinner'],
   steps:['Soak ~0.5 cup dry rice vermicelli per serving (= 1 cup cooked) in hot water 5 min. Drain and rinse cold.','Season chicken with garlic powder, salt, pepper. Grill or pan-sear over medium-high heat 5–6 min per side until 165°F. Rest 3 min, then slice thin.','Make dressing: whisk fish sauce, lime juice, honey, garlic, pepper flakes.','Combine noodles, spinach, carrots, bell pepper. Top with chicken and crushed peanuts. Drizzle dressing. Toss and eat immediately.'],
@@ -4028,6 +4048,10 @@ function getIngredientCategory(name){
   if(SHOP_CAT_MAP.meat.indexOf(name)>=0)return 'Meat';
   if(SHOP_CAT_MAP.seafood.indexOf(name)>=0)return 'Seafood';
   const db=NUTRI_DB[name];
+  // V131 (2026-05-09): items with `produce` field are produce by
+  // definition — short-circuit before the substring fall-through which
+  // would mis-route "green beans" → Pantry via the 'bean' match.
+  if(db && db.produce) return 'Produce';
   if(db&&db.unit==='oz'&&db.pro>3)return 'Meat';
   if(name.indexOf('broth')>=0||name.indexOf('noodle')>=0||name.indexOf('rice')>=0||name.indexOf('bean')>=0||name.indexOf('lentil')>=0||name.indexOf('farro')>=0||name.indexOf('quinoa')>=0||name.indexOf('oats')>=0||name.indexOf('pasta')>=0)return 'Pantry';
   return 'Produce';
@@ -4057,7 +4081,8 @@ var SHOP_DISPLAY_NAMES={
   'lentils cooked':'Lentils, cooked',
   'chickpeas cooked':'Chickpeas, cooked',
   'cottage cheese':'Cottage cheese','cotija cheese':'Cotija cheese',
-  'jalapeño':'Jalapeño','frozen corn':'Frozen corn','taco seasoning':'Taco seasoning','tajin':'Tajín'
+  'jalapeño':'Jalapeño','frozen corn':'Frozen corn','taco seasoning':'Taco seasoning','tajin':'Tajín',
+  'thai basil':'Thai basil','thai chili':'Thai chili','green beans':'Green beans','dark soy sauce':'Dark soy sauce'
 };
 
 // Epsilon-tolerant ceil for "how many packages/wholes do we need?" counts.
