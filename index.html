@@ -3641,18 +3641,29 @@ function _autoApplyFatBoosts(target){
         }
         var newAmt = existAmt + boost.amt;
         var writeIdx = existIdx >= 0 ? existIdx : port.ingredients.length;
-        // Write override entry. Mark _fatBoost:true + scalable:false.
-        setOverride(p, d, s, writeIdx, 'dbKey', boost.dbKey);
-        setOverride(p, d, s, writeIdx, 'amt', newAmt);
-        setOverride(p, d, s, writeIdx, 'role', 'fat');
-        setOverride(p, d, s, writeIdx, 'scalable', false);
-        setOverride(p, d, s, writeIdx, '_fatBoost', true);
-        // Invalidate just THIS slot's cache so the next readDayFatPct sees
-        // the boost applied. Avoids invalidating the whole day cache for
-        // every boost (which would force expensive rebuilds).
-        if(typeof _dayBalancedCache !== 'undefined' && _dayBalancedCache[pk(p,d)]){
-          delete _dayBalancedCache[pk(p,d)][s];
-        }
+        // 2026-05-13 (V134): BATCH-AWARE write. For multi-portion batches
+        // (cook anchor + leftovers, cross-person or same-person), the fat
+        // boost must land on EVERY portion so the ingredient list stays
+        // consistent across the batch. Pre-V134, the boost wrote only to the
+        // current (p,d,s), so a cross-person leftover-eater's day-fatPct
+        // decision could add avocado oil to her side without Him's anchor
+        // having it — causing card-vs-balanced (INV5) and row-vs-header
+        // (INV23) drift when later surgical ops walked the batch.
+        var _portions = (typeof _getBatchPortions === 'function')
+          ? _getBatchPortions(p,d,s) : [{p:p,d:d,s:s}];
+        _portions.forEach(function(pt){
+          setOverride(pt.p, pt.d, pt.s, writeIdx, 'dbKey', boost.dbKey);
+          setOverride(pt.p, pt.d, pt.s, writeIdx, 'amt', newAmt);
+          setOverride(pt.p, pt.d, pt.s, writeIdx, 'role', 'fat');
+          setOverride(pt.p, pt.d, pt.s, writeIdx, 'scalable', false);
+          setOverride(pt.p, pt.d, pt.s, writeIdx, '_fatBoost', true);
+          // Invalidate the affected slot's cache so the next readDayFatPct
+          // sees the boost applied for THIS day (only matters for pt===p,d
+          // — other portions' caches get invalidated below by invalidateLeftoverCache).
+          if(typeof _dayBalancedCache !== 'undefined' && _dayBalancedCache[pk(pt.p,pt.d)]){
+            delete _dayBalancedCache[pk(pt.p,pt.d)][pt.s];
+          }
+        });
       }
     });
   });
@@ -11917,12 +11928,43 @@ function unifyCrossPersonRatios(){
               var postCapMinIdeal=Infinity;
               ideals.forEach(function(v){var cap=v*scaleFactor*capFactor;if(cap<postCapMinIdeal)postCapMinIdeal=cap;});
               if(floor>0&&postCapMinIdeal<floor-0.0001){
-                // Infeasible: can't meet floor AND maxAmt. Abandon floor;
-                // use pure kcal-proportional with maxAmt cap only.
-                scaleFactor=1;
-                var maxIdealAtSF1=0;
-                ideals.forEach(function(v){if(v>maxIdealAtSF1)maxIdealAtSF1=v;});
-                if(maxIdealAtSF1>db.maxAmt){scaleFactor=db.maxAmt/maxIdealAtSF1;}
+                // Infeasible at SOFT floor (veg/fruit recipe base) + maxAmt.
+                // 2026-05-13 (V133): before abandoning, try the HARD floor
+                // (db.minAmt) — that's INV13's threshold and must never be
+                // violated. Recipe base for veg/fruit is a SOFT target (keeps
+                // veg amounts close to the recipe); db.minAmt is the HARD
+                // bound. Cleanly separating them prevents INV13 fires when a
+                // user pin makes the soft target unreachable but the hard
+                // bound still fits.
+                var hardMin = db.minAmt || 0;
+                if(hardMin > 0){
+                  var hardSf = 1;
+                  ideals.forEach(function(v){
+                    if(v>0 && v<hardMin){
+                      var need = hardMin / v;
+                      if(need > hardSf) hardSf = need;
+                    }
+                  });
+                  var maxAtHardSf = 0;
+                  ideals.forEach(function(v){var s=v*hardSf; if(s>maxAtHardSf) maxAtHardSf=s;});
+                  if(maxAtHardSf <= db.maxAmt + 0.0001){
+                    // Hard floor + cap jointly feasible — use it.
+                    scaleFactor = hardSf;
+                  } else {
+                    // Even hard floor infeasible; fall back to pure kcal-prop
+                    // with maxAmt cap (sacrifices both floors).
+                    scaleFactor=1;
+                    var maxIdealAtSF1a=0;
+                    ideals.forEach(function(v){if(v>maxIdealAtSF1a)maxIdealAtSF1a=v;});
+                    if(maxIdealAtSF1a>db.maxAmt){scaleFactor=db.maxAmt/maxIdealAtSF1a;}
+                  }
+                } else {
+                  // No hard floor; abandon soft floor entirely.
+                  scaleFactor=1;
+                  var maxIdealAtSF1=0;
+                  ideals.forEach(function(v){if(v>maxIdealAtSF1)maxIdealAtSF1=v;});
+                  if(maxIdealAtSF1>db.maxAmt){scaleFactor=db.maxAmt/maxIdealAtSF1;}
+                }
               } else {
                 scaleFactor=scaleFactor*capFactor;
               }
