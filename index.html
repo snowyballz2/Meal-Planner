@@ -456,7 +456,7 @@ var NUTRI_DB = {
   // poblano) keep their existing tighter splits.
   'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.5, dampScale:0.5},
   'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.5, dampScale:0.5},
-  'lettuce':               {kcal:10,  pro:0.7,fat:0.2, carb:1.8, unit:'cup', produce:{perWhole:3,label:'romaine heart',acceptableWaste:true}, minAmt:0.25, minAmtSolo:0.5, maxAmt:3, dampScale:0.5},
+  'lettuce':               {kcal:10,  pro:0.7,fat:0.2, carb:1.8, unit:'cup', produce:{perWhole:3,label:'romaine heart',acceptableWaste:true}, minAmt:0.5, maxAmt:3, dampScale:0.5},
   'broccoli':              {kcal:31,  pro:2.6,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'head broccoli'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
   'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
   'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
@@ -469,10 +469,7 @@ var NUTRI_DB = {
   'celery':                {kcal:12,  pro:0.6,fat:0.2, carb:2.4, unit:'cup', produce:{perWhole:0.5,label:'stalk celery'}, minAmt:0.125, minAmtSolo:0.5, maxAmt:2},
   'jalapeño':              {kcal:4,   pro:0.2,fat:0.1, carb:0.9, unit:'each', cupsEach:0.07, produce:{perWhole:1,label:'jalapeño',softWaste:true}, minAmt:0.5, maxAmt:2},
   'thai chili':            {kcal:2,   pro:0.1,fat:0,   carb:0.4, unit:'each', produce:{perWhole:1,label:'thai chili',softWaste:true}, minAmt:1, maxAmt:5},
-  // 2026-05-13 (V135): frozen corn lives in the veg DB section but is used
-  // as `role:'carb'` in recipes (e.g. street_corn_bowl). The veg minAmtSolo
-  // rule (0.5c solo floor) doesn't apply — keep at minAmt:0.25 batch+solo.
-  'frozen corn':           {kcal:134, pro:5,  fat:1.3, carb:31,  unit:'cup', brand:'Trader Joe\'s fire-roasted', minAmt:0.25, maxAmt:1.5},
+  'frozen corn':           {kcal:134, pro:5,  fat:1.3, carb:31,  unit:'cup', brand:'Trader Joe\'s fire-roasted', minAmt:0.25, minAmtSolo:0.5, maxAmt:1.5},
   'egg noodles cooked':    {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', note:'cooked; macros match USDA cooked egg noodles (~221 kcal/cup); 1 dry cup = 2.25-2.75 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.4, cookedRange:[2.25, 2.75], label:'cup dry'}},
   'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:3,pkg:{size:32,unit:'oz',cups:4,type:'carton',softWaste:true}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75, minAmt:0.5, minAmtSolo:1, maxAmt:2},
@@ -1799,7 +1796,7 @@ const MEALS=[
   ingredients:[
     I('ground turkey 93',6,'protein'),
     I('sweet potato',1.25,'carb'),
-    I('frozen corn',0.75,'carb'),
+    I('frozen corn',0.75,'veg'),
     I('cottage cheese',0.5,'protein'),
     I('cotija cheese',0.125,'fat'),
     I('avocado oil',0.125,'fat'),
