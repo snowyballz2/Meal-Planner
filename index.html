@@ -14746,6 +14746,18 @@ function switchWeek(w){
   saveWeeks();
   activeWeek=w;
   loadWeekState(w);
+  // V143 (2026-05-14): invalidate cross-week-leaky caches. Pre-V143 the
+  // _dayBalancedCache (keyed pk(p,d), not per-week) and _postRandomizeCache
+  // (same key shape) survived the week switch. After switching from a
+  // randomized 'this' week to 'next' (with different SEL), the card render
+  // showed the new week's meal NAME but the old week's INGREDIENT amounts
+  // (because getDayBalancedIngredients returns the cached entry without
+  // checking which week it was built for). Reset on a 'next' week slot also
+  // restored the 'this' week snapshot. Both bugs are cleared by wiping
+  // these caches on every week switch — the new week's first render
+  // rebuilds fresh from the new SEL.
+  invalidateLeftoverCache();
+  Object.keys(_postRandomizeCache).forEach(function(k){delete _postRandomizeCache[k];});
   renderWeekBar();renderDayTabs();renderMeals();
   if(topTab==='shop')renderShop();
 }
