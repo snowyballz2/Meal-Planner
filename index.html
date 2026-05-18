@@ -5843,34 +5843,78 @@ function verifyInvariants(){
   // scratch and discard the unification, giving false INV7 violations.
 
   // ── Invariant 1: Leftover pair consistency ──
-  // Same-person leftover days must have identical amounts to their cook day.
+  // Same-batch portions must share the same ingredient list (length + dbKey
+  // at each idx). For same-person leftovers, amounts must match the cook day
+  // exactly. For cross-person leftovers, amounts can diverge (kcal-prop split
+  // by unifyCrossPersonRatios) — but the ingredient LIST shape must still
+  // match.
+  //
+  // 2026-05-14 (V139): expanded from same-person-only to also cover
+  // cross-person batches. The old check skipped `lo.crossPerson` entirely,
+  // which let V134's per-person-per-day fat-boost write an avocado oil
+  // override on Her's leftover without Him's anchor having it — same-pot
+  // ingredient list diverged silently. INV1 now also checks:
+  //   - cookB.length === leftB.length (lengths match)
+  //   - cookB[idx].dbKey === leftB[idx].dbKey for each idx (positional parity)
+  //   - amount match only enforced for same-person batches
   ['him','her'].forEach(function(p){
     DAYS.forEach(function(d){
       ['breakfast','lunch','dinner'].forEach(function(s){
         const lo=leftovers[sk(p,d,s)];
-        if(!lo||!lo.isLeftover||lo.crossPerson)return;
+        if(!lo||!lo.isLeftover)return;
         const mealId=getMealId(p,d,s);
         const cookDay=lo.cookDay;
-        // Find cook slot
+        // Find cook slot — for cross-person, the cook is the OTHER person.
+        const cookP = lo.crossPerson ? (p==='him'?'her':'him') : p;
         var cookSlot=null;
         ['breakfast','lunch','dinner','snack'].forEach(function(cs){
           if(cookSlot)return;
-          if(getMealId(p,cookDay,cs)===mealId){
-            var clo=leftovers[sk(p,cookDay,cs)];
+          if(getMealId(cookP,cookDay,cs)===mealId){
+            var clo=leftovers[sk(cookP,cookDay,cs)];
             if(clo&&!clo.isLeftover)cookSlot=cs;
           }
         });
         if(!cookSlot)return;
-        const cookB=getBalancedSlotIngredients(p,cookDay,cookSlot);
+        const cookB=getBalancedSlotIngredients(cookP,cookDay,cookSlot);
         const leftB=getBalancedSlotIngredients(p,d,s);
         if(!cookB||!leftB)return;
-        cookB.forEach(function(ci){
-          const li=leftB.filter(function(x){return x.dbKey===ci.dbKey;})[0];
-          if(!li||Math.abs(ci.amt-li.amt)>0.001){
-            violations.push('INV1 leftover-pair: '+p+' '+d+'/'+s+' '+ci.dbKey
-              +' cook='+ci.amt.toFixed(2)+' left='+(li?li.amt.toFixed(2):'MISSING'));
+        const enforceAmt = !lo.crossPerson;
+        const sideLabel = lo.crossPerson ? 'xperson' : 'sameperson';
+
+        // (a) Length parity — cook and leftover must have the same number of
+        // ingredient entries. A mismatch means an override was written to one
+        // side but not the other (V134-style asymmetry).
+        if(cookB.length !== leftB.length){
+          violations.push('INV1 list-length: '+p+' '+d+'/'+s+' ('+sideLabel+') '
+            +'cookN='+cookB.length+' leftN='+leftB.length);
+        }
+
+        // (b) Positional parity + amounts. Iterate UNION of indices so an
+        // extra-on-leftover or extra-on-cook is surfaced.
+        const maxLen = Math.max(cookB.length, leftB.length);
+        for(var idx=0; idx<maxLen; idx++){
+          const ci = cookB[idx];
+          const li = leftB[idx];
+          if(!ci && li){
+            violations.push('INV1 extra-on-leftover: '+p+' '+d+'/'+s+' ('+sideLabel+') '
+              +'idx='+idx+' dbKey='+li.dbKey+' (cook has no entry here)');
+            continue;
           }
-        });
+          if(ci && !li){
+            violations.push('INV1 missing-on-leftover: '+p+' '+d+'/'+s+' ('+sideLabel+') '
+              +'idx='+idx+' dbKey='+ci.dbKey+' (leftover missing)');
+            continue;
+          }
+          if(ci.dbKey !== li.dbKey){
+            violations.push('INV1 dbKey-mismatch: '+p+' '+d+'/'+s+' ('+sideLabel+') '
+              +'idx='+idx+' cook='+ci.dbKey+' left='+li.dbKey);
+            continue;
+          }
+          if(enforceAmt && Math.abs(ci.amt-li.amt)>0.001){
+            violations.push('INV1 leftover-pair: '+p+' '+d+'/'+s+' '+ci.dbKey
+              +' cook='+ci.amt.toFixed(2)+' left='+li.amt.toFixed(2));
+          }
+        }
       });
     });
   });
