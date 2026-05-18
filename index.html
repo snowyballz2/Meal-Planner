@@ -5122,7 +5122,16 @@ function getDayBalancedIngredients(p,d){
     // Shake: raw amounts, no adjustment. Frozen so balancer doesn't touch.
     if(s==='shake'){
       slots[s]=ingr.map(function(i){
-        return {dbKey:i.dbKey,amt:i.amt,role:i.role,scalable:i.scalable,origAmt:i.amt};
+        // 2026-05-14 (V140): forward `_userSet` and `_fatBoost` flags so
+        // shake-slot user pins are visible to downstream consumers (e.g.
+        // _hasUserOverrides, _clampThresh skip-user-pins, INV13 skip). Pre-
+        // V140 the shake-slot cache map dropped these flags, even though
+        // `applyOverrides` set them on `i`. Non-shake slots already
+        // propagate them (around line 5233).
+        const entry={dbKey:i.dbKey,amt:i.amt,role:i.role,scalable:i.scalable,origAmt:i.amt};
+        if(i._userSet===true)entry._userSet=true;
+        if(i._fatBoost===true)entry._fatBoost=true;
+        return entry;
       });
       frozenSlots[s]=true;
       return;
@@ -6189,6 +6198,15 @@ function verifyInvariants(){
         var nonFlex=mealObj.ingredients.filter(function(ing){
           var db=NUTRI_DB[ing.dbKey];
           if(!db||!db.pkg||db.pkg.longShelfLife)return false;
+          // 2026-05-14 (V140): also skip `acceptableWaste:true` pkg items
+          // (currently coconut milk). Their waste is intentionally accepted;
+          // we don't need flex-scaling to resolve it. Without this skip,
+          // INV4 fires when MANUAL_SET locks coconut_turkey_curry or
+          // shrimp_coconut_curry into a solo slot — those are noRandomize:true
+          // recipes so randomize won't pick them, but Test 3's applyVaried
+          // can land a manual lock on one. Same intent as INV20/21/22
+          // skipping these items.
+          if(db.pkg.acceptableWaste)return false;
           return !PKG_FLEX_CONFIG[ing.dbKey];
         });
         if(nonFlex.length>0){
@@ -8932,12 +8950,16 @@ function toggleSkip(p,d,s){
   if(SKIPPED[k]) _markUserEdited(k);
   invalidateLeftoverCache();autoSaveWeek();renderMeals();
 }
-function addLateSnack(p,d){LATE_SNACK[pk(p,d)]={name:'',kcal:null,pro:null,fat:null,carb:null};renderMeals();}
-function removeLateSnack(p,d){delete LATE_SNACK[pk(p,d)];renderMeals();}
+function addLateSnack(p,d){LATE_SNACK[pk(p,d)]={name:'',kcal:null,pro:null,fat:null,carb:null};renderMeals();autoSaveWeek();}
+function removeLateSnack(p,d){delete LATE_SNACK[pk(p,d)];renderMeals();autoSaveWeek();}
 function setLateSnackField(p,d,field,val){
   const k=pk(p,d);if(!LATE_SNACK[k])return;
   if(field==='name')LATE_SNACK[k][field]=val;
   else{const n=Math.max(0,parseInt(val)||0);LATE_SNACK[k][field]=n;}
+  // 2026-05-14 (V140): persist on every field change. Pre-V140 these three
+  // functions skipped autoSaveWeek entirely — addLateSnack+removeLateSnack
+  // before any other save trigger would lose the entry on browser close.
+  autoSaveWeek();
 }
 // Late-snack ingredient mode. When LATE_SNACK[k].ingredients is non-empty,
 // macros (kcal/pro/fat/carb) are derived from them and shopping picks them
@@ -9438,10 +9460,17 @@ function onIngrAmt(p,d,s,idx,val){
           if(!_writeUserPin(pt.p, pt.d, pt.s, idx, {amt: cur*scale, capturePrior:true})) cacheOk = false;
         });
       } else {
-        // Edge: this slot's per-portion was 0. Set THIS slot to val, others 0.
+        // 2026-05-14 (V140): Edge — this slot's per-portion was 0 (user is
+        // adding a new ingredient via dropdown that wasn't in this slot's
+        // cache). Pre-V140 wrote `amt` to THIS slot and 0 to other portions,
+        // which fired INV1 list-length / dbKey-mismatch (batch portions had
+        // different ingredient lists) and routed shopping list wrong. Same
+        // shape as the V134 fat-boost asymmetry bug. Write `amt` to ALL
+        // portions (mirroring confirmTempIngredient's "+ ingredient" model)
+        // so the batch stays consistent. User pin (`_userSet:true`) skips
+        // unify so the uniform amount sticks.
         portions.forEach(function(pt){
-          const newAmt = (pt.p===p && pt.d===d && pt.s===s) ? amt : 0;
-          if(!_writeUserPin(pt.p, pt.d, pt.s, idx, {amt: newAmt, capturePrior:true})) cacheOk = false;
+          if(!_writeUserPin(pt.p, pt.d, pt.s, idx, {amt: amt, capturePrior:true})) cacheOk = false;
         });
       }
     }
@@ -9551,6 +9580,15 @@ function onIngrReset(p,d,s){
     if(_postRandomizeCache[pkkey] && _postRandomizeCache[pkkey][pt.s]){
       if(!_dayBalancedCache[pkkey]) _dayBalancedCache[pkkey] = {};
       _dayBalancedCache[pkkey][pt.s] = JSON.parse(JSON.stringify(_postRandomizeCache[pkkey][pt.s]));
+    } else {
+      // 2026-05-14 (V140): no post-randomize snapshot for this slot (e.g.
+      // fresh page load, user edited without ever running randomize). The
+      // override-clear above wiped user overrides, but the live cache still
+      // holds the edited value. Without invalidation, Reset would be a
+      // silent no-op — cache reads return the stale edited amount. Force a
+      // cache rebuild so applyOverrides re-derives from the recipe (now
+      // without the user pin).
+      if(_dayBalancedCache[pkkey]) delete _dayBalancedCache[pkkey][pt.s];
     }
     // 3. Always clear MANUAL_SET. Reset undoes ALL the user's changes
     //    on this slot (and its batch portions); if every change is undone,
@@ -14623,6 +14661,12 @@ function saveWeeks(){
   // 2026-05-03: leftoverLinks is the LEFTOVER_LINKS alias; mutations already
   // persist via this reference. Just ensure the field is present.
   if(!w.leftoverLinks) w.leftoverLinks = LEFTOVER_LINKS;
+  // 2026-05-14 (V140): stamp leftoverLinksTs on every save. Whole-array
+  // LWW for sync — whoever saved most recently wins. Pre-V140 the array
+  // was bundled into the sync payload but never merged on the receiving
+  // side (mergeSyncData didn't touch leftoverLinks), so manual link-group
+  // edits never propagated across devices.
+  w.leftoverLinksTs = now;
   weekData['last'].monday=lastMonday();
   weekData['this'].monday=todayMonday();
   weekData['next'].monday=nextMonday();
@@ -14870,6 +14914,27 @@ function mergeSyncData(remote){
           weekData[w].eatOutTs[k]=rt;
         }
       });
+
+      // 2026-05-14 (V140): leftoverLinks whole-array LWW via leftoverLinksTs.
+      // Pre-V140 leftoverLinks shipped in the payload but mergeSyncData never
+      // applied it on the receiving side — manual link-group creations and
+      // deletions didn't propagate across devices. Now: if remote ts > local
+      // ts, replace the whole local array with remote. Legacy v3 has no ts
+      // (ts=0) so local v4 arrays always win.
+      var remLeftLinks = remoteWeek.leftoverLinks;
+      var remLeftLinksTs = remoteIsLegacy ? 0 : (remoteWeek.leftoverLinksTs || 0);
+      var locLeftLinksTs = weekData[w].leftoverLinksTs || 0;
+      if(remLeftLinks !== undefined && remLeftLinksTs > locLeftLinksTs){
+        if(!weekData[w].leftoverLinks) weekData[w].leftoverLinks = [];
+        weekData[w].leftoverLinks.length = 0;
+        remLeftLinks.forEach(function(g){weekData[w].leftoverLinks.push(g);});
+        weekData[w].leftoverLinksTs = remLeftLinksTs;
+        // If this is the active week, the LEFTOVER_LINKS alias needs to
+        // re-bind to the new array reference.
+        if(w === activeWeek && typeof rebindLeftoverLinks === 'function'){
+          rebindLeftoverLinks();
+        }
+      }
     });
   }
   
@@ -15012,6 +15077,18 @@ function forcePushSync(){
     Object.keys(weekData[w].lateSnack||{}).forEach(function(k){weekData[w].lateSnackTs[k]=now;});
     if(!weekData[w].sharedScheduleTs)weekData[w].sharedScheduleTs={};
     Object.keys(weekData[w].sharedSchedule||{}).forEach(function(k){weekData[w].sharedScheduleTs[k]=now;});
+    // 2026-05-14 (V140): also bump skippedTs + eatOutTs. Pre-V140 these
+    // were untouched by Force Push, so a remote phone's older skip/eat-out
+    // edit could survive the force push (its local ts > our newly-default ts=0).
+    // Now every skip + eat-out key gets a fresh ts to guarantee
+    // overwrite-everything semantics.
+    if(!weekData[w].skippedTs)weekData[w].skippedTs={};
+    Object.keys(weekData[w].skipped||{}).forEach(function(k){weekData[w].skippedTs[k]=now;});
+    if(!weekData[w].eatOutTs)weekData[w].eatOutTs={};
+    Object.keys(weekData[w].eatOut||{}).forEach(function(k){weekData[w].eatOutTs[k]=now;});
+    // 2026-05-14 (V140): also bump leftoverLinksTs so the LWW merge always
+    // takes our array regardless of remote's age.
+    weekData[w].leftoverLinksTs = now;
   });
   Object.keys(ADJ_TARGETS).forEach(function(k){ADJ_TARGETS_TS[k]=now;});
   Object.keys(customMeals).forEach(function(k){customMeals[k]._ts=now;});
