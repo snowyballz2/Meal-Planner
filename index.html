@@ -15140,6 +15140,13 @@ function createSync(){
 }
 function pushSync(){
   if(!syncId||!syncToken)return;
+  // V145 (2026-05-14): block sync while in schedule edit mode. mergeSyncData
+  // mutates SEL/SHARED_SCHEDULE/EAT_OUT, but _scheduleEditSnapshot was
+  // captured pre-sync. Cancel would discard remote merges; Apply would
+  // diff stale-snap vs post-merge state and treat remote changes as
+  // "user-touched" → temp-lock fails → randomize re-rolls remote-edited
+  // cells. Refuse + tell the user to Apply or Cancel first.
+  if(_scheduleEditMode){setSyncStatus('Apply or Cancel schedule edits before syncing.','err');return;}
   saveWeeks();
   setSyncStatus('Syncing...','loading');
   // Pull first, merge, then push
@@ -15166,6 +15173,8 @@ function pushSync(){
 // data loss if the user clicks instead of regular Sync.
 function forcePushSync(){
   if(!syncId||!syncToken)return;
+  // V145: block while in edit mode (same reasoning as pushSync).
+  if(_scheduleEditMode){setSyncStatus('Apply or Cancel schedule edits before force-pushing.','err');return;}
   if(!confirm('Force Push will overwrite the remote sync with your CURRENT local state, bumping every timestamp to now. The other phone\'s subsequent Pull will replace its state with yours. Continue?'))return;
   setSyncStatus('Force-pushing...','loading');
   var now=Date.now();
@@ -15209,6 +15218,8 @@ function forcePushSync(){
 }
 function pullSync(){
   if(!syncId||!syncToken)return;
+  // V145: block while in edit mode (same reasoning as pushSync).
+  if(_scheduleEditMode){setSyncStatus('Apply or Cancel schedule edits before pulling.','err');return;}
   setSyncStatus('Pulling...','loading');
   fetch(GIST_API+'/'+syncId,{headers:gistHeaders()}).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
