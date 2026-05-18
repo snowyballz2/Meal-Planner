@@ -14838,6 +14838,22 @@ function switchWeek(w){
     if(!confirm('You have unsaved schedule edits. Discard them and switch weeks?')) return;
     undoScheduleEdit();
   }
+  // V147 (2026-05-14): same concern for paint mode. _paintQueued holds
+  // slot keys (sk('him','Monday','lunch') etc.) captured against the OLD
+  // week's state. If the user switches weeks mid-paint, then clicks
+  // Assign, paintAccept commits those keys to the NEW week's SEL/
+  // SHARED_SCHEDULE aliases — the new week gets stamped with the old
+  // week's intent. Exit paint mode on switch.
+  if(typeof _paintMode !== 'undefined' && _paintMode){
+    if(!confirm('You have an unsaved paint-mode selection. Discard and switch weeks?')) return;
+    _paintMode = false;
+    if(typeof _paintQueued !== 'undefined'){
+      Object.keys(_paintQueued).forEach(function(k){delete _paintQueued[k];});
+    }
+    if(typeof _paintMealId !== 'undefined') _paintMealId = '';
+    if(typeof _paintSlot !== 'undefined') _paintSlot = '';
+    if(typeof _paintExistingColorIdx !== 'undefined') _paintExistingColorIdx = -1;
+  }
   saveWeeks();
   activeWeek=w;
   loadWeekState(w);
@@ -14853,6 +14869,17 @@ function switchWeek(w){
   // rebuilds fresh from the new SEL.
   invalidateLeftoverCache();
   Object.keys(_postRandomizeCache).forEach(function(k){delete _postRandomizeCache[k];});
+  // V147 (2026-05-14): also clear custom shopping selections. These are
+  // transient (not persisted to localStorage or weekData), keyed by
+  // person_day_slot or mealId — both ambiguous across weeks. Pre-V147 the
+  // selections survived a week switch, so a slot picked for "this week's
+  // shopping" stayed picked when the user switched to "next week's"
+  // shopping view (now pointing at a different meal/state). Clearing on
+  // switch matches the transient model — selections don't survive page
+  // reload either.
+  Object.keys(CUSTOM_SHOP_SEL).forEach(function(k){delete CUSTOM_SHOP_SEL[k];});
+  Object.keys(CUSTOM_PLAN_SEL).forEach(function(k){delete CUSTOM_PLAN_SEL[k];});
+  Object.keys(CUSTOM_RECIPE_SEL).forEach(function(k){delete CUSTOM_RECIPE_SEL[k];});
   renderWeekBar();renderDayTabs();renderMeals();
   if(topTab==='shop')renderShop();
 }
