@@ -519,7 +519,7 @@ var NUTRI_DB = {
   'red wine vinegar':      {kcal:3,   pro:0,  fat:0,   carb:0,   unit:'tbsp', minAmt:0.5, maxAmt:2},
   'balsamic vinegar':      {kcal:14,  pro:0.1,fat:0,   carb:3,   unit:'tbsp', minAmt:0.5, maxAmt:2},
   'salsa':                 {kcal:5,   pro:0.2,fat:0,   carb:1,   unit:'tbsp', minAmt:1, maxAmt:4},
-  'marinara':{kcal:66,pro:2,fat:1.5,carb:12,unit:'cup',pkg:{size:24,unit:'oz',cups:3,type:'jar',softWaste:true},maxAmt:2.0},
+  'marinara':{kcal:66,pro:2,fat:1.5,carb:12,unit:'cup',pkg:{size:24,unit:'oz',cups:3,type:'jar',softWaste:true},minAmt:0.25,maxAmt:2.0},
   'white miso':{kcal:33,pro:2,fat:1,carb:4.3,unit:'tbsp',minAmt:0.5,maxAmt:2},
   'tomatillo sauce':       {kcal:5,   pro:0.2,fat:0.2, carb:1,   unit:'tbsp', minAmt:1, maxAmt:3},
   'broth concentrate':     {kcal:15,  pro:1.5,fat:0,   carb:1.5, unit:'tbsp', halfSnap:true, minAmt:0.5, maxAmt:2},
@@ -1689,7 +1689,7 @@ const MEALS=[
     I('banana',0.5,'fruit',false),
     I('greek yogurt 0%',0.75,'protein'),
     I('protein powder',1,'protein'),
-    I('granola strawberry',0.25,'carb')
+    I('granola strawberry',0.25,'fat')
   ]},
 
  {id:'turkey_sweet_potato_hash',label:'Turkey & sweet potato hash',slots:['breakfast'],
@@ -2160,7 +2160,7 @@ const MEALS=[
   him:{},her:{},
   ingredients:[
     I('greek yogurt 0%',1,'protein'),
-    I('granola strawberry',0.25,'carb'),
+    I('granola strawberry',0.25,'fat'),
     I('mixed berries',0.5,'fruit',false),
     I('honey tbsp',1,'condiment')
   ]},
@@ -12136,7 +12136,32 @@ function snapBatchTotals(){
 
           var snapped=Math.round(totalBatch/grid)*grid;
           if(snapped<grid)snapped=grid;
-          if(db.minAmt&&snapped<db.minAmt)snapped=db.minAmt;
+          // 2026-05-14 (V137): kcal-prop-aware minAmt floor. Pre-V137 the
+          // check was `if(db.minAmt && snapped<db.minAmt) snapped=db.minAmt`
+          // — but `snapped` is the BATCH total and `db.minAmt` is the
+          // PER-PORTION floor. After redistribution at the end of this block,
+          // each portion's newAmt = snapped × pa.amt / totalBatch, so the
+          // smallest portion lands at snapped × (smallest pa.amt) / totalBatch.
+          // To guarantee `smallest_per_portion >= db.minAmt`, snap UP to
+          // db.minAmt × totalBatch / smallest pa.amt. Mirrors the pattern
+          // already in snapBatchTotalsToGrid (~line 11705). Without this, a
+          // cross-person batch (Him:Her budget ratio ~1.53) with an
+          // ingredient at the minAmt boundary lets Her portion drop below
+          // db.minAmt — INV13 fires. Same structural shape as the V133
+          // unify bug.
+          if(db.minAmt){
+            var smallestAmt2=Infinity;
+            partAmts.forEach(function(pa){if(pa.amt>0&&pa.amt<smallestAmt2)smallestAmt2=pa.amt;});
+            if(smallestAmt2>0&&smallestAmt2<Infinity&&totalBatch>0){
+              var requiredForFloor2=db.minAmt*totalBatch/smallestAmt2;
+              if(snapped<requiredForFloor2){
+                snapped=Math.ceil(requiredForFloor2/grid)*grid;
+              }
+            }
+            // Backstop: simple batch-total minimum (db.minAmt × portions).
+            var minTotalSimple2=db.minAmt*partAmts.length;
+            if(snapped<minTotalSimple2)snapped=minTotalSimple2;
+          }
           // Per-serving cap: reduce snapped total so no portion exceeds db.maxAmt.
           var perServingCap2 = (db.maxAmt!=null)?db.maxAmt:Infinity;
           if(perServingCap2<Infinity){
