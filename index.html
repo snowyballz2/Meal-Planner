@@ -2754,9 +2754,25 @@ function saveAdjTargets(){
 var SHARED_SCHEDULE = {}; // key: 'day_slot', value: 'shared'|'eo-him'|'eo-her'|'eo-both' or absent (normal)
 var sharedSchedOpen = false; // collapsible panel state
 function initSharedSchedule(){
-  if(!Object.keys(SHARED_SCHEDULE).length){
+  // V149 (2026-05-14): only apply Mon-Sun dinner defaults if THIS WEEK
+  // has not yet been initialized. Pre-V149 the function repopulated
+  // defaults on every loadWeekState whenever SHARED_SCHEDULE was empty
+  // — overwriting a user's intentional "no shared meals" state every
+  // time they switched weeks, pulled sync, or refreshed.
+  //
+  // Track via weekData[activeWeek].sharedScheduleInitialized:
+  //   - undefined/false → first-time week, apply defaults if empty.
+  //   - true → user has been here. Empty == intentional empty. Skip
+  //     defaults regardless of content.
+  // Always set to true after this function runs, so a user who clears
+  // all shared cells and saves locks in the empty state.
+  var wInit = weekData[activeWeek];
+  var alreadyInit = !!(wInit && wInit.sharedScheduleInitialized);
+  if(!alreadyInit && !Object.keys(SHARED_SCHEDULE).length){
     DAYS.forEach(function(d){ SHARED_SCHEDULE[dk(d,'dinner')]='shared'; });
   }
+  if(wInit) wInit.sharedScheduleInitialized = true;
+  // Legacy 'skip-*' → 'eo-*' migration still runs regardless of init state.
   Object.keys(SHARED_SCHEDULE).forEach(function(k){
     if(SHARED_SCHEDULE[k]===true) SHARED_SCHEDULE[k]='shared';
     // V71 (2026-05-07): legacy 'skip-*' values renamed to 'eo-*' since
