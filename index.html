@@ -14367,9 +14367,13 @@ function toggleCheck(k){
 // granularity for bulk operations, which forced 19 Undo clicks to
 // reverse a single category-tap.
 function clearAll(){
+  // V148 (2026-05-14): filter by week+trip prefix. Pre-V148 CHECKS keys
+  // had no week dimension — same `chicken breast` row across all 3 weeks
+  // shared a single check state. Now each (week, trip, item) has its own.
   var changes=[];
+  var prefix = activeWeek + '_' + shopTrip + '_';
   Object.keys(CHECKS).forEach(function(k){
-    if(k.indexOf(shopTrip+'_')===0){
+    if(k.indexOf(prefix)===0){
       changes.push({key:k, prevValue:true});
       delete CHECKS[k];
     }
@@ -14381,7 +14385,7 @@ function checkAll(){
   const grouped=buildShoppingList(shopTrip,shopPerson);
   var changes=[];
   Object.keys(grouped).forEach(function(cat){grouped[cat].forEach(function(item){
-    var k=shopTrip+'_'+cat+'_'+item.name.toLowerCase();
+    var k=activeWeek+'_'+shopTrip+'_'+cat+'_'+item.name.toLowerCase();
     if(!CHECKS[k]){changes.push({key:k, prevValue:false}); CHECKS[k]=true;}
   });});
   _pushShopUndo(changes);
@@ -14392,7 +14396,7 @@ function checkCategory(cat){
   if(!grouped[cat])return;
   var changes=[];
   grouped[cat].forEach(function(item){
-    var k=shopTrip+'_'+cat+'_'+item.name.toLowerCase();
+    var k=activeWeek+'_'+shopTrip+'_'+cat+'_'+item.name.toLowerCase();
     if(!CHECKS[k]){changes.push({key:k, prevValue:false}); CHECKS[k]=true;}
   });
   _pushShopUndo(changes);
@@ -14408,7 +14412,7 @@ function renderShop(){
   const recipeScrollTop=recipeListEl?recipeListEl.scrollTop:0;
   const grouped=buildShoppingList(shopTrip,shopPerson);
   const totalItems=Object.keys(grouped).reduce(function(a,c){return a+grouped[c].length},0);
-  const checkedCount=Object.keys(CHECKS).filter(function(k){return k.indexOf(shopTrip+'_')===0&&CHECKS[k]}).length;
+  const checkedCount=Object.keys(CHECKS).filter(function(k){return k.indexOf(activeWeek+'_'+shopTrip+'_')===0&&CHECKS[k]}).length;
   const sortedCats=Object.keys(grouped).sort(function(a,b){
     const isLowA=a.indexOf('If Low')===0, isLowB=b.indexOf('If Low')===0;
     if(isLowA&&!isLowB)return 1; // If Low always last
@@ -14629,7 +14633,7 @@ function renderShop(){
       const items=grouped[cat];
       const unchecked=[];
       items.forEach(function(item){
-        const ck=shopTrip+'_'+cat+'_'+item.name.toLowerCase();
+        const ck=activeWeek+'_'+shopTrip+'_'+cat+'_'+item.name.toLowerCase();
         if(CHECKS[ck]){
           fullItems.push({item:item,cat:cat,ck:ck});
         } else {
@@ -14654,7 +14658,7 @@ function renderShop(){
         : '';
       html+='<div class="shop-section"><div class="shop-section-hdr" onclick="checkCategory(\''+catSafe+'\')" style="cursor:pointer">'+catIcon+' '+catLabel+'<span class="shop-hdr-right">'+undoBtn+'<span class="cat-check-hint">✓</span></span></div>';
       unchecked.forEach(function(item){
-        const ck=shopTrip+'_'+cat+'_'+item.name.toLowerCase();
+        const ck=activeWeek+'_'+shopTrip+'_'+cat+'_'+item.name.toLowerCase();
         html+=buildShopItemHtml(item, ck, false);
       });
       html+='</div>';
@@ -14807,9 +14811,24 @@ function saveWeeks(){
   // side (mergeSyncData didn't touch leftoverLinks), so manual link-group
   // edits never propagated across devices.
   w.leftoverLinksTs = now;
-  weekData['last'].monday=lastMonday();
-  weekData['this'].monday=todayMonday();
-  weekData['next'].monday=nextMonday();
+  // V148 (2026-05-14): DON'T unconditionally rewrite monday dates here.
+  // Pre-V148 saveWeeks always set monday to the CURRENT real-world date
+  // for all 3 weeks. That kept the dates artificially fresh — which
+  // looked harmless but silently disabled loadWeeks' rollover logic
+  // (which depends on `weekData.this.monday !== currentMonday` to
+  // detect calendar-week movement). If the user kept the tab/PWA open
+  // across the Sunday→Monday boundary, autoSaveWeek would fire on any
+  // action and overwrite the stale 'this.monday' with the new real
+  // Monday — BUT the SEL/OVERRIDES/etc. were still the OLD week's
+  // plan. Next page load: loadWeeks sees thisMonday === currentMonday
+  // → skip rollover → user's "last week" is gone (it was never rolled).
+  //
+  // Fix: only stamp monday when it's empty (initial weekData creation).
+  // The rollover path in loadWeeks (14706-14745) is the sole authority
+  // for advancing dates.
+  if(!weekData['last'].monday) weekData['last'].monday=lastMonday();
+  if(!weekData['this'].monday) weekData['this'].monday=todayMonday();
+  if(!weekData['next'].monday) weekData['next'].monday=nextMonday();
   lsSet('mealPlannerWeekData',weekData);
 }
 function loadWeekState(w){
@@ -14880,6 +14899,11 @@ function switchWeek(w){
   Object.keys(CUSTOM_SHOP_SEL).forEach(function(k){delete CUSTOM_SHOP_SEL[k];});
   Object.keys(CUSTOM_PLAN_SEL).forEach(function(k){delete CUSTOM_PLAN_SEL[k];});
   Object.keys(CUSTOM_RECIPE_SEL).forEach(function(k){delete CUSTOM_RECIPE_SEL[k];});
+  // V148: also clear the shop-undo stack on week switch. CHECKS keys are
+  // now week-prefixed (V148), so undo entries from the old week refer to
+  // items in that week's shopping view. Undoing them while the new week
+  // is active would resurrect CHECKS for a non-visible week — confusing.
+  if(typeof _shopUndoStack !== 'undefined') _shopUndoStack.length = 0;
   renderWeekBar();renderDayTabs();renderMeals();
   if(topTab==='shop')renderShop();
 }
@@ -15190,23 +15214,18 @@ function mergeSyncData(remote){
     });
   }
 
-  // ADJ_TARGETS: per-pk(p,d) last-write-wins. New in v4. v3 remote omits
-  // entirely → no merge needed (preserves local).
-  if(remote.adjTargets){
-    var rAdj=remote.adjTargets, rAdjTs=remote.adjTargetsTs||{};
-    var adjKeys={};
-    Object.keys(rAdj).forEach(function(k){adjKeys[k]=true;});
-    Object.keys(ADJ_TARGETS).forEach(function(k){adjKeys[k]=true;});
-    Object.keys(adjKeys).forEach(function(k){
-      var lt=ADJ_TARGETS_TS[k]||0;
-      var rt=remoteIsLegacy?0:(rAdjTs[k]||0);
-      if(rt>lt){
-        if(rAdj[k]!==undefined) ADJ_TARGETS[k]=rAdj[k]; else delete ADJ_TARGETS[k];
-        ADJ_TARGETS_TS[k]=rt;
-      }
-    });
-    saveAdjTargets();
-  }
+  // V148 (2026-05-14): legacy top-level adjTargets merger DELETED.
+  // Pre-V148 this block read remote.adjTargets (the v4 top-level field)
+  // and wrote into the local ADJ_TARGETS alias. Post-V146 that alias
+  // points at the RECEIVER's active week — meaning a remote sender's
+  // 'this' week adjTargets could overwrite the receiver's 'next' week
+  // (if receiver's active week was 'next' at pull time). Wrong by
+  // construction. The per-week merger inside the weekData loop (around
+  // line 15110) correctly handles per-week adjTargets sync via
+  // weekData[w].adjTargets / adjTargetsTs. If a sender ships top-level
+  // only (v4 path), the receiver simply doesn't sync adjTargets for
+  // that legacy sender — acceptable since both users typically run
+  // matching app versions.
   
   // Shared schedule now per-week in weekData — merged with other bundled state above
 
