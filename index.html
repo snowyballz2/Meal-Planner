@@ -15096,6 +15096,20 @@ function mergeSyncData(remote){
           weekData[w].sharedScheduleTs[k]=rt;
         }
       });
+      // V151 (2026-05-14): sync the V149 sharedScheduleInitialized flag.
+      // Pre-V151 the flag was per-week but NOT synced. If Phone A cleared
+      // its schedule (flag=true, sharedSchedule={}) and pushed, Phone B's
+      // pull would replace its sharedSchedule with empty — but Phone B's
+      // local flag stayed undefined. On Phone B's next loadWeekState,
+      // initSharedSchedule would re-apply Mon-Sun defaults, undoing
+      // Phone A's intentional empty state.
+      // Semantics: union. Once any device has marked a week initialized,
+      // it stays initialized (the user has interacted; defaults shouldn't
+      // come back). No timestamp needed — the flag is monotonic
+      // (false/undefined → true; never goes back).
+      if(remoteWeek.sharedScheduleInitialized === true){
+        weekData[w].sharedScheduleInitialized = true;
+      }
       // V51 (2026-05-07): per-key LWW for SKIPPED + EAT_OUT independently.
       // Skip and Eat Out are conceptually separate flags — each has its
       // own per-key ts (V51 saveWeeks). Sync merges them independently
