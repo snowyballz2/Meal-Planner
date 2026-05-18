@@ -2932,7 +2932,13 @@ function _validateManualLinkGroups(){
     var g = LEFTOVER_LINKS[gi];
     if(!g.slots || !g.slots.length){LEFTOVER_LINKS.splice(gi,1); continue;}
     var validSlots = g.slots.filter(function(sl){
-      return getMealId(sl.p, sl.d, sl.s) === g.meal;
+      // V144 (2026-05-14): check SEL directly, not getMealId. getMealId
+      // falls back to DEFAULTS when SEL is empty — that lets a slot in
+      // a manual group survive a Clear-week if its DEFAULTS meal happens
+      // to equal the group's meal. The validator's intent is "is this
+      // slot ACTUALLY assigned to the group's meal" — DEFAULTS shouldn't
+      // count.
+      return SEL[sk(sl.p, sl.d, sl.s)] === g.meal;
     });
     if(validSlots.length === g.slots.length) continue;
     if(validSlots.length === 0) LEFTOVER_LINKS.splice(gi,1);
@@ -7253,10 +7259,36 @@ function computeSlotFV(ings){
     let cups=0;
     if(db.unit==='cup') cups=ing.amt;
     else if(db.unit==='each' && typeof db.cupsEach==='number') cups=ing.amt*db.cupsEach;
-    if(ing.role==='veg') veg+=cups;
-    else if(ing.role==='fruit') fruit+=cups;
+    // V144 (2026-05-14): fall back to dbKey-based inference when the
+    // ingredient object lacks a role (late_snack ingredients are stored
+    // as {dbKey, amt} without role). Without this, apple/banana/spinach
+    // added to late_snack didn't count toward daily fruit/veg totals.
+    var role = ing.role;
+    if(!role && typeof _inferIngredientRole === 'function') role = _inferIngredientRole(ing.dbKey);
+    if(role==='veg') veg+=cups;
+    else if(role==='fruit') fruit+=cups;
   });
   return {veg:veg, fruit:fruit};
+}
+// V144 (2026-05-14): lazy role inference from MEALS. Build a {dbKey: role}
+// cache once on first call, looking at every recipe's ingredient list. An
+// ingredient used as `role:'fruit'` in ANY recipe is classified as fruit;
+// similarly for 'veg'. Items never used as fruit/veg return null.
+// Used by late_snack-aware computeDailyFV / computeSlotFV paths.
+var _ingredientRoleCache = null;
+function _inferIngredientRole(dbKey){
+  if(!_ingredientRoleCache){
+    _ingredientRoleCache = {};
+    if(typeof MEALS !== 'undefined' && MEALS){
+      MEALS.forEach(function(m){
+        (m.ingredients||[]).forEach(function(i){
+          if(i.role==='fruit') _ingredientRoleCache[i.dbKey]='fruit';
+          else if(i.role==='veg' && !_ingredientRoleCache[i.dbKey]) _ingredientRoleCache[i.dbKey]='veg';
+        });
+      });
+    }
+  }
+  return _ingredientRoleCache[dbKey] || null;
 }
 // Render-time FV string for a meal card. Returns e.g. "1.5c veg" or
 // "1c veg, 1c fruit" or "" if the slot has no veg/fruit. Replaces the
@@ -7288,6 +7320,17 @@ function computeDailyFV(p,d){
     const fv=computeSlotFV(finalIngr);
     veg+=fv.veg; fruit+=fv.fruit;
   });
+  // V144 (2026-05-14): include late_snack ingredients (V126 added the
+  // ingredients field). Pre-V144 the SLOTS.forEach explicitly skipped
+  // 'late_snack', so fruit/veg added via the `+ ingr` button on the
+  // late-snack card didn't count toward the daily fruit/veg totals.
+  // Stats bar undercounted; "fruit ≥ 1c" primary goal could falsely fail
+  // when late_snack contained an apple.
+  const ls = LATE_SNACK[pk(p,d)];
+  if(ls && ls.ingredients && ls.ingredients.length){
+    const lsFv = computeSlotFV(ls.ingredients);
+    veg += lsFv.veg; fruit += lsFv.fruit;
+  }
   return {veg:Math.round(veg*100)/100, fruit:Math.round(fruit*100)/100};
 }
 
