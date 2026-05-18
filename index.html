@@ -9559,6 +9559,17 @@ function onIngrReset(p,d,s){
 
   // Per-slot: clear user overrides, restore cache from snapshot, restore
   // MANUAL_SET from snapshot.
+  // 2026-05-14 (V141): track whether any slot fell into the no-snapshot
+  // fallback path. If so, run the full pipeline (runBalanceAdjusters) after
+  // the loop so the affected slots get correctly-scaled values — including
+  // batch unification, snap-to-grid, freeze pinning. Pre-V141 (V140 only)
+  // the fallback just deleted the cache entry; the next read rebuilt via
+  // adjustIngredients alone, which is slot-level scaling without batch
+  // unification. For non-batch slots that's fine, but for batch slots the
+  // result wouldn't reflect cross-person ratios / pkg flex. Running the
+  // full pipeline gives the same kind of "correctly scaled and calculated"
+  // values the snapshot path produces.
+  var anyNoSnapshot = false;
   slotsToRestore.forEach(function(pt){
     var k = sk(pt.p, pt.d, pt.s);
     // 1. Clear user-origin overrides only — preserve freeze pins
@@ -9581,14 +9592,18 @@ function onIngrReset(p,d,s){
       if(!_dayBalancedCache[pkkey]) _dayBalancedCache[pkkey] = {};
       _dayBalancedCache[pkkey][pt.s] = JSON.parse(JSON.stringify(_postRandomizeCache[pkkey][pt.s]));
     } else {
-      // 2026-05-14 (V140): no post-randomize snapshot for this slot (e.g.
-      // fresh page load, user edited without ever running randomize). The
-      // override-clear above wiped user overrides, but the live cache still
-      // holds the edited value. Without invalidation, Reset would be a
-      // silent no-op — cache reads return the stale edited amount. Force a
-      // cache rebuild so applyOverrides re-derives from the recipe (now
-      // without the user pin).
-      if(_dayBalancedCache[pkkey]) delete _dayBalancedCache[pkkey][pt.s];
+      // 2026-05-14 (V140/V141): no post-randomize snapshot for this slot
+      // (e.g. fresh page load, user edited without ever running randomize).
+      // Wipe the WHOLE day's cache entry. Deleting just one slot leaves
+      // _dayBalancedCache[pkkey] as a partial object — getDayBalancedIngredients
+      // checks `if(_dayBalancedCache[pkkey]) return ...` and returns the
+      // partial without rebuilding the missing slot. By deleting the whole
+      // day, the next read forces a full rebuild via adjustIngredients on
+      // every slot. runBalanceAdjusters below then applies batch unification,
+      // snap, waste, boost — producing "correctly scaled and calculated"
+      // values, matching what the user would see after a fresh randomize.
+      delete _dayBalancedCache[pkkey];
+      anyNoSnapshot = true;
     }
     // 3. Always clear MANUAL_SET. Reset undoes ALL the user's changes
     //    on this slot (and its batch portions); if every change is undone,
@@ -9601,6 +9616,13 @@ function onIngrReset(p,d,s){
     delete MANUAL_SET[k];
     delete USER_EDITED[k];
   });
+
+  // V141 — run the full pipeline only when a slot fell into Path B (no
+  // snapshot). The common Reset path (post-randomize, snapshot exists) is
+  // a literal restore and shouldn't pay the convergence-loop cost.
+  if(anyNoSnapshot && typeof runBalanceAdjusters === 'function'){
+    runBalanceAdjusters();
+  }
 
   renderMeals();
   autoSaveWeek();
@@ -15841,11 +15863,29 @@ window.MPStress=(function(){
     // USER_EDITED purple, those stale stamps would change first-tap
     // semantics for downstream tests. Capturing keeps each op
     // isolated.
-    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),USER_EDITED:clone(USER_EDITED),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),_lastSel:lastSel,_dayBalancedCache:dayBal,_leftoverCache:leftover,_postRandomizeCache:postRand};
+    // V141 (2026-05-14): also capture LEFTOVER_LINKS. The array lives on
+    // weekData[activeWeek].leftoverLinks (the alias) but mutations during
+    // an op (paintAcceptOp pushes a group, then removeFromLinkGroup
+    // dissolves it) leave the array in a different shape than the prior
+    // op started with if any step fails. Pre-V141 the snapshot didn't
+    // capture it — state leak across ops. Now snapshot/restore handle it
+    // symmetrically to other globals.
+    var links = (typeof LEFTOVER_LINKS === 'object' && Array.isArray(LEFTOVER_LINKS)) ? clone(LEFTOVER_LINKS) : [];
+    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),USER_EDITED:clone(USER_EDITED),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),LEFTOVER_LINKS:links,_lastSel:lastSel,_dayBalancedCache:dayBal,_leftoverCache:leftover,_postRandomizeCache:postRand};
   }
   function replace(g,v){Object.keys(g).forEach(function(k){delete g[k];});Object.keys(v).forEach(function(k){g[k]=v[k];});}
   function restore(s){
     replace(SEL,s.SEL);replace(SKIPPED,s.SKIPPED);replace(EAT_OUT,s.EAT_OUT);replace(MANUAL_SET,s.MANUAL_SET);if(s.USER_EDITED) replace(USER_EDITED,s.USER_EDITED); else Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];});replace(SHARED_SCHEDULE,s.SHARED_SCHEDULE);replace(ADJ_TARGETS,s.ADJ_TARGETS);replace(OVERRIDES,s.OVERRIDES);replace(LATE_SNACK,s.LATE_SNACK);
+    // V141: restore LEFTOVER_LINKS by mutating the array in place (the alias
+    // points to weekData[activeWeek].leftoverLinks — replacing the reference
+    // would break the alias). If the snapshot is missing the field (legacy
+    // snapshot pre-V141), clear to empty rather than leaving prior op's state.
+    if(Array.isArray(LEFTOVER_LINKS)){
+      LEFTOVER_LINKS.length = 0;
+      if(s.LEFTOVER_LINKS && Array.isArray(s.LEFTOVER_LINKS)){
+        s.LEFTOVER_LINKS.forEach(function(g){LEFTOVER_LINKS.push(g);});
+      }
+    }
     if (s._lastSel && weekData.last) { weekData.last.sel = s._lastSel; }
     // Restore caches AFTER source-state restore. Don't call invalidateLeftoverCache
     // — the snapshot already has the correct cache contents from when it was
@@ -20327,6 +20367,11 @@ window.MPStress=(function(){
       Object.keys(SHARED_SCHEDULE).forEach(function(k){
         if(/^eo-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
       });
+      // V141 (2026-05-14): clear LEFTOVER_LINKS. paintAcceptOp pushes groups
+      // and removeFromLinkGroup dissolves them, but any future op variant
+      // that creates a >1-slot group without dissolving would leak across
+      // ops/seeds. Defensive — keep state-machine consistent across iterations.
+      if(Array.isArray(LEFTOVER_LINKS)) LEFTOVER_LINKS.length = 0;
     }
     function recordCheck(c){
       agg.byAssertion[c.assertion]=agg.byAssertion[c.assertion]||{p:0,f:0};
@@ -20469,6 +20514,11 @@ window.MPStress=(function(){
       Object.keys(SHARED_SCHEDULE).forEach(function(k){
         if(/^eo-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
       });
+      // V141 (2026-05-14): clear LEFTOVER_LINKS. paintAcceptOp pushes groups
+      // and removeFromLinkGroup dissolves them, but any future op variant
+      // that creates a >1-slot group without dissolving would leak across
+      // ops/seeds. Defensive — keep state-machine consistent across iterations.
+      if(Array.isArray(LEFTOVER_LINKS)) LEFTOVER_LINKS.length = 0;
     }
 
     var CHAINS=[
