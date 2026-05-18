@@ -20574,6 +20574,18 @@ window.MPStress=(function(){
       coverage:{seedsScanned:0, geomCounts:{solo:0,anchorBatch:0,leftoverDiff:0,sharedSameDay:0,shake:0}, missingGeometries:[]}
     };
     function freshRestore(snap){
+      // V150 (2026-05-14): defensive activeWeek reset before restore.
+      // If a prior op left activeWeek in a non-'this' state (e.g., a
+      // test that calls switchWeek and its finally cleanup itself
+      // threw mid-cleanup), the aliases SEL/SKIPPED/EAT_OUT/etc.
+      // would point at the wrong week's weekData storage. restore()
+      // would then write the snapshot data into that other week,
+      // corrupting it for subsequent ops. Force activeWeek='this' +
+      // re-load the per-week aliases before applying the snapshot.
+      if(typeof activeWeek !== 'undefined' && activeWeek !== 'this'){
+        activeWeek = 'this';
+        if(typeof loadWeekState === 'function') loadWeekState('this');
+      }
       restore(JSON.parse(JSON.stringify(snap)));
       // V83 (2026-05-08): also reset edit-mode state. Pre-V83 if a prior
       // op left _scheduleEditMode=true or _scheduleEditTouchedCells/Sides
@@ -20739,7 +20751,15 @@ window.MPStress=(function(){
     var baseSeed=opts.baseSeed||12345;
     var maxSeedScan=opts.maxSeedScan||(nSeeds*4);
     var saved=snapshot();
-    function freshRestore(snap){restore(JSON.parse(JSON.stringify(snap)));}
+    function freshRestore(snap){
+      // V150 (2026-05-14): defensive activeWeek reset (same reasoning as
+      // the scenario-runner's freshRestore above — see that comment block).
+      if(typeof activeWeek !== 'undefined' && activeWeek !== 'this'){
+        activeWeek = 'this';
+        if(typeof loadWeekState === 'function') loadWeekState('this');
+      }
+      restore(JSON.parse(JSON.stringify(snap)));
+    }
     function _smWipeUserState(){
       Object.keys(OVERRIDES).forEach(function(k){
         var ov=OVERRIDES[k]; if(!ov) return;
