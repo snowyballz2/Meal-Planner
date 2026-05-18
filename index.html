@@ -2667,8 +2667,18 @@ var USER_EDITED={}; // key: 'person_day_slot', true ONLY if user directly edited
 var SKIPPED={}; // key: 'person_day_slot', true if skipped — calories shift to dinner
 var EAT_OUT={}; // key: 'person_day_slot', value: {name,restaurant,kcal,pro,fat,carb}
 var LATE_SNACK={}; // key: 'person_day', value: {name,kcal,pro,fat,carb}
-var ADJ_TARGETS={}; // key: 'person_day', value: per-slot bools for which meals absorb redistributed calories
-var ADJ_TARGETS_TS={}; // key: 'person_day', value: timestamp ms — for sync last-write-wins
+// V146 (2026-05-14): ADJ_TARGETS is now PER-WEEK. The globals below are
+// aliases reassigned by rebindAdjTargets() on every week switch (mirrors
+// the LEFTOVER_LINKS pattern). Storage lives at weekData[w].adjTargets
+// and weekData[w].adjTargetsTs. Each week's checkboxes can differ — e.g.
+// "this week, I'm skipping breakfast → redistribute to lunch+snack" vs
+// "next week, redistribute to dinner only."
+//
+// Migration: on first V146 load, if active week's adjTargets is empty
+// AND the legacy global localStorage entry exists, populate all 3 weeks
+// from the legacy value. See loadAdjTargets below.
+var ADJ_TARGETS={}; // alias to weekData[activeWeek].adjTargets
+var ADJ_TARGETS_TS={}; // alias to weekData[activeWeek].adjTargetsTs
 // User preference: when true, the "Set" pill (MANUAL_SET[k]=true on a slot)
 // blocks incoming sync from overwriting that slot — even if remote has a
 // newer timestamp. Off by default. Per-device pref (not synced). Lets a
@@ -2703,14 +2713,44 @@ function toggleAdjTarget(p,d,slot){
   saveAdjTargets();
   renderMeals();
 }
-function loadAdjTargets(){
-  var data=lsGet('mealPlannerAdjTargets',null);
-  if(data&&typeof data==='object'){
-    if(data.targets){ADJ_TARGETS=data.targets;ADJ_TARGETS_TS=data.ts||{};}
-    else{ADJ_TARGETS=data;ADJ_TARGETS_TS={};} // legacy: no ts
-  }
+// V146 (2026-05-14): re-bind the ADJ_TARGETS / ADJ_TARGETS_TS globals to
+// the active week's per-week storage. Called from loadWeekState() and at
+// init. Mirrors rebindLeftoverLinks().
+function rebindAdjTargets(){
+  if(!weekData[activeWeek]) return;
+  if(!weekData[activeWeek].adjTargets) weekData[activeWeek].adjTargets = {};
+  if(!weekData[activeWeek].adjTargetsTs) weekData[activeWeek].adjTargetsTs = {};
+  ADJ_TARGETS = weekData[activeWeek].adjTargets;
+  ADJ_TARGETS_TS = weekData[activeWeek].adjTargetsTs;
 }
-function saveAdjTargets(){lsSet('mealPlannerAdjTargets',{targets:ADJ_TARGETS,ts:ADJ_TARGETS_TS});}
+function loadAdjTargets(){
+  // V146: storage moved to weekData[w].adjTargets. This function now just
+  // handles MIGRATION from the legacy global localStorage entry. If any
+  // week lacks adjTargets, populate from the legacy value (so existing
+  // users' redistribution preferences carry over). After migration, each
+  // week's adjTargets can be edited independently.
+  var legacy = lsGet('mealPlannerAdjTargets', null);
+  var legacyTargets = null, legacyTs = null;
+  if(legacy && typeof legacy === 'object'){
+    if(legacy.targets){legacyTargets = legacy.targets; legacyTs = legacy.ts || {};}
+    else {legacyTargets = legacy; legacyTs = {};}
+  }
+  ['last','this','next'].forEach(function(w){
+    if(!weekData[w]) return;
+    if(!weekData[w].adjTargets || Object.keys(weekData[w].adjTargets).length === 0){
+      weekData[w].adjTargets = legacyTargets ? JSON.parse(JSON.stringify(legacyTargets)) : {};
+      weekData[w].adjTargetsTs = legacyTs ? JSON.parse(JSON.stringify(legacyTs)) : {};
+    }
+  });
+  rebindAdjTargets();
+}
+// V146: saveAdjTargets is now a thin wrapper around saveWeeks, since the
+// storage lives inside weekData. Kept as a named function for compatibility
+// with the call sites in toggleAdjTarget, mergeSyncData, forcePushSync.
+function saveAdjTargets(){
+  if(typeof autoSaveWeek === 'function') autoSaveWeek();
+  else if(typeof saveWeeks === 'function') saveWeeks();
+}
 var SHARED_SCHEDULE = {}; // key: 'day_slot', value: 'shared'|'eo-him'|'eo-her'|'eo-both' or absent (normal)
 var sharedSchedOpen = false; // collapsible panel state
 function initSharedSchedule(){
@@ -3272,6 +3312,17 @@ function _v85ClearSideVisualIfAny(side, d, s){
     delete USER_EDITED[sk_other];
     delete MANUAL_SET[sk_this];
     delete MANUAL_SET[sk_other];
+    // V146 (2026-05-14): also clear any EAT_OUT on either side. Defensive:
+    // the legitimate `SHARED_SCHEDULE='shared'` state should have NO EAT_OUT
+    // on either side (mutual exclusion enforced by INV24 + setSchedule).
+    // But pre-V31 sync data or old localStorage from before V31 could
+    // contain both — visible as SHARED='shared' + EAT_OUT[him/her] truthy.
+    // Pre-V146 the function cleared SHARED and returned, leaving EAT_OUT
+    // stuck. INV24 fires until user manually toggles the eat-out off via
+    // the per-slot pill. Now: clear both atomically as part of "first tap
+    // clears all visuals" V85 contract.
+    if(EAT_OUT[sk_this]) delete EAT_OUT[sk_this];
+    if(EAT_OUT[sk_other]) delete EAT_OUT[sk_other];
     _scheduleEditPreserveSel[sk_this] = true;
     _scheduleEditPreserveSel[sk_other] = true;
     _scheduleEditTouchedSides[sk_other] = true; // shared-break touches both
@@ -14775,6 +14826,7 @@ function loadWeekState(w){
   loadInto(USER_EDITED,wd.userEdited); // V53
   initSharedSchedule(); // ensure defaults if empty
   rebindLeftoverLinks(); // 2026-05-03: bind LEFTOVER_LINKS to wd.leftoverLinks
+  rebindAdjTargets(); // V146 (2026-05-14): bind ADJ_TARGETS to wd.adjTargets
 }
 function switchWeek(w){
   // V30 (2026-05-07): if user is in schedule edit mode, switching weeks
@@ -15036,6 +15088,34 @@ function mergeSyncData(remote){
           rebindLeftoverLinks();
         }
       }
+
+      // V146 (2026-05-14): per-week adjTargets merge (per-key LWW).
+      // adjTargets storage moved from a global to weekData[w].adjTargets,
+      // so cross-phone sync now carries per-week values via weekData[w].
+      // Pre-V146 senders ship adjTargets at top level (handled in the
+      // legacy block after this loop) — keep that as a fallback for v4
+      // compatibility but per-week is the authoritative path.
+      if(remoteWeek.adjTargets){
+        if(!weekData[w].adjTargets) weekData[w].adjTargets = {};
+        if(!weekData[w].adjTargetsTs) weekData[w].adjTargetsTs = {};
+        var remAdj = remoteWeek.adjTargets;
+        var remAdjTs = remoteWeek.adjTargetsTs || {};
+        var adjKeys = {};
+        Object.keys(remAdj).forEach(function(k){adjKeys[k]=true;});
+        Object.keys(weekData[w].adjTargets).forEach(function(k){adjKeys[k]=true;});
+        Object.keys(adjKeys).forEach(function(k){
+          var lt = weekData[w].adjTargetsTs[k] || 0;
+          var rt = remoteIsLegacy ? 0 : (remAdjTs[k] || 0);
+          if(rt > lt){
+            if(remAdj[k] !== undefined) weekData[w].adjTargets[k] = remAdj[k];
+            else delete weekData[w].adjTargets[k];
+            weekData[w].adjTargetsTs[k] = rt;
+          }
+        });
+        if(w === activeWeek && typeof rebindAdjTargets === 'function'){
+          rebindAdjTargets();
+        }
+      }
     });
   }
   
@@ -15199,8 +15279,17 @@ function forcePushSync(){
     // 2026-05-14 (V140): also bump leftoverLinksTs so the LWW merge always
     // takes our array regardless of remote's age.
     weekData[w].leftoverLinksTs = now;
+    // V146 (2026-05-14): bump per-week adjTargets timestamps too. adjTargets
+    // moved into weekData[w]; force-push must stamp all per-week values for
+    // the merge to take ours on the remote side.
+    if(!weekData[w].adjTargets) weekData[w].adjTargets = {};
+    if(!weekData[w].adjTargetsTs) weekData[w].adjTargetsTs = {};
+    Object.keys(weekData[w].adjTargets).forEach(function(k){weekData[w].adjTargetsTs[k]=now;});
   });
-  Object.keys(ADJ_TARGETS).forEach(function(k){ADJ_TARGETS_TS[k]=now;});
+  // V146: ADJ_TARGETS is now the alias to active week's adjTargets. The
+  // per-week bumps above already stamped all 3 weeks. The top-level
+  // adjTargetsTs (for backward compat) is also covered since it's the
+  // same object as weekData[activeWeek].adjTargetsTs.
   Object.keys(customMeals).forEach(function(k){customMeals[k]._ts=now;});
   Object.keys(customIngredients).forEach(function(k){customIngredients[k]._ts=now;});
   EAT_OUT_DB.forEach(function(e){e._ts=now;});
