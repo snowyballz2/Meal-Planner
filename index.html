@@ -9559,17 +9559,24 @@ function onIngrReset(p,d,s){
 
   // Per-slot: clear user overrides, restore cache from snapshot, restore
   // MANUAL_SET from snapshot.
-  // 2026-05-14 (V141): track whether any slot fell into the no-snapshot
-  // fallback path. If so, run the full pipeline (runBalanceAdjusters) after
-  // the loop so the affected slots get correctly-scaled values — including
-  // batch unification, snap-to-grid, freeze pinning. Pre-V141 (V140 only)
-  // the fallback just deleted the cache entry; the next read rebuilt via
-  // adjustIngredients alone, which is slot-level scaling without batch
-  // unification. For non-batch slots that's fine, but for batch slots the
-  // result wouldn't reflect cross-person ratios / pkg flex. Running the
-  // full pipeline gives the same kind of "correctly scaled and calculated"
-  // values the snapshot path produces.
+  // 2026-05-14 (V141 → V142): track which slots fell into the no-snapshot
+  // fallback path. For those days, preserve OTHER (unrelated) slots' cache
+  // values across the rebuild so Reset only touches the targeted slot(s).
+  //
+  // Pre-V142 the no-snapshot path deleted the WHOLE day's cache; runBalance-
+  // Adjusters then rebuilt every slot in that day. Functionally fine (the
+  // pipeline is deterministic, so unrelated slots recompute to the same
+  // values), but semantically too broad — "Reset slot X" shouldn't churn
+  // slot Y's cache. V142 narrows: capture unaffected slots before the wipe,
+  // restore them after runBalanceAdjusters. The reset slot(s) get full-
+  // pipeline values (matching snapshot-restore behavior); unrelated slots
+  // are byte-for-byte untouched.
   var anyNoSnapshot = false;
+  var resetSlotSet = {};
+  slotsToRestore.forEach(function(pt){
+    resetSlotSet[sk(pt.p, pt.d, pt.s)] = true;
+  });
+  var preservedByDay = {}; // pkkey -> {slot: cachedEntry} for slots NOT being reset
   slotsToRestore.forEach(function(pt){
     var k = sk(pt.p, pt.d, pt.s);
     // 1. Clear user-origin overrides only — preserve freeze pins
@@ -9592,16 +9599,21 @@ function onIngrReset(p,d,s){
       if(!_dayBalancedCache[pkkey]) _dayBalancedCache[pkkey] = {};
       _dayBalancedCache[pkkey][pt.s] = JSON.parse(JSON.stringify(_postRandomizeCache[pkkey][pt.s]));
     } else {
-      // 2026-05-14 (V140/V141): no post-randomize snapshot for this slot
-      // (e.g. fresh page load, user edited without ever running randomize).
-      // Wipe the WHOLE day's cache entry. Deleting just one slot leaves
-      // _dayBalancedCache[pkkey] as a partial object — getDayBalancedIngredients
-      // checks `if(_dayBalancedCache[pkkey]) return ...` and returns the
-      // partial without rebuilding the missing slot. By deleting the whole
-      // day, the next read forces a full rebuild via adjustIngredients on
-      // every slot. runBalanceAdjusters below then applies batch unification,
-      // snap, waste, boost — producing "correctly scaled and calculated"
-      // values, matching what the user would see after a fresh randomize.
+      // V142: capture unaffected slots in this day BEFORE wiping the cache.
+      // After runBalanceAdjusters rebuilds, we'll restore these slots so
+      // their cached entries don't change. Only slots being reset (in
+      // resetSlotSet) need to come from the rebuild.
+      if(_dayBalancedCache[pkkey] && !preservedByDay[pkkey]){
+        preservedByDay[pkkey] = {};
+        Object.keys(_dayBalancedCache[pkkey]).forEach(function(slotName){
+          if(!resetSlotSet[sk(pt.p, pt.d, slotName)]){
+            preservedByDay[pkkey][slotName] = JSON.parse(JSON.stringify(_dayBalancedCache[pkkey][slotName]));
+          }
+        });
+      }
+      // Wipe the day's cache so getDayBalancedIngredients fully rebuilds
+      // (it returns the day object as-is if present, so a partial delete
+      // wouldn't trigger a rebuild for the missing slot).
       delete _dayBalancedCache[pkkey];
       anyNoSnapshot = true;
     }
@@ -9622,6 +9634,18 @@ function onIngrReset(p,d,s){
   // a literal restore and shouldn't pay the convergence-loop cost.
   if(anyNoSnapshot && typeof runBalanceAdjusters === 'function'){
     runBalanceAdjusters();
+    // V142: restore the unaffected slots' cache entries we captured
+    // pre-wipe. The pipeline is deterministic so their rebuilt values
+    // SHOULD equal the pre-wipe values, but write the preserved entries
+    // back to guarantee semantic narrowness ("Reset only changes the
+    // reset slot's cache entry").
+    Object.keys(preservedByDay).forEach(function(pkkey){
+      if(!_dayBalancedCache[pkkey]) return;
+      var preserved = preservedByDay[pkkey];
+      Object.keys(preserved).forEach(function(slotName){
+        _dayBalancedCache[pkkey][slotName] = preserved[slotName];
+      });
+    });
   }
 
   renderMeals();
