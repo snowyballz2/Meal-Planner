@@ -3238,6 +3238,29 @@ function _buildAutoLinkGroups(){
       });
     });
   });
+  // V161 (2026-05-19): auto-shared for breakfast/snack cells when both
+  // sides have the same meal. The leftover-detector pass above only
+  // populates lunch/dinner because that's where batches form. But the
+  // user's rule ("if both sides have the same meal it's shared") applies
+  // to every slot. Breakfast/snack same-meal cells now get the green
+  // visual in the schedule grid even without SHARED_SCHEDULE='shared'.
+  // Skipped/eat-out sides excluded.
+  DAYS.forEach(function(d){
+    ['breakfast','snack'].forEach(function(s){
+      var himK = sk('him', d, s);
+      var herK = sk('her', d, s);
+      if(SKIPPED[himK] || SKIPPED[herK] || EAT_OUT[himK] || EAT_OUT[herK]) return;
+      var himId = SEL[himK];
+      var herId = SEL[herK];
+      if(!himId || !herId || himId !== herId) return;
+      // V25 edit-mode override — same as the lunch/dinner pass above.
+      if(_scheduleEditMode && (
+        _scheduleEditTouchedSides[himK] ||
+        _scheduleEditTouchedSides[herK]
+      )) return;
+      _autoSharedCells[dk(d, s)] = true;
+    });
+  });
 }
 // Split pill: tap toggles skip, long press toggles shared
 // Left tap: normal ↔ eo-him. Right tap: normal ↔ eo-her.
@@ -9546,6 +9569,13 @@ function changeMeal(slot,mealId){
   }
   clearOverrides(person,day,slot);invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
 }
+// V161 (2026-05-19): per-week undo map for toggleShared. When user
+// shares from one side, the OTHER side's prior meal is captured here so
+// un-share can restore the exact pre-share meal (option C, true undo).
+// Transient — reset on switchWeek; not persisted; not synced. Falls
+// back to random re-roll (option A) when no undo entry exists.
+var SHARED_UNDO = {};
+
 function toggleShared(slot,checked){
   // V36 (2026-05-07): close two symmetry gaps from the V25-V35 audit.
   //   A1: toggleShared OFF previously left SHARED_SCHEDULE='shared'
@@ -9556,6 +9586,9 @@ function toggleShared(slot,checked){
   //       prior to sharing, the data ended up shared+SKIPPED. Now both
   //       sides' SKIPPED gets cleared to match the per-slot pill semantics
   //       already used by toggleEatOut.
+  // V161 (2026-05-19): ON captures the other side's pre-share meal into
+  // SHARED_UNDO[otherKey] so OFF can restore the exact pre-share state.
+  // Audit-O3 motivated.
   const other=person==='him'?'her':'him';
   const dKey=dk(day,slot);
   const meK=sk(person,day,slot);
@@ -9564,6 +9597,18 @@ function toggleShared(slot,checked){
     // Set the other person's meal to match — manual shared
     const myId=getMealId(person,day,slot);
     if(myId){
+      // V161: capture the OTHER side's pre-share meal for option-C undo.
+      // Use SEL[otherKey] directly (not getMealId which falls back to
+      // DEFAULTS — DEFAULTS isn't the user's choice, we don't want to
+      // "restore" to a starter-plan pick).
+      const prevOther = SEL[otherKey];
+      if(prevOther && prevOther !== myId){
+        SHARED_UNDO[otherKey] = {mealId: prevOther, ts: Date.now()};
+      } else {
+        // Pre-share state was empty or already matched — no useful undo,
+        // and an empty undo would let OFF fall through to random anyway.
+        delete SHARED_UNDO[otherKey];
+      }
       stampSel(otherKey,myId);
       clearOverrides(other,day,slot);
       // Mark both as manual set and update schedule to shared
@@ -9588,15 +9633,36 @@ function toggleShared(slot,checked){
       saveSharedSchedule();
     }
   } else {
-    // Unshare — randomize the other person's meal for that slot
-    const candidates=getMealsForSlot(slot).filter(function(m){return m[other];});
-    const myId=getMealId(person,day,slot);
-    const others=candidates.filter(function(m){return m.id!==myId;});
-    if(others.length){
-      const pick=others[Math.floor(Math.random()*others.length)];
-      stampSel(otherKey,pick.id);
-      clearOverrides(other,day,slot);
+    // V161 (2026-05-19): un-share — try option C (restore the OTHER
+    // side's pre-share meal from SHARED_UNDO) before falling back to
+    // option A (random re-roll). Restoring is the user's mental model
+    // of "undo this share": "what did Her have here before I shared?"
+    const undo = SHARED_UNDO[otherKey];
+    var restored = false;
+    if(undo && undo.mealId){
+      // Validate the captured meal still exists + still serves this side
+      // (recipe library could have changed; defensive).
+      const um = getMeal(undo.mealId);
+      if(um && um[other] && getMealsForSlot(slot).some(function(m){return m.id===undo.mealId;})){
+        stampSel(otherKey, undo.mealId);
+        clearOverrides(other, day, slot);
+        restored = true;
+      }
     }
+    if(!restored){
+      // Option A fallback: random pick from this slot's candidate pool,
+      // excluding the currently-shared meal so we visibly diverge.
+      const candidates=getMealsForSlot(slot).filter(function(m){return m[other];});
+      const myId=getMealId(person,day,slot);
+      const others=candidates.filter(function(m){return m.id!==myId;});
+      if(others.length){
+        const pick=others[Math.floor(Math.random()*others.length)];
+        stampSel(otherKey,pick.id);
+        clearOverrides(other,day,slot);
+      }
+    }
+    // V161: undo entry consumed (or attempted) — drop it.
+    delete SHARED_UNDO[otherKey];
     // V36 (A1): drop SHARED_SCHEDULE='shared' so the grid no longer
     // claims the cell is shared. Other states (skip-*) shouldn't exist
     // alongside 'shared' but we only delete if it WAS 'shared' so the
@@ -15311,6 +15377,12 @@ function switchWeek(w){
   // items in that week's shopping view. Undoing them while the new week
   // is active would resurrect CHECKS for a non-visible week — confusing.
   if(typeof _shopUndoStack !== 'undefined') _shopUndoStack.length = 0;
+  // V161 (2026-05-19): also clear toggleShared undo entries — keyed by
+  // sk(p,d,s) without week prefix, so stale entries from the old week
+  // would un-share into wrong meals on the new week's slots.
+  if(typeof SHARED_UNDO !== 'undefined'){
+    Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
+  }
   renderWeekBar();renderDayTabs();renderMeals();
   if(topTab==='shop')renderShop();
 }
