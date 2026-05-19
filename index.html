@@ -3632,19 +3632,25 @@ function _hasUserOverrides(p,d,s){
 // can't trim them, surfacing as kcalHigh days (e.g., seed 70 him Wed +617).
 // 2026-05-02.
 function _clearFreezeOverrides(){
+  // V158 (2026-05-19): switched to POSITIVE identification — drop only
+  // entries explicitly tagged _freezePin:true (set by freezeTripTotals).
+  // Also drop _fatBoost entries (re-applied each randomize by
+  // _autoApplyFatBoosts). Everything else is preserved by default —
+  // user pins, dbKey-only swaps (no scalable field), and any future
+  // override-writer that forgets to tag survives the cleanup pass.
+  //
+  // Pre-V158 the filter dropped anything with scalable:false that
+  // wasn't on the recognized-flag allowlist (_userSet / _fatBoost). It
+  // worked today because we knew every scalable:false writer, but was
+  // fragile: a future code path adding a new scalable:false override
+  // without a recognized flag would be silently nuked on next randomize.
   Object.keys(OVERRIDES).forEach(function(k){
     var ov = OVERRIDES[k];
     if(!ov || !ov.length) return;
-    // 2026-05-04: clear FREEZE-origin entries only (scalable:false AND no
-    // _userSet). User pins (also scalable:false but with _userSet:true) are
-    // preserved across randomize cycles.
-    // V93 (2026-05-08): also clear _fatBoost-origin entries (auto-managed by
-    // _autoApplyFatBoosts each randomize — we re-apply based on current SEL).
     var filtered = ov.filter(function(o){
-      if(o.scalable !== false) return true; // not freeze-marked
-      if(o._userSet === true) return true; // user pin, keep
-      if(o._fatBoost === true) return false; // auto fat-boost, drop & re-apply
-      return false; // freeze-only, drop
+      if(o._freezePin === true) return false; // freeze write, drop & re-apply
+      if(o._fatBoost === true) return false;  // auto fat-boost, drop & re-apply
+      return true;                            // keep everything else
     });
     if(filtered.length === 0) delete OVERRIDES[k];
     else if(filtered.length !== ov.length) OVERRIDES[k] = filtered;
@@ -10172,6 +10178,12 @@ function freezeTripTotals(randTarget, attemptSwap){
       // reads it via applyOverrides, sees scalable:false, leaves frozen item
       // at the override amt; balanceDayMacros and the post-freeze unify then
       // compensate via non-frozen items.
+      // V158 (2026-05-19): every freeze write tags _freezePin:true.
+      // _clearFreezeOverrides now identifies freeze pins POSITIVELY via
+      // this flag instead of dropping anything scalable:false that isn't
+      // recognized as user/fatBoost. Safer for future writers: anyone
+      // adding a new scalable:false override without _freezePin survives
+      // the cleanup pass by default.
       info.solos.forEach(function(so){
         var soCache = _dayBalancedCache[pk(so.p, so.d)];
         if(soCache && soCache[so.s] && soCache[so.s][so.idx]){
@@ -10180,6 +10192,7 @@ function freezeTripTotals(randTarget, attemptSwap){
         }
         setOverride(so.p, so.d, so.s, so.idx, 'amt', so.amt);
         setOverride(so.p, so.d, so.s, so.idx, 'scalable', false);
+        setOverride(so.p, so.d, so.s, so.idx, '_freezePin', true);
         affectedDays[so.p+'_'+so.d] = {p:so.p, d:so.d};
       });
       info.batches.forEach(function(b){
@@ -10191,6 +10204,7 @@ function freezeTripTotals(randTarget, attemptSwap){
           }
           setOverride(pt.p, pt.d, pt.s, pt.idx, 'amt', pt.amt);
           setOverride(pt.p, pt.d, pt.s, pt.idx, 'scalable', false);
+          setOverride(pt.p, pt.d, pt.s, pt.idx, '_freezePin', true);
           affectedDays[pt.p+'_'+pt.d] = {p:pt.p, d:pt.d};
         });
       });
