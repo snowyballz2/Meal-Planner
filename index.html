@@ -397,7 +397,7 @@ var NUTRI_DB = {
   'protein powder':        {kcal:97.5,pro:21, fat:1,   carb:2,   unit:'scoop', brand:'Raw Grass Fed Whey', altUnits:{tbsp:5}, minAmt:1, maxAmt:1},
   'creatine':              {kcal:0,   pro:0,  fat:0,   carb:0,   unit:'scoop', brand:'Promix'},
   'egg white':             {kcal:133, pro:26.7,fat:0,  carb:0,   unit:'cup', note:'liquid carton; ¼ cup = 2 egg whites; 32oz carton = 4 cups', pkg:{size:32,unit:'oz',cups:4,type:'carton',longShelfLife:true}, minAmt:0.25, maxAmt:1},
-  'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each', minAmt:1, maxAmt:6},
+  'egg whole':             {kcal:72,  pro:6.3,fat:4.8, carb:0.4, unit:'each', wholeOnly:true, minAmt:1, maxAmt:6},
   'chicken breast':        {kcal:31,  pro:5.8,fat:0.7, carb:0,   unit:'oz', minAmt:4, maxAmt:16},
   'chicken thigh':         {kcal:36,  pro:4.8,fat:1.8, carb:0,   unit:'oz', minAmt:4, maxAmt:16},
   'ground turkey 93':      {kcal:38,  pro:5.3,fat:1.8, carb:0,   unit:'oz',pkg:{size:16,unit:'oz',drained:16,type:'container'}, minAmt:3.5, maxAmt:12.5, minAmtSolo:3, maxAmtSolo:12},
@@ -593,6 +593,16 @@ function I(dbKey, amt, role, scalable) {
 
 // Shared fraction formatter
 function fmtFrac(n) {
+  // V154 (2026-05-14): tiny non-zero values get a 2-decimal display
+  // instead of being snap-rounded down to "0". Pre-V154 the [0,'0']
+  // snap entry caught any n < 0.06 (or n < 0.0625 in the eighth-snap
+  // fallback) and returned "0", which lied to the user when an
+  // ingredient contributed kcal but the row showed "0 cup". The fix
+  // separates "ingredient genuinely present at small amount" from
+  // "ingredient absent" — display the decimal so the user sees what's
+  // actually in the cache. Threshold 0.06 chosen to match the snap
+  // tolerance band.
+  if(n > 0 && n < 0.06) return String(Math.round(n*1000)/1000);
   // Order = priority on equidistant ties. We list thirds first, eighths
   // next, quarters last; combined with <= comparator below, later entries
   // replace earlier ones on equal distance. Result: quarter-grid wins over
@@ -8037,7 +8047,16 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
         parts.push(dir+' '+fmtFrac(fromAmt)+' → '+fmtFrac(newAmtBanner)+' '+unit+' ('+diffSign+kcalDiff+' kcal)');
       }
       if(flags.userDbKey !== undefined && currentDbKey !== recipeDbKey){
-        parts.push('🔄 was <i>'+recipeDbKey+'</i>');
+        // V154 (2026-05-14): suppress the "was X" hint when recipeDbKey is
+        // empty. recipeDbKey == '' means the ingredient slot is at an idx
+        // PAST port.ingredients.length — i.e., the user added it via the
+        // `+ ingredient` button. There's no "was" — it's a fresh add.
+        // Pre-V154 the banner rendered "🔄 was <i></i>" with empty italic
+        // tags. Now we only show the swap hint when there's an actual
+        // prior dbKey to reference.
+        if(recipeDbKey){
+          parts.push('🔄 was <i>'+recipeDbKey+'</i>');
+        }
       }
       if(parts.length === 0) return;
       // Waste hint for pkg/produce ingredients — empty string when
