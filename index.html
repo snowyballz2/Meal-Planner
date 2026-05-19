@@ -4228,12 +4228,20 @@ function shopQtyWithCount(dbKey,qtyObj){
   // container size in parens. Cartons carry between trips, so what user
   // needs is "how much this trip" + "container holds N cups".
   // 2026-05-01.
+  // V155 (2026-05-19): round trip-total via fmtFrac (kills IEEE float
+  // noise like "1.4999999999999998 cups") AND show carton count when
+  // trip total exceeds one container — e.g. "5 cups (2× 4-cup carton)"
+  // so the shopper knows to buy 2 cartons, not 1.
   if(db.pkg && db.pkg.longShelfLife){
     var amt=qtyObj.num;
     var unit=qtyObj.unit;
-    var label=amt+' '+unit+(amt!==1&&unit!=='oz'?'s':'');
     var containerCups=db.pkg.cups;
-    return label+' ('+containerCups+' cups)';
+    var amtLabel = fmtFrac(amt) + ' ' + unit + (amt!==1 && unit!=='oz' ? 's' : '');
+    var cartonsNeeded = _pkgsNeeded(amt, containerCups);
+    if(cartonsNeeded > 1){
+      return amtLabel + ' (' + cartonsNeeded + '× ' + containerCups + '-cup carton' + (cartonsNeeded>1?'s':'') + ')';
+    }
+    return amtLabel + ' (' + containerCups + ' cups)';
   }
 
   // Dry-equivalent conversion for cooked grains/beans/legumes. Recipe
@@ -4430,9 +4438,18 @@ function _parseShopDisplayToCache(displayed, dbKey, unit){
 
 function shopDisplayName(dbKey){return SHOP_DISPLAY_NAMES[dbKey]||(dbKey.charAt(0).toUpperCase()+dbKey.slice(1));}
 
+// V155 (2026-05-19): single source of truth for "recipe ingredients that
+// legitimately don't reach the shopping list." Both addShopIngredient (drop
+// from output) and INV3 reverse-direction check (allow as expected-not-in-
+// shop) read from here. Pre-V155 they were two hardcoded duplicates that
+// could drift apart — adding a new drop here in addShopIngredient without
+// updating INV3 would cause INV3 to false-fire on every recipe using the
+// new item.
+var SHOP_DROP_KEYS = ['water'];
+
 function addShopIngredient(items,dbKey,amt,p){
   const db=NUTRI_DB[dbKey];if(!db)return;
-  if(dbKey==='water'||amt<=0)return;
+  if(SHOP_DROP_KEYS.indexOf(dbKey)>=0||amt<=0)return;
   // Egg whites are tracked as their own shopping line (liquid cartons), not folded into whole eggs
   const shopKey=dbKey;
   const shopDb=NUTRI_DB[shopKey]||db;
@@ -4460,7 +4477,22 @@ function buildShoppingList(trip,who){
     persons.forEach(function(p){
       days.forEach(function(d){
         SLOTS.forEach(function(s){
-          if(s==='late_snack')return;
+          // V155 (2026-05-19): late_snack now eligible for custom trip
+          // shopping. Pre-V155 it was excluded ("custom trip has no UI
+          // for late_snack"). The custom day-grid (line ~14530) now
+          // includes late_snack rows for days where LATE_SNACK[pk(p,d)]
+          // exists with ingredients — user can check the row to include
+          // those ingredients.
+          if(s==='late_snack'){
+            if(!CUSTOM_SHOP_SEL[sk(p,d,s)])return;
+            const ls=LATE_SNACK[pk(p,d)];
+            if(!ls||!ls.ingredients||!ls.ingredients.length)return;
+            ls.ingredients.forEach(function(ing){
+              if(!ing.dbKey)return;
+              addShopIngredient(items, ing.dbKey, ing.amt, p);
+            });
+            return;
+          }
           if(!CUSTOM_SHOP_SEL[sk(p,d,s)])return;
           if(SKIPPED[sk(p,d,s)])return;
           if(EAT_OUT[sk(p,d,s)])return;
@@ -4546,7 +4578,16 @@ function buildShoppingList(trip,who){
         if(tripDaySet[d]){
           const ls = LATE_SNACK[pk(p,d)];
           if(ls && ls.ingredients && ls.ingredients.length){
-            ls.ingredients.forEach(function(ing){addShopIngredient(items, ing.dbKey, ing.amt, p);});
+            ls.ingredients.forEach(function(ing){
+              // V155 (2026-05-19): defensive guard against missing dbKey.
+              // confirmLateSnackIngredient validates dbKey at push-time, so
+              // current code paths never produce undefined. But a corrupted
+              // sync payload or pre-V126 migration could carry malformed
+              // entries — silently skipping protects shopping output from
+              // garbage ingredients.
+              if(!ing.dbKey) return;
+              addShopIngredient(items, ing.dbKey, ing.amt, p);
+            });
           }
         }
       });
@@ -4563,6 +4604,13 @@ function buildShoppingList(trip,who){
       const mealId=parts.slice(0,-1).join('_');
       const p=parts[parts.length-1];
       if(persons.indexOf(p)<0)return;
+      // V155 (2026-05-19): dedupe with CUSTOM_PLAN_SEL. If the same mealId
+      // is selected in both pickers, the plan picker already added the
+      // meal's ingredients (at balanced amounts). Pre-V155 the recipe
+      // picker would add a SECOND copy (at raw amounts) → double-count.
+      // Plan picker wins because its balanced amounts reflect the actual
+      // post-pipeline cooking quantities for this week.
+      if(CUSTOM_PLAN_SEL[mealId])return;
       const m=getMeal(mealId);
       if(!m||!m[p])return;
       const port=m[p];
@@ -6110,6 +6158,11 @@ function verifyInvariants(){
           const ls2=LATE_SNACK[pk(p,d)];
           if(ls2&&ls2.ingredients&&ls2.ingredients.length){
             ls2.ingredients.forEach(function(i){
+              // V155 (2026-05-19): symmetric defensive guard to the one in
+              // addShopIngredient — skip entries with missing dbKey so the
+              // reverse-check `expected` map doesn't acquire an `undefined`
+              // string-key bucket.
+              if(!i.dbKey)return;
               if(!expected[i.dbKey])expected[i.dbKey]={him:0,her:0};
               expected[i.dbKey][p]+=i.amt;
             });
@@ -6135,10 +6188,12 @@ function verifyInvariants(){
       });
     });
     // Reverse: every expected dbKey (with non-zero amount) must appear in
-    // shopList, unless explicitly allowlisted as "not shopped". Today
-    // addShopIngredient drops 'water' (always available at home). Any
-    // future skip rule MUST add itself to this allowlist or it'll fire.
-    const SHOP_EXPECTED_ALLOWLIST=['water'];
+    // shopList, unless explicitly allowlisted as "not shopped".
+    // V155 (2026-05-19): use SHOP_DROP_KEYS — the same constant
+    // addShopIngredient reads from. Pre-V155 this was a hardcoded
+    // duplicate ['water'] that could drift if someone added a second
+    // drop entry to addShopIngredient without updating INV3.
+    const SHOP_EXPECTED_ALLOWLIST=SHOP_DROP_KEYS;
     const shopDbKeys={};
     Object.keys(shopList).forEach(function(cat){
       shopList[cat].forEach(function(item){shopDbKeys[item.dbKey]=true;});
@@ -6237,11 +6292,19 @@ function verifyInvariants(){
           const PER_ITEM_SLOP = 0.25 * range[0] + 0.1; // cup cooked
           const minProducible = bought * range[0]; // pessimistic cooked yield
           const maxProducible = bought * range[1]; // optimistic cooked yield
+          // V155 (2026-05-19): the under-buy check is unreachable in
+          // normal operation because shopQtyAsCacheUnits' helper rounds
+          // bought_dry UP via Math.ceil(sum/range_avg). It's a DEFENSIVE
+          // DB-consistency guard: catches the case where db.dry.ratio is
+          // mis-set vs db.dry.cookedRange[1] (e.g., ratio:0.3 with
+          // cookedRange:[2.5,3.0] — 1/0.3=3.33 > 3.0 → under-buy possible).
+          // Keeps the safety net for future DB edits.
           if(sum > maxProducible + 0.001){
             violations.push('INV3 dry under-bought: '+trip+' '+item.dbKey
               +' boughtDry='+bought.toFixed(3)+'cup'
               +' sumCooked='+sum.toFixed(3)+'cup'
-              +' maxProducible='+maxProducible.toFixed(3)+'cup');
+              +' maxProducible='+maxProducible.toFixed(3)+'cup'
+              +' (likely DB drift: ratio vs cookedRange[1])');
           } else if(minProducible > sum + PER_ITEM_SLOP + 0.001){
             violations.push('INV3 dry gross over-buy: '+trip+' '+item.dbKey
               +' boughtDry='+bought.toFixed(3)+'cup'
@@ -14332,19 +14395,27 @@ function toggleCustomMeal(d,s){
   renderShop();
 }
 function toggleCustomDay(d){
+  // V155 (2026-05-19): include late_snack rows in day-level select.
+  // A day is "all checked" if all per-slot (meal-id or late_snack-with-ingredients)
+  // cells are selected.
   const persons=getShopPersons();
+  function _hasSlot(p,s){
+    if(s==='late_snack'){
+      const ls=LATE_SNACK[pk(p,d)];
+      return !!(ls && ls.ingredients && ls.ingredients.length);
+    }
+    return !!getMealId(p,d,s);
+  }
   let allChecked=true;
   persons.forEach(function(p){
     SLOTS.forEach(function(s){
-      if(s==='late_snack')return;
-      const id=getMealId(p,d,s);if(!id)return;
+      if(!_hasSlot(p,s)) return;
       if(!CUSTOM_SHOP_SEL[sk(p,d,s)])allChecked=false;
     });
   });
   persons.forEach(function(p){
     SLOTS.forEach(function(s){
-      if(s==='late_snack')return;
-      const id=getMealId(p,d,s);if(!id)return;
+      if(!_hasSlot(p,s)) return;
       const k=sk(p,d,s);
       if(allChecked)delete CUSTOM_SHOP_SEL[k];
       else CUSTOM_SHOP_SEL[k]=true;
@@ -14353,9 +14424,15 @@ function toggleCustomDay(d){
   renderShop();
 }
 function customShopSelectAll(){
+  // V155 (2026-05-19): include late_snack rows in select-all.
   const persons=getShopPersons();
   persons.forEach(function(p){DAYS.forEach(function(d){SLOTS.forEach(function(s){
-    if(s==='late_snack')return;
+    if(s==='late_snack'){
+      const ls=LATE_SNACK[pk(p,d)];
+      if(!ls || !ls.ingredients || !ls.ingredients.length) return;
+      CUSTOM_SHOP_SEL[sk(p,d,s)]=true;
+      return;
+    }
     const id=getMealId(p,d,s);if(!id)return;
     CUSTOM_SHOP_SEL[sk(p,d,s)]=true;
   });});});
@@ -14520,7 +14597,13 @@ function renderShop(){
       let allDaySelected=true;
       persons.forEach(function(p){
         SLOTS.forEach(function(s){
-          if(s==='late_snack')return;
+          // V155 (2026-05-19): include late_snack in day-header check
+          if(s==='late_snack'){
+            const ls=LATE_SNACK[pk(p,d)];
+            if(!ls || !ls.ingredients || !ls.ingredients.length) return;
+            if(!CUSTOM_SHOP_SEL[sk(p,d,s)])allDaySelected=false;
+            return;
+          }
           const id=getMealId(p,d,s);if(!id)return;
           if(!CUSTOM_SHOP_SEL[sk(p,d,s)])allDaySelected=false;
         });
@@ -14529,13 +14612,21 @@ function renderShop(){
     });
     
     // Rows: one per slot
-    const displaySlots=['shake','breakfast','lunch','snack','dinner'];
+    // V155 (2026-05-19): include late_snack — rows render only on days
+    // where at least one person has LATE_SNACK ingredients defined.
+    // Empty late_snack days show an empty cell.
+    const displaySlots=['shake','breakfast','lunch','snack','dinner','late_snack'];
     displaySlots.forEach(function(s){
       html+='<div class="cs-slot-label">'+SLOT_LABEL[s]+'</div>';
       DAYS.forEach(function(d){
         let hasAny=false;
         persons.forEach(function(p){
-          const id=getMealId(p,d,s);if(id)hasAny=true;
+          if(s==='late_snack'){
+            const ls=LATE_SNACK[pk(p,d)];
+            if(ls && ls.ingredients && ls.ingredients.length) hasAny=true;
+          } else {
+            const id=getMealId(p,d,s);if(id)hasAny=true;
+          }
         });
         if(!hasAny){
           html+='<div class="cs-cell empty"></div>';
