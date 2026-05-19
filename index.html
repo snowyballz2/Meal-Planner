@@ -10124,6 +10124,14 @@ var ROUND_PRODUCE_ITEMS = ['baby spinach','kale','broccoli','bell pepper','carro
 // and would compound cost). 2026-04-29 (late).
 function freezeTripTotals(randTarget, attemptSwap){
   var persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  // V160 (2026-05-19): increment a pass counter in _swapDiag so the
+  // swap pass below can record which pass triggered each swap. Pass 1
+  // and 2 have attemptSwap=true; Pass 3 has attemptSwap=false (no swaps
+  // recorded). Diag inspection: window._swapDiag.swaps[i].pass.
+  if(window._swapDiag){
+    window._swapDiag.passLabel = (window._swapDiag.passLabel || '0');
+    window._swapDiag.passLabel = String(parseInt(window._swapDiag.passLabel, 10) + 1);
+  }
   // Caller must run runBalanceAdjusters first so the cache is populated and
   // unify has produced kcal-prop ratios for every batch. Freeze applies
   // uniform scaling per batch, which preserves those ratios.
@@ -10154,12 +10162,33 @@ function freezeTripTotals(randTarget, attemptSwap){
           var swap = _trySwapForWaste(dbKey, trip, days, persons, leftovers);
           if(swap){
             var key = sk(swap.p, swap.d, swap.s);
+            // V160: cascade depth guard. If this slot was ALREADY swapped
+            // this randomize (any pass), refuse the new swap — prevents
+            // wave-2 swaps cascading on wave-1 fallout. Diag records the
+            // refusal for inspection.
+            if(window._swapDiag && window._swapDiag.swappedKeys[key]){
+              window._swapDiag.refused.push({
+                p:swap.p, d:swap.d, s:swap.s, dbKey:dbKey, trip:trip,
+                pass:window._swapDiag.passLabel,
+                priorSwap:window._swapDiag.swappedKeys[key]
+              });
+              return; // continue outer allItems.forEach
+            }
             SEL[key] = swap.newMealId;
             if(weekData[activeWeek] && weekData[activeWeek].ts){
               weekData[activeWeek].ts[key] = Date.now();
             }
             clearOverrides(swap.p, swap.d, swap.s);
             affectedDays[swap.p+'_'+swap.d] = {p:swap.p, d:swap.d};
+            // V160: record the swap so future passes refuse to re-swap this slot.
+            if(window._swapDiag){
+              var swapRec = {p:swap.p, d:swap.d, s:swap.s, dbKey:dbKey, trip:trip,
+                pass:window._swapDiag.passLabel,
+                oldMealId:swap.oldMealId, newMealId:swap.newMealId,
+                sharedSlot:!!swap.sharedSlot};
+              window._swapDiag.swappedKeys[key] = swapRec;
+              window._swapDiag.swaps.push(swapRec);
+            }
             if(swap.sharedSlot){
               var otherP = swap.p==='him' ? 'her' : 'him';
               var oKey = sk(otherP, swap.d, swap.s);
@@ -10169,6 +10198,10 @@ function freezeTripTotals(randTarget, attemptSwap){
               }
               clearOverrides(otherP, swap.d, swap.s);
               affectedDays[otherP+'_'+swap.d] = {p:otherP, d:swap.d};
+              // V160: also mark the shared-side slot.
+              if(window._swapDiag){
+                window._swapDiag.swappedKeys[oKey] = swapRec;
+              }
             }
             // CO-CONTRIBUTOR CLEANUP: the OUTGOING meal might have shared
             // pkg/produce ingredients with OTHER slots in this trip. Their
@@ -13050,6 +13083,12 @@ function randomizeWeek(target, seed){
   // increment _rbaCapHits. verifyInvariants reads the ratio at the end.
   _rbaCallCount = 0;
   _rbaCapHits = 0;
+  // V160 (2026-05-19): per-randomize swap diag. _trySwapForWaste consults
+  // _swapDiag.swappedKeys to refuse swapping a slot that's ALREADY been
+  // swapped this randomize — prevents cascade chains (audit O1: Pass 2's
+  // swap-on-Pass-1-fallout). Each entry records {p,d,s,pass,oldMealId,
+  // newMealId,dbKey} for post-randomize inspection.
+  window._swapDiag = {swappedKeys: {}, swaps: [], passLabel: '', refused: []};
   const randTarget=target||person; // use passed target or current person tab
   // Optional seed: replaces Math.random with a deterministic PRNG for the
   // duration of this call. Used by the stress harness so failing cases are
