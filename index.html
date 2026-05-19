@@ -5704,9 +5704,16 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     if(Math.abs(calGap0) > 100){
       if(calGap0 < 0){
         // Over target: trim one grid step. Order fat → carb → protein.
-        const trim = bestTrim(['fat'], CAL_SLOTS)
-                  || bestTrim(['carb'], CAL_SLOTS)
-                  || bestTrim(['protein'], CAL_SLOTS);
+        // V152 (2026-05-14): respect 40% day-wide carb floor (same guard
+        // P2 uses at line 5765). Pre-V152 P0 had no carb-floor check; if
+        // calGap0 < -100 on a day already at 40% carb, P0 would trim carb
+        // further, breaking the V89a/V90 "no make-worse" pattern. Skipping
+        // the carb branch when at floor falls through to protein (which
+        // P0 already considered last).
+        const carbTrimRoles = (carbPct <= carbFloor) ? [] : ['carb'];
+        let trim = bestTrim(['fat'], CAL_SLOTS);
+        if(!trim && carbTrimRoles.length) trim = bestTrim(carbTrimRoles, CAL_SLOTS);
+        if(!trim) trim = bestTrim(['protein'], CAL_SLOTS);
         if(trim) applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
       } else {
         // Under target: boost one grid step. Order protein → carb → other → fat.
@@ -12407,13 +12414,34 @@ function snapBatchTotals(){
             if(snapped<minTotalSimple2)snapped=minTotalSimple2;
           }
           // Per-serving cap: reduce snapped total so no portion exceeds db.maxAmt.
+          // V153 (2026-05-14): after applying maxAmt cap-down, re-check the
+          // minAmt floor and abandon the snap if infeasible. Pre-V153 the
+          // order was: floor snap-up → cap snap-down with NO floor re-check.
+          // If maxAmt < requiredForFloor2 (cap below floor), the cap-down
+          // could land snapped below the per-portion floor → INV13 fires.
+          // No current DB entry triggers this (minAmt:maxAmt ratios are
+          // typically ≥ 3:1), but defensive against future DB additions.
           var perServingCap2 = (db.maxAmt!=null)?db.maxAmt:Infinity;
           if(perServingCap2<Infinity){
             var largestContribShare=0;
             partAmts.forEach(function(pa){var sh=pa.contrib/totalBatch;if(sh>largestContribShare)largestContribShare=sh;});
             if(largestContribShare>0){
               var maxAllowedSnap=perServingCap2/largestContribShare;
-              if(snapped>maxAllowedSnap){snapped=Math.floor(maxAllowedSnap/grid)*grid;if(snapped<grid)snapped=grid;}
+              if(snapped>maxAllowedSnap){
+                var capped=Math.floor(maxAllowedSnap/grid)*grid;
+                if(capped<grid)capped=grid;
+                // V153 re-check: if the floor was set and the cap would
+                // land us below it, infeasibility — bail out, leave the
+                // batch unchanged. unify's hard-floor fallback (V133) is
+                // the right downstream stage to resolve this.
+                if(db.minAmt && partAmts.length){
+                  var minPerPortionAfterCap = capped * (partAmts.reduce(function(m,pa){return Math.min(m, pa.amt);}, Infinity)) / totalBatch;
+                  if(minPerPortionAfterCap < db.minAmt - 0.0001){
+                    return; // skip this ingredient — let unify handle it
+                  }
+                }
+                snapped=capped;
+              }
             }
           }
           // Thirds-grid acceptance: if the batch total is already on 1/3
