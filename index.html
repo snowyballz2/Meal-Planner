@@ -602,7 +602,11 @@ function fmtFrac(n) {
   // "ingredient absent" — display the decimal so the user sees what's
   // actually in the cache. Threshold 0.06 chosen to match the snap
   // tolerance band.
-  if(n > 0 && n < 0.06) return String(Math.round(n*1000)/1000);
+  // V156: <= 0.06 (was <) — exactly 0.06 was below the eighth-snap distance
+  // 0.065 to ⅛, so [0,'0'] won the snap. Now displays "0.06" raw. Any real
+  // amount this small is either user-edited (banner shows it) or a balancer
+  // bug (INV25 round-trip catches it via |0.06 - 0| = 0.06 > 0.02 tolerance).
+  if(n > 0 && n <= 0.06) return String(Math.round(n*1000)/1000);
   // Order = priority on equidistant ties. We list thirds first, eighths
   // next, quarters last; combined with <= comparator below, later entries
   // replace earlier ones on equal distance. Result: quarter-grid wins over
@@ -4239,7 +4243,8 @@ function shopQtyWithCount(dbKey,qtyObj){
     var amtLabel = fmtFrac(amt) + ' ' + unit + (amt!==1 && unit!=='oz' ? 's' : '');
     var cartonsNeeded = _pkgsNeeded(amt, containerCups);
     if(cartonsNeeded > 1){
-      return amtLabel + ' (' + cartonsNeeded + '× ' + containerCups + '-cup carton' + (cartonsNeeded>1?'s':'') + ')';
+      // V156: ternary always true inside if(>1); literal 's'.
+      return amtLabel + ' (' + cartonsNeeded + '× ' + containerCups + '-cup cartons)';
     }
     return amtLabel + ' (' + containerCups + ' cups)';
   }
@@ -4400,11 +4405,25 @@ function _parseShopDisplayToCache(displayed, dbKey, unit){
     const m = displayed.match(/^(\d+)\s/);
     if(m) return parseInt(m[1], 10) * db.produce.perWhole;
   }
-  // longShelfLife pkg: "N <unit>(s) (M cups)" — leading N is "this trip's" amount,
-  // parens are the container size reference. We want the leading N (matches helper).
+  // longShelfLife pkg: "N <unit>(s) (M cups)" or "X½ <unit>(s) (M cups)" —
+  // leading N is "this trip's" cup amount (NOT a carton count). Without this
+  // branch the parser falls through to the generic db.pkg branch which
+  // multiplies leading N × perPkg → wildly wrong (e.g., "3 cups (4 cups)"
+  // would parse as 3 × 4 = 12). V156: extended regex to also accept the
+  // fraction-symbol output that fmtFrac emits ("¼ cups" → 0.25). Audit-found
+  // by 10-seed INV3 fire on "3 cups (4 cups)" returning 12.
   if(db.pkg && db.pkg.longShelfLife){
-    const m = displayed.match(/^([\d.]+)\s/);
-    if(m) return parseFloat(m[1]);
+    const fracMap = {'½':0.5, '¼':0.25, '¾':0.75, '⅓':1/3, '⅔':2/3,
+      '⅛':0.125, '⅜':0.375, '⅝':0.625, '⅞':0.875};
+    const lm = displayed.match(/^(\d+)?\s*([½¼¾⅓⅔⅛⅜⅝⅞])?\s/);
+    if(lm && (lm[1] || lm[2])){
+      let n = lm[1] ? parseInt(lm[1], 10) : 0;
+      if(lm[2]) n += fracMap[lm[2]] || 0;
+      return n;
+    }
+    // Decimal fallback for pre-fmtFrac legacy display
+    const dm = displayed.match(/^([\d.]+)\s/);
+    if(dm) return parseFloat(dm[1]);
   }
   // Dry-conversion: "N cup(s) dry [label]" — leading N is dry-cup amount
   if(db.dry && unit === 'cup'){
@@ -6426,11 +6445,12 @@ function verifyInvariants(){
         const headerBatchPro  = card23.pm.pro  * cookServings23;
         const headerBatchFat  = card23.pm.fat  * cookServings23;
         const headerBatchCarb = card23.pm.carb * cookServings23;
-        // Tolerance scales with cookServings: re-rounding header to integer
-        // per-serving and multiplying back by N drops up to Math.ceil(N/2)
-        // units per macro. For solo (N=1) tolerance 1 allows ±0 drift after
-        // exact match. For batch (N=4) tolerance 2; (N=5) tolerance 3, etc.
-        const tol23 = Math.ceil(cookServings23 / 2);
+        // V156: tightened tolerance. For solo (N=1) no header-divide happens,
+        // exact match required (tol=0). For batches, header is computed as
+        // round(rowSum/N) so multiplying back drops up to ceil(N/2) units
+        // per macro. Pre-V156 used ceil(N/2) uniformly which allowed ±1
+        // drift on solo — a silent regression mask.
+        const tol23 = cookServings23 <= 1 ? 0 : Math.ceil(cookServings23 / 2);
         if(Math.abs(rowKcal-headerBatchKcal) > tol23
            || Math.abs(rowPro-headerBatchPro) > tol23
            || Math.abs(rowFat-headerBatchFat) > tol23
@@ -10348,7 +10368,8 @@ function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
   // 2026-05-01.
   if(SWAP_OUT_EXCLUDE[dbKey]){
     var wastePctSE = isPkg ? (waste / bought) : (waste / perUnit);
-    if(wastePctSE < 0.25) return null;
+    // V156: inclusive threshold — at exactly 25%, treat as soft (don't swap).
+    if(wastePctSE <= 0.25) return null;
   }
 
   // Only solo single-meal — multi-meal/multi-portion cases are conservative skip.
@@ -14385,9 +14406,23 @@ function getShopPersons(){return shopPerson==='both'?['him','her']:shopPerson===
 function setShopTrip(t){shopTrip=t;renderShop();}
 function setShopPerson(p){shopPerson=p;renderShop();}
 function toggleCustomMeal(d,s){
+  // V156: gate on whether the slot actually has content. For late_snack the
+  // slot must have an ingredients[] array; for other slots a meal id must be
+  // set. Without the gate, this function silently created orphan
+  // CUSTOM_SHOP_SEL keys for empty late_snack slots — harmless (skipped at
+  // shop time) but inconsistent with toggleCustomDay's behavior.
   const persons=getShopPersons();
-  const allChecked=persons.every(function(p){return !!CUSTOM_SHOP_SEL[sk(p,d,s)];});
-  persons.forEach(function(p){
+  function _hasSlot(p){
+    if(s==='late_snack'){
+      const ls=LATE_SNACK[pk(p,d)];
+      return !!(ls && ls.ingredients && ls.ingredients.length);
+    }
+    return !!getMealId(p,d,s);
+  }
+  const eligible=persons.filter(_hasSlot);
+  if(!eligible.length){renderShop();return;}
+  const allChecked=eligible.every(function(p){return !!CUSTOM_SHOP_SEL[sk(p,d,s)];});
+  eligible.forEach(function(p){
     const k=sk(p,d,s);
     if(allChecked)delete CUSTOM_SHOP_SEL[k];
     else CUSTOM_SHOP_SEL[k]=true;
@@ -15042,6 +15077,13 @@ function switchWeek(w){
   // rebuilds fresh from the new SEL.
   invalidateLeftoverCache();
   Object.keys(_postRandomizeCache).forEach(function(k){delete _postRandomizeCache[k];});
+  // V156 (2026-05-19): also clear _autoLinkColorCache on week switch. Cache
+  // key is groupId composed from (anchor p,d,s,mealId). Two weeks can produce
+  // identical groupIds (same meal on same anchor day/slot), so a color
+  // allocated for week A's group could be reused for week B even if the
+  // available-color set differs. Symptom: link group on week B picks a
+  // wrong color the first render after switching from week A.
+  Object.keys(_autoLinkColorCache).forEach(function(k){delete _autoLinkColorCache[k];});
   // V147 (2026-05-14): also clear custom shopping selections. These are
   // transient (not persisted to localStorage or weekData), keyed by
   // person_day_slot or mealId — both ambiguous across weeks. Pre-V147 the
@@ -20753,6 +20795,19 @@ window.MPStress=(function(){
       Object.keys(_scheduleEditPreserveSel).forEach(function(k){delete _scheduleEditPreserveSel[k];});
       Object.keys(_scheduleEditClearedLinkSides).forEach(function(k){delete _scheduleEditClearedLinkSides[k];}); // V84
       _scheduleEditSnapshot = null;
+      // V156: also reset paint-mode globals + _autoLinkColorCache. If an
+      // earlier op threw between entering paint mode and exiting, the next
+      // op would start with _paintMode=true and stale queued slots / mealId.
+      // The color cache is keyed by groupId — same groupId across ops can
+      // reuse a stale color if the allocator state differs. Defensive.
+      if(typeof _paintMode !== 'undefined') _paintMode = false;
+      if(typeof _paintQueued !== 'undefined') Object.keys(_paintQueued).forEach(function(k){delete _paintQueued[k];});
+      if(typeof _paintMealId !== 'undefined') _paintMealId = '';
+      if(typeof _paintSlot !== 'undefined') _paintSlot = '';
+      if(typeof _paintExistingColorIdx !== 'undefined') _paintExistingColorIdx = -1;
+      if(typeof _autoLinkColorCache === 'object' && _autoLinkColorCache){
+        Object.keys(_autoLinkColorCache).forEach(function(k){delete _autoLinkColorCache[k];});
+      }
     }
     function _smWipeUserState(){
       Object.keys(OVERRIDES).forEach(function(k){
@@ -20911,6 +20966,17 @@ window.MPStress=(function(){
         if(typeof loadWeekState === 'function') loadWeekState('this');
       }
       restore(JSON.parse(JSON.stringify(snap)));
+      // V156: same paint-mode + _autoLinkColorCache reset as the
+      // scenario-runner. Sequential chains can leak paint/link state
+      // between scenarios if an op throws.
+      if(typeof _paintMode !== 'undefined') _paintMode = false;
+      if(typeof _paintQueued !== 'undefined') Object.keys(_paintQueued).forEach(function(k){delete _paintQueued[k];});
+      if(typeof _paintMealId !== 'undefined') _paintMealId = '';
+      if(typeof _paintSlot !== 'undefined') _paintSlot = '';
+      if(typeof _paintExistingColorIdx !== 'undefined') _paintExistingColorIdx = -1;
+      if(typeof _autoLinkColorCache === 'object' && _autoLinkColorCache){
+        Object.keys(_autoLinkColorCache).forEach(function(k){delete _autoLinkColorCache[k];});
+      }
     }
     function _smWipeUserState(){
       Object.keys(OVERRIDES).forEach(function(k){
