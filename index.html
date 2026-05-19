@@ -454,8 +454,8 @@ var NUTRI_DB = {
   // INV13. Solo floor is "at least half a cup" so single-portion cooks land
   // at a recognizable portion. Aromatics (red onion, celery, scallion,
   // poblano) keep their existing tighter splits.
-  'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.5, dampScale:0.5},
-  'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.5, dampScale:0.5},
+  'baby spinach':          {kcal:7,   pro:0.9,fat:0.1, carb:1.1, unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, bulkOz:true, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.5, dampScale:0.5},
+  'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, bulkOz:true, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.5, dampScale:0.5},
   'lettuce':               {kcal:10,  pro:0.7,fat:0.2, carb:1.8, unit:'cup', produce:{perWhole:3,label:'romaine heart',acceptableWaste:true}, minAmt:0.5, maxAmt:3, dampScale:0.5},
   'broccoli':              {kcal:31,  pro:2.6,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'head broccoli'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
   'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
@@ -3747,6 +3747,25 @@ function _autoApplyFatBoosts(target){
         // (INV23) drift when later surgical ops walked the batch.
         var _portions = (typeof _getBatchPortions === 'function')
           ? _getBatchPortions(p,d,s) : [{p:p,d:d,s:s}];
+        // V157 (2026-05-19): geometry-aware bound clamp. Pre-V157 boost
+        // could write past db.maxAmt(Solo). E.g., tuna_white_bean has
+        // olive oil = 1 tbsp recipe-base; boost adds 0.5 → 1.5 tbsp.
+        // olive oil maxAmtSolo=1, maxAmt=1.5. Solo cooks would have
+        // exceeded the solo cap. INV13 used to skip _fatBoost overrides,
+        // masking the violation. V157 also removes that skip, so boost
+        // is responsible for staying in bounds.
+        var dbBoost = NUTRI_DB[boost.dbKey];
+        if(dbBoost){
+          var capB = dbBoost.maxAmt !== undefined ? dbBoost.maxAmt : Infinity;
+          var capS = dbBoost.maxAmtSolo !== undefined ? dbBoost.maxAmtSolo : capB;
+          var isBatch = _portions.length > 1;
+          var cap = isBatch ? capB : capS;
+          if(newAmt > cap) newAmt = cap;
+          // If clamp brings us to-or-below existAmt, the boost is a no-op
+          // for this slot — skip the write to avoid setting scalable:false
+          // on what would be an unchanged value.
+          if(newAmt <= existAmt) continue;
+        }
         _portions.forEach(function(pt){
           setOverride(pt.p, pt.d, pt.s, writeIdx, 'dbKey', boost.dbKey);
           setOverride(pt.p, pt.d, pt.s, writeIdx, 'amt', newAmt);
@@ -4210,12 +4229,13 @@ function shopQtyWithCount(dbKey,qtyObj){
   const db=NUTRI_DB[dbKey];
   if(!db)return base;
 
-  // Custom display: leafy greens — show total oz needed (rounded up to 0.5oz).
-  // 3.5oz container holds db.produce.perWhole cups (1.5c for spinach/kale).
-  // User wants oz total since leafy greens are typically sold by oz with
-  // varying container sizes (3.5oz / 5oz / bagged); count-of-containers is
-  // less actionable than oz needed. 2026-05-01.
-  if((dbKey==='baby spinach' || dbKey==='kale') && db.produce && db.produce.perWhole>0){
+  // Custom display: bulk-oz items (leafy greens) — show total oz needed,
+  // rounded up to 0.5oz. Bulk-oz items are sold by oz in varying container
+  // sizes (3.5oz / 5oz / bagged), so count-of-containers is less actionable
+  // than the oz total. db.produce.perWhole gives cups-per-container.
+  // 2026-05-01; V157 (2026-05-19) gated on db.bulkOz flag (was hardcoded
+  // 'baby spinach'/'kale'). Bok choy stays as stalk-count (not bulkOz).
+  if(db.bulkOz && db.produce && db.produce.perWhole>0){
     var ozPerCup=3.5/db.produce.perWhole;
     var ozTotal=Math.ceil(qtyObj.num*ozPerCup*2)/2;
     return ozTotal+' oz';
@@ -4312,9 +4332,10 @@ function shopQtyAsCacheUnits(dbKey, qtyObj){
   if(!qtyObj || qtyObj.num <= 0) return 0;
   const db = NUTRI_DB[dbKey];
   if(!db) return qtyObj.num;
-  // Leafy oz (spinach/kale): display rounds to 0.5oz; bought-in-cups =
+  // Bulk-oz items (leafy greens): display rounds to 0.5oz; bought-in-cups =
   // ozTotal / ozPerCup. Tiny over-buy (~0.14 cup typical).
-  if((dbKey==='baby spinach' || dbKey==='kale') && db.produce && db.produce.perWhole>0){
+  // V157 (2026-05-19): gated on db.bulkOz (was hardcoded names).
+  if(db.bulkOz && db.produce && db.produce.perWhole>0){
     const ozPerCup = 3.5/db.produce.perWhole;
     const ozTotal = Math.ceil(qtyObj.num * ozPerCup * 2)/2;
     return ozTotal / ozPerCup;
@@ -4391,8 +4412,9 @@ function _parseShopDisplayToCache(displayed, dbKey, unit){
   if(!displayed || displayed === '—') return 0;
   const db = NUTRI_DB[dbKey];
   if(!db) return parseFloat(displayed) || 0;
-  // Leafy oz: "14 oz" → ozTotal / ozPerCup = cups
-  if((dbKey === 'baby spinach' || dbKey === 'kale') && db.produce && db.produce.perWhole > 0){
+  // Bulk-oz items (leafy greens): "14 oz" → ozTotal / ozPerCup = cups
+  // V157 (2026-05-19): gated on db.bulkOz (was hardcoded names).
+  if(db.bulkOz && db.produce && db.produce.perWhole > 0){
     const m = displayed.match(/^([\d.]+)\s*oz/);
     if(m){
       const ozTotal = parseFloat(m[1]);
@@ -4623,13 +4645,14 @@ function buildShoppingList(trip,who){
       const mealId=parts.slice(0,-1).join('_');
       const p=parts[parts.length-1];
       if(persons.indexOf(p)<0)return;
-      // V155 (2026-05-19): dedupe with CUSTOM_PLAN_SEL. If the same mealId
-      // is selected in both pickers, the plan picker already added the
-      // meal's ingredients (at balanced amounts). Pre-V155 the recipe
-      // picker would add a SECOND copy (at raw amounts) → double-count.
-      // Plan picker wins because its balanced amounts reflect the actual
-      // post-pipeline cooking quantities for this week.
-      if(CUSTOM_PLAN_SEL[mealId])return;
+      // V157 (2026-05-19): dedupe removed (was V155). If user ticks the
+      // same mealId in BOTH pickers, they want both contributions — the
+      // PLAN entries cover all scheduled instances for this week, and the
+      // RECIPE entry adds one EXTRA base-recipe copy (for "cook it once
+      // more" use cases). Pre-V157 dedupe silently dropped the recipe
+      // contribution, leaving the user's tick visually checked but doing
+      // nothing. The UI's visual+functional inconsistency was confusing.
+      // To avoid both: leave one box unchecked.
       const m=getMeal(mealId);
       if(!m||!m[p])return;
       const port=m[p];
@@ -6253,8 +6276,9 @@ function verifyInvariants(){
         // Silent acceptableWaste — explicit "ignore this divergence"
         if(db.pkg && db.pkg.acceptableWaste) return;
         if(db.produce && db.produce.acceptableWaste) return;
-        // Leafy oz hardcoded skip (ceil-to-0.5oz over-buy is rounding noise)
-        if(item.dbKey==='baby spinach' || item.dbKey==='kale') return;
+        // Bulk-oz skip (ceil-to-0.5oz over-buy is rounding noise).
+        // V157 (2026-05-19): gated on db.bulkOz (was hardcoded names).
+        if(db.bulkOz) return;
         const unit=(item.hisSum||item.herSum||{}).unit;
         const qtyObj={num:sum, unit:unit};
         const bought=shopQtyAsCacheUnits(item.dbKey, qtyObj);
@@ -6889,23 +6913,24 @@ function verifyInvariants(){
         var isSoloSlot=!slotLo;
         // 2026-05-05: detect USER pins on this slot — user-set overrides
         // bypass min/max checks so users can pick arbitrary values.
-        // V93 (2026-05-08): also detect _fatBoost overrides — auto-applied
-        // by recipe metadata, bypass min/max same as user pins.
+        // V157 (2026-05-19): removed _fatBoost skip. Pre-V157 INV13 also
+        // skipped _fatBoost-tagged entries, masking violations where boost
+        // wrote past db.maxAmt(Solo). Audit-found: tuna_white_bean + bibimbap
+        // boosted olive/sesame oil to 1.5 tbsp on solo cooks (maxAmtSolo=1).
+        // _autoApplyFatBoosts now clamps to geometry-aware cap, so this
+        // skip would just be redundant; removing it surfaces any future
+        // boost-writer that forgets to clamp.
         const _slotOv = OVERRIDES[sk(p,d,s)] || [];
         const _userIdxs = {};
         _slotOv.forEach(function(o){
           if(o._userSet===true) _userIdxs[o.idx]=true;
-          if(o._fatBoost===true) _userIdxs[o.idx]=true;
         });
         bal.forEach(function(bi,_ix){
           var db=NUTRI_DB[bi.dbKey];if(!db)return;
           // Skip zero / near-zero amounts (ingredient effectively absent).
           if(bi.amt<0.001)return;
-          // Skip user pins / fat-boost overrides — both allowed any value.
+          // Skip user pins — user-allowed any value.
           if(_userIdxs[_ix])return;
-          // V93: also skip if the ingredient itself carries _fatBoost (added
-          // beyond recipe.length, no idx-based detection).
-          if(bi._fatBoost===true)return;
           var effMinCheck=(isSoloSlot && typeof db.minAmtSolo==='number')
             ? db.minAmtSolo
             : (db.minAmt!=null ? db.minAmt : null);
@@ -14904,14 +14929,27 @@ function loadWeeks(){
   if(thisMonday && thisMonday!==currentMonday){
     // The real-world week has changed
     if(nextMon===currentMonday){
-      // Shift: last <- this (full state), this <- next (with schedule copied forward), next <- empty
-      const prevSchedule=JSON.parse(JSON.stringify(weekData['this'].sharedSchedule||{}));
+      // Shift: last <- this (full state), this <- next (whatever user planned),
+      // next <- empty.
+      // V157 (2026-05-19): no longer carry old this.sharedSchedule forward.
+      // Pre-V157, an old manual "Wed lunch shared" setting on this would
+      // propagate to new this AND new next indefinitely. Now: new this
+      // inherits whatever user planned in next; new next is empty, so
+      // initSharedSchedule will apply defaults (Mon-Sun dinners) on first
+      // visit. User's intentional "empty schedule" choice on a given week
+      // stays scoped to that week — doesn't infect the next calendar week.
       weekData['last']=JSON.parse(JSON.stringify(weekData['this']));
       weekData['last'].monday=weekData['this'].monday;
       weekData['this']=JSON.parse(JSON.stringify(weekData['next']));
       weekData['this'].monday=currentMonday;
-      weekData['this'].sharedSchedule=prevSchedule; // carry schedule forward
-      weekData['next']={sel:{},monday:nextMonday(),sharedSchedule:JSON.parse(JSON.stringify(prevSchedule))};
+      weekData['next']={sel:{},monday:nextMonday()};
+      // V157: rolled-over weeks reset sharedScheduleInitialized so the
+      // default schedule (Mon-Sun dinners shared) applies on first visit
+      // if the carried-forward state was empty. A user who deliberately
+      // cleared 'next' with the V149 flag set would otherwise see that
+      // empty state stick when 'next' rolls into 'this'.
+      if(weekData['this']) weekData['this'].sharedScheduleInitialized = false;
+      if(weekData['next']) weekData['next'].sharedScheduleInitialized = false;
     } else {
       // More than a week has passed, or dates don't match — reset all
       weekData['last']={sel:{},monday:lastMonday()};
@@ -15901,6 +15939,11 @@ function addNewDbIngredient(){
   if(minAmt>0)entry.minAmt=minAmt;
   if(document.getElementById('rf_new_halfSnap').value==='yes')entry.halfSnap=true;
   if(document.getElementById('rf_new_wholeOnly').value==='yes')entry.wholeOnly=true;
+  // V157 (2026-05-19): bulkOz flag — sold by oz, varying container size
+  // (e.g. spinach 3.5oz/5oz). Shopping shows oz total; INV3 skips strict
+  // check (ceil-to-0.5oz over-buy is rounding noise).
+  const bulkOzEl=document.getElementById('rf_new_bulkOz');
+  if(bulkOzEl && bulkOzEl.value==='yes')entry.bulkOz=true;
 
   // Optional package fields
   const pkgSize=parseFloat(document.getElementById('rf_new_pkgSize').value);
@@ -15934,6 +15977,8 @@ function addNewDbIngredient(){
   document.getElementById('rf_new_wholeOnly').value='no';
   document.getElementById('rf_new_pkgUnit').value='';
   document.getElementById('rf_new_pkgType').value='';
+  // V157
+  if(document.getElementById('rf_new_bulkOz')) document.getElementById('rf_new_bulkOz').value='no';
 }
 function saveRecipe(){const meal=buildCustomMeal();if(!meal)return;meal._ts=Date.now();customMeals[meal.id]=meal;saveCustomMeals();injectCustomMeals();closeRecipeForm();renderRecipesView();}
 function closeRecipeForm(){editingRecipeId=null;selectedSlots=[];selectedRecipePersons='both';renderRecipesView();}
@@ -16101,6 +16146,13 @@ function renderRecipesView(){
     +'<div class="ni-field" style="flex:1"><label>Pkg Unit</label><select id="rf_new_pkgUnit"><option value="">—</option><option value="oz">oz</option><option value="cups">cups</option></select></div>'
     +'<div class="ni-field" style="flex:1"><label>Drained</label><input id="rf_new_pkgDrained" type="number" min="0" step="0.25" placeholder="—"></div>'
     +'<div class="ni-field" style="flex:1"><label>Pkg Type</label><select id="rf_new_pkgType"><option value="">—</option><option value="can">can</option><option value="carton">carton</option><option value="jar">jar</option><option value="container">container</option><option value="pouch">pouch</option></select></div>'
+    +'</div>'
+    // V157 (2026-05-19): Bulk-Oz option for leafy-style items sold by oz
+    // in varying container sizes (spinach 3.5oz/5oz/bagged). Shopping list
+    // displays "X oz" total instead of "N containers"; INV3 skips
+    // strict-check on these (the ceil-to-0.5oz over-buy is rounding noise).
+    +'<div class="ni-row">'
+    +'<div class="ni-field" style="flex:1"><label>Sold by Oz</label><select id="rf_new_bulkOz"><option value="no">No</option><option value="yes">Yes (varying bag sizes)</option></select></div>'
     +'</div>'
     +'<button class="rf-save" style="padding:5px 14px;font-size:11px;margin-top:8px" onclick="addNewDbIngredient()">Add to Database</button>'
     +'</div>':'')
