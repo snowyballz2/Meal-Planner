@@ -3356,6 +3356,16 @@ function _v85ClearSideVisualIfAny(side, d, s){
     _scheduleEditPreserveSel[sk_this] = true;
     _scheduleEditPreserveSel[sk_other] = true;
     _scheduleEditTouchedSides[sk_other] = true; // shared-break touches both
+    // V159 (2026-05-19): also clear link layer if the cell has one. Pre-
+    // V159 the shared-branch returned without stamping
+    // _scheduleEditClearedLinkSides, so a cell with BOTH shared AND a link
+    // group survived the first tap with the link visual still showing —
+    // violating the V85 "every-first-tap-clears" contract. Stamp both
+    // halves (shared affects both).
+    if(hasLink){
+      _scheduleEditClearedLinkSides[sk_this] = true;
+      _scheduleEditClearedLinkSides[sk_other] = true;
+    }
     return true;
   }
   // Eat-out: V70 cascade handles EAT_OUT/USER_EDITED/MANUAL_SET clear
@@ -3369,6 +3379,9 @@ function _v85ClearSideVisualIfAny(side, d, s){
       if(cur === 'eo-her') delete SHARED_SCHEDULE[k];
       else if(cur === 'eo-both') SHARED_SCHEDULE[k] = 'eo-him';
     }
+    // V159: same link-side clear for completeness — eat-out + link
+    // is rare but possible.
+    if(hasLink) _scheduleEditClearedLinkSides[sk_this] = true;
     return true;
   }
   // Skip: clear per-side
@@ -3377,6 +3390,8 @@ function _v85ClearSideVisualIfAny(side, d, s){
     delete USER_EDITED[sk_this];
     delete MANUAL_SET[sk_this];
     _scheduleEditPreserveSel[sk_this] = true;
+    // V159: same link-side clear for skip + link case.
+    if(hasLink) _scheduleEditClearedLinkSides[sk_this] = true;
     return true;
   }
   // Link group + manual purple: clear both layers if present (so the
@@ -3585,14 +3600,52 @@ function saveSharedSchedule(){
 }
 
 var EAT_OUT_DB=[]; // saved eat-out meals for reuse
-function loadEatOutDB(){EAT_OUT_DB=lsGet('eatOutDB',[]);}
+// V159 (2026-05-19): stable identity via `id` field. Pre-V159, identity
+// was `name+restaurant` — renaming a saved entry created a NEW identity
+// and orphaned the old one (visible as duplicates in the dropdown +
+// non-propagation across sync). The `id` field is assigned at create
+// time and never changes. Backward compat: legacy entries without `id`
+// get one minted via _ensureEatOutId on load + before merge.
+// V159: also support deletion tombstones via `_deletedAt` ts. Pre-V159
+// deleted entries propagated as "still exists" from the non-deleter
+// phone on next pull (no tombstone, so the merge re-injected them).
+function _mintEatOutId(){return 'eo_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);}
+function _ensureEatOutIds(arr){
+  (arr||[]).forEach(function(e){
+    if(!e || e.id) return;
+    e.id = _mintEatOutId();
+  });
+}
+function loadEatOutDB(){
+  EAT_OUT_DB = lsGet('eatOutDB', []);
+  _ensureEatOutIds(EAT_OUT_DB);
+  _gcEatOutTombstones();
+}
 function saveEatOutDB(){lsSet('eatOutDB',EAT_OUT_DB);}
 function addToEatOutDB(entry){
   entry._ts=Date.now();
-  // Update existing match (name+restaurant) with newer macros, else add
-  const existing=EAT_OUT_DB.find(function(e){return e.name===entry.name&&e.restaurant===entry.restaurant;});
-  if(existing){Object.assign(existing,entry);}
-  else{EAT_OUT_DB.push(entry);}
+  // V159: match by stable id when present, else fall back to name+restaurant
+  // for legacy entries without ids.
+  var existing=null;
+  if(entry.id){
+    existing=EAT_OUT_DB.find(function(e){return e.id===entry.id;});
+  }
+  if(!existing){
+    existing=EAT_OUT_DB.find(function(e){
+      return !e._deletedAt && e.name===entry.name && e.restaurant===entry.restaurant;
+    });
+  }
+  if(existing){
+    if(!entry.id) entry.id = existing.id || _mintEatOutId();
+    if(existing._deletedAt){
+      // Re-adding an entry that was tombstoned. Clear tombstone, update.
+      delete existing._deletedAt;
+    }
+    Object.assign(existing,entry);
+  } else {
+    if(!entry.id) entry.id = _mintEatOutId();
+    EAT_OUT_DB.push(entry);
+  }
   saveEatOutDB();
 }
 let topTab='meals',person='him',day='Monday',shopTrip='cook1',shopPerson='both';
@@ -7985,11 +8038,16 @@ function buildPrepBanner(day){
 
 // 3a. Eat-out form HTML
 function buildEatOutFormHtml(person, day, s, k, eo, topRowPills, setPill){
+  // V159 (2026-05-19): filter out tombstoned entries; use stable e.id as
+  // the option value (was array index). Index-based identity broke when
+  // tombstones changed the array's effective shape, and entry edits via
+  // sync moved positions.
+  const visibleEatOuts = _eatOutDBVisible();
   // Build saved meals dropdown
-  const savedOpts=EAT_OUT_DB.length?'<option value="">— Load from history —</option>'+EAT_OUT_DB.map(function(e,i){return'<option value="'+i+'">'+e.name+(e.restaurant?' ('+e.restaurant+')':'')+' · '+e.kcal+' kcal</option>';}).join('')
-    +'<option disabled>──────────</option>'+EAT_OUT_DB.map(function(e,i){return'<option value="del_'+i+'">✕ Delete: '+e.name+'</option>';}).join('')
+  const savedOpts=visibleEatOuts.length?'<option value="">— Load from history —</option>'+visibleEatOuts.map(function(e){return'<option value="'+e.id+'">'+e.name+(e.restaurant?' ('+e.restaurant+')':'')+' · '+e.kcal+' kcal</option>';}).join('')
+    +'<option disabled>──────────</option>'+visibleEatOuts.map(function(e){return'<option value="del_'+e.id+'">✕ Delete: '+e.name+'</option>';}).join('')
     :'';
-  const savedDropdown=EAT_OUT_DB.length?'<select class="eo-saved" onchange="var v=this.value;if(v.indexOf(\'del_\')===0){deleteEatOutEntry(parseInt(v.slice(4)));return;}if(v!==\'\')loadEatOutEntry(\''+person+'\',\''+day+'\',\''+s+'\',parseInt(v))">'+savedOpts+'</select>':'';
+  const savedDropdown=visibleEatOuts.length?'<select class="eo-saved" onchange="var v=this.value;if(v.indexOf(\'del_\')===0){deleteEatOutEntry(v.slice(4));return;}if(v!==\'\')loadEatOutEntry(\''+person+'\',\''+day+'\',\''+s+'\',v)">'+savedOpts+'</select>':'';
 
   // Build eat-out impact summary
   let eoSummary='';
@@ -9402,21 +9460,65 @@ function saveEatOut(p,d,s){
   addToEatOutDB({name:eo.name,restaurant:eo.restaurant,kcal:eo.kcal,pro:eo.pro,fat:eo.fat,carb:eo.carb});
   renderMeals();
 }
-function loadEatOutEntry(p,d,s,idx){
+function loadEatOutEntry(p,d,s,idOrIdx){
   // V43 (2026-05-07): close the Y1 audit gap. Pre-V43 this just wrote
   // EAT_OUT[k] from a saved entry — no SKIPPED clear, no MANUAL_SET, no
   // SHARED_SCHEDULE update, no autoSaveWeek. A user with SKIPPED on a
   // slot who loaded a saved Eat Out entry would end up with both flags
   // set. Delegate to the V43 helper which mirrors toggleEatOut's V31/V34
   // semantics, then run the same post-mutation triggers.
-  const entry=EAT_OUT_DB[idx];if(!entry)return;
+  // V159 (2026-05-19): accept stable id OR numeric idx (backward compat
+  // for any caller still passing index).
+  var entry = null;
+  if(typeof idOrIdx === 'string'){
+    entry = EAT_OUT_DB.find(function(e){return e.id===idOrIdx && !e._deletedAt;});
+  } else {
+    entry = EAT_OUT_DB[idOrIdx];
+    if(entry && entry._deletedAt) entry = null;
+  }
+  if(!entry) return;
   _applyEatOutOn(p, d, s, {
     name:entry.name, restaurant:entry.restaurant,
     kcal:entry.kcal, pro:entry.pro, fat:entry.fat, carb:entry.carb
   });
   invalidateLeftoverCache();autoSaveWeek();renderMeals();
 }
-function deleteEatOutEntry(idx){EAT_OUT_DB.splice(idx,1);saveEatOutDB();renderMeals();}
+function deleteEatOutEntry(idOrIdx){
+  // V159 (2026-05-19): tombstone instead of splice. Pre-V159, splice
+  // removed the entry locally, but next sync pull saw the entry still
+  // present on the OTHER phone and re-injected it. Tombstone with
+  // _deletedAt timestamp propagates the deletion: merge logic checks
+  // both _ts (entry update) and _deletedAt (deletion) and the newer
+  // operation wins. The UI filters out tombstoned entries so they
+  // disappear locally. Tombstones older than 30 days get GC'd at load
+  // (low-traffic; usually only a handful of deletes).
+  // V159: accept stable id OR numeric idx.
+  var entry = null;
+  if(typeof idOrIdx === 'string'){
+    entry = EAT_OUT_DB.find(function(e){return e.id===idOrIdx;});
+  } else {
+    entry = EAT_OUT_DB[idOrIdx];
+  }
+  if(!entry) return;
+  entry._deletedAt = Date.now();
+  entry._ts = entry._deletedAt;
+  saveEatOutDB();
+  renderMeals();
+}
+function _eatOutDBVisible(){
+  // Used by UI dropdowns to filter out tombstoned entries.
+  return EAT_OUT_DB.filter(function(e){return !e._deletedAt;});
+}
+function _gcEatOutTombstones(){
+  // Drop tombstones older than 30 days. Called once at load + after merge.
+  var cutoff = Date.now() - 30*24*60*60*1000;
+  for(var i=EAT_OUT_DB.length-1; i>=0; i--){
+    var e = EAT_OUT_DB[i];
+    if(e && e._deletedAt && e._deletedAt < cutoff){
+      EAT_OUT_DB.splice(i,1);
+    }
+  }
+}
 function changeMeal(slot,mealId){
   const selKey=sk(person,day,slot);
   stampSel(selKey,mealId);
@@ -14986,7 +15088,25 @@ function loadWeeks(){
   if(!weekData['last'].monday)weekData['last'].monday=lastMonday();
   if(!weekData['this'].monday)weekData['this'].monday=currentMonday;
   if(!weekData['next'].monday)weekData['next'].monday=nextMonday();
-  
+
+  // V159 (2026-05-19): migrate legacy 'skip-*' shared-schedule values on
+  // ALL three weeks. Pre-V159, initSharedSchedule only migrated the active
+  // week — last/next stayed in legacy format until visited. With M7's
+  // rollover change (next.sharedSchedule no longer carries forward), this
+  // matters less, but sync + cold-load scenarios can still receive legacy
+  // values on non-active weeks. One-shot sweep at loadWeeks.
+  ['last','this','next'].forEach(function(w){
+    var ss = weekData[w] && weekData[w].sharedSchedule;
+    if(!ss) return;
+    Object.keys(ss).forEach(function(k){
+      if(ss[k] === true) ss[k] = 'shared';
+      var v = ss[k];
+      if(v === 'skip-him') ss[k] = 'eo-him';
+      else if(v === 'skip-her') ss[k] = 'eo-her';
+      else if(v === 'skip-both') ss[k] = 'eo-both';
+    });
+  });
+
   // Load active week's state into globals
   loadWeekState(activeWeek);
 
@@ -15214,6 +15334,15 @@ function mergeSyncData(remote){
   // locally is "remote has data, local doesn't" → take remote).
   var remoteV = remote.version || 3;
   var remoteIsLegacy = remoteV < 4;
+  // V159 (2026-05-19): force-flush pending autoSaveWeek before merge. Pre-
+  // V159 the LOCK_MANUAL_SLOTS check below read weekData[w].manualSet,
+  // which is debounced 500ms behind the runtime MANUAL_SET global via
+  // autoSaveWeek. If the user marked a slot MANUAL_SET and pulled within
+  // 500ms, the lock failed to protect — remote LWW overwrote the freshly-
+  // picked slot. Sync flush right before merge ensures the lock check
+  // sees the latest state.
+  clearTimeout(_selSaveTimer);
+  try { saveWeeks(); } catch(e) { /* defensive; never block sync on save */ }
 
   // Week data: merge by MONDAY DATE, not by position name.
   // Build a map of remote weeks keyed by monday date.
@@ -15463,17 +15592,42 @@ function mergeSyncData(remote){
     });
   }
 
-  // Eat-out DB: per-entry last-write-wins via entry._ts (v4+). Identity is
-  // name+restaurant. Remote newer ts overwrites local entry's macros.
+  // Eat-out DB: per-entry last-write-wins via entry._ts (v4+).
+  // V159 (2026-05-19): identity prefer stable `id` field; fall back to
+  // name+restaurant for legacy entries without ids. Tombstoned entries
+  // (with _deletedAt) propagate as deletions — remote tombstone newer
+  // than local entry's _ts wins, marking local as tombstoned.
   if(remote.eatOutDB){
+    // Mint ids for any legacy remote entries before merge so the dedupe
+    // works consistently from this point on.
+    _ensureEatOutIds(remote.eatOutDB);
     remote.eatOutDB.forEach(function(rEntry){
-      var idx=EAT_OUT_DB.findIndex(function(e){return e.name===rEntry.name&&e.restaurant===rEntry.restaurant;});
-      var rt=remoteIsLegacy?0:(rEntry._ts||0);
-      if(idx<0){EAT_OUT_DB.push(rEntry);return;}
-      var lEntry=EAT_OUT_DB[idx];
-      var lt=lEntry._ts||0;
-      if(rt>lt){EAT_OUT_DB[idx]=rEntry;}
+      var idx = -1;
+      if(rEntry.id){
+        idx = EAT_OUT_DB.findIndex(function(e){return e.id===rEntry.id;});
+      }
+      if(idx < 0){
+        // Legacy fallback: name+restaurant. Skip if local entry has an id
+        // but rEntry doesn't — id-based identity takes precedence.
+        idx = EAT_OUT_DB.findIndex(function(e){
+          return !e.id && e.name===rEntry.name && e.restaurant===rEntry.restaurant;
+        });
+      }
+      var rt = remoteIsLegacy ? 0 : (rEntry._ts || 0);
+      if(idx<0){
+        // New entry from remote. Push as-is (includes tombstone if present;
+        // GC at load drops old tombstones).
+        EAT_OUT_DB.push(rEntry);
+        return;
+      }
+      var lEntry = EAT_OUT_DB[idx];
+      var lt = lEntry._ts || 0;
+      if(rt > lt){
+        // Remote wins — full replacement, including tombstone status.
+        EAT_OUT_DB[idx] = rEntry;
+      }
     });
+    _gcEatOutTombstones();
   }
 
   // V148 (2026-05-14): legacy top-level adjTargets merger DELETED.
