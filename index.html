@@ -10721,10 +10721,128 @@ function freezeTripTotals(randTarget, attemptSwap){
   // freeze fails, accept the natural amounts; INV20 fires at the weekly
   // waste check (not per-trip), and softWaste:true keeps it soft.
   var allWeekDays = DAYS.slice();
+  // V166 (2026-05-19): combined-week swap fallback. When combined freeze
+  // FAILS for a carry item AND _trySwapForWaste finds weekly waste >25%,
+  // swap the offending solo meal. Reclaims swap-out behavior for cases
+  // like solo viet_tofu_soup (2c broth, 50% week waste) that V164 had
+  // accepted as soft fires. Co-contributor cleanup scoped to the swap
+  // target's trip days only (NOT all 7) — non-carry pkg items in the
+  // other trip keep their per-trip freeze pins intact.
+  var c1DaysFTT = TRIP_DAYS_STATIC.cook1 || [];
+  var c1SetFTT = {}; c1DaysFTT.forEach(function(d){c1SetFTT[d]=true;});
   allItems.forEach(function(dbKey){
     if(!_isCarryItem(dbKey)) return;
     var info = _freezeOneItem(dbKey, allWeekDays, persons, leftovers);
-    if(!info) return;
+    if(!info){
+      if(!attemptSwap) return;
+      var cSwap = _trySwapForWaste(dbKey, 'week', allWeekDays, persons, leftovers);
+      if(!cSwap) return;
+      var cKey = sk(cSwap.p, cSwap.d, cSwap.s);
+      if(window._swapDiag && window._swapDiag.swappedKeys[cKey]){
+        window._swapDiag.refused.push({
+          p:cSwap.p, d:cSwap.d, s:cSwap.s, dbKey:dbKey, trip:'week',
+          pass:window._swapDiag.passLabel,
+          priorSwap:window._swapDiag.swappedKeys[cKey]
+        });
+        return;
+      }
+      SEL[cKey] = cSwap.newMealId;
+      if(weekData[activeWeek] && weekData[activeWeek].ts){
+        weekData[activeWeek].ts[cKey] = Date.now();
+      }
+      clearOverrides(cSwap.p, cSwap.d, cSwap.s);
+      affectedDays[cSwap.p+'_'+cSwap.d] = {p:cSwap.p, d:cSwap.d};
+      if(window._swapDiag){
+        var cRec = {p:cSwap.p, d:cSwap.d, s:cSwap.s, dbKey:dbKey, trip:'week',
+          pass:window._swapDiag.passLabel,
+          oldMealId:cSwap.oldMealId, newMealId:cSwap.newMealId,
+          sharedSlot:!!cSwap.sharedSlot};
+        window._swapDiag.swappedKeys[cKey] = cRec;
+        window._swapDiag.swaps.push(cRec);
+      }
+      if(cSwap.sharedSlot){
+        var cOther = cSwap.p==='him' ? 'her' : 'him';
+        var cOKey = sk(cOther, cSwap.d, cSwap.s);
+        SEL[cOKey] = cSwap.newMealId;
+        if(weekData[activeWeek] && weekData[activeWeek].ts){
+          weekData[activeWeek].ts[cOKey] = Date.now();
+        }
+        clearOverrides(cOther, cSwap.d, cSwap.s);
+        affectedDays[cOther+'_'+cSwap.d] = {p:cOther, d:cSwap.d};
+        if(window._swapDiag) window._swapDiag.swappedKeys[cOKey] = cRec;
+      }
+      var swapTrip = c1SetFTT[cSwap.d] ? 'cook1' : 'cook2';
+      var swapTripDays = TRIP_DAYS_STATIC[swapTrip] || [];
+      var cOldMeal = getMeal(cSwap.oldMealId);
+      if(cOldMeal && cOldMeal.ingredients){
+        var cSwapTargets = {};
+        cSwapTargets[cKey] = true;
+        if(cSwap.sharedSlot){
+          cSwapTargets[sk(cSwap.p==='him'?'her':'him', cSwap.d, cSwap.s)] = true;
+        }
+        var _cClearIng = function(p, d, s, coKey){
+          var k3 = sk(p,d,s);
+          var mid = SEL[k3]; if(!mid) return false;
+          var mm = getMeal(mid);
+          if(!mm || !mm.ingredients) return false;
+          var ii = -1;
+          for(var jj=0; jj<mm.ingredients.length; jj++){
+            if(mm.ingredients[jj].dbKey === coKey){ ii = jj; break; }
+          }
+          if(ii < 0) return false;
+          var ovList = OVERRIDES[k3];
+          if(!ovList) return false;
+          var changed = false;
+          for(var ll=ovList.length-1; ll>=0; ll--){
+            if(ovList[ll].idx === ii){ ovList.splice(ll,1); changed = true; }
+          }
+          if(ovList.length === 0) delete OVERRIDES[k3];
+          if(changed) affectedDays[p+'_'+d] = {p:p, d:d};
+          return changed;
+        };
+        cOldMeal.ingredients.forEach(function(ing){
+          var coKey = ing.dbKey;
+          if(coKey === dbKey) return;
+          if(ROUND_PKG_ITEMS.indexOf(coKey) < 0 && ROUND_PRODUCE_ITEMS.indexOf(coKey) < 0) return;
+          swapTripDays.forEach(function(d){
+            ['him','her'].forEach(function(p){
+              ['breakfast','lunch','snack','dinner'].forEach(function(s){
+                var k4 = sk(p,d,s);
+                if(cSwapTargets[k4]) return;
+                var cleared = _cClearIng(p, d, s, coKey);
+                if(!cleared) return;
+                var lo4 = leftovers[k4];
+                var anchorLo4 = null;
+                if(lo4 && !lo4.isLeftover && lo4.portions) anchorLo4 = lo4;
+                else if(lo4 && lo4.isLeftover){
+                  for(var akey in leftovers){
+                    var alo = leftovers[akey];
+                    if(alo && !alo.isLeftover && alo.portions){
+                      for(var pi=0; pi<alo.portions.length; pi++){
+                        if(sk(alo.portions[pi].p, alo.portions[pi].d, alo.portions[pi].s) === k4){
+                          anchorLo4 = alo; break;
+                        }
+                      }
+                      if(anchorLo4) break;
+                    }
+                  }
+                }
+                if(anchorLo4){
+                  anchorLo4.portions.forEach(function(pt){
+                    if(sk(pt.p, pt.d, pt.s) === k4) return;
+                    _cClearIng(pt.p, pt.d, pt.s, coKey);
+                  });
+                }
+              });
+            });
+          });
+        });
+      }
+      invalidateLeftoverCache();
+      runBalanceAdjusters();
+      leftovers = computeLeftovers();
+      return;
+    }
     info.solos.forEach(function(so){
       if(_isUserPinned(so.p, so.d, so.s, so.idx)) return;
       var soCache = _dayBalancedCache[pk(so.p, so.d)];
