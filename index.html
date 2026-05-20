@@ -8228,11 +8228,22 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
       const recipeDbKey = (port.ingredients[ix] && port.ingredients[ix].dbKey) || '';
       const currentDbKey = a.ing.dbKey;
       const parts = [];
-      const fromAmt = (flags.priorAmt !== undefined) ? flags.priorAmt : recipeAmt;
+      // V162 (2026-05-19): match the row display's per-vs-combined context.
+      // _priorAmt and a.newAmt are stored per-portion. When this card is
+      // rendering the combined batch view (cookServings > 1) the ingredient
+      // rows show `amt × cookServings` (batch total). Scale the banner's
+      // from/to to match so the user sees "12 oz → 15 oz" on anchor combined
+      // view, "4 oz → 5 oz" on a 3-portion leftover/solo view. cookServings
+      // is the function arg — 1 for solo + per-portion leftover; N for the
+      // anchor combined view.
+      const _viewMult = cookServings || 1;
+      const fromAmtPer = (flags.priorAmt !== undefined) ? flags.priorAmt : recipeAmt;
       // Use bannerDay's balanced amount when it differs from the macro day —
       // matches the source of priorAmt.
-      const newAmtBanner = (_bannerBalanced && _bannerBalanced[ix])
+      const newAmtBannerPer = (_bannerBalanced && _bannerBalanced[ix])
         ? _bannerBalanced[ix].amt : a.newAmt;
+      const fromAmt = fromAmtPer * _viewMult;
+      const newAmtBanner = newAmtBannerPer * _viewMult;
       if(flags.userAmt !== undefined && Math.abs(newAmtBanner - fromAmt) > 0.02){
         const db = NUTRI_DB[currentDbKey];
         const unit = db ? db.unit : '';
