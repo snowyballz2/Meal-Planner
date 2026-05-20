@@ -10246,7 +10246,24 @@ function _writeUserPin(p,d,s,idx,opts){
   // (i.e. dbKey was carried from recipe). Recipe dbKey != opts.dbKey is
   // still a "the dbKey is changing" event. Detect via cache.
   const cacheDbKeyDiffers = opts.dbKey !== undefined && slotCache && slotCache[idx] && slotCache[idx].dbKey !== opts.dbKey;
-  const refreshPrior = swapInProgress || (cacheDbKeyDiffers && existing && existing._priorAmt !== undefined);
+  // V176 (2026-05-20): A5 audit fix. When cache is empty (e.g. between an
+  // invalidateLeftoverCache call and the next render rebuild) AND existing
+  // has no dbKey override, cacheDbKeyDiffers couldn't detect the swap.
+  // Result: _priorAmt (captured against OLD ingredient's amt grid) was kept
+  // across the dbKey change, breaking banner kcalDiff math.
+  // Fall back to the meal's recipe ingredient at idx as the source of truth.
+  let recipeDbKeyDiffers = false;
+  if(opts.dbKey !== undefined && !cacheDbKeyDiffers && (!existing || existing.dbKey === undefined)){
+    const _mid = SEL[sk(p,d,s)];
+    const _meal = _mid ? getMeal(_mid) : null;
+    if(_meal && _meal.ingredients && _meal.ingredients[idx]
+       && _meal.ingredients[idx].dbKey !== opts.dbKey){
+      recipeDbKeyDiffers = true;
+    }
+  }
+  const refreshPrior = swapInProgress
+    || (cacheDbKeyDiffers && existing && existing._priorAmt !== undefined)
+    || (recipeDbKeyDiffers && existing && existing._priorAmt !== undefined);
   if(opts.capturePrior && (!existing || existing._priorAmt === undefined || refreshPrior)){
     // V173 (2026-05-19): lazy-build cache fallback when _dayBalancedCache
     // is empty/stale. Pre-V173 the priorAmt defaulted to 0 when cache
