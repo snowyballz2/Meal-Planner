@@ -10051,7 +10051,23 @@ function _writeUserPin(p,d,s,idx,opts){
   const existing = ov ? ov.find(function(o){return o.idx===idx;}) : null;
   const cache = (typeof _dayBalancedCache!=='undefined') ? _dayBalancedCache[pk(p,d)] : null;
   const slotCache = cache ? cache[s] : null;
-  if(opts.capturePrior && (!existing || existing._priorAmt === undefined)){
+  // V168 (2026-05-19): refresh _priorAmt on dbKey swap.
+  // The V11 sticky-first contract preserves _priorAmt across edits to the
+  // SAME ingredient — banner shows "from {first-displayed} to {current}".
+  // But on a dbKey swap (opts.dbKey provided AND differs from the row's
+  // current dbKey), the old _priorAmt was captured for the PREVIOUS
+  // ingredient. Preserving it makes the banner kcalDiff math compute
+  // (newAmt − oldDbKey's amt) × NEW dbKey's kcal — nonsensical mix.
+  // V168: when dbKey is changing, force-refresh _priorAmt to the cache's
+  // current displayed value (the slot's amt BEFORE the swap). Subsequent
+  // amt edits chain off this new reference cleanly.
+  const swapInProgress = opts.dbKey !== undefined && existing && existing.dbKey !== undefined && existing.dbKey !== opts.dbKey;
+  // Also: first-time swap where existing row has no override-stored dbKey
+  // (i.e. dbKey was carried from recipe). Recipe dbKey != opts.dbKey is
+  // still a "the dbKey is changing" event. Detect via cache.
+  const cacheDbKeyDiffers = opts.dbKey !== undefined && slotCache && slotCache[idx] && slotCache[idx].dbKey !== opts.dbKey;
+  const refreshPrior = swapInProgress || (cacheDbKeyDiffers && existing && existing._priorAmt !== undefined);
+  if(opts.capturePrior && (!existing || existing._priorAmt === undefined || refreshPrior)){
     const priorAmt = (slotCache && slotCache[idx] && slotCache[idx].amt !== undefined) ? slotCache[idx].amt : 0;
     setOverride(p,d,s,idx,'_priorAmt', priorAmt);
   }
