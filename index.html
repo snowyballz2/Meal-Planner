@@ -4734,7 +4734,11 @@ function buildShoppingList(trip,who){
               // entries — silently skipping protects shopping output from
               // garbage ingredients.
               if(!ing.dbKey) return;
-              addShopIngredient(items, ing.dbKey, ing.amt, p);
+              // V172 (2026-05-19): use _addNonCarry wrapper so late_snack
+              // carry items flow through the combined-week carry-
+              // attribution pass below (instead of being added directly
+              // per-trip, which bypassed the carry pool).
+              _addNonCarry(items, ing.dbKey, ing.amt, p);
             });
           }
         }
@@ -4791,6 +4795,21 @@ function buildShoppingList(trip,who){
             });
           });
         });
+        // V172 (2026-05-19): include late_snack carry ingredients in the
+        // carry-attribution pool. Pre-V172 late_snack flowed through
+        // addShopIngredient directly per-trip, bypassing the carry math.
+        const _lsCarry = LATE_SNACK[pk(p,d)];
+        if(_lsCarry && _lsCarry.ingredients && _lsCarry.ingredients.length){
+          const _lsCookTrip = c1DaySet[d] ? 'cook1' : (c2DaySet[d] ? 'cook2' : null);
+          if(_lsCookTrip){
+            _lsCarry.ingredients.forEach(function(ing){
+              if(!ing.dbKey) return;
+              if(!_isCarry(ing.dbKey)) return;
+              if(!carryDemand[ing.dbKey]) carryDemand[ing.dbKey] = {him:{cook1:0,cook2:0}, her:{cook1:0,cook2:0}};
+              carryDemand[ing.dbKey][p][_lsCookTrip] += ing.amt;
+            });
+          }
+        }
       });
     });
     Object.keys(carryDemand).forEach(function(dbKey){
@@ -6451,6 +6470,22 @@ function verifyInvariants(){
             });
           });
         });
+        // V172 (2026-05-19): include late_snack carry ingredients here too,
+        // mirroring buildShoppingList. Without this INV3 expected map
+        // would undercount, false-firing 'expected-not-in-shop' for the
+        // late_snack carry contribution that buildShoppingList includes.
+        const _ls3 = LATE_SNACK[pk(p,d)];
+        if(_ls3 && _ls3.ingredients && _ls3.ingredients.length){
+          const _ls3Trip = c1DaySetI3[d] ? 'cook1' : (c2DaySetI3[d] ? 'cook2' : null);
+          if(_ls3Trip){
+            _ls3.ingredients.forEach(function(ing){
+              if(!ing.dbKey) return;
+              if(!_inv3IsCarry(ing.dbKey)) return;
+              if(!carryDemandI3[ing.dbKey]) carryDemandI3[ing.dbKey] = {him:{cook1:0,cook2:0}, her:{cook1:0,cook2:0}};
+              carryDemandI3[ing.dbKey][p][_ls3Trip] += ing.amt;
+            });
+          }
+        }
       });
     });
     Object.keys(carryDemandI3).forEach(function(dbKey){
@@ -7532,6 +7567,23 @@ function verifyInvariants(){
             });
           });
         });
+        // V172 (2026-05-19): include late_snack carry ingredients in the
+        // weekly waste check. Pre-V172 late_snack contributions were
+        // skipped here (SLOTS iteration excludes late_snack), causing
+        // INV20 to undercount weekly waste when a user added a carry
+        // item to a late_snack via the + ingr button.
+        var _lsW = LATE_SNACK[pk(p,d)];
+        if(_lsW && _lsW.ingredients && _lsW.ingredients.length){
+          _lsW.ingredients.forEach(function(ing){
+            if(!ing.dbKey) return;
+            var db = NUTRI_DB[ing.dbKey];
+            var isC = db && ((db.pkg && db.pkg.crossTripCarry)
+                          || (db.produce && db.produce.crossTripCarry));
+            if(!isC) return;
+            if(!carryDemand[ing.dbKey]) carryDemand[ing.dbKey] = {totalCups:0};
+            carryDemand[ing.dbKey].totalCups += ing.amt;
+          });
+        }
       });
     });
     Object.keys(carryDemand).forEach(function(dbKey){
