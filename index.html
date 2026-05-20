@@ -19489,7 +19489,15 @@ window.MPStress=(function(){
       checkInv();
       checkSchedEatOut();
       checkCoherence();
-      checkBanner('edit', {dbKey:preIng.dbKey, kcalDiff:predictedKcalPerPortion});
+      // V164 (2026-05-19): anchor combined view banner shows BATCH-total
+      // kcal diff (per V162's view-context scaling). For other geometries
+      // (leftoverDiff per-portion, sharedSameDay Him/Her tab per-portion
+      // per INV9, shake, solo), cookServings=1 → no scaling.
+      var bannerKcalPred = predictedKcalPerPortion;
+      if(slot.geometry === 'anchorBatch' && baseline.cookServings > 1){
+        bannerKcalPred = predictedKcalPerPortion * baseline.cookServings;
+      }
+      checkBanner('edit', {dbKey:preIng.dbKey, kcalDiff:bannerKcalPred});
       checkWasteHint(preIng.dbKey, 'edit');
     }
 
