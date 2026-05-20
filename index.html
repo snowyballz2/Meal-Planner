@@ -10248,7 +10248,24 @@ function _writeUserPin(p,d,s,idx,opts){
   const cacheDbKeyDiffers = opts.dbKey !== undefined && slotCache && slotCache[idx] && slotCache[idx].dbKey !== opts.dbKey;
   const refreshPrior = swapInProgress || (cacheDbKeyDiffers && existing && existing._priorAmt !== undefined);
   if(opts.capturePrior && (!existing || existing._priorAmt === undefined || refreshPrior)){
-    const priorAmt = (slotCache && slotCache[idx] && slotCache[idx].amt !== undefined) ? slotCache[idx].amt : 0;
+    // V173 (2026-05-19): lazy-build cache fallback when _dayBalancedCache
+    // is empty/stale. Pre-V173 the priorAmt defaulted to 0 when cache
+    // was missing (e.g., right after invalidateLeftoverCache() and
+    // before next render), causing banner to show "↑ 0 → X" with wrong
+    // kcalDiff. Now: read cache first; if missing, call
+    // getBalancedSlotIngredients (which lazy-builds), then read that.
+    // Last-resort fallback to 0 only if the slot truly has no
+    // ingredient at idx.
+    let priorAmt = 0;
+    if(slotCache && slotCache[idx] && slotCache[idx].amt !== undefined){
+      priorAmt = slotCache[idx].amt;
+    } else {
+      const _balForPrior = (typeof getBalancedSlotIngredients === 'function')
+        ? getBalancedSlotIngredients(p,d,s) : null;
+      if(_balForPrior && _balForPrior[idx] && _balForPrior[idx].amt !== undefined){
+        priorAmt = _balForPrior[idx].amt;
+      }
+    }
     setOverride(p,d,s,idx,'_priorAmt', priorAmt);
   }
   if(opts.amt !== undefined) setOverride(p,d,s,idx,'amt', opts.amt);
