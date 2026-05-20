@@ -17899,6 +17899,23 @@ window.MPStress=(function(){
     Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
     Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
     Object.keys(ADJ_TARGETS).forEach(function(k){delete ADJ_TARGETS[k];});
+    // V174 (2026-05-19): also clear USER_EDITED, LEFTOVER_LINKS, SHARED_UNDO.
+    // All three are captured by MPStress.snapshot. Pre-V174 they leaked
+    // through _clearAllState → snapshot reflected polluted state → runs
+    // deterministically reproduced dirtiness. Same class of bug as the
+    // V166 SKIPPED pollution incident — _clearAllState must clear
+    // EVERY global that snapshot captures, otherwise the "fresh-state
+    // test run" claim is broken.
+    if(typeof USER_EDITED === 'object' && USER_EDITED){
+      Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];});
+    }
+    // LEFTOVER_LINKS is an alias to weekData[activeWeek].leftoverLinks.
+    // Mutate in place (length=0) — replacing the reference would break
+    // the alias.
+    if(Array.isArray(LEFTOVER_LINKS)) LEFTOVER_LINKS.length = 0;
+    if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
+      Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
+    }
     if(weekData.last){
       if(weekData.last.sel) Object.keys(weekData.last.sel).forEach(function(k){delete weekData.last.sel[k];});
       if(weekData.last.overrides) Object.keys(weekData.last.overrides).forEach(function(k){delete weekData.last.overrides[k];});
