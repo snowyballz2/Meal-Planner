@@ -8539,6 +8539,9 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
         if(o.amt !== undefined) map[o.idx].userAmt = o.amt;
         if(o.dbKey !== undefined) map[o.idx].userDbKey = o.dbKey;
         if(o._priorAmt !== undefined) map[o.idx].priorAmt = o._priorAmt;
+        // V177 (2026-05-20): dbKey at first-edit time so banner can compute
+        // cross-ingredient kcalDiff for slots that went through a swap.
+        if(o._priorDbKey !== undefined) map[o.idx].priorDbKey = o._priorDbKey;
       });
       return map;
     })();
@@ -8557,6 +8560,10 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
         ? port.ingredients[ix].amt : 0;
       const recipeDbKey = (port.ingredients[ix] && port.ingredients[ix].dbKey) || '';
       const currentDbKey = a.ing.dbKey;
+      // V177 (2026-05-20): priorDbKey for cross-ingredient kcalDiff. Falls
+      // back to recipeDbKey when first edit predates V177 (no captured
+      // _priorDbKey) or when the slot is a fresh add ('+ ingredient' button).
+      const priorDbKey = (flags.priorDbKey !== undefined) ? flags.priorDbKey : recipeDbKey;
       const parts = [];
       // V162 (2026-05-19): match the row display's per-vs-combined context.
       // _priorAmt and a.newAmt are stored per-portion. When this card is
@@ -8574,24 +8581,34 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
         ? _bannerBalanced[ix].amt : a.newAmt;
       const fromAmt = fromAmtPer * _viewMult;
       const newAmtBanner = newAmtBannerPer * _viewMult;
-      if(flags.userAmt !== undefined && Math.abs(newAmtBanner - fromAmt) > 0.02){
-        const db = NUTRI_DB[currentDbKey];
-        const unit = db ? db.unit : '';
-        const dir = newAmtBanner > fromAmt ? '↑' : '↓';
-        const kcalDiff = Math.round((newAmtBanner - fromAmt) * (db?db.kcal:0));
+      // V177: compute true slot-level kcalDiff cross-ingredient.
+      //   fromKcal = fromAmt × NUTRI_DB[priorDbKey].kcal
+      //   toKcal   = newAmtBanner × NUTRI_DB[currentDbKey].kcal
+      //   kcalDiff = toKcal − fromKcal
+      // When dbKey unchanged, priorDbKey === currentDbKey → math reduces to
+      // the pre-V177 same-ingredient form. When dbKey changed, the diff
+      // correctly reflects "lost old ingredient kcal, gained new ingredient
+      // kcal" instead of pretending the swap was a same-ingredient amt edit.
+      const dbKeyChanged = currentDbKey !== priorDbKey && priorDbKey !== '';
+      const amtChanged = flags.userAmt !== undefined && Math.abs(newAmtBanner - fromAmt) > 0.02;
+      if(amtChanged || dbKeyChanged){
+        const curDb = NUTRI_DB[currentDbKey];
+        const priorDb = priorDbKey ? NUTRI_DB[priorDbKey] : null;
+        const unit = curDb ? curDb.unit : '';
+        const fromKcal = fromAmt * (priorDb ? priorDb.kcal : (curDb ? curDb.kcal : 0));
+        const toKcal = newAmtBanner * (curDb ? curDb.kcal : 0);
+        const kcalDiff = Math.round(toKcal - fromKcal);
         const diffSign = kcalDiff > 0 ? '+' : '';
-        parts.push(dir+' '+fmtFrac(fromAmt)+' → '+fmtFrac(newAmtBanner)+' '+unit+' ('+diffSign+kcalDiff+' kcal)');
-      }
-      if(flags.userDbKey !== undefined && currentDbKey !== recipeDbKey){
-        // V154 (2026-05-14): suppress the "was X" hint when recipeDbKey is
-        // empty. recipeDbKey == '' means the ingredient slot is at an idx
-        // PAST port.ingredients.length — i.e., the user added it via the
-        // `+ ingredient` button. There's no "was" — it's a fresh add.
-        // Pre-V154 the banner rendered "🔄 was <i></i>" with empty italic
-        // tags. Now we only show the swap hint when there's an actual
-        // prior dbKey to reference.
-        if(recipeDbKey){
-          parts.push('🔄 was <i>'+recipeDbKey+'</i>');
+        // Direction follows kcal (not amt) — for swap-only cases the amt may
+        // not move but the kcal can swing in either direction.
+        const dir = kcalDiff >= 0 ? '↑' : '↓';
+        if(dbKeyChanged){
+          // Include the old ingredient name on the "from" side. The row
+          // header (<b>currentDbKey</b>) already shows the new ingredient —
+          // the old "🔄 was X" hint is no longer needed.
+          parts.push(dir+' '+fmtFrac(fromAmt)+' <i>'+priorDbKey+'</i> → '+fmtFrac(newAmtBanner)+' '+unit+' ('+diffSign+kcalDiff+' kcal)');
+        } else {
+          parts.push(dir+' '+fmtFrac(fromAmt)+' → '+fmtFrac(newAmtBanner)+' '+unit+' ('+diffSign+kcalDiff+' kcal)');
         }
       }
       if(parts.length === 0) return;
@@ -10274,16 +10291,35 @@ function _writeUserPin(p,d,s,idx,opts){
     // Last-resort fallback to 0 only if the slot truly has no
     // ingredient at idx.
     let priorAmt = 0;
+    let priorDbKey = null;
     if(slotCache && slotCache[idx] && slotCache[idx].amt !== undefined){
       priorAmt = slotCache[idx].amt;
+      if(slotCache[idx].dbKey !== undefined) priorDbKey = slotCache[idx].dbKey;
     } else {
       const _balForPrior = (typeof getBalancedSlotIngredients === 'function')
         ? getBalancedSlotIngredients(p,d,s) : null;
       if(_balForPrior && _balForPrior[idx] && _balForPrior[idx].amt !== undefined){
         priorAmt = _balForPrior[idx].amt;
+        if(_balForPrior[idx].dbKey !== undefined) priorDbKey = _balForPrior[idx].dbKey;
+      }
+    }
+    // V177 (2026-05-20): fall back to the meal's recipe dbKey at this idx
+    // when neither cache nor balanced lookup gave us a dbKey. This is the
+    // source-of-truth for "what the slot started as".
+    if(priorDbKey === null){
+      const _mid2 = SEL[sk(p,d,s)];
+      const _meal2 = _mid2 ? getMeal(_mid2) : null;
+      if(_meal2 && _meal2.ingredients && _meal2.ingredients[idx]){
+        priorDbKey = _meal2.ingredients[idx].dbKey;
       }
     }
     setOverride(p,d,s,idx,'_priorAmt', priorAmt);
+    // V177: capture the dbKey at the time of first edit too. Banner uses
+    // (_priorAmt × _priorDbKey.kcal) vs (newAmt × currentDbKey.kcal) for the
+    // true slot-level kcalDiff when an ingredient swap is in the mix.
+    if(priorDbKey !== null){
+      setOverride(p,d,s,idx,'_priorDbKey', priorDbKey);
+    }
   }
   if(opts.amt !== undefined) setOverride(p,d,s,idx,'amt', opts.amt);
   if(opts.dbKey !== undefined) setOverride(p,d,s,idx,'dbKey', opts.dbKey);
