@@ -10739,149 +10739,178 @@ function freezeTripTotals(randTarget, attemptSwap){
       var info = _freezeOneItem(dbKey, days, persons, leftovers);
       if(!info){
         if(attemptSwap){
-          var swap = _trySwapForWaste(dbKey, trip, days, persons, leftovers);
-          if(swap){
-            var key = sk(swap.p, swap.d, swap.s);
-            // V160: cascade depth guard. If this slot was ALREADY swapped
-            // this randomize (any pass), refuse the new swap — prevents
-            // wave-2 swaps cascading on wave-1 fallout. Diag records the
-            // refusal for inspection.
-            if(window._swapDiag && window._swapDiag.swappedKeys[key]){
-              window._swapDiag.refused.push({
-                p:swap.p, d:swap.d, s:swap.s, dbKey:dbKey, trip:trip,
-                pass:window._swapDiag.passLabel,
-                priorSwap:window._swapDiag.swappedKeys[key]
-              });
-              return; // continue outer allItems.forEach
-            }
-            SEL[key] = swap.newMealId;
-            if(weekData[activeWeek] && weekData[activeWeek].ts){
-              weekData[activeWeek].ts[key] = Date.now();
-            }
-            clearOverrides(swap.p, swap.d, swap.s);
-            affectedDays[swap.p+'_'+swap.d] = {p:swap.p, d:swap.d};
-            // V160: record the swap so future passes refuse to re-swap this slot.
-            if(window._swapDiag){
-              var swapRec = {p:swap.p, d:swap.d, s:swap.s, dbKey:dbKey, trip:trip,
-                pass:window._swapDiag.passLabel,
-                oldMealId:swap.oldMealId, newMealId:swap.newMealId,
-                sharedSlot:!!swap.sharedSlot};
-              window._swapDiag.swappedKeys[key] = swapRec;
-              window._swapDiag.swaps.push(swapRec);
-            }
-            if(swap.sharedSlot){
-              var otherP = swap.p==='him' ? 'her' : 'him';
-              var oKey = sk(otherP, swap.d, swap.s);
-              SEL[oKey] = swap.newMealId;
-              if(weekData[activeWeek] && weekData[activeWeek].ts){
-                weekData[activeWeek].ts[oKey] = Date.now();
+          // V175 (2026-05-20): multi-candidate loop. _trySwapForWaste now
+          // returns up to 10 sorted candidates. For each: snapshot state →
+          // apply → verify NEW pkg/carry items freeze cleanly (zero waste,
+          // 1e-6 tolerance) → keep on success, revert + try next on failure.
+          var swapList = _trySwapForWaste(dbKey, trip, days, persons, leftovers);
+          if(swapList && swapList.length > 0){
+            for(var pi175 = 0; pi175 < swapList.length; pi175++){
+              var swap = swapList[pi175];
+              var key = sk(swap.p, swap.d, swap.s);
+              // V160 cascade depth guard: applies to ALL candidates for this
+              // slot (slot-level lock). Record refusal once and break.
+              if(window._swapDiag && window._swapDiag.swappedKeys[key]){
+                if(pi175 === 0){
+                  window._swapDiag.refused.push({
+                    p:swap.p, d:swap.d, s:swap.s, dbKey:dbKey, trip:trip,
+                    pass:window._swapDiag.passLabel,
+                    priorSwap:window._swapDiag.swappedKeys[key]
+                  });
+                }
+                break;
               }
-              clearOverrides(otherP, swap.d, swap.s);
-              affectedDays[otherP+'_'+swap.d] = {p:otherP, d:swap.d};
-              // V160: also mark the shared-side slot.
-              if(window._swapDiag){
-                window._swapDiag.swappedKeys[oKey] = swapRec;
-              }
-            }
-            // CO-CONTRIBUTOR CLEANUP: the OUTGOING meal might have shared
-            // pkg/produce ingredients with OTHER slots in this trip. Their
-            // freeze overrides were sized assuming the OLD trip composition
-            // (with the swapped-out meal contributing). Now that contribution
-            // is gone — those overrides are stale and would lock subsequent
-            // freezes into wrong amounts.
-            //
-            // Example: turkey_zucchini_boats (gt93 + marinara) on Him Sun.
-            // Earlier in the freeze loop, gt93 cook2 wrote overrides:
-            //   Him Sun gt93 = 9.6oz + Her Sat gt93 = 6.4oz = 16oz container.
-            // Now we swap Him Sun → burrito_bowl (no gt93). Without this
-            // cleanup, Her Sat keeps 6.4oz override even though it's now
-            // alone in cook2 → trip total 6.4oz wastes 9.6oz of a 16oz can.
-            // With cleanup: clear Her Sat's gt93 override; the post-swap RBA
-            // re-adjusts gt93 to recipe-base; freeze re-evaluates; if it can
-            // still resolve, great; otherwise this slot may also get swapped.
-            var oldMeal = getMeal(swap.oldMealId);
-            if(oldMeal && oldMeal.ingredients){
-              var swapTargetKeys = {};
-              swapTargetKeys[key] = true;
-              if(swap.sharedSlot){
-                var otherPck = swap.p==='him' ? 'her' : 'him';
-                swapTargetKeys[sk(otherPck, swap.d, swap.s)] = true;
-              }
-              // Helper: clear OVERRIDES[k][idx for coKey] on a single slot.
-              var _clearIngOverride = function(p, d, s, coKey){
+              // V175 snapshot: capture SEL + OVERRIDES entries we're about
+              // to mutate. savedOv[k] = null means "originally undefined"
+              // (delete on revert). Array means "was that array" (restore).
+              var savedSel = {};
+              var savedOv = {};
+              var _snapV175 = function(p, d, s){
                 var k2 = sk(p, d, s);
-                var mealId = SEL[k2]; if(!mealId) return false;
-                var meal = getMeal(mealId);
-                if(!meal || !meal.ingredients) return false;
-                var idx = -1;
-                for(var ii=0; ii<meal.ingredients.length; ii++){
-                  if(meal.ingredients[ii].dbKey === coKey){ idx = ii; break; }
-                }
-                if(idx < 0) return false;
-                var ovList = OVERRIDES[k2];
-                if(!ovList) return false;
-                var changed = false;
-                for(var jj=ovList.length-1; jj>=0; jj--){
-                  if(ovList[jj].idx === idx){ ovList.splice(jj, 1); changed = true; }
-                }
-                if(ovList.length === 0) delete OVERRIDES[k2];
-                if(changed) affectedDays[p+'_'+d] = {p:p, d:d};
-                return changed;
+                if(savedOv[k2] !== undefined) return;
+                savedOv[k2] = OVERRIDES[k2]
+                  ? OVERRIDES[k2].map(function(o){return Object.assign({},o);})
+                  : null;
               };
-              oldMeal.ingredients.forEach(function(ing){
-                var coKey = ing.dbKey;
-                if(coKey === dbKey) return; // already handled by this freeze attempt
-                if(ROUND_PKG_ITEMS.indexOf(coKey) < 0 && ROUND_PRODUCE_ITEMS.indexOf(coKey) < 0) return;
-                // Iterate THIS TRIP's days only. For each slot found using
-                // coKey, also clear ANY cross-trip batch portions (anchor or
-                // leftover) so the whole batch's state stays consistent —
-                // partial override clearing across batch portions breaks
-                // unify and triggers INV7/INV8.
-                days.forEach(function(d){
-                  ['him','her'].forEach(function(p){
-                    if(p!=='him' && p!=='her') return;
-                    ['breakfast','lunch','snack','dinner'].forEach(function(s){
-                      var k2 = sk(p, d, s);
-                      if(swapTargetKeys[k2]) return; // swap target already cleared via clearOverrides
-                      var cleared = _clearIngOverride(p, d, s, coKey);
-                      if(!cleared) return;
-                      // If this slot is part of a batch (anchor with leftovers,
-                      // or a leftover itself), clear coKey overrides on ALL
-                      // batch portions — they may live in another trip.
-                      var lo = leftovers[k2];
-                      var anchorLo = null;
-                      if(lo && !lo.isLeftover && lo.portions){
-                        anchorLo = lo;
-                      } else if(lo && lo.isLeftover){
-                        // Leftover slot — find its anchor by scanning leftovers
-                        // for an anchor whose portions include k2.
-                        for(var akey in leftovers){
-                          var alo = leftovers[akey];
-                          if(alo && !alo.isLeftover && alo.portions){
-                            for(var pi=0; pi<alo.portions.length; pi++){
-                              var pp = alo.portions[pi];
-                              if(sk(pp.p, pp.d, pp.s) === k2){ anchorLo = alo; break; }
+              savedSel[key] = SEL[key];
+              var otherP = null, oKey = null;
+              if(swap.sharedSlot){
+                otherP = swap.p==='him' ? 'her' : 'him';
+                oKey = sk(otherP, swap.d, swap.s);
+                savedSel[oKey] = SEL[oKey];
+              }
+              // === Apply swap ===
+              _snapV175(swap.p, swap.d, swap.s);
+              SEL[key] = swap.newMealId;
+              if(weekData[activeWeek] && weekData[activeWeek].ts){
+                weekData[activeWeek].ts[key] = Date.now();
+              }
+              clearOverrides(swap.p, swap.d, swap.s);
+              affectedDays[swap.p+'_'+swap.d] = {p:swap.p, d:swap.d};
+              if(swap.sharedSlot){
+                _snapV175(otherP, swap.d, swap.s);
+                SEL[oKey] = swap.newMealId;
+                if(weekData[activeWeek] && weekData[activeWeek].ts){
+                  weekData[activeWeek].ts[oKey] = Date.now();
+                }
+                clearOverrides(otherP, swap.d, swap.s);
+                affectedDays[otherP+'_'+swap.d] = {p:otherP, d:swap.d};
+              }
+              // CO-CONTRIBUTOR CLEANUP (existing logic — see V161 notes):
+              // OLD meal's pkg/produce ingredients may share slots in this
+              // trip whose freeze overrides were sized to the OLD trip
+              // composition. Clear them so post-swap freeze re-evaluates.
+              // V175: snapshot every slot's OVERRIDES before _clearIngOverride
+              // mutates them.
+              var oldMeal = getMeal(swap.oldMealId);
+              if(oldMeal && oldMeal.ingredients){
+                var swapTargetKeys = {};
+                swapTargetKeys[key] = true;
+                if(swap.sharedSlot){
+                  swapTargetKeys[oKey] = true;
+                }
+                var _clearIngOverride = function(p, d, s, coKey){
+                  var k2 = sk(p, d, s);
+                  var mealId = SEL[k2]; if(!mealId) return false;
+                  var meal = getMeal(mealId);
+                  if(!meal || !meal.ingredients) return false;
+                  var idx = -1;
+                  for(var ii=0; ii<meal.ingredients.length; ii++){
+                    if(meal.ingredients[ii].dbKey === coKey){ idx = ii; break; }
+                  }
+                  if(idx < 0) return false;
+                  var ovList = OVERRIDES[k2];
+                  if(!ovList) return false;
+                  _snapV175(p, d, s); // V175: snapshot before mutation
+                  var changed = false;
+                  for(var jj=ovList.length-1; jj>=0; jj--){
+                    if(ovList[jj].idx === idx){ ovList.splice(jj, 1); changed = true; }
+                  }
+                  if(ovList.length === 0) delete OVERRIDES[k2];
+                  if(changed) affectedDays[p+'_'+d] = {p:p, d:d};
+                  return changed;
+                };
+                oldMeal.ingredients.forEach(function(ing){
+                  var coKey = ing.dbKey;
+                  if(coKey === dbKey) return;
+                  if(ROUND_PKG_ITEMS.indexOf(coKey) < 0 && ROUND_PRODUCE_ITEMS.indexOf(coKey) < 0) return;
+                  days.forEach(function(d){
+                    ['him','her'].forEach(function(p){
+                      if(p!=='him' && p!=='her') return;
+                      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+                        var k2 = sk(p, d, s);
+                        if(swapTargetKeys[k2]) return;
+                        var cleared = _clearIngOverride(p, d, s, coKey);
+                        if(!cleared) return;
+                        var lo = leftovers[k2];
+                        var anchorLo = null;
+                        if(lo && !lo.isLeftover && lo.portions){
+                          anchorLo = lo;
+                        } else if(lo && lo.isLeftover){
+                          for(var akey in leftovers){
+                            var alo = leftovers[akey];
+                            if(alo && !alo.isLeftover && alo.portions){
+                              for(var pix=0; pix<alo.portions.length; pix++){
+                                var pp = alo.portions[pix];
+                                if(sk(pp.p, pp.d, pp.s) === k2){ anchorLo = alo; break; }
+                              }
+                              if(anchorLo) break;
                             }
-                            if(anchorLo) break;
                           }
                         }
-                      }
-                      if(anchorLo){
-                        anchorLo.portions.forEach(function(pt){
-                          if(sk(pt.p, pt.d, pt.s) === k2) return; // already cleared above
-                          _clearIngOverride(pt.p, pt.d, pt.s, coKey);
-                        });
-                      }
+                        if(anchorLo){
+                          anchorLo.portions.forEach(function(pt){
+                            if(sk(pt.p, pt.d, pt.s) === k2) return;
+                            _clearIngOverride(pt.p, pt.d, pt.s, coKey);
+                          });
+                        }
+                      });
                     });
                   });
                 });
+              }
+              invalidateLeftoverCache();
+              runBalanceAdjusters();
+              leftovers = computeLeftovers();
+              // === V175 verify: check NEW pkg/carry items freeze cleanly ===
+              var verifyResult = _verifyNewPkgItemsAfterSwap(swap, days, persons, leftovers);
+              if(verifyResult.ok){
+                // Accept — record diag, break candidate loop
+                if(window._swapDiag){
+                  var swapRec = {p:swap.p, d:swap.d, s:swap.s, dbKey:dbKey, trip:trip,
+                    pass:window._swapDiag.passLabel,
+                    oldMealId:swap.oldMealId, newMealId:swap.newMealId,
+                    sharedSlot:!!swap.sharedSlot, candidateRank:pi175};
+                  window._swapDiag.swappedKeys[key] = swapRec;
+                  window._swapDiag.swaps.push(swapRec);
+                  if(swap.sharedSlot){
+                    window._swapDiag.swappedKeys[oKey] = swapRec;
+                  }
+                }
+                break;
+              }
+              // === Verify failed — revert SEL + OVERRIDES, try next ===
+              Object.keys(savedSel).forEach(function(k){
+                if(savedSel[k] === undefined) delete SEL[k];
+                else SEL[k] = savedSel[k];
               });
+              Object.keys(savedOv).forEach(function(k){
+                if(savedOv[k] === null) delete OVERRIDES[k];
+                else OVERRIDES[k] = savedOv[k];
+              });
+              if(window._swapDiag){
+                window._swapDiag.reverted = (window._swapDiag.reverted || []);
+                window._swapDiag.reverted.push({
+                  p:swap.p, d:swap.d, s:swap.s, dbKey:dbKey, trip:trip,
+                  pass:window._swapDiag.passLabel, newMealId:swap.newMealId,
+                  reason:verifyResult.reason, candidateRank:pi175
+                });
+              }
+              invalidateLeftoverCache();
+              runBalanceAdjusters();
+              leftovers = computeLeftovers();
+              // continue candidate loop
             }
-            // Full cache invalidation + RBA so subsequent freeze items see
-            // a consistent unified state with all stale overrides resolved.
-            invalidateLeftoverCache();
-            runBalanceAdjusters();
-            leftovers = computeLeftovers();
           }
         }
         return;
@@ -10964,112 +10993,167 @@ function freezeTripTotals(randTarget, attemptSwap){
     var info = _freezeOneItem(dbKey, allWeekDays, persons, leftovers);
     if(!info){
       if(!attemptSwap) return;
-      var cSwap = _trySwapForWaste(dbKey, 'week', allWeekDays, persons, leftovers);
-      if(!cSwap) return;
-      var cKey = sk(cSwap.p, cSwap.d, cSwap.s);
-      if(window._swapDiag && window._swapDiag.swappedKeys[cKey]){
-        window._swapDiag.refused.push({
-          p:cSwap.p, d:cSwap.d, s:cSwap.s, dbKey:dbKey, trip:'week',
-          pass:window._swapDiag.passLabel,
-          priorSwap:window._swapDiag.swappedKeys[cKey]
-        });
-        return;
-      }
-      SEL[cKey] = cSwap.newMealId;
-      if(weekData[activeWeek] && weekData[activeWeek].ts){
-        weekData[activeWeek].ts[cKey] = Date.now();
-      }
-      clearOverrides(cSwap.p, cSwap.d, cSwap.s);
-      affectedDays[cSwap.p+'_'+cSwap.d] = {p:cSwap.p, d:cSwap.d};
-      if(window._swapDiag){
-        var cRec = {p:cSwap.p, d:cSwap.d, s:cSwap.s, dbKey:dbKey, trip:'week',
-          pass:window._swapDiag.passLabel,
-          oldMealId:cSwap.oldMealId, newMealId:cSwap.newMealId,
-          sharedSlot:!!cSwap.sharedSlot};
-        window._swapDiag.swappedKeys[cKey] = cRec;
-        window._swapDiag.swaps.push(cRec);
-      }
-      if(cSwap.sharedSlot){
-        var cOther = cSwap.p==='him' ? 'her' : 'him';
-        var cOKey = sk(cOther, cSwap.d, cSwap.s);
-        SEL[cOKey] = cSwap.newMealId;
-        if(weekData[activeWeek] && weekData[activeWeek].ts){
-          weekData[activeWeek].ts[cOKey] = Date.now();
-        }
-        clearOverrides(cOther, cSwap.d, cSwap.s);
-        affectedDays[cOther+'_'+cSwap.d] = {p:cOther, d:cSwap.d};
-        if(window._swapDiag) window._swapDiag.swappedKeys[cOKey] = cRec;
-      }
-      var swapTrip = c1SetFTT[cSwap.d] ? 'cook1' : 'cook2';
-      var swapTripDays = TRIP_DAYS_STATIC[swapTrip] || [];
-      var cOldMeal = getMeal(cSwap.oldMealId);
-      if(cOldMeal && cOldMeal.ingredients){
-        var cSwapTargets = {};
-        cSwapTargets[cKey] = true;
-        if(cSwap.sharedSlot){
-          cSwapTargets[sk(cSwap.p==='him'?'her':'him', cSwap.d, cSwap.s)] = true;
-        }
-        var _cClearIng = function(p, d, s, coKey){
-          var k3 = sk(p,d,s);
-          var mid = SEL[k3]; if(!mid) return false;
-          var mm = getMeal(mid);
-          if(!mm || !mm.ingredients) return false;
-          var ii = -1;
-          for(var jj=0; jj<mm.ingredients.length; jj++){
-            if(mm.ingredients[jj].dbKey === coKey){ ii = jj; break; }
+      // V175 (2026-05-20): same multi-candidate loop as per-trip site, but
+      // probe scope is combined-week for carry items (DAYS.slice()).
+      var cSwapList = _trySwapForWaste(dbKey, 'week', allWeekDays, persons, leftovers);
+      if(!cSwapList || cSwapList.length === 0) return;
+      for(var cpi175 = 0; cpi175 < cSwapList.length; cpi175++){
+        var cSwap = cSwapList[cpi175];
+        var cKey = sk(cSwap.p, cSwap.d, cSwap.s);
+        if(window._swapDiag && window._swapDiag.swappedKeys[cKey]){
+          if(cpi175 === 0){
+            window._swapDiag.refused.push({
+              p:cSwap.p, d:cSwap.d, s:cSwap.s, dbKey:dbKey, trip:'week',
+              pass:window._swapDiag.passLabel,
+              priorSwap:window._swapDiag.swappedKeys[cKey]
+            });
           }
-          if(ii < 0) return false;
-          var ovList = OVERRIDES[k3];
-          if(!ovList) return false;
-          var changed = false;
-          for(var ll=ovList.length-1; ll>=0; ll--){
-            if(ovList[ll].idx === ii){ ovList.splice(ll,1); changed = true; }
-          }
-          if(ovList.length === 0) delete OVERRIDES[k3];
-          if(changed) affectedDays[p+'_'+d] = {p:p, d:d};
-          return changed;
+          break;
+        }
+        // V175 snapshot
+        var cSavedSel = {};
+        var cSavedOv = {};
+        var _cSnapV175 = function(p, d, s){
+          var k2 = sk(p, d, s);
+          if(cSavedOv[k2] !== undefined) return;
+          cSavedOv[k2] = OVERRIDES[k2]
+            ? OVERRIDES[k2].map(function(o){return Object.assign({},o);})
+            : null;
         };
-        cOldMeal.ingredients.forEach(function(ing){
-          var coKey = ing.dbKey;
-          if(coKey === dbKey) return;
-          if(ROUND_PKG_ITEMS.indexOf(coKey) < 0 && ROUND_PRODUCE_ITEMS.indexOf(coKey) < 0) return;
-          swapTripDays.forEach(function(d){
-            ['him','her'].forEach(function(p){
-              ['breakfast','lunch','snack','dinner'].forEach(function(s){
-                var k4 = sk(p,d,s);
-                if(cSwapTargets[k4]) return;
-                var cleared = _cClearIng(p, d, s, coKey);
-                if(!cleared) return;
-                var lo4 = leftovers[k4];
-                var anchorLo4 = null;
-                if(lo4 && !lo4.isLeftover && lo4.portions) anchorLo4 = lo4;
-                else if(lo4 && lo4.isLeftover){
-                  for(var akey in leftovers){
-                    var alo = leftovers[akey];
-                    if(alo && !alo.isLeftover && alo.portions){
-                      for(var pi=0; pi<alo.portions.length; pi++){
-                        if(sk(alo.portions[pi].p, alo.portions[pi].d, alo.portions[pi].s) === k4){
-                          anchorLo4 = alo; break;
+        cSavedSel[cKey] = SEL[cKey];
+        var cOther = null, cOKey = null;
+        if(cSwap.sharedSlot){
+          cOther = cSwap.p==='him' ? 'her' : 'him';
+          cOKey = sk(cOther, cSwap.d, cSwap.s);
+          cSavedSel[cOKey] = SEL[cOKey];
+        }
+        // === Apply swap ===
+        _cSnapV175(cSwap.p, cSwap.d, cSwap.s);
+        SEL[cKey] = cSwap.newMealId;
+        if(weekData[activeWeek] && weekData[activeWeek].ts){
+          weekData[activeWeek].ts[cKey] = Date.now();
+        }
+        clearOverrides(cSwap.p, cSwap.d, cSwap.s);
+        affectedDays[cSwap.p+'_'+cSwap.d] = {p:cSwap.p, d:cSwap.d};
+        if(cSwap.sharedSlot){
+          _cSnapV175(cOther, cSwap.d, cSwap.s);
+          SEL[cOKey] = cSwap.newMealId;
+          if(weekData[activeWeek] && weekData[activeWeek].ts){
+            weekData[activeWeek].ts[cOKey] = Date.now();
+          }
+          clearOverrides(cOther, cSwap.d, cSwap.s);
+          affectedDays[cOther+'_'+cSwap.d] = {p:cOther, d:cSwap.d};
+        }
+        var swapTrip = c1SetFTT[cSwap.d] ? 'cook1' : 'cook2';
+        var swapTripDays = TRIP_DAYS_STATIC[swapTrip] || [];
+        var cOldMeal = getMeal(cSwap.oldMealId);
+        if(cOldMeal && cOldMeal.ingredients){
+          var cSwapTargets = {};
+          cSwapTargets[cKey] = true;
+          if(cSwap.sharedSlot){
+            cSwapTargets[cOKey] = true;
+          }
+          var _cClearIng = function(p, d, s, coKey){
+            var k3 = sk(p,d,s);
+            var mid = SEL[k3]; if(!mid) return false;
+            var mm = getMeal(mid);
+            if(!mm || !mm.ingredients) return false;
+            var ii = -1;
+            for(var jj=0; jj<mm.ingredients.length; jj++){
+              if(mm.ingredients[jj].dbKey === coKey){ ii = jj; break; }
+            }
+            if(ii < 0) return false;
+            var ovList = OVERRIDES[k3];
+            if(!ovList) return false;
+            _cSnapV175(p, d, s); // V175: snapshot before mutation
+            var changed = false;
+            for(var ll=ovList.length-1; ll>=0; ll--){
+              if(ovList[ll].idx === ii){ ovList.splice(ll,1); changed = true; }
+            }
+            if(ovList.length === 0) delete OVERRIDES[k3];
+            if(changed) affectedDays[p+'_'+d] = {p:p, d:d};
+            return changed;
+          };
+          cOldMeal.ingredients.forEach(function(ing){
+            var coKey = ing.dbKey;
+            if(coKey === dbKey) return;
+            if(ROUND_PKG_ITEMS.indexOf(coKey) < 0 && ROUND_PRODUCE_ITEMS.indexOf(coKey) < 0) return;
+            swapTripDays.forEach(function(d){
+              ['him','her'].forEach(function(p){
+                ['breakfast','lunch','snack','dinner'].forEach(function(s){
+                  var k4 = sk(p,d,s);
+                  if(cSwapTargets[k4]) return;
+                  var cleared = _cClearIng(p, d, s, coKey);
+                  if(!cleared) return;
+                  var lo4 = leftovers[k4];
+                  var anchorLo4 = null;
+                  if(lo4 && !lo4.isLeftover && lo4.portions) anchorLo4 = lo4;
+                  else if(lo4 && lo4.isLeftover){
+                    for(var akey in leftovers){
+                      var alo = leftovers[akey];
+                      if(alo && !alo.isLeftover && alo.portions){
+                        for(var pix=0; pix<alo.portions.length; pix++){
+                          if(sk(alo.portions[pix].p, alo.portions[pix].d, alo.portions[pix].s) === k4){
+                            anchorLo4 = alo; break;
+                          }
                         }
+                        if(anchorLo4) break;
                       }
-                      if(anchorLo4) break;
                     }
                   }
-                }
-                if(anchorLo4){
-                  anchorLo4.portions.forEach(function(pt){
-                    if(sk(pt.p, pt.d, pt.s) === k4) return;
-                    _cClearIng(pt.p, pt.d, pt.s, coKey);
-                  });
-                }
+                  if(anchorLo4){
+                    anchorLo4.portions.forEach(function(pt){
+                      if(sk(pt.p, pt.d, pt.s) === k4) return;
+                      _cClearIng(pt.p, pt.d, pt.s, coKey);
+                    });
+                  }
+                });
               });
             });
           });
+        }
+        invalidateLeftoverCache();
+        runBalanceAdjusters();
+        leftovers = computeLeftovers();
+        // === V175 verify ===
+        // Combined-week site: carry items get checked against all 7 days;
+        // non-carry pkg/produce against swap's trip days.
+        var cVerify = _verifyNewPkgItemsAfterSwap(cSwap, swapTripDays, persons, leftovers);
+        if(cVerify.ok){
+          if(window._swapDiag){
+            var cRec = {p:cSwap.p, d:cSwap.d, s:cSwap.s, dbKey:dbKey, trip:'week',
+              pass:window._swapDiag.passLabel,
+              oldMealId:cSwap.oldMealId, newMealId:cSwap.newMealId,
+              sharedSlot:!!cSwap.sharedSlot, candidateRank:cpi175};
+            window._swapDiag.swappedKeys[cKey] = cRec;
+            window._swapDiag.swaps.push(cRec);
+            if(cSwap.sharedSlot){
+              window._swapDiag.swappedKeys[cOKey] = cRec;
+            }
+          }
+          break;
+        }
+        // === Verify failed — revert + try next ===
+        Object.keys(cSavedSel).forEach(function(k){
+          if(cSavedSel[k] === undefined) delete SEL[k];
+          else SEL[k] = cSavedSel[k];
         });
+        Object.keys(cSavedOv).forEach(function(k){
+          if(cSavedOv[k] === null) delete OVERRIDES[k];
+          else OVERRIDES[k] = cSavedOv[k];
+        });
+        if(window._swapDiag){
+          window._swapDiag.reverted = (window._swapDiag.reverted || []);
+          window._swapDiag.reverted.push({
+            p:cSwap.p, d:cSwap.d, s:cSwap.s, dbKey:dbKey, trip:'week',
+            pass:window._swapDiag.passLabel, newMealId:cSwap.newMealId,
+            reason:cVerify.reason, candidateRank:cpi175
+          });
+        }
+        invalidateLeftoverCache();
+        runBalanceAdjusters();
+        leftovers = computeLeftovers();
       }
-      invalidateLeftoverCache();
-      runBalanceAdjusters();
-      leftovers = computeLeftovers();
       return;
     }
     info.solos.forEach(function(so){
@@ -11334,13 +11418,22 @@ function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
   // produced an INV11 fire (seed 80019, shrimp_quinoa_bowl Thu→Fri gap=0).
   // INV11-aware L1 keeps gap<2 protection while letting gap 2-4d through.
   //
-  // Build a set of meals to STRICTLY reject for INV11 protection: any meal
-  // already cooked within 2 days of mu.d (calendar gap < 2 = adjacent days).
+  // Build a set of meals to STRICTLY reject for INV11 protection.
+  // V175 (2026-05-20): widened window from [-1,0,1] to [-2,-1,0,1,2].
+  // INV11 fires when gap_days < 2. For new swap at dayIdx D and existing
+  // anchor/leftover at dayIdx E:
+  //   E = D-1 → gap_days = D - (D-1) - 1 = 0 (fires)
+  //   E = D-2 → gap_days = D - (D-2) - 1 = 1 (fires, was missed)
+  //   E = D-3 → gap_days = D - (D-3) - 1 = 2 (safe)
+  // Same on the +side. The previous [-1,0,1] window missed E = D±2,
+  // letting V175's rank-1 fallback candidates slip through into INV11
+  // territory (e.g. quinoa_bowl rank-1 fallback at him_Friday_lunch when
+  // her_Wednesday_dinner already had a quinoa_bowl batch end on Wed).
+  // SEL[*] holds the same meal id for anchor + leftover slots, so a single
+  // calendar-day scan catches both.
   var inv11Blocked = {};
   if(mu.s === 'lunch' || mu.s === 'dinner'){
-    // Look at days [dayIdx-1, dayIdx, dayIdx+1] — any cook within these 3
-    // days of mu.d would have gap_days <= 1 → INV11 fire if same meal here.
-    [-1, 0, 1].forEach(function(off){
+    [-2, -1, 0, 1, 2].forEach(function(off){
       var checkIdx = dayIdx + off;
       if(checkIdx < 0 || checkIdx >= DAYS.length) return;
       var checkDay = DAYS[checkIdx];
@@ -11385,17 +11478,58 @@ function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
   }
   if(!candidates.length) return null;
 
-  var best = null, bestDiff = Infinity;
+  // V175 (2026-05-20): return up to 10 candidates sorted by kcal-fit (best
+  // first). Caller iterates: snapshot → apply → verify NEW pkg/carry items
+  // freeze cleanly → keep on success, revert + try next on failure. Picks
+  // the first candidate that doesn't introduce new pkg/carry waste. If all
+  // 10 fail verify, no swap is applied; original waste stands.
   candidates.forEach(function(c){
     var cBase = 0;
     c.ingredients.forEach(function(i){var idb = NUTRI_DB[i.dbKey]; if(idb) cBase += idb.kcal*(i.amt||0);});
-    var diff = Math.abs(cBase - slotBudget);
-    if(diff < bestDiff){ bestDiff = diff; best = c; }
+    c._mpV175Diff = Math.abs(cBase - slotBudget);
   });
-  if(!best) return null;
+  candidates.sort(function(a,b){return a._mpV175Diff - b._mpV175Diff;});
   // oldMealId returned so caller can clean up co-contributor overrides for
   // the OUTGOING meal's pkg/produce ingredients in other trip slots.
-  return {p:mu.p, d:mu.d, s:mu.s, oldMealId:mu.mealId, newMealId:best.id, sharedSlot:sharedSlot};
+  var proposals = candidates.slice(0, 10).map(function(c){
+    return {p:mu.p, d:mu.d, s:mu.s, oldMealId:mu.mealId, newMealId:c.id, sharedSlot:sharedSlot};
+  });
+  return proposals.length > 0 ? proposals : null;
+}
+
+// V175 (2026-05-20): post-swap verifier. Returns {ok, reason}. For each
+// pkg/produce ingredient the new meal uses that the OLD meal didn't,
+// probes _freezeOneItem to see if it can land cleanly. Carry items get
+// probed against all 7 days; non-carry against the swap's trip days.
+// `_freezeOneItem` returns null when the item can't be made to fit
+// without waste. ANY null result fails verify — caller reverts and tries
+// next candidate.
+function _verifyNewPkgItemsAfterSwap(swap, days, persons, leftovers){
+  var newMeal = getMeal(swap.newMealId);
+  if(!newMeal || !newMeal.ingredients) return {ok:true, reason:null};
+  var oldMeal = getMeal(swap.oldMealId);
+  var oldKeys = {};
+  if(oldMeal && oldMeal.ingredients){
+    oldMeal.ingredients.forEach(function(i){oldKeys[i.dbKey]=true;});
+  }
+  for(var i = 0; i < newMeal.ingredients.length; i++){
+    var ing = newMeal.ingredients[i];
+    if(oldKeys[ing.dbKey]) continue;  // already present in old; not "new"
+    var isPkg = ROUND_PKG_ITEMS.indexOf(ing.dbKey) >= 0;
+    var isProduce = ROUND_PRODUCE_ITEMS.indexOf(ing.dbKey) >= 0;
+    if(!isPkg && !isProduce) continue;  // not a pkg/produce concern
+    // Inline carry-item check (the freezeTripTotals closure helper isn't
+    // visible at module scope).
+    var iDb = NUTRI_DB[ing.dbKey];
+    var isCarry = !!(iDb && ((iDb.pkg && iDb.pkg.crossTripCarry === true)
+                          || (iDb.produce && iDb.produce.crossTripCarry === true)));
+    var checkDays = isCarry ? DAYS.slice() : days;
+    var probe = _freezeOneItem(ing.dbKey, checkDays, persons, leftovers);
+    if(!probe){
+      return {ok:false, reason:'no-plan:' + ing.dbKey};
+    }
+  }
+  return {ok:true, reason:null};
 }
 
 // Build a "no-scale" freeze plan for the on-boundary case.
