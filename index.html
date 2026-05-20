@@ -471,7 +471,7 @@ var NUTRI_DB = {
   'thai chili':            {kcal:2,   pro:0.1,fat:0,   carb:0.4, unit:'each', produce:{perWhole:1,label:'thai chili',softWaste:true}, minAmt:1, maxAmt:5},
   'frozen corn':           {kcal:134, pro:5,  fat:1.3, carb:31,  unit:'cup', brand:'Trader Joe\'s fire-roasted', minAmt:0.25, minAmtSolo:0.5, maxAmt:1.5},
   'egg noodles cooked':    {kcal:220, pro:8,  fat:3,   carb:40,  unit:'cup', note:'cooked; macros match USDA cooked egg noodles (~221 kcal/cup); 1 dry cup = 2.25-2.75 cups cooked', minAmt:0.25, maxAmt:2, dry:{ratio:0.4, cookedRange:[2.25, 2.75], label:'cup dry'}},
-  'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:3,pkg:{size:32,unit:'oz',cups:4,type:'carton',softWaste:true}},
+  'chicken broth':{kcal:15,pro:2,fat:0.5,carb:1,unit:'cup',minAmt:0.25,maxAmt:3,pkg:{size:32,unit:'oz',cups:4,type:'carton',softWaste:true,crossTripCarry:true}},
   'poblano':               {kcal:15,  pro:0.7,fat:0.1, carb:3,   unit:'each', cupsEach:0.75, minAmt:0.5, minAmtSolo:1, maxAmt:2},
   'scallion':              {kcal:5,   pro:0.3,fat:0,   carb:1,   unit:'each', cupsEach:0.125, wholeWhenSolo:true, minAmt:0.5, minAmtSolo:1, maxAmt:4},
   'bok choy':              {kcal:9,   pro:1,  fat:0.1, carb:1.5, unit:'cup', produce:{perWhole:2,label:'head bok choy'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.5},
@@ -519,7 +519,7 @@ var NUTRI_DB = {
   'red wine vinegar':      {kcal:3,   pro:0,  fat:0,   carb:0,   unit:'tbsp', minAmt:0.5, maxAmt:2},
   'balsamic vinegar':      {kcal:14,  pro:0.1,fat:0,   carb:3,   unit:'tbsp', minAmt:0.5, maxAmt:2},
   'salsa':                 {kcal:5,   pro:0.2,fat:0,   carb:1,   unit:'tbsp', minAmt:1, maxAmt:4},
-  'marinara':{kcal:66,pro:2,fat:1.5,carb:12,unit:'cup',pkg:{size:24,unit:'oz',cups:3,type:'jar',softWaste:true},minAmt:0.25,maxAmt:2.0},
+  'marinara':{kcal:66,pro:2,fat:1.5,carb:12,unit:'cup',pkg:{size:24,unit:'oz',cups:3,type:'jar',softWaste:true,crossTripCarry:true},minAmt:0.25,maxAmt:2.0},
   'white miso':{kcal:33,pro:2,fat:1,carb:4.3,unit:'tbsp',minAmt:0.5,maxAmt:2},
   'tomatillo sauce':       {kcal:5,   pro:0.2,fat:0.2, carb:1,   unit:'tbsp', minAmt:1, maxAmt:3},
   'broth concentrate':     {kcal:15,  pro:1.5,fat:0,   carb:1.5, unit:'tbsp', halfSnap:true, minAmt:0.5, maxAmt:2},
@@ -4652,9 +4652,24 @@ function buildShoppingList(trip,who){
     // cook is the one shopping for the batch; the other person's portion
     // is implicitly included in the cook's bucket. For solo cooks, anchor
     // person = eater person, no difference.
+    //
+    // V164 (2026-05-19): crossTripCarry items (marinara, chicken broth)
+    // are handled SEPARATELY via a combined-week attribution pass below.
+    // Cook 1 buys the bulk; Cook 2 only buys remainder if Cook 1's
+    // purchased leftover doesn't cover Cook 2's cooking. Skip these in
+    // the main per-trip iteration via _isCarry helper + _addNonCarry
+    // wrapper.
     const leftovers = computeLeftovers();
     const tripDaySet = {};
     days.forEach(function(d){tripDaySet[d]=true;});
+    function _isCarry(dbKey){
+      var db = NUTRI_DB[dbKey];
+      return !!(db && db.pkg && db.pkg.crossTripCarry === true);
+    }
+    function _addNonCarry(items, dbKey, amt, p){
+      if(_isCarry(dbKey)) return;
+      addShopIngredient(items, dbKey, amt, p);
+    }
 
     persons.forEach(function(p){
       DAYS.forEach(function(d){
@@ -4681,12 +4696,12 @@ function buildShoppingList(trip,who){
             lo.portions.forEach(function(pt){
               const bal = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
               if(bal){
-                bal.forEach(function(i){addShopIngredient(items, i.dbKey, i.amt, p);});
+                bal.forEach(function(i){_addNonCarry(items, i.dbKey, i.amt, p);});
               } else {
                 const m2 = getMeal(getMealId(pt.p, pt.d, pt.s));
                 if(m2 && m2[pt.p]){
                   const ingr = applyOverrides(m2[pt.p], pt.p, pt.d, pt.s);
-                  ingr.forEach(function(i){addShopIngredient(items, i.dbKey, i.amt, p);});
+                  ingr.forEach(function(i){_addNonCarry(items, i.dbKey, i.amt, p);});
                 }
               }
             });
@@ -4694,10 +4709,10 @@ function buildShoppingList(trip,who){
             // Solo cook (no leftover entry, or single-portion).
             const balanced = getBalancedSlotIngredients(p, d, s);
             if(balanced){
-              balanced.forEach(function(i){addShopIngredient(items, i.dbKey, i.amt, p);});
+              balanced.forEach(function(i){_addNonCarry(items, i.dbKey, i.amt, p);});
             } else {
               const ingr = applyOverrides(port, p, d, s);
-              ingr.forEach(function(i){addShopIngredient(items, i.dbKey, i.amt, p);});
+              ingr.forEach(function(i){_addNonCarry(items, i.dbKey, i.amt, p);});
             }
           }
         });
@@ -4718,6 +4733,86 @@ function buildShoppingList(trip,who){
               addShopIngredient(items, ing.dbKey, ing.amt, p);
             });
           }
+        }
+      });
+    });
+
+    // V164 (2026-05-19): crossTripCarry attribution pass.
+    // For each carry item × each person in this view:
+    //  - Sum the person's anchored carry-item demand in Cook 1's days
+    //    (cook1Demand) and Cook 2's days (cook2Demand) — INCLUDING
+    //    anchors whose cook day is in the OTHER trip than the one we're
+    //    building shopping for.
+    //  - Cook 1 view: attribute the person's cook1Demand to their bucket.
+    //  - Cook 2 view: compute Cook 1's leftover after rounded purchase;
+    //    attribute (cook2Demand − leftover, floored at 0) to the bucket.
+    //    Edge: if person had 0 cook1Demand, attribute their full
+    //    cook2Demand (they'd buy fresh on Cook 2 — nothing to carry).
+    // Per-person semantics match the existing anchor-attribution model
+    // (each person shops for what they cook); per-household sharing of
+    // the open jar/carton is implicit in the 'both' view aggregation.
+    const c1Days = TRIP_DAYS_STATIC.cook1 || [];
+    const c2Days = TRIP_DAYS_STATIC.cook2 || [];
+    const c1DaySet = {}; c1Days.forEach(function(d){c1DaySet[d]=true;});
+    const c2DaySet = {}; c2Days.forEach(function(d){c2DaySet[d]=true;});
+    // {dbKey: {him: {cook1, cook2}, her: {cook1, cook2}}}
+    const carryDemand = {};
+    persons.forEach(function(p){
+      DAYS.forEach(function(d){
+        SLOTS.forEach(function(s){
+          if(s==='late_snack') return;
+          const k=sk(p,d,s);
+          if(SKIPPED[k]||EAT_OUT[k]) return;
+          const id=getMealId(p,d,s);if(!id) return;
+          const m=getMeal(id);if(!m||!m[p]) return;
+          const port=m[p];
+          if(!port.ingredients||!port.ingredients.length||port.ingredients[0].dbKey===undefined) return;
+          const lo = leftovers[k];
+          if(lo && lo.isLeftover) return; // skip leftover slots
+          const cookTrip = c1DaySet[d] ? 'cook1' : (c2DaySet[d] ? 'cook2' : null);
+          if(!cookTrip) return;
+          // Sum batch portion amts for carry items only
+          const portionList = (lo && lo.portions && lo.portions.length > 1) ? lo.portions : [{p:p,d:d,s:s}];
+          portionList.forEach(function(pt){
+            let src = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
+            if(!src){
+              const m2 = getMeal(getMealId(pt.p, pt.d, pt.s));
+              if(m2 && m2[pt.p]) src = applyOverrides(m2[pt.p], pt.p, pt.d, pt.s);
+            }
+            if(!src) return;
+            src.forEach(function(i){
+              if(!_isCarry(i.dbKey)) return;
+              if(!carryDemand[i.dbKey]) carryDemand[i.dbKey] = {him:{cook1:0,cook2:0}, her:{cook1:0,cook2:0}};
+              carryDemand[i.dbKey][p][cookTrip] += i.amt;
+            });
+          });
+        });
+      });
+    });
+    Object.keys(carryDemand).forEach(function(dbKey){
+      const demand = carryDemand[dbKey];
+      const db = NUTRI_DB[dbKey];
+      const perUnit = db && db.pkg ? db.pkg.cups : 0;
+      if(!(perUnit > 0)) return;
+      ['him','her'].forEach(function(p){
+        if(persons.indexOf(p) < 0) return;
+        const c1 = demand[p].cook1;
+        const c2 = demand[p].cook2;
+        let displayedAmt = 0;
+        if(trip === 'cook1'){
+          displayedAmt = c1;
+        } else if(trip === 'cook2'){
+          if(c1 < 0.001){
+            // No Cook 1 demand for this person — they buy fresh on Cook 2
+            displayedAmt = c2;
+          } else {
+            const c1Jars = _pkgsNeeded(c1, perUnit);
+            const c1Leftover = c1Jars * perUnit - c1;
+            displayedAmt = Math.max(0, c2 - c1Leftover);
+          }
+        }
+        if(displayedAmt > 0.001){
+          addShopIngredient(items, dbKey, displayedAmt, p);
         }
       });
     });
@@ -6237,6 +6332,13 @@ function verifyInvariants(){
   // catches expected ingredients that addShopIngredient silently dropped
   // (stale dbKeys, future skip rules, balanced-cache leakage).
   const _inv3Leftovers = computeLeftovers();
+  // V164 (2026-05-19): crossTripCarry items need attribution mirroring
+  // buildShoppingList. Skip them in the per-trip expected accumulation
+  // below; add via the carry-attribution pass after.
+  function _inv3IsCarry(dbKey){
+    var db = NUTRI_DB[dbKey];
+    return !!(db && db.pkg && db.pkg.crossTripCarry === true);
+  }
   ['cook1','cook2'].forEach(function(trip){
     const tripDays=TRIP_DAYS_STATIC[trip]||[];
     const tripDaySet={};
@@ -6266,6 +6368,7 @@ function verifyInvariants(){
               const src = bal || (m3 && m3[pt.p] ? applyOverrides(m3[pt.p], pt.p, pt.d, pt.s) : null);
               if(src){
                 src.forEach(function(i){
+                  if(_inv3IsCarry(i.dbKey)) return; // V164: carry-attribution pass below
                   if(!expected[i.dbKey])expected[i.dbKey]={him:0,her:0};
                   expected[i.dbKey][p]+=i.amt;
                 });
@@ -6277,6 +6380,7 @@ function verifyInvariants(){
             const src=bal||applyOverrides(port2,p,d,s2);
             if(src){
               src.forEach(function(i){
+                if(_inv3IsCarry(i.dbKey)) return; // V164
                 if(!expected[i.dbKey])expected[i.dbKey]={him:0,her:0};
                 expected[i.dbKey][p]+=i.amt;
               });
@@ -6300,6 +6404,74 @@ function verifyInvariants(){
         }
       });
     });
+    // V164 (2026-05-19): carry items expected attribution — mirrors
+    // buildShoppingList's Cook-1-buys-first algorithm. Per-person demand
+    // summed across both cook days, then:
+    //  - cook1 view expected[dbKey][p] += person's cook1 demand
+    //  - cook2 view expected[dbKey][p] += max(0, cook2 demand − cook1 leftover)
+    //  - Edge: if person's cook1 demand is 0, cook2 expected = full cook2 demand
+    const c1DaysI3 = TRIP_DAYS_STATIC.cook1 || [];
+    const c2DaysI3 = TRIP_DAYS_STATIC.cook2 || [];
+    const c1DaySetI3 = {}; c1DaysI3.forEach(function(d){c1DaySetI3[d]=true;});
+    const c2DaySetI3 = {}; c2DaysI3.forEach(function(d){c2DaySetI3[d]=true;});
+    const carryDemandI3 = {};
+    ['him','her'].forEach(function(p){
+      DAYS.forEach(function(d){
+        SLOTS.forEach(function(s){
+          if(s==='late_snack') return;
+          const k=sk(p,d,s);
+          if(SKIPPED[k]||EAT_OUT[k]) return;
+          const id=getMealId(p,d,s);if(!id) return;
+          const m=getMeal(id);if(!m||!m[p]) return;
+          const port=m[p];
+          if(!port.ingredients||!port.ingredients.length||port.ingredients[0].dbKey===undefined) return;
+          const lo = _inv3Leftovers[k];
+          if(lo && lo.isLeftover) return;
+          const cookTrip = c1DaySetI3[d] ? 'cook1' : (c2DaySetI3[d] ? 'cook2' : null);
+          if(!cookTrip) return;
+          const portionList = (lo && lo.portions && lo.portions.length > 1) ? lo.portions : [{p:p,d:d,s:s}];
+          portionList.forEach(function(pt){
+            let src = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
+            if(!src){
+              const m2 = getMeal(getMealId(pt.p, pt.d, pt.s));
+              if(m2 && m2[pt.p]) src = applyOverrides(m2[pt.p], pt.p, pt.d, pt.s);
+            }
+            if(!src) return;
+            src.forEach(function(i){
+              if(!_inv3IsCarry(i.dbKey)) return;
+              if(!carryDemandI3[i.dbKey]) carryDemandI3[i.dbKey] = {him:{cook1:0,cook2:0}, her:{cook1:0,cook2:0}};
+              carryDemandI3[i.dbKey][p][cookTrip] += i.amt;
+            });
+          });
+        });
+      });
+    });
+    Object.keys(carryDemandI3).forEach(function(dbKey){
+      const demand = carryDemandI3[dbKey];
+      const db = NUTRI_DB[dbKey];
+      const perUnit = db && db.pkg ? db.pkg.cups : 0;
+      if(!(perUnit > 0)) return;
+      ['him','her'].forEach(function(p){
+        const c1 = demand[p].cook1;
+        const c2 = demand[p].cook2;
+        let exp = 0;
+        if(trip === 'cook1'){
+          exp = c1;
+        } else {
+          if(c1 < 0.001) exp = c2;
+          else {
+            const c1Jars = _pkgsNeeded(c1, perUnit);
+            const c1Leftover = c1Jars * perUnit - c1;
+            exp = Math.max(0, c2 - c1Leftover);
+          }
+        }
+        if(exp > 0.001){
+          if(!expected[dbKey]) expected[dbKey] = {him:0, her:0};
+          expected[dbKey][p] += exp;
+        }
+      });
+    });
+
     // Forward: every shopList item must match expected.
     Object.keys(shopList).forEach(function(cat){
       shopList[cat].forEach(function(item){
@@ -7247,7 +7419,14 @@ function verifyInvariants(){
         // computation subtracts INV20Soft from INV20 so soft fires don't
         // count as hard regressions. User-accepted "single-jar/carton waste
         // is OK" items.
-        if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+        //
+        // V164 (2026-05-19): crossTripCarry items (marinara, broth) are
+        // checked OUTSIDE this per-trip loop via a combined-week pass at
+        // the end. Per-trip waste would falsely fire here because Cook 1's
+        // shopping covers BOTH trips' demand (so Cook 1's "used" alone
+        // looks tiny vs "bought"). The combined-week pass uses weekly
+        // demand and total weekly jars purchased.
+        if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.crossTripCarry){
           var perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
           if(perPkg > 0){
             var bought = _pkgsNeeded(totalNum, perPkg) * perPkg;
@@ -7299,6 +7478,70 @@ function verifyInvariants(){
       });
     });
   });
+
+  // V164 (2026-05-19): combined-week waste check for crossTripCarry items.
+  // Cook 1 buys the bulk; Cook 2 buys any remainder. Total weekly waste =
+  // (Cook 1 jars + Cook 2 jars) × perUnit − combined weekly cooking demand.
+  // Per-trip waste checks above falsely flag carry items because Cook 1's
+  // shopping includes BOTH trips' demand (so Cook 1's used vs bought looks
+  // wrong); we skip them there and use this combined check instead.
+  (function _inv20CarryWeekly(){
+    var carryDemand = {}; // {dbKey: {him: cups, her: cups, totalCups: num}}
+    var _wLeftovers = computeLeftovers();
+    ['him','her'].forEach(function(p){
+      DAYS.forEach(function(d){
+        SLOTS.forEach(function(s){
+          if(s==='late_snack') return;
+          var k=sk(p,d,s);
+          if(SKIPPED[k]||EAT_OUT[k]) return;
+          var id=getMealId(p,d,s);if(!id) return;
+          var m=getMeal(id);if(!m||!m[p]) return;
+          var port=m[p];
+          if(!port.ingredients||!port.ingredients.length||port.ingredients[0].dbKey===undefined) return;
+          var lo = _wLeftovers[k];
+          if(lo && lo.isLeftover) return;
+          var portionList = (lo && lo.portions && lo.portions.length > 1) ? lo.portions : [{p:p,d:d,s:s}];
+          portionList.forEach(function(pt){
+            var src = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
+            if(!src){
+              var m2 = getMeal(getMealId(pt.p, pt.d, pt.s));
+              if(m2 && m2[pt.p]) src = applyOverrides(m2[pt.p], pt.p, pt.d, pt.s);
+            }
+            if(!src) return;
+            src.forEach(function(i){
+              var db = NUTRI_DB[i.dbKey];
+              if(!(db && db.pkg && db.pkg.crossTripCarry)) return;
+              if(!carryDemand[i.dbKey]) carryDemand[i.dbKey] = {totalCups:0};
+              carryDemand[i.dbKey].totalCups += i.amt;
+            });
+          });
+        });
+      });
+    });
+    Object.keys(carryDemand).forEach(function(dbKey){
+      var db = NUTRI_DB[dbKey];
+      var perPkg = db.pkg.cups || 0;
+      if(!(perPkg > 0)) return;
+      var totalUsed = carryDemand[dbKey].totalCups;
+      if(totalUsed <= 0) return;
+      var jars = _pkgsNeeded(totalUsed, perPkg);
+      var bought = jars * perPkg;
+      var waste = bought - totalUsed;
+      var wastePct = bought > 0 ? waste / bought : 0;
+      if(wastePct > 0.01){
+        var detail = 'week '+dbKey
+          +' used='+totalUsed.toFixed(3)+'cup'
+          +' bought='+bought.toFixed(3)+'cup'
+          +' waste='+waste.toFixed(3)+'cup'
+          +' pct='+(wastePct*100).toFixed(1)+'%';
+        violations.push('INV20 waste-over-threshold (pkg): '+detail);
+        violations.push('INV21 pkg-waste-over-1pct: '+detail);
+        if(db.pkg.softWaste){
+          violations.push('INV20Soft soft-waste (pkg): '+detail);
+        }
+      }
+    });
+  })();
 
   return violations;
 }
@@ -10236,9 +10479,34 @@ function freezeTripTotals(randTarget, attemptSwap){
   var allItems = ROUND_PKG_ITEMS.concat(ROUND_PRODUCE_ITEMS);
   var affectedDays = {};
 
+  // V164 (2026-05-19): cross-trip carry. Items flagged db.pkg.crossTripCarry
+  // (marinara, chicken broth) freeze across the FULL WEEK as one logical
+  // trip instead of per-(cook1/cook2). They have shelf life long enough to
+  // open the jar/carton in Cook 1 shopping and consume the leftover in
+  // Cook 2's cooking. Combined freeze pools contributors → more elasticity
+  // → fewer freeze-fail cases AND eliminates per-trip rounding redundancy.
+  // Shopping list attributes the bulk of the buy to Cook 1; Cook 2 only
+  // buys a remainder if Cook 1's purchased leftover can't cover Cook 2's
+  // demand. See buildShoppingList for the attribution math.
+  function _isCarryItem(dbKey){
+    var db = NUTRI_DB[dbKey];
+    return !!(db && db.pkg && db.pkg.crossTripCarry === true);
+  }
+  // V163 + V164: hoisted so combined-week pass below can reuse.
+  function _isUserPinned(p, d, s, idx){
+    var ov = OVERRIDES[sk(p, d, s)];
+    if(!ov) return false;
+    for(var i = 0; i < ov.length; i++){
+      if(ov[i].idx === idx && ov[i]._userSet === true) return true;
+    }
+    return false;
+  }
+
   ['cook1','cook2'].forEach(function(trip){
     var days = TRIP_DAYS_STATIC[trip] || [];
     allItems.forEach(function(dbKey){
+      // V164: skip carry items in per-trip pass — handled below with all 7 days
+      if(_isCarryItem(dbKey)) return;
       var info = _freezeOneItem(dbKey, days, persons, leftovers);
       if(!info){
         if(attemptSwap){
@@ -10411,14 +10679,7 @@ function freezeTripTotals(randTarget, attemptSwap){
       // check, freeze stamped _freezePin:true onto the user-pinned
       // entry, and _clearFreezeOverrides dropped the entire entry on
       // the next randomize — silently destroying the user pin.
-      function _isUserPinned(p, d, s, idx){
-        var ov = OVERRIDES[sk(p, d, s)];
-        if(!ov) return false;
-        for(var i = 0; i < ov.length; i++){
-          if(ov[i].idx === idx && ov[i]._userSet === true) return true;
-        }
-        return false;
-      }
+      // V164: _isUserPinned hoisted to outer scope (above this forEach).
       info.solos.forEach(function(so){
         if(_isUserPinned(so.p, so.d, so.s, so.idx)) return;
         var soCache = _dayBalancedCache[pk(so.p, so.d)];
@@ -10444,6 +10705,50 @@ function freezeTripTotals(randTarget, attemptSwap){
           setOverride(pt.p, pt.d, pt.s, pt.idx, '_freezePin', true);
           affectedDays[pt.p+'_'+pt.d] = {p:pt.p, d:pt.d};
         });
+      });
+    });
+  });
+
+  // V164 (2026-05-19): combined-week freeze pass for crossTripCarry items.
+  // Same write logic as the per-trip pass, but enumerates contributors
+  // across ALL seven days. Pooled contributors give the freeze pass more
+  // degrees of freedom to land on a clean jar/carton multiple. Result is
+  // written as overrides on individual portion slots (same as per-trip);
+  // buildShoppingList does the trip attribution math separately.
+  //
+  // Swap not attempted in combined-week mode — the swap logic is per-trip
+  // semantically (it swaps one slot's meal). For carry items, if combined
+  // freeze fails, accept the natural amounts; INV20 fires at the weekly
+  // waste check (not per-trip), and softWaste:true keeps it soft.
+  var allWeekDays = DAYS.slice();
+  allItems.forEach(function(dbKey){
+    if(!_isCarryItem(dbKey)) return;
+    var info = _freezeOneItem(dbKey, allWeekDays, persons, leftovers);
+    if(!info) return;
+    info.solos.forEach(function(so){
+      if(_isUserPinned(so.p, so.d, so.s, so.idx)) return;
+      var soCache = _dayBalancedCache[pk(so.p, so.d)];
+      if(soCache && soCache[so.s] && soCache[so.s][so.idx]){
+        soCache[so.s][so.idx].amt = so.amt;
+        soCache[so.s][so.idx].scalable = false;
+      }
+      setOverride(so.p, so.d, so.s, so.idx, 'amt', so.amt);
+      setOverride(so.p, so.d, so.s, so.idx, 'scalable', false);
+      setOverride(so.p, so.d, so.s, so.idx, '_freezePin', true);
+      affectedDays[so.p+'_'+so.d] = {p:so.p, d:so.d};
+    });
+    info.batches.forEach(function(b){
+      b.portions.forEach(function(pt){
+        if(_isUserPinned(pt.p, pt.d, pt.s, pt.idx)) return;
+        var ptCache = _dayBalancedCache[pk(pt.p, pt.d)];
+        if(ptCache && ptCache[pt.s] && ptCache[pt.s][pt.idx]){
+          ptCache[pt.s][pt.idx].amt = pt.amt;
+          ptCache[pt.s][pt.idx].scalable = false;
+        }
+        setOverride(pt.p, pt.d, pt.s, pt.idx, 'amt', pt.amt);
+        setOverride(pt.p, pt.d, pt.s, pt.idx, 'scalable', false);
+        setOverride(pt.p, pt.d, pt.s, pt.idx, '_freezePin', true);
+        affectedDays[pt.p+'_'+pt.d] = {p:pt.p, d:pt.d};
       });
     });
   });
