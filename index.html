@@ -490,7 +490,7 @@ var NUTRI_DB = {
   'nectarine':             {kcal:62,  pro:1.5,fat:0.5, carb:15,  unit:'each', cupsEach:0.75, minAmt:0.5, maxAmt:1},
   'mixed berries':         {kcal:70,  pro:1,  fat:0.5, carb:17,  unit:'cup', brand:'Giant', altUnits:{g:140}, minAmt:0.25, maxAmt:1.5},
   'acai':                  {kcal:70,  pro:1,  fat:1.5, carb:13,  unit:'cup', brand:'Sambazon', altUnits:{g:115}, minAmt:0.25, maxAmt:1},
-  'lime':                  {kcal:20,  pro:0.5,fat:0.1, carb:7,   unit:'each', produce:{perWhole:1,label:'lime',softWaste:true}, minAmt:0.25, maxAmt:1},
+  'lime':                  {kcal:20,  pro:0.5,fat:0.1, carb:7,   unit:'each', produce:{perWhole:1,label:'lime',softWaste:true,crossTripCarry:true}, minAmt:0.25, maxAmt:1},
   // Fats & oils
   // NOTE: sesame oil + olive oil are dressing/sauce oils, NOT pan-sauté oils.
   // They do NOT get minAmtSolo (unlike avocado oil which is for sautéing).
@@ -543,7 +543,7 @@ var NUTRI_DB = {
   'chili flake':           {kcal:6,   pro:0.3,fat:0.3, carb:0.9, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'red pepper flake':      {kcal:6,   pro:0.3,fat:0.3, carb:0.9, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'garlic':{kcal:4,pro:0.2,fat:0,carb:1,unit:'cloves',wholeOnly:true,minAmt:1,maxAmt:4},
-  'lemon':                 {kcal:12,  pro:0.5,fat:0.1, carb:4,   unit:'each', produce:{perWhole:1,label:'lemon',softWaste:true}, minAmt:0.25, maxAmt:1},
+  'lemon':                 {kcal:12,  pro:0.5,fat:0.1, carb:4,   unit:'each', produce:{perWhole:1,label:'lemon',softWaste:true,crossTripCarry:true}, minAmt:0.25, maxAmt:1},
   'grapefruit juice':      {kcal:6,   pro:0.07,fat:0,  carb:1.4, unit:'tbsp', halfSnap:true, minAmt:0.5, maxAmt:3},
   'ginger':                {kcal:6,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', halfSnap:true, minAmt:0.125, maxAmt:1},
   'lemongrass':            {kcal:5,   pro:0,  fat:0,   carb:1.2, unit:'tbsp', minAmt:0.5, maxAmt:2},
@@ -4663,8 +4663,12 @@ function buildShoppingList(trip,who){
     const tripDaySet = {};
     days.forEach(function(d){tripDaySet[d]=true;});
     function _isCarry(dbKey){
+      // V171 (2026-05-19): also check produce.crossTripCarry. Pkg items
+      // (marinara, broth) use db.pkg.crossTripCarry; produce items
+      // (lime, lemon) use db.produce.crossTripCarry. Both pool weekly.
       var db = NUTRI_DB[dbKey];
-      return !!(db && db.pkg && db.pkg.crossTripCarry === true);
+      return !!(db && ((db.pkg && db.pkg.crossTripCarry === true)
+                    || (db.produce && db.produce.crossTripCarry === true)));
     }
     function _addNonCarry(items, dbKey, amt, p){
       if(_isCarry(dbKey)) return;
@@ -4792,7 +4796,8 @@ function buildShoppingList(trip,who){
     Object.keys(carryDemand).forEach(function(dbKey){
       const demand = carryDemand[dbKey];
       const db = NUTRI_DB[dbKey];
-      const perUnit = db && db.pkg ? db.pkg.cups : 0;
+      // V171: support both pkg (cups) and produce (perWhole) perUnit.
+      const perUnit = db && db.pkg ? db.pkg.cups : (db && db.produce ? db.produce.perWhole : 0);
       if(!(perUnit > 0)) return;
       ['him','her'].forEach(function(p){
         if(persons.indexOf(p) < 0) return;
@@ -6336,8 +6341,10 @@ function verifyInvariants(){
   // buildShoppingList. Skip them in the per-trip expected accumulation
   // below; add via the carry-attribution pass after.
   function _inv3IsCarry(dbKey){
+    // V171: also check produce.crossTripCarry (lime, lemon).
     var db = NUTRI_DB[dbKey];
-    return !!(db && db.pkg && db.pkg.crossTripCarry === true);
+    return !!(db && ((db.pkg && db.pkg.crossTripCarry === true)
+                  || (db.produce && db.produce.crossTripCarry === true)));
   }
   ['cook1','cook2'].forEach(function(trip){
     const tripDays=TRIP_DAYS_STATIC[trip]||[];
@@ -6449,7 +6456,8 @@ function verifyInvariants(){
     Object.keys(carryDemandI3).forEach(function(dbKey){
       const demand = carryDemandI3[dbKey];
       const db = NUTRI_DB[dbKey];
-      const perUnit = db && db.pkg ? db.pkg.cups : 0;
+      // V171: support both pkg + produce perUnit.
+      const perUnit = db && db.pkg ? db.pkg.cups : (db && db.produce ? db.produce.perWhole : 0);
       if(!(perUnit > 0)) return;
       ['him','her'].forEach(function(p){
         const c1 = demand[p].cook1;
@@ -7457,7 +7465,12 @@ function verifyInvariants(){
         // INV20Soft from INV20 hardFail. User wants whole-unit shopping
         // displays and visible waste warning, without freeze-pinning the
         // recipes to whole trip totals (would over-bump per-portion macros).
-        if(db.produce && !db.produce.acceptableWaste){
+        //
+        // V171 (2026-05-19): crossTripCarry produce items (lime, lemon)
+        // are checked OUTSIDE this per-trip loop via the combined-week
+        // pass at the end. Per-trip would falsely fire because Cook 1
+        // owns the buy for both trips.
+        if(db.produce && !db.produce.acceptableWaste && !db.produce.crossTripCarry){
           var perWhole = db.produce.perWhole;
           if(perWhole > 0){
             var pBought = _pkgsNeeded(totalNum, perWhole) * perWhole;
@@ -7510,7 +7523,10 @@ function verifyInvariants(){
             if(!src) return;
             src.forEach(function(i){
               var db = NUTRI_DB[i.dbKey];
-              if(!(db && db.pkg && db.pkg.crossTripCarry)) return;
+              // V171: include both pkg and produce crossTripCarry items.
+              var isCarry = db && ((db.pkg && db.pkg.crossTripCarry)
+                                || (db.produce && db.produce.crossTripCarry));
+              if(!isCarry) return;
               if(!carryDemand[i.dbKey]) carryDemand[i.dbKey] = {totalCups:0};
               carryDemand[i.dbKey].totalCups += i.amt;
             });
@@ -7520,24 +7536,37 @@ function verifyInvariants(){
     });
     Object.keys(carryDemand).forEach(function(dbKey){
       var db = NUTRI_DB[dbKey];
-      var perPkg = db.pkg.cups || 0;
-      if(!(perPkg > 0)) return;
+      // V171: pick perUnit + threshold + labels per item type.
+      var isPkg = !!(db && db.pkg && db.pkg.crossTripCarry);
+      var isProduce = !isPkg && !!(db && db.produce && db.produce.crossTripCarry);
+      var perUnit = isPkg ? (db.pkg.cups || 0) : (isProduce ? db.produce.perWhole : 0);
+      if(!(perUnit > 0)) return;
       var totalUsed = carryDemand[dbKey].totalCups;
       if(totalUsed <= 0) return;
-      var jars = _pkgsNeeded(totalUsed, perPkg);
-      var bought = jars * perPkg;
+      var units = _pkgsNeeded(totalUsed, perUnit);
+      var bought = units * perUnit;
       var waste = bought - totalUsed;
-      var wastePct = bought > 0 ? waste / bought : 0;
-      if(wastePct > 0.01){
+      // Threshold: pkg = wastePct > 1%; produce = waste > 50% of one whole.
+      var fires = isPkg
+        ? (bought > 0 && (waste / bought) > 0.01)
+        : (waste > perUnit * 0.5);
+      if(fires){
+        var unitLabel = isPkg ? 'cup' : 'each';
         var detail = 'week '+dbKey
-          +' used='+totalUsed.toFixed(3)+'cup'
-          +' bought='+bought.toFixed(3)+'cup'
-          +' waste='+waste.toFixed(3)+'cup'
-          +' pct='+(wastePct*100).toFixed(1)+'%';
-        violations.push('INV20 waste-over-threshold (pkg): '+detail);
-        violations.push('INV21 pkg-waste-over-1pct: '+detail);
-        if(db.pkg.softWaste){
-          violations.push('INV20Soft soft-waste (pkg): '+detail);
+          +' used='+totalUsed.toFixed(3)+unitLabel
+          +' bought='+bought.toFixed(3)+unitLabel
+          +' waste='+waste.toFixed(3)+unitLabel;
+        if(isPkg){
+          var pct = (waste / bought * 100).toFixed(1);
+          detail += ' pct='+pct+'%';
+          violations.push('INV20 waste-over-threshold (pkg): '+detail);
+          violations.push('INV21 pkg-waste-over-1pct: '+detail);
+          if(db.pkg.softWaste) violations.push('INV20Soft soft-waste (pkg): '+detail);
+        } else {
+          detail += ' ('+(waste/perUnit*100).toFixed(0)+'% of one whole)';
+          violations.push('INV20 waste-over-threshold (produce): '+detail);
+          violations.push('INV22 produce-waste-over-50pct-of-whole: '+detail);
+          if(db.produce.softWaste) violations.push('INV20Soft soft-waste (produce): '+detail);
         }
       }
     });
@@ -10618,8 +10647,10 @@ function freezeTripTotals(randTarget, attemptSwap){
   // buys a remainder if Cook 1's purchased leftover can't cover Cook 2's
   // demand. See buildShoppingList for the attribution math.
   function _isCarryItem(dbKey){
+    // V171: also check produce.crossTripCarry (lime, lemon).
     var db = NUTRI_DB[dbKey];
-    return !!(db && db.pkg && db.pkg.crossTripCarry === true);
+    return !!(db && ((db.pkg && db.pkg.crossTripCarry === true)
+                  || (db.produce && db.produce.crossTripCarry === true)));
   }
   // V163 + V164: hoisted so combined-week pass below can reuse.
   function _isUserPinned(p, d, s, idx){
