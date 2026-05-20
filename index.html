@@ -9804,6 +9804,11 @@ function _gcEatOutTombstones(){
 }
 function changeMeal(slot,mealId){
   const selKey=sk(person,day,slot);
+  // V169 (2026-05-19): capture user pins for ROUND_*_ITEMS that exist
+  // in BOTH the current and new meal. Preserves the user's amount
+  // preference for pkg items across meal change (e.g., "I want 1.5c
+  // marinara" survives when swapping to a different marinara recipe).
+  var preservedPins = _captureUserPinsForMealChange(person, day, slot, mealId);
   stampSel(selKey,mealId);
   MANUAL_SET[selKey]=true;
   // V53: direct meal pick — mark slot user-edited.
@@ -9828,6 +9833,8 @@ function changeMeal(slot,mealId){
     saveSharedSchedule();
   }
   clearOverrides(person,day,slot);
+  // V169: re-emit preserved pins at the new meal's idx.
+  _applyPreservedPins(person, day, slot, preservedPins);
   // V167 (2026-05-19): user picked a new meal at this slot — drop any
   // SHARED_UNDO entry that referenced the OLD meal. Pre-V167 a stale
   // undo could resurface the prior meal if user later un-shared from
@@ -9849,6 +9856,86 @@ function changeMeal(slot,mealId){
 // Transient — reset on switchWeek; not persisted; not synced. Falls
 // back to random re-roll (option A) when no undo entry exists.
 var SHARED_UNDO = {};
+
+// V169 (2026-05-19): preserve USER PINS (_userSet:true) for ROUND_*_ITEMS
+// when a meal id changes at a slot. Pins for ingredients that exist in
+// BOTH the old and new meal are re-emitted at the new meal's idx.
+// Non-pkg pins, freeze pins, and pins for ingredients not in the new
+// meal are dropped.
+//
+// Rationale: when user pins "1.5 cups marinara" on a slot, that's their
+// preference. If the meal id changes (toggleShared copies a different
+// meal in; user picks a new meal via dropdown) AND the new meal also
+// uses marinara, the user's amount preference should carry. Recipe
+// changes don't invalidate "I want 1.5c marinara" — the global
+// db.maxAmt applies regardless of meal.
+//
+// Returns the array of override entries to preserve. Caller should
+// call clearOverrides (or equivalent) THEN re-emit the entries via
+// setOverride. Helper here builds the entries; doesn't mutate.
+function _captureUserPinsForMealChange(p, d, s, newMealId){
+  const k = sk(p, d, s);
+  const ov = OVERRIDES[k];
+  if(!ov || !ov.length) return [];
+  const newMeal = getMeal(newMealId);
+  if(!newMeal || !newMeal[p] || !newMeal[p].ingredients) return [];
+  const newIngrs = newMeal[p].ingredients;
+  // Map dbKey -> new idx (first occurrence).
+  const newIdxByDbKey = {};
+  newIngrs.forEach(function(ing, i){
+    if(newIdxByDbKey[ing.dbKey] === undefined) newIdxByDbKey[ing.dbKey] = i;
+  });
+  // Walk old overrides, capture user pins for ROUND_*_ITEMS dbKeys
+  // that exist in the new meal.
+  const preserved = [];
+  ov.forEach(function(o){
+    if(o._userSet !== true) return; // skip non-user (freeze, fatBoost, normal swap)
+    // Determine dbKey: from override field if set, else from cache, else
+    // from the OLD meal's recipe at that idx.
+    let dbKey = o.dbKey;
+    if(!dbKey){
+      const cache = _dayBalancedCache[pk(p,d)];
+      if(cache && cache[s] && cache[s][o.idx]) dbKey = cache[s][o.idx].dbKey;
+    }
+    if(!dbKey){
+      // Fallback to the old recipe at idx (cache invalidated, no override
+      // dbKey field). Uses SEL[k] which is still the OLD meal id since
+      // caller hasn't called stampSel yet.
+      const oldMealId = SEL[k];
+      const oldMeal = oldMealId ? getMeal(oldMealId) : null;
+      if(oldMeal && oldMeal[p] && oldMeal[p].ingredients && oldMeal[p].ingredients[o.idx]){
+        dbKey = oldMeal[p].ingredients[o.idx].dbKey;
+      }
+    }
+    if(!dbKey) return;
+    // Only preserve for clean-pkg-amount eligible items.
+    if(ROUND_PKG_ITEMS.indexOf(dbKey) < 0 && ROUND_PRODUCE_ITEMS.indexOf(dbKey) < 0) return;
+    // Must also exist in the new meal.
+    const newIdx = newIdxByDbKey[dbKey];
+    if(newIdx === undefined) return;
+    // Capture the override fields to re-emit at the new idx.
+    preserved.push({
+      idx: newIdx,
+      dbKey: dbKey,
+      amt: o.amt,
+      scalable: false,
+      _userSet: true,
+      _priorAmt: o._priorAmt
+    });
+  });
+  return preserved;
+}
+function _applyPreservedPins(p, d, s, preserved){
+  preserved.forEach(function(entry){
+    setOverride(p, d, s, entry.idx, 'dbKey', entry.dbKey);
+    setOverride(p, d, s, entry.idx, 'amt', entry.amt);
+    setOverride(p, d, s, entry.idx, 'scalable', false);
+    setOverride(p, d, s, entry.idx, '_userSet', true);
+    if(entry._priorAmt !== undefined){
+      setOverride(p, d, s, entry.idx, '_priorAmt', entry._priorAmt);
+    }
+  });
+}
 
 function toggleShared(slot,checked){
   // V36 (2026-05-07): close two symmetry gaps from the V25-V35 audit.
@@ -9883,8 +9970,14 @@ function toggleShared(slot,checked){
         // and an empty undo would let OFF fall through to random anyway.
         delete SHARED_UNDO[otherKey];
       }
+      // V169 (2026-05-19): preserve OTHER side's user pins for
+      // ROUND_*_ITEMS that exist in the new (shared) meal. Per-DB
+      // maxAmt applies globally, so the user's pkg amount preference
+      // stays valid across the meal change.
+      var _otherPreserved_on = _captureUserPinsForMealChange(other, day, slot, myId);
       stampSel(otherKey,myId);
       clearOverrides(other,day,slot);
+      _applyPreservedPins(other, day, slot, _otherPreserved_on);
       // Mark both as manual set and update schedule to shared
       MANUAL_SET[meK]=true;
       MANUAL_SET[otherKey]=true;
@@ -9918,8 +10011,11 @@ function toggleShared(slot,checked){
       // (recipe library could have changed; defensive).
       const um = getMeal(undo.mealId);
       if(um && um[other] && getMealsForSlot(slot).some(function(m){return m.id===undo.mealId;})){
+        // V169: preserve user pins for ROUND_*_ITEMS across the restore.
+        var _otherPreserved_off1 = _captureUserPinsForMealChange(other, day, slot, undo.mealId);
         stampSel(otherKey, undo.mealId);
         clearOverrides(other, day, slot);
+        _applyPreservedPins(other, day, slot, _otherPreserved_off1);
         restored = true;
       }
     }
@@ -9931,8 +10027,11 @@ function toggleShared(slot,checked){
       const others=candidates.filter(function(m){return m.id!==myId;});
       if(others.length){
         const pick=others[Math.floor(Math.random()*others.length)];
+        // V169: same pin-preservation for the random pick path.
+        var _otherPreserved_off2 = _captureUserPinsForMealChange(other, day, slot, pick.id);
         stampSel(otherKey,pick.id);
         clearOverrides(other,day,slot);
+        _applyPreservedPins(other, day, slot, _otherPreserved_off2);
       }
     }
     // V161: undo entry consumed (or attempted) — drop it.
