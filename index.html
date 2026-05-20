@@ -3715,18 +3715,24 @@ function _clearFreezeOverrides(){
   // user pins, dbKey-only swaps (no scalable field), and any future
   // override-writer that forgets to tag survives the cleanup pass.
   //
-  // Pre-V158 the filter dropped anything with scalable:false that
-  // wasn't on the recognized-flag allowlist (_userSet / _fatBoost). It
-  // worked today because we knew every scalable:false writer, but was
-  // fragile: a future code path adding a new scalable:false override
-  // without a recognized flag would be silently nuked on next randomize.
+  // V163 (2026-05-19): user-pin precedence. Pre-V163 _freezePin:true
+  // entries were dropped unconditionally — but if a user edit landed on
+  // a slot that previously had a _freezePin (because freeze wrote first
+  // and the user edited after), the entry carries BOTH flags via the
+  // field-by-field setOverride merge. Dropping based on _freezePin
+  // alone would destroy the user pin. V163 also gates writes in
+  // freezeTripTotals to avoid creating new dual-flag entries, but this
+  // filter must still handle any pre-V163 saved-state entries that
+  // already accumulated both flags.
   Object.keys(OVERRIDES).forEach(function(k){
     var ov = OVERRIDES[k];
     if(!ov || !ov.length) return;
     var filtered = ov.filter(function(o){
-      if(o._freezePin === true) return false; // freeze write, drop & re-apply
-      if(o._fatBoost === true) return false;  // auto fat-boost, drop & re-apply
-      return true;                            // keep everything else
+      // User pins win over freeze classification.
+      if(o._userSet === true) return true;
+      if(o._freezePin === true) return false;
+      if(o._fatBoost === true) return false;
+      return true;
     });
     if(filtered.length === 0) delete OVERRIDES[k];
     else if(filtered.length !== ov.length) OVERRIDES[k] = filtered;
@@ -10396,7 +10402,25 @@ function freezeTripTotals(randTarget, attemptSwap){
       // recognized as user/fatBoost. Safer for future writers: anyone
       // adding a new scalable:false override without _freezePin survives
       // the cleanup pass by default.
+      // V163 (2026-05-19): skip writes on slots whose existing override
+      // at this idx has _userSet:true. User pins are absolute — freeze's
+      // rounded amount must NOT overwrite the user's choice. The trip
+      // total computation already includes the user-pinned contribution
+      // (via getBalancedSlotIngredients), so trip rounding still
+      // accounts for it; only the WRITE step is skipped. Without this
+      // check, freeze stamped _freezePin:true onto the user-pinned
+      // entry, and _clearFreezeOverrides dropped the entire entry on
+      // the next randomize — silently destroying the user pin.
+      function _isUserPinned(p, d, s, idx){
+        var ov = OVERRIDES[sk(p, d, s)];
+        if(!ov) return false;
+        for(var i = 0; i < ov.length; i++){
+          if(ov[i].idx === idx && ov[i]._userSet === true) return true;
+        }
+        return false;
+      }
       info.solos.forEach(function(so){
+        if(_isUserPinned(so.p, so.d, so.s, so.idx)) return;
         var soCache = _dayBalancedCache[pk(so.p, so.d)];
         if(soCache && soCache[so.s] && soCache[so.s][so.idx]){
           soCache[so.s][so.idx].amt = so.amt;
@@ -10409,6 +10433,7 @@ function freezeTripTotals(randTarget, attemptSwap){
       });
       info.batches.forEach(function(b){
         b.portions.forEach(function(pt){
+          if(_isUserPinned(pt.p, pt.d, pt.s, pt.idx)) return;
           var ptCache = _dayBalancedCache[pk(pt.p, pt.d)];
           if(ptCache && ptCache[pt.s] && ptCache[pt.s][pt.idx]){
             ptCache[pt.s][pt.idx].amt = pt.amt;
