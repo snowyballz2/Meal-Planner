@@ -9827,7 +9827,21 @@ function changeMeal(slot,mealId){
     else if(person==='her'&&schedState==='eo-both') SHARED_SCHEDULE[schedKey]='eo-him';
     saveSharedSchedule();
   }
-  clearOverrides(person,day,slot);invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
+  clearOverrides(person,day,slot);
+  // V167 (2026-05-19): user picked a new meal at this slot — drop any
+  // SHARED_UNDO entry that referenced the OLD meal. Pre-V167 a stale
+  // undo could resurface the prior meal if user later un-shared from
+  // the OTHER side of the cell (toggleShared OFF restores SHARED_UNDO
+  // for the OTHER side's key, but the entry was captured BEFORE
+  // changeMeal — invalid post-pick).
+  var _otherUndoKey = sk(person==='him'?'her':'him', day, slot);
+  if(typeof SHARED_UNDO === 'object' && SHARED_UNDO && SHARED_UNDO[_otherUndoKey]){
+    delete SHARED_UNDO[_otherUndoKey];
+  }
+  // Also clear undo for THIS slot's key (defensive — toggleShared
+  // captures into the OTHER side's key, but be safe).
+  if(SHARED_UNDO && SHARED_UNDO[selKey]) delete SHARED_UNDO[selKey];
+  invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
 }
 // V161 (2026-05-19): per-week undo map for toggleShared. When user
 // shares from one side, the OTHER side's prior meal is captured here so
@@ -12439,6 +12453,14 @@ function clearWeek(){
   Object.keys(SHARED_SCHEDULE).forEach(function(k){
     if(/^eo-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
   });
+  // V167 (2026-05-19): also clear SHARED_UNDO. Pre-V167 the toggleShared
+  // undo map persisted across clearWeek — after a clearWeek + fresh
+  // share/un-share cycle, the OFF restore could resurface a meal from
+  // the wiped pre-clearWeek state. Symmetric with other transient state
+  // already cleared above.
+  if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
+    Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
+  }
   // V10 sync no-op now (no skip-* states left), but call it to honor the
   // invariant contract — if any user-customized EAT_OUTs survive on cells
   // that had been skip-*, this lines up the data with current state.
@@ -17096,7 +17118,13 @@ window.MPStress=(function(){
     // capture it — state leak across ops. Now snapshot/restore handle it
     // symmetrically to other globals.
     var links = (typeof LEFTOVER_LINKS === 'object' && Array.isArray(LEFTOVER_LINKS)) ? clone(LEFTOVER_LINKS) : [];
-    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),USER_EDITED:clone(USER_EDITED),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),LEFTOVER_LINKS:links,_lastSel:lastSel,_dayBalancedCache:dayBal,_leftoverCache:leftover,_postRandomizeCache:postRand};
+    // V167 (2026-05-19): capture SHARED_UNDO (V161 toggleShared undo map).
+    // Pre-V167 it lived outside snapshot/restore; stress runs leaking
+    // SHARED_UNDO entries from one test into another could change toggle
+    // OFF behavior (restore wrong meal). Symmetric with other transient
+    // globals captured above.
+    var sharedUndo = (typeof SHARED_UNDO === 'object' && SHARED_UNDO) ? clone(SHARED_UNDO) : {};
+    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),USER_EDITED:clone(USER_EDITED),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),LEFTOVER_LINKS:links,_lastSel:lastSel,_dayBalancedCache:dayBal,_leftoverCache:leftover,_postRandomizeCache:postRand,SHARED_UNDO:sharedUndo};
   }
   function replace(g,v){Object.keys(g).forEach(function(k){delete g[k];});Object.keys(v).forEach(function(k){g[k]=v[k];});}
   function restore(s){
@@ -17133,6 +17161,14 @@ window.MPStress=(function(){
     if (s._postRandomizeCache) {
       Object.keys(_postRandomizeCache).forEach(function(k){delete _postRandomizeCache[k];});
       Object.keys(s._postRandomizeCache).forEach(function(k){_postRandomizeCache[k]=JSON.parse(JSON.stringify(s._postRandomizeCache[k]));});
+    }
+    // V167 (2026-05-19): restore SHARED_UNDO. If snapshot is missing the
+    // field (legacy pre-V167), clear to empty.
+    if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
+      Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
+      if(s.SHARED_UNDO){
+        Object.keys(s.SHARED_UNDO).forEach(function(k){SHARED_UNDO[k]=s.SHARED_UNDO[k];});
+      }
     }
   }
 
@@ -21606,6 +21642,19 @@ window.MPStress=(function(){
       if(typeof _autoLinkColorCache === 'object' && _autoLinkColorCache){
         Object.keys(_autoLinkColorCache).forEach(function(k){delete _autoLinkColorCache[k];});
       }
+      // V167: reset SHARED_UNDO. Snapshot's SHARED_UNDO restore already
+      // sets it correctly for the next op, but defensive in case a
+      // legacy snapshot lacks the field.
+      if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
+        Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
+      }
+      // V167: also reset _swapDiag — purely diagnostic, reset per
+      // randomize, but if a test reads window._swapDiag before its
+      // own randomize fires, it sees the prior op's diag. Clean slate
+      // matches other transient globals.
+      if(typeof window._swapDiag === 'object' && window._swapDiag){
+        window._swapDiag = {swappedKeys:{}, swaps:[], passLabel:'', refused:[]};
+      }
     }
     function _smWipeUserState(){
       Object.keys(OVERRIDES).forEach(function(k){
@@ -21630,6 +21679,15 @@ window.MPStress=(function(){
       // that creates a >1-slot group without dissolving would leak across
       // ops/seeds. Defensive — keep state-machine consistent across iterations.
       if(Array.isArray(LEFTOVER_LINKS)) LEFTOVER_LINKS.length = 0;
+      // V167 (2026-05-19): also clear SHARED_UNDO + _swapDiag. Matches the
+      // freshRestore reset above; covers the case where _smWipeUserState
+      // is called WITHOUT freshRestore (clean-state seeds, op chains).
+      if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
+        Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
+      }
+      if(typeof window._swapDiag === 'object' && window._swapDiag){
+        window._swapDiag = {swappedKeys:{}, swaps:[], passLabel:'', refused:[]};
+      }
     }
     function recordCheck(c){
       agg.byAssertion[c.assertion]=agg.byAssertion[c.assertion]||{p:0,f:0};
@@ -21775,6 +21833,13 @@ window.MPStress=(function(){
       if(typeof _autoLinkColorCache === 'object' && _autoLinkColorCache){
         Object.keys(_autoLinkColorCache).forEach(function(k){delete _autoLinkColorCache[k];});
       }
+      // V167: SHARED_UNDO + _swapDiag reset (same as scenario-runner above).
+      if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
+        Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
+      }
+      if(typeof window._swapDiag === 'object' && window._swapDiag){
+        window._swapDiag = {swappedKeys:{}, swaps:[], passLabel:'', refused:[]};
+      }
     }
     function _smWipeUserState(){
       Object.keys(OVERRIDES).forEach(function(k){
@@ -21791,6 +21856,13 @@ window.MPStress=(function(){
       Object.keys(SHARED_SCHEDULE).forEach(function(k){
         if(/^eo-/.test(SHARED_SCHEDULE[k])) delete SHARED_SCHEDULE[k];
       });
+      // V167: SHARED_UNDO + _swapDiag reset.
+      if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
+        Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
+      }
+      if(typeof window._swapDiag === 'object' && window._swapDiag){
+        window._swapDiag = {swappedKeys:{}, swaps:[], passLabel:'', refused:[]};
+      }
       // V141 (2026-05-14): clear LEFTOVER_LINKS. paintAcceptOp pushes groups
       // and removeFromLinkGroup dissolves them, but any future op variant
       // that creates a >1-slot group without dissolving would leak across
