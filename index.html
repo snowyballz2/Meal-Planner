@@ -22379,6 +22379,151 @@ window.MPStress=(function(){
       checkSchedEatOut();
     }
 
+    else if(op==='carryShoppingPoolMath'){
+      // V190 (2026-05-21): regression test for V164's combined-week carry
+      // allocation in buildShoppingList. Verifies:
+      //   cook1 view buys ceil(c1Demand / perUnit) jars (i.e., displayed
+      //     marinara amt for cook1 trip = c1Demand, post-carryover).
+      //   cook2 view displayed amt = max(0, c2Demand - c1Leftover) where
+      //     c1Leftover = c1Jars*perUnit - c1Demand.
+      // Reads CURRENT week's marinara distribution; doesn't mutate SEL.
+      // (Carryover from prior week is also accounted for via _computePriorCarryover.)
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'solo only'); return {checks:checks};
+      }
+      // Find marinara cook anchors in both trips
+      var cspmLeftovers = (typeof computeLeftovers === 'function') ? computeLeftovers() : {};
+      var cspmAnchors = {cook1:[], cook2:[]};
+      ['him','her'].forEach(function(pp){
+        DAYS.forEach(function(dd){
+          ['breakfast','lunch','snack','dinner'].forEach(function(ss){
+            var kk = sk(pp, dd, ss);
+            var mid = SEL[kk]; if(!mid) return;
+            if(SKIPPED[kk] || EAT_OUT[kk]) return;
+            var meal = getMeal(mid);
+            if(!meal || !meal.ingredients) return;
+            if(!meal.ingredients.some(function(i){return i.dbKey === 'marinara';})) return;
+            // Skip leftover slots — anchor handles the batch
+            var lo = cspmLeftovers[kk];
+            if(lo && lo.isLeftover) return;
+            var trip = TRIP_DAYS_STATIC.cook1.indexOf(dd) >= 0 ? 'cook1' : 'cook2';
+            cspmAnchors[trip].push({p:pp, d:dd, s:ss, lo:lo});
+          });
+        });
+      });
+      if(cspmAnchors.cook1.length === 0 || cspmAnchors.cook2.length === 0){
+        add('setup', true, '', null,
+          'need marinara cook anchors in both trips (c1='+cspmAnchors.cook1.length
+          +' c2='+cspmAnchors.cook2.length+')');
+        return {checks:checks};
+      }
+      // Compute per-person demand per trip
+      function _cspmDemand(anchors){
+        var byP = {him:0, her:0};
+        anchors.forEach(function(a){
+          var portionList = (a.lo && a.lo.portions && a.lo.portions.length > 1)
+            ? a.lo.portions : [{p:a.p, d:a.d, s:a.s}];
+          // Anchor's person owns the batch (per buildShoppingList's
+          // cook-anchor architecture). Sum across all portions.
+          portionList.forEach(function(pt){
+            var src = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
+            if(!src) return;
+            var ent = src.find(function(i){return i.dbKey === 'marinara';});
+            if(ent) byP[a.p] += ent.amt;
+          });
+        });
+        return byP;
+      }
+      var cspmC1Demand = _cspmDemand(cspmAnchors.cook1);
+      var cspmC2Demand = _cspmDemand(cspmAnchors.cook2);
+      var cspmDb = NUTRI_DB['marinara'];
+      var cspmPerUnit = cspmDb.pkg.cups || 1.5;
+      // V180 carryover from prior week
+      var cspmCarry = (typeof _computePriorCarryover === 'function')
+        ? _computePriorCarryover(_prevWeekKey()) : {};
+      var cspmCarryAmt = cspmCarry.marinara || 0;
+      // Deplete c1 demand by carryover (household-level: him first, then her).
+      var cspmEffC1 = {him: cspmC1Demand.him, her: cspmC1Demand.her};
+      var cspmRem = cspmCarryAmt;
+      if(cspmRem > 0){
+        var take = Math.min(cspmRem, cspmEffC1.him);
+        cspmEffC1.him -= take; cspmRem -= take;
+      }
+      if(cspmRem > 0){
+        var take2 = Math.min(cspmRem, cspmEffC1.her);
+        cspmEffC1.her -= take2; cspmRem -= take2;
+      }
+      // Build shopping lists for both trips, both persons. buildShoppingList
+      // returns {category: [items]}, so we flatten across categories to find
+      // the marinara entry.
+      function _cspmFindMarinara(catObj){
+        var found = null;
+        Object.keys(catObj).forEach(function(cat){
+          (catObj[cat]||[]).forEach(function(it){
+            if(it.dbKey === 'marinara') found = it;
+          });
+        });
+        return found;
+      }
+      // buildShoppingList(trip, who): `who` is a STRING ('both'/'him'/'her'),
+      // NOT an array. Pass 'both' for combined view.
+      var cspmC1List = buildShoppingList('cook1', 'both');
+      var cspmC2List = buildShoppingList('cook2', 'both');
+      var cspmC1Marinara = _cspmFindMarinara(cspmC1List);
+      var cspmC2Marinara = _cspmFindMarinara(cspmC2List);
+      // Compute expected displayed amounts (matches V164 lines 4843-4863)
+      function _cspmDisplay(trip){
+        var byP = {him:0, her:0};
+        ['him','her'].forEach(function(p){
+          var c1 = cspmEffC1[p];
+          var c2 = cspmC2Demand[p];
+          if(trip === 'cook1'){
+            byP[p] = c1;
+          } else {
+            if(c1 < 0.001){
+              byP[p] = c2;  // No c1 demand → buy fresh on c2
+            } else {
+              var c1Jars = _pkgsNeeded(c1, cspmPerUnit);
+              var c1Lo = c1Jars * cspmPerUnit - c1;
+              byP[p] = Math.max(0, c2 - c1Lo);
+            }
+          }
+        });
+        return byP;
+      }
+      var cspmExpC1 = _cspmDisplay('cook1');
+      var cspmExpC2 = _cspmDisplay('cook2');
+      // Actual amounts from shopping list (hisSum.num / herSum.num)
+      var cspmActC1 = {
+        him: (cspmC1Marinara && cspmC1Marinara.hisSum && cspmC1Marinara.hisSum.num) || 0,
+        her: (cspmC1Marinara && cspmC1Marinara.herSum && cspmC1Marinara.herSum.num) || 0
+      };
+      var cspmActC2 = {
+        him: (cspmC2Marinara && cspmC2Marinara.hisSum && cspmC2Marinara.hisSum.num) || 0,
+        her: (cspmC2Marinara && cspmC2Marinara.herSum && cspmC2Marinara.herSum.num) || 0
+      };
+      // Assertions — 0.05c tolerance (matches existing tests)
+      add('cspm_c1_him_demand',
+        Math.abs(cspmActC1.him - cspmExpC1.him) < 0.05,
+        'V164: cook1 him expected=' + cspmExpC1.him.toFixed(3)
+        + ' got=' + cspmActC1.him.toFixed(3)
+        + ' (c1Demand=' + cspmC1Demand.him.toFixed(3) + ' carry=' + cspmCarryAmt.toFixed(3) + ')');
+      add('cspm_c1_her_demand',
+        Math.abs(cspmActC1.her - cspmExpC1.her) < 0.05,
+        'V164: cook1 her expected=' + cspmExpC1.her.toFixed(3)
+        + ' got=' + cspmActC1.her.toFixed(3));
+      add('cspm_c2_him_net',
+        Math.abs(cspmActC2.him - cspmExpC2.him) < 0.05,
+        'V164: cook2 him net (after c1 leftover) expected=' + cspmExpC2.him.toFixed(3)
+        + ' got=' + cspmActC2.him.toFixed(3)
+        + ' (c1=' + cspmEffC1.him.toFixed(3) + ' c2=' + cspmC2Demand.him.toFixed(3) + ')');
+      add('cspm_c2_her_net',
+        Math.abs(cspmActC2.her - cspmExpC2.her) < 0.05,
+        'V164: cook2 her net expected=' + cspmExpC2.her.toFixed(3)
+        + ' got=' + cspmActC2.her.toFixed(3));
+      checkSchedEatOut();
+    }
+
     else if(op==='bannerPlusMinusDelta'){
       // V184 (2026-05-21): regression test for V178's +/- delta math.
       // Find a pkg ingredient in the slot, pin to a value that creates
@@ -22830,7 +22975,9 @@ window.MPStress=(function(){
              'lateSnackCarryAttribution',            // V172
              'clearAllStateCompleteness',            // V174
              // V189 (2026-05-21): V161 toggleShared SHARED_UNDO restore
-             'cardSharedToggleUndoRestore'];         // V161
+             'cardSharedToggleUndoRestore',          // V161
+             // V190 (2026-05-21): V164 buildShoppingList carry-pool math
+             'carryShoppingPoolMath'];               // V164
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -22859,7 +23006,8 @@ window.MPStress=(function(){
             preserveUserPinsAcrossMealChange:{p:0,f:0},
             lateSnackCarryAttribution:{p:0,f:0},
             clearAllStateCompleteness:{p:0,f:0},
-            cardSharedToggleUndoRestore:{p:0,f:0}},
+            cardSharedToggleUndoRestore:{p:0,f:0},
+            carryShoppingPoolMath:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
