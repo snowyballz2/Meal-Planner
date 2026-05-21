@@ -14331,6 +14331,7 @@ function randomizeWeek(target, seed){
   let bestWaste = Infinity;
   let bestMisses = Infinity;
   let bestInv14 = Infinity;
+  let bestInv11 = Infinity;   // V188 (2026-05-21): include hard INV11 in retry selector
   let bestSEL = null;
   let bestCaches = null;
   for (let retry = 0; retry < maxRetries; retry++) {
@@ -14398,20 +14399,31 @@ function randomizeWeek(target, seed){
     // ratio drift. Force post-retry pipeline rerun on every winner.
     invalidateLeftoverCache();
     let inv14 = countInv14();
-    // V97 lexicographic ordering: goalMisses primary (most important — day
-    // goals matter most), totalWaste secondary (rare on post-pipeline state),
-    // inv14 tertiary.
-    const better = (goalMisses < bestMisses)
-      || (goalMisses === bestMisses && totalWaste < bestWaste)
-      || (goalMisses === bestMisses && totalWaste === bestWaste && inv14 < bestInv14);
+    // V188 (2026-05-21): also include INV11 (hard invariant) in the
+    // retry selector. Pre-V188 only (goalMisses, totalWaste, inv14) were
+    // ranked, so a retry with INV11=1 + 0 goalMisses would WIN over a
+    // retry with INV11=0 + 1 goalMiss. INV11 is a HARD invariant — its
+    // count must always be 0 in a chosen retry. Promote to a priority
+    // ABOVE goalMisses since hard INVs are non-negotiable.
+    let inv11 = countInv11();
+    // V188 lexicographic ordering (highest priority first):
+    //   1. inv11 (hard INV — must be zero)
+    //   2. goalMisses (day-level primary goals)
+    //   3. totalWaste (INV20 hard waste)
+    //   4. inv14 (tracking, same-meal cooks within 5 days)
+    const better = (inv11 < bestInv11)
+      || (inv11 === bestInv11 && goalMisses < bestMisses)
+      || (inv11 === bestInv11 && goalMisses === bestMisses && totalWaste < bestWaste)
+      || (inv11 === bestInv11 && goalMisses === bestMisses && totalWaste === bestWaste && inv14 < bestInv14);
     if (better) {
       bestWaste = totalWaste;
       bestMisses = goalMisses;
       bestInv14 = inv14;
+      bestInv11 = inv11;
       bestSEL = JSON.parse(JSON.stringify(SEL));
       bestCaches = null; // force post-retry rerun
     }
-    if (totalWaste === 0 && goalMisses === 0 && inv14 === 0) break;
+    if (totalWaste === 0 && goalMisses === 0 && inv14 === 0 && inv11 === 0) break;
   }
 
   // Restore best state. The retry-loop's countInv14 step invalidates the
