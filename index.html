@@ -8501,43 +8501,84 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
       label = db.produce.label || 'unit';
     } else return '';
     if(!(perUnit > 0)) return '';
-    // V178 (2026-05-20): scope waste to the slot's actual trip. Pre-V178
-    // summed cook1 + cook2 even on a single-slot banner — confusing because
-    // a Mon-side pin can't directly affect cook2's total. Carry items
-    // (crossTripCarry) still pool across the whole week.
     const isCarry = !!(db.pkg && db.pkg.crossTripCarry === true)
                  || !!(db.produce && db.produce.crossTripCarry === true);
     const c1Days = TRIP_DAYS_STATIC.cook1 || [];
-    const isCook1 = c1Days.indexOf(_bannerDay) >= 0;
-    const tripScopeDays = isCarry
-      ? DAYS.slice()
-      : (isCook1 ? c1Days : (TRIP_DAYS_STATIC.cook2 || []));
-    let tripTotal = 0;
-    tripScopeDays.forEach(function(_d){
-      ['him','her'].forEach(function(_p){
-        ['breakfast','lunch','snack','dinner'].forEach(function(_s){
-          const _bal = getBalancedSlotIngredients(_p,_d,_s);
-          if(!_bal) return;
-          _bal.forEach(function(_i){ if(_i.dbKey===dbKey) tripTotal += _i.amt; });
+    const c2Days = TRIP_DAYS_STATIC.cook2 || [];
+    const isCook1Slot = c1Days.indexOf(_bannerDay) >= 0;
+    const slotTrip = isCook1Slot ? 'cook1' : 'cook2';
+    // Helper: sum household carry-item demand across a set of days.
+    const sumDays = function(days){
+      let s = 0;
+      days.forEach(function(_d){
+        ['him','her'].forEach(function(_p){
+          ['breakfast','lunch','snack','dinner'].forEach(function(_s){
+            const _bal = getBalancedSlotIngredients(_p,_d,_s);
+            if(!_bal) return;
+            _bal.forEach(function(_i){ if(_i.dbKey===dbKey) s += _i.amt; });
+          });
         });
       });
-    });
-    if(tripTotal <= 0) return '';
-    const pkgs = Math.ceil(tripTotal/perUnit - 1e-9);
-    const waste = pkgs*perUnit - tripTotal;
-    if(waste < 0.05) return '';
-    const wasteFmt = (waste >= 0.99 ? Math.round(waste) : Math.round(waste*100)/100);
+      return s;
+    };
+    let waste = 0, partialTrip = null;
+    if(isCarry){
+      // V179 (2026-05-20): sequential-fill attribution for carry items.
+      // Mirrors V164's shopping-list logic. Cook 1 opens jars to cover its
+      // demand; any leftover (partial last jar) carries forward to cook 2.
+      // Cook 2 uses the carry-in first, opens new jars for the remainder.
+      // The "partial jar at end of week" lives in whichever trip last
+      // opened a jar — usually cook 2, but cook 1 if cook 2's demand is
+      // fully covered by cook 1's leftover.
+      //
+      // Show the warning only on slots in the partial-jar-owning trip.
+      // Slots in the other trip can't affect the partial jar — adjusting
+      // them would either be a no-op (cook 2 if partial is in cook 1) or
+      // shift waste around without resolving it.
+      const houseC1 = sumDays(c1Days);
+      const houseC2 = sumDays(c2Days);
+      if(houseC1 + houseC2 <= 0) return '';
+      const cook1Jars = Math.ceil(houseC1 / perUnit - 1e-9);
+      const cook1Bought = cook1Jars * perUnit;
+      const cook1Leftover = Math.max(0, cook1Bought - houseC1);
+      const cook2Net = Math.max(0, houseC2 - cook1Leftover);
+      const cook2Jars = Math.ceil(cook2Net / perUnit - 1e-9);
+      const cook2Bought = cook2Jars * perUnit;
+      const cook2Leftover = Math.max(0, cook2Bought - cook2Net);
+      if(cook2Jars > 0){
+        partialTrip = 'cook2';
+        waste = cook2Leftover;
+      } else if(cook1Jars > 0){
+        // Cook 2 opened no new jars. Partial is in cook 1's last jar
+        // after cook 2's carry-usage. cook2Net === 0 here, so cook 2
+        // consumed houseC2 from cook 1's leftover.
+        partialTrip = 'cook1';
+        waste = Math.max(0, cook1Leftover - houseC2);
+      }
+      if(!partialTrip || waste < 0.05) return '';
+      // Slots not in the partial-jar trip can't affect this waste.
+      if(slotTrip !== partialTrip) return '';
+    } else {
+      // V178 (2026-05-20): non-carry items pool per-trip. Slot's trip
+      // owns the waste; adjusting other-trip slots can't help.
+      const tripScopeDays = isCook1Slot ? c1Days : c2Days;
+      const tripTotal = sumDays(tripScopeDays);
+      if(tripTotal <= 0) return '';
+      const pkgs = Math.ceil(tripTotal/perUnit - 1e-9);
+      waste = pkgs*perUnit - tripTotal;
+      if(waste < 0.05) return '';
+    }
+    // V179 (2026-05-20): pass raw values to fmtFrac, which handles
+    // fractions like ½, ¼, etc. cleanly. Pre-V179 used Math.round() which
+    // promoted 1.5 → 2 before formatting, losing half-unit precision.
     // V178 (2026-05-20 — A8): suggested adjustments to eliminate trip waste.
     //   +addToFill  = add this much to trip total → reaches pkgs × perUnit
     //   -dropToSkip = reduce trip total by this → drops to (pkgs-1) × perUnit
     // These are trip-total deltas; user can distribute across pinned/other
-    // slots however they want. Show both directions so user picks the
-    // easier path (e.g. "+2 or -14" when trip is just over a boundary).
+    // slots however they want.
     const addToFill = waste;
     const dropToSkip = perUnit - waste;
-    const fmtA = fmtFrac(addToFill >= 0.99 ? Math.round(addToFill) : Math.round(addToFill*100)/100);
-    const fmtD = fmtFrac(dropToSkip >= 0.99 ? Math.round(dropToSkip) : Math.round(dropToSkip*100)/100);
-    return ' · ⚠ '+fmtFrac(wasteFmt)+' '+(db.unit||'')+' '+label+' waste · +'+fmtA+' or -'+fmtD;
+    return ' · ⚠ '+fmtFrac(waste)+' '+(db.unit||'')+' '+label+' waste · +'+fmtFrac(addToFill)+' or -'+fmtFrac(dropToSkip);
   }
 
   // 2026-05-05: extracted banner builder so both slotAdj!==0 and slotAdj===0
