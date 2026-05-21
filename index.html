@@ -8501,26 +8501,43 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
       label = db.produce.label || 'unit';
     } else return '';
     if(!(perUnit > 0)) return '';
-    let totalWaste = 0;
-    ['cook1','cook2'].forEach(function(trip){
-      const tripDays = TRIP_DAYS_STATIC[trip] || [];
-      let tripTotal = 0;
-      tripDays.forEach(function(_d){
-        ['him','her'].forEach(function(_p){
-          ['breakfast','lunch','snack','dinner'].forEach(function(_s){
-            const _bal = getBalancedSlotIngredients(_p,_d,_s);
-            if(!_bal) return;
-            _bal.forEach(function(_i){ if(_i.dbKey===dbKey) tripTotal += _i.amt; });
-          });
+    // V178 (2026-05-20): scope waste to the slot's actual trip. Pre-V178
+    // summed cook1 + cook2 even on a single-slot banner — confusing because
+    // a Mon-side pin can't directly affect cook2's total. Carry items
+    // (crossTripCarry) still pool across the whole week.
+    const isCarry = !!(db.pkg && db.pkg.crossTripCarry === true)
+                 || !!(db.produce && db.produce.crossTripCarry === true);
+    const c1Days = TRIP_DAYS_STATIC.cook1 || [];
+    const isCook1 = c1Days.indexOf(_bannerDay) >= 0;
+    const tripScopeDays = isCarry
+      ? DAYS.slice()
+      : (isCook1 ? c1Days : (TRIP_DAYS_STATIC.cook2 || []));
+    let tripTotal = 0;
+    tripScopeDays.forEach(function(_d){
+      ['him','her'].forEach(function(_p){
+        ['breakfast','lunch','snack','dinner'].forEach(function(_s){
+          const _bal = getBalancedSlotIngredients(_p,_d,_s);
+          if(!_bal) return;
+          _bal.forEach(function(_i){ if(_i.dbKey===dbKey) tripTotal += _i.amt; });
         });
       });
-      if(tripTotal <= 0) return;
-      const pkgs = Math.ceil(tripTotal/perUnit - 1e-9);
-      totalWaste += pkgs*perUnit - tripTotal;
     });
-    if(totalWaste < 0.05) return '';
-    const wasteFmt = (totalWaste >= 0.99 ? Math.round(totalWaste) : Math.round(totalWaste*100)/100);
-    return ' · ⚠ '+fmtFrac(wasteFmt)+' '+(db.unit||'')+' '+label+' waste';
+    if(tripTotal <= 0) return '';
+    const pkgs = Math.ceil(tripTotal/perUnit - 1e-9);
+    const waste = pkgs*perUnit - tripTotal;
+    if(waste < 0.05) return '';
+    const wasteFmt = (waste >= 0.99 ? Math.round(waste) : Math.round(waste*100)/100);
+    // V178 (2026-05-20 — A8): suggested adjustments to eliminate trip waste.
+    //   +addToFill  = add this much to trip total → reaches pkgs × perUnit
+    //   -dropToSkip = reduce trip total by this → drops to (pkgs-1) × perUnit
+    // These are trip-total deltas; user can distribute across pinned/other
+    // slots however they want. Show both directions so user picks the
+    // easier path (e.g. "+2 or -14" when trip is just over a boundary).
+    const addToFill = waste;
+    const dropToSkip = perUnit - waste;
+    const fmtA = fmtFrac(addToFill >= 0.99 ? Math.round(addToFill) : Math.round(addToFill*100)/100);
+    const fmtD = fmtFrac(dropToSkip >= 0.99 ? Math.round(dropToSkip) : Math.round(dropToSkip*100)/100);
+    return ' · ⚠ '+fmtFrac(wasteFmt)+' '+(db.unit||'')+' '+label+' waste · +'+fmtA+' or -'+fmtD;
   }
 
   // 2026-05-05: extracted banner builder so both slotAdj!==0 and slotAdj===0
