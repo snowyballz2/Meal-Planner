@@ -18418,9 +18418,51 @@ window.MPStress=(function(){
     // class of bugs where prior experiments leak meals/overrides/etc. into
     // the snapshot that every seed restores to. Snapshot+restore wraps the
     // whole run so user's state survives unchanged.
+    //
+    // V187 (2026-05-21): after clearing state, PRIME weekData.last.sel by
+    // running one fresh randomize, copying this.sel → last.sel, then
+    // re-clearing this. Real users always have a randomized prior week
+    // (last shifts in from this on rollover); empty last only happens on
+    // a brand-new install or before any rollover. Empty-last baseline
+    // showed primary ~94% because variety filter had no prior meals to
+    // push against and V180 carryover was always 0. Primed-last reflects
+    // the realistic ongoing-usage baseline.
     var userSnap=snapshot();
     _clearAllState();
     _applyStandardSharedSchedule();
+    // V187: prime prior week with a realistic randomized state.
+    try {
+      randomizeWeek('shared', 99999); // deterministic prime seed (unrelated to test seeds)
+      // Copy this.sel + overrides to last (fresh prior-week SEL).
+      if(!weekData.last) weekData.last = {sel:{}};
+      weekData.last.sel = JSON.parse(JSON.stringify(weekData.this.sel || {}));
+      weekData.last.overrides = JSON.parse(JSON.stringify(weekData.this.overrides || {}));
+      weekData.last.skipped = JSON.parse(JSON.stringify(weekData.this.skipped || {}));
+      weekData.last.eatOut = JSON.parse(JSON.stringify(weekData.this.eatOut || {}));
+      // Clear ONLY this-week state — keep the primed last.sel we just set.
+      // (Can't call _clearAllState because it wipes weekData.last.sel too.)
+      Object.keys(SEL).forEach(function(k){delete SEL[k];});
+      Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
+      Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+      Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
+      Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
+      Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
+      Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
+      Object.keys(ADJ_TARGETS).forEach(function(k){delete ADJ_TARGETS[k];});
+      if(typeof USER_EDITED === 'object' && USER_EDITED){
+        Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];});
+      }
+      if(Array.isArray(LEFTOVER_LINKS)) LEFTOVER_LINKS.length = 0;
+      if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
+        Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
+      }
+      invalidateLeftoverCache();
+      _applyStandardSharedSchedule();
+    } catch(e) {
+      // If priming fails for any reason, fall through with empty last —
+      // matches pre-V187 behavior, no regression.
+      console.warn('runStandard prime failed:', e && e.message);
+    }
     try{
       var results=[];
       var baseSeed=12345;
