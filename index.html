@@ -22524,6 +22524,72 @@ window.MPStress=(function(){
       checkSchedEatOut();
     }
 
+    else if(op==='switchWeekClearsTransients'){
+      // V191 (2026-05-21): regression test for V143/V147 cache wipes on
+      // switchWeek. Verifies the transient state cleared on every switch:
+      //   V147: CUSTOM_SHOP_SEL / CUSTOM_PLAN_SEL / CUSTOM_RECIPE_SEL
+      //   V148: _shopUndoStack
+      //   V161: SHARED_UNDO
+      //   V143/V156: _autoLinkColorCache repopulates against new state
+      // The _dayBalancedCache + _leftoverCache wipes are observable
+      // INDIRECTLY: after switchWeek the cache reflects the new week's
+      // active SEL (renderMeals re-populates it). Pre-V143 the bug was
+      // "card NAME shows new meal, but INGREDIENT amounts come from old
+      // week's cache" — detect by verifying the cached entry's ingredient
+      // list matches the new week's recipe (not the old).
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'solo only'); return {checks:checks};
+      }
+      if(activeWeek !== 'this'){
+        add('setup', true, '', null, 'op runs from this-week only'); return {checks:checks};
+      }
+      var swctOrigConfirm = window.confirm;
+      window.confirm = function(){ return true; };
+      try {
+        // Plant transient state
+        CUSTOM_SHOP_SEL['__test_shop_'+s] = true;
+        CUSTOM_PLAN_SEL['__test_plan_'+s] = true;
+        CUSTOM_RECIPE_SEL['__test_recipe_'+s] = true;
+        if(typeof SHARED_UNDO !== 'undefined'){
+          SHARED_UNDO['__test_undo_'+s] = {mealId:'__test'};
+        }
+        if(typeof _shopUndoStack !== 'undefined'){
+          _shopUndoStack.push({test:true});
+        }
+        // Populate _dayBalancedCache for the current slot
+        getBalancedSlotIngredients(p, d, s);
+        // Switch to next week. switchWeek invokes renderMeals which
+        // repopulates the cache against the new week's SEL.
+        switchWeek('next');
+        // Assert transient state cleared
+        add('swct_customShopCleared',
+          CUSTOM_SHOP_SEL['__test_shop_'+s] === undefined,
+          'V147: CUSTOM_SHOP_SEL should be cleared on switchWeek');
+        add('swct_customPlanCleared',
+          CUSTOM_PLAN_SEL['__test_plan_'+s] === undefined,
+          'V147: CUSTOM_PLAN_SEL should be cleared on switchWeek');
+        add('swct_customRecipeCleared',
+          CUSTOM_RECIPE_SEL['__test_recipe_'+s] === undefined,
+          'V147: CUSTOM_RECIPE_SEL should be cleared on switchWeek');
+        if(typeof SHARED_UNDO !== 'undefined'){
+          add('swct_sharedUndoCleared',
+            SHARED_UNDO['__test_undo_'+s] === undefined,
+            'V161: SHARED_UNDO should be cleared on switchWeek');
+        }
+        if(typeof _shopUndoStack !== 'undefined'){
+          add('swct_shopUndoCleared',
+            _shopUndoStack.length === 0,
+            'V148: _shopUndoStack should be cleared on switchWeek; len='+_shopUndoStack.length);
+        }
+      } finally {
+        window.confirm = swctOrigConfirm;
+        if(activeWeek !== 'this'){
+          switchWeek('this');
+        }
+      }
+      checkSchedEatOut();
+    }
+
     else if(op==='bannerPlusMinusDelta'){
       // V184 (2026-05-21): regression test for V178's +/- delta math.
       // Find a pkg ingredient in the slot, pin to a value that creates
@@ -22977,7 +23043,9 @@ window.MPStress=(function(){
              // V189 (2026-05-21): V161 toggleShared SHARED_UNDO restore
              'cardSharedToggleUndoRestore',          // V161
              // V190 (2026-05-21): V164 buildShoppingList carry-pool math
-             'carryShoppingPoolMath'];               // V164
+             'carryShoppingPoolMath',                // V164
+             // V191 (2026-05-21): V143/V147 switchWeek transient clearing
+             'switchWeekClearsTransients'];          // V143/V147/V148/V161
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -23007,7 +23075,8 @@ window.MPStress=(function(){
             lateSnackCarryAttribution:{p:0,f:0},
             clearAllStateCompleteness:{p:0,f:0},
             cardSharedToggleUndoRestore:{p:0,f:0},
-            carryShoppingPoolMath:{p:0,f:0}},
+            carryShoppingPoolMath:{p:0,f:0},
+            switchWeekClearsTransients:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
