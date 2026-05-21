@@ -7574,10 +7574,17 @@ function verifyInvariants(){
   // shopping includes BOTH trips' demand (so Cook 1's used vs bought looks
   // wrong); we skip them there and use this combined check instead.
   (function _inv20CarryWeekly(){
-    var carryDemand = {}; // {dbKey: {him: cups, her: cups, totalCups: num}}
+    // V181 (2026-05-21): track demand per-trip for the two-tier model.
+    // Pre-V181 lumped both trips into totalCups; needed for old "bought
+    // vs totalUsed" formula. V181's actual-waste check requires the
+    // cook1-specific demand because actual waste = priorCarry that doesn't
+    // get consumed by THIS week's cook 1 (per user's "next cook trip" rule).
+    var carryDemand = {}; // {dbKey: {cook1: cups, cook2: cups}}
     var _wLeftovers = computeLeftovers();
+    var c1DaySet = {}; (TRIP_DAYS_STATIC.cook1||[]).forEach(function(d){c1DaySet[d]=true;});
     ['him','her'].forEach(function(p){
       DAYS.forEach(function(d){
+        var trip = c1DaySet[d] ? 'cook1' : 'cook2';
         SLOTS.forEach(function(s){
           if(s==='late_snack') return;
           var k=sk(p,d,s);
@@ -7596,22 +7603,21 @@ function verifyInvariants(){
               if(m2 && m2[pt.p]) src = applyOverrides(m2[pt.p], pt.p, pt.d, pt.s);
             }
             if(!src) return;
+            // Bucket each portion by its OWN day's trip (cross-trip batches).
+            var ptTrip = c1DaySet[pt.d] ? 'cook1' : 'cook2';
             src.forEach(function(i){
               var db = NUTRI_DB[i.dbKey];
               // V171: include both pkg and produce crossTripCarry items.
               var isCarry = db && ((db.pkg && db.pkg.crossTripCarry)
                                 || (db.produce && db.produce.crossTripCarry));
               if(!isCarry) return;
-              if(!carryDemand[i.dbKey]) carryDemand[i.dbKey] = {totalCups:0};
-              carryDemand[i.dbKey].totalCups += i.amt;
+              if(!carryDemand[i.dbKey]) carryDemand[i.dbKey] = {cook1:0, cook2:0};
+              carryDemand[i.dbKey][ptTrip] += i.amt;
             });
           });
         });
         // V172 (2026-05-19): include late_snack carry ingredients in the
-        // weekly waste check. Pre-V172 late_snack contributions were
-        // skipped here (SLOTS iteration excludes late_snack), causing
-        // INV20 to undercount weekly waste when a user added a carry
-        // item to a late_snack via the + ingr button.
+        // weekly waste check.
         var _lsW = LATE_SNACK[pk(p,d)];
         if(_lsW && _lsW.ingredients && _lsW.ingredients.length){
           _lsW.ingredients.forEach(function(ing){
@@ -7620,8 +7626,8 @@ function verifyInvariants(){
             var isC = db && ((db.pkg && db.pkg.crossTripCarry)
                           || (db.produce && db.produce.crossTripCarry));
             if(!isC) return;
-            if(!carryDemand[ing.dbKey]) carryDemand[ing.dbKey] = {totalCups:0};
-            carryDemand[ing.dbKey].totalCups += ing.amt;
+            if(!carryDemand[ing.dbKey]) carryDemand[ing.dbKey] = {cook1:0, cook2:0};
+            carryDemand[ing.dbKey][trip] += ing.amt;
           });
         }
       });
@@ -7633,44 +7639,72 @@ function verifyInvariants(){
       var isProduce = !isPkg && !!(db && db.produce && db.produce.crossTripCarry);
       var perUnit = isPkg ? (db.pkg.cups || 0) : (isProduce ? db.produce.perWhole : 0);
       if(!(perUnit > 0)) return;
-      var totalUsed = carryDemand[dbKey].totalCups;
+      var houseC1 = carryDemand[dbKey].cook1;
+      var houseC2 = carryDemand[dbKey].cook2;
+      var totalUsed = houseC1 + houseC2;
       if(totalUsed <= 0) return;
-      // V180 (2026-05-21): subtract prior-week carryover from this week's
-      // effective need before computing jars bought. The carry "shrinks"
-      // the purchase, and ALSO shrinks waste because any unused carry was
-      // already bought in a prior week — not double-counted here.
-      var pCarryW = (typeof _computePriorCarryover === 'function' && typeof _prevWeekKey === 'function')
+      // V181 (2026-05-21) — two-tier waste model:
+      //   ACTUAL WASTE  = priorCarry that doesn't get consumed in THIS week's
+      //                   cook 1 (the "next cook trip" after prior cook 2).
+      //                   Per user's freshness rule, leftover priorCarry not
+      //                   used by cook 1 has aged past usable lifetime.
+      //   FORWARD INVT  = this week's new-jar partial at end of cook 2.
+      //                   Becomes next week's priorCarry. NOT waste yet.
+      // Pre-V181 (incl. V180's first attempt) lumped these together — the
+      // forward inventory was double-counted as waste.
+      var priorCarry = (typeof _computePriorCarryover === 'function' && typeof _prevWeekKey === 'function')
         ? (_computePriorCarryover(_prevWeekKey())[dbKey] || 0) : 0;
-      var effUsed = Math.max(0, totalUsed - pCarryW);
-      var units = _pkgsNeeded(effUsed, perUnit);
-      var bought = units * perUnit;
-      // V180: waste is what's left in the NEW jars (cook2-opened) that
-      // doesn't fit the effective need. The carry inventory itself ISN'T
-      // waste — it was bought in prior week's accounting. So:
-      //   waste_this_week = bought_this_week − effUsed
-      var waste = Math.max(0, bought - effUsed);
-      // Threshold: pkg = wastePct > 1%; produce = waste > 50% of one whole.
+      // Sequential fill:
+      //   1. Prior carry covers cook 1 first.
+      //   2. Cook 1 buys new jars for the rest (effC1Need).
+      //   3. Cook 1's new-jar partial carries WITHIN this week to cook 2.
+      //   4. Cook 2 buys new jars for what cook 1's leftover can't cover.
+      //   5. Cook 2's new-jar partial = forward inventory (next week's carry).
+      var actualWaste = Math.max(0, priorCarry - houseC1);  // excess priorCarry not used by cook 1
+      var carryConsumedByC1 = Math.min(priorCarry, houseC1);
+      var effC1Need = Math.max(0, houseC1 - carryConsumedByC1);
+      var c1Jars = _pkgsNeeded(effC1Need, perUnit);
+      var c1Bought = c1Jars * perUnit;
+      var c1NewLeftover = Math.max(0, c1Bought - effC1Need);
+      var c2Net = Math.max(0, houseC2 - c1NewLeftover);
+      var c2Jars = _pkgsNeeded(c2Net, perUnit);
+      var c2Bought = c2Jars * perUnit;
+      var c2Leftover = Math.max(0, c2Bought - c2Net);  // forward inventory
+      var bought = c1Bought + c2Bought;
+      // INV20 fires on ACTUAL waste only.
+      // Threshold (pkg): actualWaste/(bought + priorCarry) > 1%, or actualWaste > 0 with low denom.
+      // Threshold (produce): actualWaste > 50% of one whole.
+      var totalAcquired = bought + priorCarry;
       var fires = isPkg
-        ? (bought > 0 && (waste / bought) > 0.01)
-        : (waste > perUnit * 0.5);
+        ? (actualWaste > 0.05 && totalAcquired > 0 && (actualWaste / totalAcquired) > 0.01)
+        : (actualWaste > perUnit * 0.5);
+      var unitLabel = isPkg ? 'cup' : 'each';
       if(fires){
-        var unitLabel = isPkg ? 'cup' : 'each';
         var detail = 'week '+dbKey
-          +' used='+totalUsed.toFixed(3)+unitLabel
-          +' bought='+bought.toFixed(3)+unitLabel
-          +' waste='+waste.toFixed(3)+unitLabel;
+          +' priorCarry='+priorCarry.toFixed(3)+unitLabel
+          +' c1Demand='+houseC1.toFixed(3)+unitLabel
+          +' actualWaste='+actualWaste.toFixed(3)+unitLabel;
         if(isPkg){
-          var pct = (waste / bought * 100).toFixed(1);
+          var pct = totalAcquired > 0 ? (actualWaste / totalAcquired * 100).toFixed(1) : '0';
           detail += ' pct='+pct+'%';
-          violations.push('INV20 waste-over-threshold (pkg): '+detail);
+          violations.push('INV20 actual-waste (pkg): '+detail);
           violations.push('INV21 pkg-waste-over-1pct: '+detail);
           if(db.pkg.softWaste) violations.push('INV20Soft soft-waste (pkg): '+detail);
         } else {
-          detail += ' ('+(waste/perUnit*100).toFixed(0)+'% of one whole)';
-          violations.push('INV20 waste-over-threshold (produce): '+detail);
+          detail += ' ('+(actualWaste/perUnit*100).toFixed(0)+'% of one whole)';
+          violations.push('INV20 actual-waste (produce): '+detail);
           violations.push('INV22 produce-waste-over-50pct-of-whole: '+detail);
           if(db.produce.softWaste) violations.push('INV20Soft soft-waste (produce): '+detail);
         }
+      }
+      // V181: INV20Leftover sub-category — forward inventory (this week's
+      // end-of-cook-2 partial). Tracking-only — flags potential waste
+      // pending next week's consumption.
+      if(c2Leftover > 0.05){
+        var lDetail = 'week '+dbKey
+          +' c2Leftover='+c2Leftover.toFixed(3)+unitLabel
+          +' (forward to next week; potential waste if unused)';
+        violations.push('INV20Leftover forward-inventory: '+lDetail);
       }
     });
   })();
@@ -17908,9 +17942,15 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV20Leftover:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
     violations.forEach(function(v){
-      // Match INV20Soft first (longer suffix); fall back to INV<digits>.
+      // Match longer suffixes first; fall back to INV<digits>.
+      // V181 (2026-05-21): INV20Leftover tracks forward inventory (this
+      // week's cook 2 partial that becomes next week's priorCarry). Not
+      // a fire — informational sub-category. INV20Soft kept for
+      // marinara/broth softWaste flag (subtracted from INV20 hard count).
+      var msL=v.match(/^(INV20Leftover)\b/);
+      if(msL){counts[msL[1]]++;return;}
       var ms=v.match(/^(INV20Soft)\b/);
       if(ms){counts[ms[1]]++;return;}
       var m=v.match(/^INV(\d+)/);if(!m)return;
@@ -17972,9 +18012,9 @@ window.MPStress=(function(){
     // run starts from this run's output (used by runStandard2 to simulate
     // real-world repeated Randomize clicks and exercise state-evolution paths).
     if(!opts.persistState) restore(snap);
-    // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16, INV18, INV20Soft, INV21, INV22) from the "real fail" list
+    // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16, INV18, INV20Soft, INV20Leftover, INV21, INV22) from the "real fail" list
     var nonInv6=violations.filter(function(v){
-      return !v.startsWith('INV6 ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ') && !v.startsWith('INV18 ') && !v.startsWith('INV20Soft ') && !v.startsWith('INV21 ') && !v.startsWith('INV22 ');
+      return !v.startsWith('INV6 ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ') && !v.startsWith('INV18 ') && !v.startsWith('INV20Soft ') && !v.startsWith('INV20Leftover ') && !v.startsWith('INV21 ') && !v.startsWith('INV22 ');
     }).slice(0,30);
     // Extract INV15/16 leftover-eaten counts per person
     var leftoversEaten={him:0,her:0};
@@ -18082,7 +18122,7 @@ window.MPStress=(function(){
     var fatLowBins={'14.5-15.0':0,'14.0-14.5':0,'13.0-14.0':0,'<13.0':0};
     var proPctBins={'40.0-42.0':0,'42.0-45.0':0,'45.0-50.0':0,'>50.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV20Leftover:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
@@ -18251,7 +18291,7 @@ window.MPStress=(function(){
       missCounts:missCounts,
       kcalBins:kcalBins,fatBins:fatBins,fatLowBins:fatLowBins,proPctBins:proPctBins,vegBins:vegBins,
       invTotals:invTotals,
-      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV21'&&k!=='INV22'&&invTotals[k]>0;}), // INV19/INV20 hard — count toward "any fail". INV20Soft/INV21/22 tracking-only.
+      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV20Leftover'&&k!=='INV21'&&k!=='INV22'&&invTotals[k]>0;}), // INV19/INV20 hard — count toward "any fail". INV20Soft/INV20Leftover/INV21/22 tracking-only.
       // INV13 fires per-ingredient that has db.minAmt/maxAmt defined; ingredients without those are exempt by construction.
       invSamples:invSamples,
       topMeals:topMeals,
