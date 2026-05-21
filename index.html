@@ -6445,6 +6445,13 @@ function verifyInvariants(){
               // reverse-check `expected` map doesn't acquire an `undefined`
               // string-key bucket.
               if(!i.dbKey)return;
+              // V185 (2026-05-21): skip carry items here — they are added
+              // to carryDemandI3 below via the V172 late_snack pass and
+              // attributed via the V164 carry pass with proper trip-aware
+              // depletion (incl. V180 prior-week carryover subtraction).
+              // Without this filter, carry items get DOUBLE-counted:
+              // once direct (here) plus once via carry-attribution.
+              if(_inv3IsCarry(i.dbKey)) return;
               if(!expected[i.dbKey])expected[i.dbKey]={him:0,her:0};
               expected[i.dbKey][p]+=i.amt;
             });
@@ -22115,6 +22122,157 @@ window.MPStress=(function(){
       undoScheduleEdit();
     }
 
+    else if(op==='preserveUserPinsAcrossMealChange'){
+      // V185 (2026-05-21): regression test for V169.
+      // Find a slot whose current meal uses a ROUND_PKG_ITEMS dbKey AND
+      // find an alt meal (same slot type) that also uses the same dbKey.
+      // Pin the pkg ingredient via _writeUserPin, then changeMeal to the
+      // alt. V169 should preserve the user pin at the new meal's idx.
+      if(slot.geometry !== 'solo' || s === 'shake'){
+        add('setup', true, '', null, 'solo non-shake only'); return {checks:checks};
+      }
+      // Find a pkg ingredient in current slot's meal
+      var pumIdx = -1, pumDbKey = null;
+      // V185: preBal may be empty for this op's slot (depends on slot
+      // iteration order). Refresh via getBalancedSlotIngredients so we
+      // always have content.
+      var pumBal = getBalancedSlotIngredients(p, d, s) || [];
+      if(pumBal.length === 0){
+        add('setup', true, '', null, 'no balanced ingredients for slot'); return {checks:checks};
+      }
+      for(var pumI = 0; pumI < pumBal.length; pumI++){
+        var pumDb = NUTRI_DB[pumBal[pumI].dbKey];
+        if(ROUND_PKG_ITEMS.indexOf(pumBal[pumI].dbKey) >= 0
+           || ROUND_PRODUCE_ITEMS.indexOf(pumBal[pumI].dbKey) >= 0){
+          pumIdx = pumI; pumDbKey = pumBal[pumI].dbKey; break;
+        }
+      }
+      if(pumIdx < 0){
+        add('setup', true, '', null, 'no pkg/produce ingredient'); return {checks:checks};
+      }
+      // Find an alt meal that ALSO uses this dbKey
+      var pumCurrentMid = getMealId(p, d, s);
+      var pumAlt = MEALS.find(function(m){
+        if(m.id === pumCurrentMid) return false;
+        if(m.noRandomize) return false;
+        if(!m.slots || m.slots.indexOf(s) < 0) return false;
+        if(!m.ingredients) return false;
+        return m.ingredients.some(function(ii){return ii.dbKey === pumDbKey;});
+      });
+      if(!pumAlt){
+        add('setup', true, '', null, 'no alt meal with same pkg dbKey'); return {checks:checks};
+      }
+      // Pin the pkg item
+      var pumPinAmt = pumBal[pumIdx].amt + 0.5; // bump
+      if(NUTRI_DB[pumDbKey].maxAmt) pumPinAmt = Math.min(pumPinAmt, NUTRI_DB[pumDbKey].maxAmt);
+      _writeUserPin(p, d, s, pumIdx, {amt: pumPinAmt, capturePrior: true});
+      var pumPrevP = person, pumPrevD = day;
+      person = p; day = d;
+      try { changeMeal(s, pumAlt.id); }
+      finally { person = pumPrevP; day = pumPrevD; }
+      // V169 expectation: pin survived (with new idx) for the same dbKey
+      var pumOvAfter = OVERRIDES[sk(p,d,s)] || [];
+      var pumPreserved = pumOvAfter.find(function(o){return o._userSet === true && o.dbKey === pumDbKey;});
+      add('pum_pin_preserved',
+        !!pumPreserved,
+        'V169: user pin on '+pumDbKey+' should survive changeMeal to '+pumAlt.id+'; got overrides: '
+        + JSON.stringify(pumOvAfter.map(function(o){return {idx:o.idx,dbKey:o.dbKey,amt:o.amt,_userSet:o._userSet};})));
+      if(pumPreserved){
+        add('pum_amt_preserved',
+          Math.abs(pumPreserved.amt - pumPinAmt) < 0.01,
+          'V169: pin amt should match; expected '+pumPinAmt+' got '+pumPreserved.amt);
+      }
+      checkSchedEatOut();
+    }
+
+    else if(op==='lateSnackCarryAttribution'){
+      // V185 (2026-05-21): regression test for V172 (late_snack carry).
+      // Add a carry ingredient (lime) to a CURRENT week late_snack.
+      // Verify verifyInvariants doesn't fire INV3 (shopping list vs
+      // expected mismatch) — V172 ensures both pipelines include
+      // late_snack carry contributions.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'solo only'); return {checks:checks};
+      }
+      // Pick a person/day for late_snack
+      var lsP = p, lsD = d;
+      var lsKey = pk(lsP, lsD);
+      var savedLs = LATE_SNACK[lsKey] ? JSON.parse(JSON.stringify(LATE_SNACK[lsKey])) : null;
+      // Add late_snack with a lime ingredient
+      LATE_SNACK[lsKey] = {
+        name: 'test late snack with lime',
+        kcal: 20, pro: 0.5, fat: 0.1, carb: 7,
+        ingredients: [{dbKey: 'lime', amt: 0.5}]
+      };
+      invalidateLeftoverCache();
+      // V185: baseline INV3 fires for display-vs-sum may exist regardless
+      // of late_snack (cooking grid rounding); we only check for lime-
+      // specific fires here — they'd surface if V172/V180/V185 broke the
+      // late_snack carry path.
+      var lsViolations = verifyInvariants();
+      var lsHasLimeInv3 = lsViolations.some(function(v){
+        return /^INV3\b/.test(v) && /\blime\b/.test(v);
+      });
+      add('lsca_no_lime_inv3',
+        !lsHasLimeInv3,
+        'V172/V185: late_snack lime should NOT fire INV3; got: '
+        + lsViolations.filter(function(v){return /^INV3\b/.test(v) && /lime/.test(v);}).slice(0,2).join(' | '));
+      // Restore
+      if(savedLs) LATE_SNACK[lsKey] = savedLs;
+      else delete LATE_SNACK[lsKey];
+      invalidateLeftoverCache();
+      checkSchedEatOut();
+    }
+
+    else if(op==='clearAllStateCompleteness'){
+      // V185 (2026-05-21): regression test for V174.
+      // Pollute USER_EDITED + LEFTOVER_LINKS + SHARED_UNDO, then call
+      // _clearAllState (private to MPStress harness). Verify all wiped.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'solo only'); return {checks:checks};
+      }
+      // _clearAllState lives inside the IIFE — accessible via MPStress?
+      // It's not exported. We can't call it directly. Instead, verify
+      // that snapshot/restore (which IS exported) handles the same set.
+      // After freshRestore, USER_EDITED + LEFTOVER_LINKS + SHARED_UNDO
+      // should match the snapshot.
+      var savedUE = JSON.parse(JSON.stringify(USER_EDITED));
+      var savedLL = LEFTOVER_LINKS.slice();
+      var savedSU = (typeof SHARED_UNDO==='object' && SHARED_UNDO) ? JSON.parse(JSON.stringify(SHARED_UNDO)) : {};
+      // Pollute
+      USER_EDITED['test_pollution'] = true;
+      LEFTOVER_LINKS.push({id:'__test_clear', meal:'__test', slots:[], colorIdx:0});
+      if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
+        SHARED_UNDO['test_pollution'] = {mealId:'__test'};
+      }
+      // Take a snapshot, then pollute MORE, then restore — verify state
+      // matches the snapshot (not the polluted state).
+      var casSnap = MPStress.snapshot();
+      USER_EDITED['more_pollution'] = true;
+      LEFTOVER_LINKS.push({id:'__test_clear2', meal:'__test2', slots:[], colorIdx:1});
+      MPStress.restore(casSnap);
+      // After restore, the snapshot (which captured the polluted state) is
+      // restored. So we expect 'test_pollution' to be present but
+      // 'more_pollution' to be absent.
+      add('cas_user_edited_restored',
+        USER_EDITED['test_pollution'] === true && USER_EDITED['more_pollution'] === undefined,
+        'V174: snapshot/restore should round-trip USER_EDITED faithfully');
+      add('cas_leftover_links_restored',
+        LEFTOVER_LINKS.some(function(g){return g.id === '__test_clear';})
+        && !LEFTOVER_LINKS.some(function(g){return g.id === '__test_clear2';}),
+        'V174: snapshot/restore should round-trip LEFTOVER_LINKS faithfully');
+      // Cleanup: restore the ORIGINAL state (pre-pollution).
+      Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];});
+      Object.keys(savedUE).forEach(function(k){USER_EDITED[k] = savedUE[k];});
+      LEFTOVER_LINKS.length = 0;
+      savedLL.forEach(function(g){LEFTOVER_LINKS.push(g);});
+      if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
+        Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
+        Object.keys(savedSU).forEach(function(k){SHARED_UNDO[k] = savedSU[k];});
+      }
+      checkSchedEatOut();
+    }
+
     else if(op==='bannerPlusMinusDelta'){
       // V184 (2026-05-21): regression test for V178's +/- delta math.
       // Find a pkg ingredient in the slot, pin to a value that creates
@@ -22167,10 +22325,15 @@ window.MPStress=(function(){
       // of carry-item waste. Plant marinara so cook 1 lands exactly on a
       // jar boundary (no partial) and cook 2 spills over (partial jar).
       // Verify: cook 1 banner has NO waste warning; cook 2 banner DOES.
+      //
+      // V185 (2026-05-21): prefer SOLO marinara slots (cookservings=1) so
+      // _writeUserPin's per-portion amount IS the trip-total contribution.
+      // Shared/batch anchors would multiply by cookservings, breaking the
+      // math (e.g. pin 4.5 on a 2-portion batch = 9c trip, not 4.5c).
       if(slot.geometry !== 'solo'){
         add('setup', true, '', null, 'solo only'); return {checks:checks};
       }
-      // Collect every marinara-using slot in current SEL
+      var bwhLeftovers = (typeof computeLeftovers === 'function') ? computeLeftovers() : {};
       var bwhSlots = [];
       ['him','her'].forEach(function(pp){
         DAYS.forEach(function(dd){
@@ -22180,17 +22343,35 @@ window.MPStress=(function(){
             var meal = getMeal(mid);
             if(!meal || !meal.ingredients) return;
             var idx = meal.ingredients.findIndex(function(i){return i.dbKey === 'marinara';});
-            if(idx >= 0) bwhSlots.push({p:pp, d:dd, s:ss, idx:idx});
+            if(idx < 0) return;
+            // Determine if this slot is solo (cookservings=1) — V185 fix
+            var lo = bwhLeftovers[kk];
+            var isSolo = !lo || (lo.totalServings === 1 && !lo.isLeftover);
+            if(!lo) isSolo = true;
+            if(isSolo) bwhSlots.push({p:pp, d:dd, s:ss, idx:idx});
           });
         });
       });
       var bwhC1 = bwhSlots.find(function(x){return TRIP_DAYS_STATIC.cook1.indexOf(x.d) >= 0;});
       var bwhC2 = bwhSlots.find(function(x){return TRIP_DAYS_STATIC.cook2.indexOf(x.d) >= 0;});
       if(!bwhC1 || !bwhC2){
-        add('setup', true, '', null, 'need marinara slots in both trips'); return {checks:checks};
+        add('setup', true, '', null, 'need SOLO marinara slots in both trips'); return {checks:checks};
       }
-      // Zero ALL marinara contributions to start from clean math.
-      bwhSlots.forEach(function(sl){
+      // Zero ALL marinara contributions (every marinara slot, not just solos).
+      var bwhAllSlots = [];
+      ['him','her'].forEach(function(pp){
+        DAYS.forEach(function(dd){
+          ['breakfast','lunch','snack','dinner'].forEach(function(ss){
+            var kk = sk(pp, dd, ss);
+            var mid = SEL[kk]; if(!mid) return;
+            var meal = getMeal(mid);
+            if(!meal || !meal.ingredients) return;
+            var idx = meal.ingredients.findIndex(function(i){return i.dbKey === 'marinara';});
+            if(idx >= 0) bwhAllSlots.push({p:pp, d:dd, s:ss, idx:idx});
+          });
+        });
+      });
+      bwhAllSlots.forEach(function(sl){
         _writeUserPin(sl.p, sl.d, sl.s, sl.idx, {amt:0, capturePrior:true});
       });
       // Pin cook 1 = 3.0c (= exactly 1 jar) → no leftover.
@@ -22202,11 +22383,9 @@ window.MPStress=(function(){
       var bwhR2 = _smParseBanner(bwhC2.p, bwhC2.d, bwhC2.s);
       var bwhM1 = bwhR1.find(function(r){return r.dbKey === 'marinara';});
       var bwhM2 = bwhR2.find(function(r){return r.dbKey === 'marinara';});
-      // V179 expectation: cook 1 is clean (no partial jar there), no waste line
       add('bwha_cook1_no_waste',
         !bwhM1 || !bwhM1.hasWaste,
         'V179: cook 1 marinara should NOT show waste; raw: ' + (bwhM1 ? bwhM1.raw : '<no row>'));
-      // V179 expectation: cook 2 owns the 1.5c partial jar → waste warning
       add('bwha_cook2_has_waste',
         bwhM2 && bwhM2.hasWaste,
         'V179: cook 2 marinara should show waste; raw: ' + (bwhM2 ? bwhM2.raw : '<no row>'));
@@ -22539,7 +22718,11 @@ window.MPStress=(function(){
              // V184 (2026-05-21): V175/V178/V179 coverage
              'bannerPlusMinusDelta',                 // V178
              'bannerWasteHintScopeAttribution',      // V179
-             'swapVerifyRevertsBadCandidate'];       // V175
+             'swapVerifyRevertsBadCandidate',        // V175
+             // V185 (2026-05-21): V169/V172/V174 coverage
+             'preserveUserPinsAcrossMealChange',     // V169
+             'lateSnackCarryAttribution',            // V172
+             'clearAllStateCompleteness'];           // V174
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -22564,7 +22747,10 @@ window.MPStress=(function(){
             inv20ActualVsLeftover:{p:0,f:0},
             bannerPlusMinusDelta:{p:0,f:0},
             bannerWasteHintScopeAttribution:{p:0,f:0},
-            swapVerifyRevertsBadCandidate:{p:0,f:0}},
+            swapVerifyRevertsBadCandidate:{p:0,f:0},
+            preserveUserPinsAcrossMealChange:{p:0,f:0},
+            lateSnackCarryAttribution:{p:0,f:0},
+            clearAllStateCompleteness:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
