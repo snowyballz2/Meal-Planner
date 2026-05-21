@@ -4812,15 +4812,37 @@ function buildShoppingList(trip,who){
         }
       });
     });
+    // V180 (2026-05-21): prior-week carryover. Subtract prior week's
+    // end-of-cook2 partial jars from cook 1 demand (household total).
+    // The carryover is HOUSEHOLD-level (one open jar in the fridge feeds
+    // both people), so we deplete the first person's cook 1 demand first,
+    // then spill over to the second person. Order: him first, then her
+    // (matches the existing display order; symmetric for 'both' view).
+    const priorCarry = (typeof _computePriorCarryover === 'function')
+      ? _computePriorCarryover(_prevWeekKey()) : {};
     Object.keys(carryDemand).forEach(function(dbKey){
       const demand = carryDemand[dbKey];
       const db = NUTRI_DB[dbKey];
       // V171: support both pkg (cups) and produce (perWhole) perUnit.
       const perUnit = db && db.pkg ? db.pkg.cups : (db && db.produce ? db.produce.perWhole : 0);
       if(!(perUnit > 0)) return;
+      // V180: deplete cook 1 demand using prior-week carryover.
+      // Track effective c1 per person after carry subtraction.
+      let carryRemaining = priorCarry[dbKey] || 0;
+      const effC1 = {him: demand.him.cook1, her: demand.her.cook1};
+      if(carryRemaining > 0){
+        const take = Math.min(carryRemaining, effC1.him);
+        effC1.him -= take;
+        carryRemaining -= take;
+      }
+      if(carryRemaining > 0){
+        const take = Math.min(carryRemaining, effC1.her);
+        effC1.her -= take;
+        carryRemaining -= take;
+      }
       ['him','her'].forEach(function(p){
         if(persons.indexOf(p) < 0) return;
-        const c1 = demand[p].cook1;
+        const c1 = effC1[p];                  // V180: post-carryover demand
         const c2 = demand[p].cook2;
         let displayedAmt = 0;
         if(trip === 'cook1'){
@@ -6488,14 +6510,32 @@ function verifyInvariants(){
         }
       });
     });
+    // V180 (2026-05-21): mirror buildShoppingList's prior-week carryover
+    // subtraction. INV3 must use the same effective cook 1 demand.
+    const priorCarryI3 = (typeof _computePriorCarryover === 'function')
+      ? _computePriorCarryover(_prevWeekKey()) : {};
     Object.keys(carryDemandI3).forEach(function(dbKey){
       const demand = carryDemandI3[dbKey];
       const db = NUTRI_DB[dbKey];
       // V171: support both pkg + produce perUnit.
       const perUnit = db && db.pkg ? db.pkg.cups : (db && db.produce ? db.produce.perWhole : 0);
       if(!(perUnit > 0)) return;
+      // V180: deplete cook 1 per-person demand with priorCarryover
+      // (household-level; him first, then her — matches buildShoppingList).
+      let carryRemaining = priorCarryI3[dbKey] || 0;
+      const effC1 = {him: demand.him.cook1, her: demand.her.cook1};
+      if(carryRemaining > 0){
+        const take = Math.min(carryRemaining, effC1.him);
+        effC1.him -= take;
+        carryRemaining -= take;
+      }
+      if(carryRemaining > 0){
+        const take = Math.min(carryRemaining, effC1.her);
+        effC1.her -= take;
+        carryRemaining -= take;
+      }
       ['him','her'].forEach(function(p){
-        const c1 = demand[p].cook1;
+        const c1 = effC1[p];                 // V180: post-carryover demand
         const c2 = demand[p].cook2;
         let exp = 0;
         if(trip === 'cook1'){
@@ -7595,9 +7635,20 @@ function verifyInvariants(){
       if(!(perUnit > 0)) return;
       var totalUsed = carryDemand[dbKey].totalCups;
       if(totalUsed <= 0) return;
-      var units = _pkgsNeeded(totalUsed, perUnit);
+      // V180 (2026-05-21): subtract prior-week carryover from this week's
+      // effective need before computing jars bought. The carry "shrinks"
+      // the purchase, and ALSO shrinks waste because any unused carry was
+      // already bought in a prior week — not double-counted here.
+      var pCarryW = (typeof _computePriorCarryover === 'function' && typeof _prevWeekKey === 'function')
+        ? (_computePriorCarryover(_prevWeekKey())[dbKey] || 0) : 0;
+      var effUsed = Math.max(0, totalUsed - pCarryW);
+      var units = _pkgsNeeded(effUsed, perUnit);
       var bought = units * perUnit;
-      var waste = bought - totalUsed;
+      // V180: waste is what's left in the NEW jars (cook2-opened) that
+      // doesn't fit the effective need. The carry inventory itself ISN'T
+      // waste — it was bought in prior week's accounting. So:
+      //   waste_this_week = bought_this_week − effUsed
+      var waste = Math.max(0, bought - effUsed);
       // Threshold: pkg = wastePct > 1%; produce = waste > 50% of one whole.
       var fires = isPkg
         ? (bought > 0 && (waste / bought) > 0.01)
@@ -8531,13 +8582,22 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
       // opened a jar — usually cook 2, but cook 1 if cook 2's demand is
       // fully covered by cook 1's leftover.
       //
+      // V180 (2026-05-21): prior-week carryover. Prior week's cook 2 may
+      // have left partial jars (in jars newly opened in prior cook 2 only).
+      // Those are "free" inventory for new week's cook 1. Subtract from
+      // c1Demand before allocating jars, so the planner doesn't double-buy.
+      //
       // Show the warning only on slots in the partial-jar-owning trip.
       // Slots in the other trip can't affect the partial jar — adjusting
       // them would either be a no-op (cook 2 if partial is in cook 1) or
       // shift waste around without resolving it.
-      const houseC1 = sumDays(c1Days);
+      const houseC1raw = sumDays(c1Days);
       const houseC2 = sumDays(c2Days);
-      if(houseC1 + houseC2 <= 0) return '';
+      if(houseC1raw + houseC2 <= 0) return '';
+      // Apply prior-week carryover. V180 (2026-05-21).
+      const priorCarry = (typeof _computePriorCarryover === 'function')
+        ? (_computePriorCarryover(_prevWeekKey())[dbKey] || 0) : 0;
+      const houseC1 = Math.max(0, houseC1raw - priorCarry);
       const cook1Jars = Math.ceil(houseC1 / perUnit - 1e-9);
       const cook1Bought = cook1Jars * perUnit;
       const cook1Leftover = Math.max(0, cook1Bought - houseC1);
@@ -11379,6 +11439,28 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   var tripTotal = soloSum + batchSum;
   if(!(tripTotal > 0.001)) return null;
 
+  // V180 (2026-05-21): prior-week carryover for carry items. The prior
+  // week's cook 2 may have left partial-jar inventory; that inventory
+  // reduces the new week's BUY count without changing what gets cooked.
+  // Shift the rounding math by priorCarry — the freeze targets:
+  //   Y = N * perUnit + priorCarry   (N jars bought + carryover used)
+  // so tripTotal lands on a clean multiple of perUnit AFTER subtracting
+  // the existing inventory. Non-carry items: priorCarry = 0, math unchanged.
+  var isCarry = !!(db && ((db.pkg && db.pkg.crossTripCarry === true)
+                       || (db.produce && db.produce.crossTripCarry === true)));
+  var priorCarry = 0;
+  if(isCarry && typeof _computePriorCarryover === 'function' && typeof _prevWeekKey === 'function'){
+    priorCarry = _computePriorCarryover(_prevWeekKey())[dbKey] || 0;
+  }
+  var effTotal = Math.max(0, tripTotal - priorCarry);
+
+  // V180: if carry covers this week's full need, no jars to buy and no
+  // scaling needed. Just return current amounts (excess carry stays as
+  // inventory; will surface in next week's carryover computation).
+  if(priorCarry > 0 && effTotal <= 0.001){
+    return _onBoundary(solos, batches);
+  }
+
   // Bounds (per-portion).
   var floorSolo = (typeof db.minAmtSolo==='number') ? db.minAmtSolo
                 : (typeof db.minAmt==='number' ? db.minAmt : 0);
@@ -11387,15 +11469,16 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   var floorB    = (typeof db.minAmt==='number') ? db.minAmt : 0;
   var capB      = (typeof db.maxAmt==='number') ? db.maxAmt : Infinity;
 
-  // Already on perUnit boundary — freeze current values, no scaling.
-  var Y_round = Math.round(tripTotal/perUnit) * perUnit;
-  if(Math.abs(tripTotal - Y_round) < 0.001 && Y_round >= perUnit){
+  // Already on (effective) perUnit boundary — freeze current values, no scaling.
+  // V180: target = N * perUnit + priorCarry (where N is jars to buy, possibly 0).
+  var Y_round = Math.round(effTotal/perUnit) * perUnit + priorCarry;
+  if(Math.abs(tripTotal - Y_round) < 0.001 && Y_round >= priorCarry){
     return _onBoundary(solos, batches);
   }
-  // Try Y_nearest first, then Y_other.
-  var Y_nearest = Math.max(perUnit, Y_round);
-  var floorMult = Math.max(perUnit, Math.floor(tripTotal/perUnit) * perUnit);
-  var ceilMult  = Math.max(perUnit, Math.ceil(tripTotal/perUnit) * perUnit);
+  // Try Y_nearest first, then Y_other. Both anchored to effTotal grid + priorCarry shift.
+  var Y_nearest = Math.max(priorCarry > 0 ? priorCarry : perUnit, Y_round);
+  var floorMult = Math.max(priorCarry > 0 ? priorCarry : perUnit, Math.floor(effTotal/perUnit) * perUnit + priorCarry);
+  var ceilMult  = Math.max(priorCarry > 0 ? priorCarry : perUnit, Math.ceil(effTotal/perUnit) * perUnit + priorCarry);
   var Y_other   = (Y_nearest === ceilMult) ? floorMult : ceilMult;
 
   var ctx = {db:db, grid:grid, floorSolo:floorSolo, capSolo:capSolo, floorB:floorB, capB:capB};
@@ -11952,6 +12035,100 @@ function randomPick(arr){return arr[Math.floor(Math.random()*arr.length)];}
 // week when planning ahead.
 function _prevWeekKey() {
   return activeWeek === 'next' ? 'this' : 'last';
+}
+
+// V180 (2026-05-21): compute the prior week's end-of-cook2 carryover for
+// carry items (crossTripCarry pkg/produce). Returns {dbKey: leftoverAmt}.
+//
+// "Carryover" means partial-jar inventory at the end of the prior week's
+// last cook trip. Per the user's freshness rule, only items opened FOR THE
+// FIRST TIME in prior week's cook 2 count — items opened in prior cook 1
+// and merely carried through prior cook 2 are NOT carryover (they'd be
+// ~7-10 days open by the time the new week starts, past usable lifetime
+// for shelf-stable carry items like marinara, broth).
+//
+// Algorithm (mirrors V164/V179 sequential fill):
+//   priorC1Demand   = sum of carry-item amts in prior week's cook 1 slots
+//   priorC2Demand   = sum in prior week's cook 2 slots
+//   cook1Jars       = ceil(priorC1Demand / perUnit)
+//   cook1Leftover   = cook1Jars * perUnit − priorC1Demand
+//                     (this carries within the prior week, NOT to new week)
+//   cook2Net        = max(0, priorC2Demand − cook1Leftover)
+//   cook2Jars       = ceil(cook2Net / perUnit)
+//   cook2Leftover   = cook2Jars * perUnit − cook2Net
+//                     (partial in NEW jars opened in prior cook 2)
+//   carryover       = cook2Leftover IF cook2Jars > 0, ELSE 0
+//
+// Reads from weekData[priorWeekKey].sel/.overrides/.skipped/.eatOut.
+// Uses recipe amts with user-pin overrides applied; skips per-slot
+// adjustment (carry items are usually scalable:false anyway, so the
+// approximation is tight). Returns empty object for legacy data (no SEL).
+function _computePriorCarryover(priorWeekKey){
+  const result = {};
+  const prior = weekData[priorWeekKey];
+  if(!prior || !prior.sel) return result;
+  const priorSel = prior.sel;
+  const priorOv = prior.overrides || {};
+  const priorSkipped = prior.skipped || {};
+  const priorEatOut = prior.eatOut || {};
+  const c1Days = TRIP_DAYS_STATIC.cook1 || [];
+  const c2Days = TRIP_DAYS_STATIC.cook2 || [];
+  // Build set of carry items
+  const carryItems = [];
+  Object.keys(NUTRI_DB).forEach(function(k){
+    const db = NUTRI_DB[k];
+    const isCarry = !!(db && ((db.pkg && db.pkg.crossTripCarry === true)
+                           || (db.produce && db.produce.crossTripCarry === true)));
+    if(isCarry) carryItems.push(k);
+  });
+  // For each carry item, walk all slots and accumulate per-trip demand
+  carryItems.forEach(function(dbKey){
+    const db = NUTRI_DB[dbKey];
+    let perUnit = 0;
+    if(db.pkg) perUnit = (db.pkg.drained && (db.unit==='cup'||db.unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
+    else if(db.produce) perUnit = db.produce.perWhole || 0;
+    if(!(perUnit > 0)) return;
+    let c1Demand = 0, c2Demand = 0;
+    DAYS.forEach(function(d){
+      const isCook1 = c1Days.indexOf(d) >= 0;
+      ['him','her'].forEach(function(p){
+        ['breakfast','lunch','snack','dinner'].forEach(function(s){
+          const slotKey = p+'_'+d+'_'+s;
+          if(priorSkipped[slotKey]) return;
+          if(priorEatOut[slotKey]) return;
+          const mid = priorSel[slotKey]; if(!mid) return;
+          const meal = getMeal(mid); if(!meal || !meal[p] || !meal[p].ingredients) return;
+          meal[p].ingredients.forEach(function(ing, idx){
+            if(ing.dbKey !== dbKey) return;
+            let amt = ing.amt || 0;
+            const ovList = priorOv[slotKey];
+            if(ovList){
+              const ovr = ovList.find(function(o){return o.idx === idx;});
+              if(ovr && ovr.amt !== undefined) amt = ovr.amt;
+            }
+            if(isCook1) c1Demand += amt;
+            else c2Demand += amt;
+          });
+        });
+      });
+    });
+    if(c1Demand + c2Demand <= 0) return;
+    const cook1Jars = Math.ceil(c1Demand / perUnit - 1e-9);
+    const cook1Bought = cook1Jars * perUnit;
+    const cook1Leftover = Math.max(0, cook1Bought - c1Demand);
+    const cook2Net = Math.max(0, c2Demand - cook1Leftover);
+    const cook2Jars = Math.ceil(cook2Net / perUnit - 1e-9);
+    const cook2Bought = cook2Jars * perUnit;
+    const cook2Leftover = Math.max(0, cook2Bought - cook2Net);
+    // Per user's freshness rule: only the NEW jars opened in prior cook 2
+    // carry forward. If prior cook 2 opened no new jars (cook 1's leftover
+    // covered all of cook 2's demand), there's no carryover — any remaining
+    // jar partial belongs to prior cook 1, which is past usable lifetime.
+    if(cook2Jars > 0 && cook2Leftover >= 0.001){
+      result[dbKey] = cook2Leftover;
+    }
+  });
+  return result;
 }
 
 // Household-level: returns every meal ID used by EITHER person across all
