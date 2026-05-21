@@ -20006,14 +20006,20 @@ window.MPStress=(function(){
       if(!m) return null;
       var dbKey=m[1], rest=m[2];
       var hasArrow=/[↑↓]/.test(rest);
-      var hasSwap=/🔄 was/.test(rest);
+      // V181 (2026-05-21): V177 replaced the standalone "🔄 was X" hint
+      // with an inline <i>oldDbKey</i> between fromAmt and the arrow:
+      //   "↓ ¾ <i>oats</i> → 1 cup (-3 kcal)"
+      // Detect EITHER form (legacy + V177+) so the test handles old data.
+      var hasSwap=/🔄 was/.test(rest) || /<i>[^<]+<\/i>\s*→/.test(rest);
       var hasWaste=/⚠/.test(rest);
-      var arrowMatch=rest.match(/[↑↓]\s+(\S+)\s+→\s+(\S+)\s+(\w+)\s*\(([+-]?\d+)\s*kcal\)/);
+      // V181: match optional <i>oldDbKey</i> between fromAmt and arrow
+      // (V177's cross-ingredient form). Group 2 captures old dbKey if present.
+      var arrowMatch=rest.match(/[↑↓]\s+(\S+)\s*(?:<i>([^<]+)<\/i>\s+)?→\s+(\S+)\s+(\w+)\s*\(([+-]?\d+)\s*kcal\)/);
       var wasteMatch=rest.match(/⚠\s+(\S+)\s+(\w+)\s+([\w\s]+?)\s+waste/);
       return {
         dbKey:dbKey, raw:rest,
         hasArrow:hasArrow, hasSwap:hasSwap, hasWaste:hasWaste,
-        arrow:arrowMatch?{from:arrowMatch[1].trim(),to:arrowMatch[2].trim(),unit:arrowMatch[3],kcalDiff:parseInt(arrowMatch[4],10)}:null,
+        arrow:arrowMatch?{from:arrowMatch[1].trim(),oldDbKey:arrowMatch[2]||null,to:arrowMatch[3].trim(),unit:arrowMatch[4],kcalDiff:parseInt(arrowMatch[5],10)}:null,
         waste:wasteMatch?{value:wasteMatch[1],unit:wasteMatch[2],label:wasteMatch[3].trim()}:null
       };
     }).filter(function(x){return x;});
