@@ -11480,27 +11480,20 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   var tripTotal = soloSum + batchSum;
   if(!(tripTotal > 0.001)) return null;
 
-  // V180 (2026-05-21): prior-week carryover for carry items. The prior
-  // week's cook 2 may have left partial-jar inventory; that inventory
-  // reduces the new week's BUY count without changing what gets cooked.
-  // Shift the rounding math by priorCarry — the freeze targets:
-  //   Y = N * perUnit + priorCarry   (N jars bought + carryover used)
-  // so tripTotal lands on a clean multiple of perUnit AFTER subtracting
-  // the existing inventory. Non-carry items: priorCarry = 0, math unchanged.
-  var isCarry = !!(db && ((db.pkg && db.pkg.crossTripCarry === true)
-                       || (db.produce && db.produce.crossTripCarry === true)));
-  var priorCarry = 0;
-  if(isCarry && typeof _computePriorCarryover === 'function' && typeof _prevWeekKey === 'function'){
-    priorCarry = _computePriorCarryover(_prevWeekKey())[dbKey] || 0;
-  }
-  var effTotal = Math.max(0, tripTotal - priorCarry);
-
-  // V180: if carry covers this week's full need, no jars to buy and no
-  // scaling needed. Just return current amounts (excess carry stays as
-  // inventory; will surface in next week's carryover computation).
-  if(priorCarry > 0 && effTotal <= 0.001){
-    return _onBoundary(solos, batches);
-  }
+  // V186 (2026-05-21): REVERTED V180's freeze change. The V180 attempt to
+  // shift Y_round by priorCarry made freeze pick a different N (jars), which
+  // scales meals UP or DOWN compared to pre-V180. Specifically: for
+  // tripTotal=4.5 + priorCarry=0.5, pre-V180 picked Y=6 (scale meals UP);
+  // post-V180 picked Y=3.5 (scale meals DOWN, lower kcal → kcalLow misses).
+  //
+  // Correct semantic: priorCarry should reduce what you BUY (shopping list +
+  // INV20 + banner all do this in V180), NOT what you COOK. The freeze
+  // pipeline plans meal amounts, not jars-bought. So Y_round should round
+  // tripTotal as before, ignoring priorCarry. PriorCarry is consumed in the
+  // shopping/INV20 layers downstream.
+  //
+  // V180 helper + V180 shopping/INV3/banner + V181 INV20 two-tier all stay.
+  // Only this Y_round computation reverts to pre-V180.
 
   // Bounds (per-portion).
   var floorSolo = (typeof db.minAmtSolo==='number') ? db.minAmtSolo
@@ -11510,16 +11503,15 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   var floorB    = (typeof db.minAmt==='number') ? db.minAmt : 0;
   var capB      = (typeof db.maxAmt==='number') ? db.maxAmt : Infinity;
 
-  // Already on (effective) perUnit boundary — freeze current values, no scaling.
-  // V180: target = N * perUnit + priorCarry (where N is jars to buy, possibly 0).
-  var Y_round = Math.round(effTotal/perUnit) * perUnit + priorCarry;
-  if(Math.abs(tripTotal - Y_round) < 0.001 && Y_round >= priorCarry){
+  // Already on perUnit boundary — freeze current values, no scaling.
+  var Y_round = Math.round(tripTotal/perUnit) * perUnit;
+  if(Math.abs(tripTotal - Y_round) < 0.001 && Y_round >= perUnit){
     return _onBoundary(solos, batches);
   }
-  // Try Y_nearest first, then Y_other. Both anchored to effTotal grid + priorCarry shift.
-  var Y_nearest = Math.max(priorCarry > 0 ? priorCarry : perUnit, Y_round);
-  var floorMult = Math.max(priorCarry > 0 ? priorCarry : perUnit, Math.floor(effTotal/perUnit) * perUnit + priorCarry);
-  var ceilMult  = Math.max(priorCarry > 0 ? priorCarry : perUnit, Math.ceil(effTotal/perUnit) * perUnit + priorCarry);
+  // Try Y_nearest first, then Y_other.
+  var Y_nearest = Math.max(perUnit, Y_round);
+  var floorMult = Math.max(perUnit, Math.floor(tripTotal/perUnit) * perUnit);
+  var ceilMult  = Math.max(perUnit, Math.ceil(tripTotal/perUnit) * perUnit);
   var Y_other   = (Y_nearest === ceilMult) ? floorMult : ceilMult;
 
   var ctx = {db:db, grid:grid, floorSolo:floorSolo, capSolo:capSolo, floorB:floorB, capB:capB};
