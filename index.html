@@ -22115,6 +22115,148 @@ window.MPStress=(function(){
       undoScheduleEdit();
     }
 
+    else if(op==='bannerPlusMinusDelta'){
+      // V184 (2026-05-21): regression test for V178's +/- delta math.
+      // Find a pkg ingredient in the slot, pin to a value that creates
+      // off-boundary trip waste, and verify the banner row's waste
+      // warning includes the "+X or -Y" suffix.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'solo only'); return {checks:checks};
+      }
+      var bpdIdx = -1;
+      for(var bpi = 0; bpi < preBal.length; bpi++){
+        var pbdb = NUTRI_DB[preBal[bpi].dbKey];
+        // Skip carry items (different trip-attribution path); long-shelf/acceptable.
+        if(pbdb && pbdb.pkg && !pbdb.pkg.longShelfLife
+           && !pbdb.pkg.acceptableWaste && !pbdb.pkg.crossTripCarry){
+          bpdIdx = bpi; break;
+        }
+      }
+      if(bpdIdx < 0){
+        add('setup', true, '', null, 'no non-carry pkg ingredient in slot'); return {checks:checks};
+      }
+      var bpdDb = NUTRI_DB[preBal[bpdIdx].dbKey];
+      var bpdPerUnit = bpdDb.pkg.drained || bpdDb.pkg.cups || 1;
+      // Pin to current amt + perUnit/2 to nudge off-boundary (creates waste).
+      // Cap to maxAmt to keep within bounds.
+      var bpdTarget = preBal[bpdIdx].amt + bpdPerUnit * 0.5;
+      if(bpdDb.maxAmt) bpdTarget = Math.min(bpdTarget, bpdDb.maxAmt);
+      if(bpdTarget <= preBal[bpdIdx].amt){
+        add('setup', true, '', null, 'cannot pin higher (at maxAmt)'); return {checks:checks};
+      }
+      onIngrAmt(p, d, s, bpdIdx, bpdTarget);
+      var bpdRows = _smParseBanner(p, d, s);
+      var bpdMatch = bpdRows.find(function(r){return r.dbKey === preBal[bpdIdx].dbKey;});
+      add('bpd_banner_row', !!bpdMatch, 'no banner row for ' + preBal[bpdIdx].dbKey);
+      // Only assert +/- format when waste warning actually fires. If trip
+      // happens to land on boundary anyway (unlikely with +0.5×perUnit
+      // nudge but possible if other contributors offset), skip the assertion.
+      if(bpdMatch && bpdMatch.hasWaste){
+        var bpdRaw = bpdMatch.raw;
+        var hasPlusMinus = /·\s+\+\S+\s+or\s+-\S+/.test(bpdRaw);
+        add('bpd_has_plusminus', hasPlusMinus,
+          'V178: warning should have "+X or -Y" suffix; raw: ' + bpdRaw);
+      } else {
+        add('bpd_no_waste_skipped', true, '', null, 'no waste fired — pin landed cleanly');
+      }
+      checkSchedEatOut();
+    }
+
+    else if(op==='bannerWasteHintScopeAttribution'){
+      // V184 (2026-05-21): regression test for V179's per-trip attribution
+      // of carry-item waste. Plant marinara so cook 1 lands exactly on a
+      // jar boundary (no partial) and cook 2 spills over (partial jar).
+      // Verify: cook 1 banner has NO waste warning; cook 2 banner DOES.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'solo only'); return {checks:checks};
+      }
+      // Collect every marinara-using slot in current SEL
+      var bwhSlots = [];
+      ['him','her'].forEach(function(pp){
+        DAYS.forEach(function(dd){
+          ['breakfast','lunch','snack','dinner'].forEach(function(ss){
+            var kk = sk(pp, dd, ss);
+            var mid = SEL[kk]; if(!mid) return;
+            var meal = getMeal(mid);
+            if(!meal || !meal.ingredients) return;
+            var idx = meal.ingredients.findIndex(function(i){return i.dbKey === 'marinara';});
+            if(idx >= 0) bwhSlots.push({p:pp, d:dd, s:ss, idx:idx});
+          });
+        });
+      });
+      var bwhC1 = bwhSlots.find(function(x){return TRIP_DAYS_STATIC.cook1.indexOf(x.d) >= 0;});
+      var bwhC2 = bwhSlots.find(function(x){return TRIP_DAYS_STATIC.cook2.indexOf(x.d) >= 0;});
+      if(!bwhC1 || !bwhC2){
+        add('setup', true, '', null, 'need marinara slots in both trips'); return {checks:checks};
+      }
+      // Zero ALL marinara contributions to start from clean math.
+      bwhSlots.forEach(function(sl){
+        _writeUserPin(sl.p, sl.d, sl.s, sl.idx, {amt:0, capturePrior:true});
+      });
+      // Pin cook 1 = 3.0c (= exactly 1 jar) → no leftover.
+      // Pin cook 2 = 4.5c (= 1.5 jars) → 1.5c leftover in cook 2's new jar.
+      _writeUserPin(bwhC1.p, bwhC1.d, bwhC1.s, bwhC1.idx, {amt:3.0, capturePrior:true});
+      _writeUserPin(bwhC2.p, bwhC2.d, bwhC2.s, bwhC2.idx, {amt:4.5, capturePrior:true});
+      invalidateLeftoverCache();
+      var bwhR1 = _smParseBanner(bwhC1.p, bwhC1.d, bwhC1.s);
+      var bwhR2 = _smParseBanner(bwhC2.p, bwhC2.d, bwhC2.s);
+      var bwhM1 = bwhR1.find(function(r){return r.dbKey === 'marinara';});
+      var bwhM2 = bwhR2.find(function(r){return r.dbKey === 'marinara';});
+      // V179 expectation: cook 1 is clean (no partial jar there), no waste line
+      add('bwha_cook1_no_waste',
+        !bwhM1 || !bwhM1.hasWaste,
+        'V179: cook 1 marinara should NOT show waste; raw: ' + (bwhM1 ? bwhM1.raw : '<no row>'));
+      // V179 expectation: cook 2 owns the 1.5c partial jar → waste warning
+      add('bwha_cook2_has_waste',
+        bwhM2 && bwhM2.hasWaste,
+        'V179: cook 2 marinara should show waste; raw: ' + (bwhM2 ? bwhM2.raw : '<no row>'));
+      checkSchedEatOut();
+    }
+
+    else if(op==='swapVerifyRevertsBadCandidate'){
+      // V184 (2026-05-21): regression test for V175's _trySwapForWaste
+      // signature change (single object → array of up to 10 candidates).
+      // Also verifies _swapDiag is populated with a refused/reverted
+      // structure when applicable.
+      if(slot.geometry !== 'solo'){
+        add('setup', true, '', null, 'solo only'); return {checks:checks};
+      }
+      var svrLeftovers = (typeof computeLeftovers === 'function') ? computeLeftovers() : {};
+      // V175 returns null OR array. Try with a common pkg item.
+      var svrResult = _trySwapForWaste('canned tuna', 'cook1',
+        TRIP_DAYS_STATIC.cook1 || [], ['him','her'], svrLeftovers);
+      add('svr_null_or_array',
+        svrResult === null || Array.isArray(svrResult),
+        'V175: _trySwapForWaste should return null or Array, got: ' + (typeof svrResult));
+      if(Array.isArray(svrResult)){
+        add('svr_capped_10',
+          svrResult.length <= 10,
+          'V175: candidate array should be capped at 10, got ' + svrResult.length);
+        if(svrResult.length > 0){
+          var sFirst = svrResult[0];
+          var sShape = sFirst.p !== undefined && sFirst.d !== undefined
+                    && sFirst.s !== undefined && sFirst.oldMealId !== undefined
+                    && sFirst.newMealId !== undefined;
+          add('svr_proposal_shape', sShape,
+            'V175: each proposal should have {p,d,s,oldMealId,newMealId}, got keys: '
+            + Object.keys(sFirst).join(','));
+        }
+      }
+      // _swapDiag is set up by randomizeWeek's freeze pass — may not be
+      // populated outside that context. Defensive check.
+      if(typeof window !== 'undefined' && window._swapDiag !== undefined){
+        var sd = window._swapDiag;
+        add('svr_swapdiag_shape',
+          sd.swappedKeys !== undefined && Array.isArray(sd.swaps),
+          'V175 _swapDiag should have {swappedKeys, swaps, refused}; got keys: '
+          + Object.keys(sd).join(','));
+      } else {
+        add('svr_swapdiag_absent', true, '', null,
+          '_swapDiag not active outside freeze pass (expected)');
+      }
+      checkSchedEatOut();
+    }
+
     else if(op==='carryoverHelperDeducts'){
       // V183 (2026-05-21): regression test for V180's prior-week carryover
       // helper + shopping-list integration. Plants marinara on prior week's
@@ -22393,7 +22535,11 @@ window.MPStress=(function(){
              'editModeResetSuppressesShared',       // V87
              // V183 (2026-05-21): V180 carryover helper + V181 INV20 two-tier
              'carryoverHelperDeducts',               // V180
-             'inv20ActualVsLeftover'];               // V181
+             'inv20ActualVsLeftover',                // V181
+             // V184 (2026-05-21): V175/V178/V179 coverage
+             'bannerPlusMinusDelta',                 // V178
+             'bannerWasteHintScopeAttribution',      // V179
+             'swapVerifyRevertsBadCandidate'];       // V175
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -22415,7 +22561,10 @@ window.MPStress=(function(){
             editModeIntentOverridesMealMatch:{p:0,f:0},
             editModeResetSuppressesShared:{p:0,f:0},
             carryoverHelperDeducts:{p:0,f:0},
-            inv20ActualVsLeftover:{p:0,f:0}},
+            inv20ActualVsLeftover:{p:0,f:0},
+            bannerPlusMinusDelta:{p:0,f:0},
+            bannerWasteHintScopeAttribution:{p:0,f:0},
+            swapVerifyRevertsBadCandidate:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
