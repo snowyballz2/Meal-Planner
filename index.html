@@ -22319,6 +22319,66 @@ window.MPStress=(function(){
       checkSchedEatOut();
     }
 
+    else if(op==='cardSharedToggleUndoRestore'){
+      // V189 (2026-05-21): regression test for V161's toggleShared
+      // SHARED_UNDO option-C restore. When user clicks the card-level
+      // "Shared" pill:
+      //   ON: capture OTHER side's pre-share meal into SHARED_UNDO,
+      //       overwrite OTHER's SEL with this side's meal.
+      //   OFF: restore OTHER's pre-share meal from SHARED_UNDO (option C),
+      //        fall back to random pick if SHARED_UNDO empty (option A).
+      // Existing `tapAlreadyShared` tests the schedule-grid path; V189
+      // tests the card-pill path with the SHARED_UNDO restore semantic.
+      if(slot.geometry !== 'solo' || s === 'shake'){
+        add('setup', true, '', null, 'solo non-shake only'); return {checks:checks};
+      }
+      if(s !== 'breakfast' && s !== 'lunch' && s !== 'dinner'){
+        add('setup', true, '', null, 'card pill only on b/l/d'); return {checks:checks};
+      }
+      var ctsHimK = sk('him', d, s), ctsHerK = sk('her', d, s);
+      var ctsDKey = dk(d, s);
+      // Need state: him/her have DIFFERENT meals, SHARED_SCHEDULE not 'shared'
+      var ctsHimMid = SEL[ctsHimK], ctsHerMid = SEL[ctsHerK];
+      if(!ctsHimMid || !ctsHerMid){
+        add('setup', true, '', null, 'either side empty'); return {checks:checks};
+      }
+      if(ctsHimMid === ctsHerMid){
+        add('setup', true, '', null, 'already same meal'); return {checks:checks};
+      }
+      if(SHARED_SCHEDULE[ctsDKey] === 'shared'){
+        add('setup', true, '', null, 'already shared'); return {checks:checks};
+      }
+      // Snapshot pre-toggle state for comparison
+      var preHerMid = ctsHerMid;
+      // Step 1: toggle ON from him side (her should adopt him's meal)
+      var ctsPrevP = person, ctsPrevD = day;
+      person = 'him'; day = d;
+      try { toggleShared(s, true); }
+      finally { person = ctsPrevP; day = ctsPrevD; }
+      add('cts_on_sharedSet',
+        SHARED_SCHEDULE[ctsDKey] === 'shared',
+        'V161: toggle ON should set SHARED_SCHEDULE to shared');
+      add('cts_on_herAdoptedHim',
+        SEL[ctsHerK] === ctsHimMid,
+        'V161: toggle ON should set her SEL = him SEL; her=' + SEL[ctsHerK] + ' expected ' + ctsHimMid);
+      add('cts_on_undoCaptured',
+        SHARED_UNDO[ctsHerK] && SHARED_UNDO[ctsHerK].mealId === preHerMid,
+        'V161: toggle ON should capture her pre-share meal in SHARED_UNDO; got '
+        + JSON.stringify(SHARED_UNDO[ctsHerK]));
+      // Step 2: toggle OFF from him side (her should restore to pre-share)
+      person = 'him'; day = d;
+      try { toggleShared(s, false); }
+      finally { person = ctsPrevP; day = ctsPrevD; }
+      add('cts_off_sharedCleared',
+        SHARED_SCHEDULE[ctsDKey] !== 'shared',
+        'V161: toggle OFF should clear SHARED_SCHEDULE shared');
+      add('cts_off_herRestored',
+        SEL[ctsHerK] === preHerMid,
+        'V161 option-C: toggle OFF should restore her to pre-share meal '
+        + preHerMid + '; got ' + SEL[ctsHerK]);
+      checkSchedEatOut();
+    }
+
     else if(op==='bannerPlusMinusDelta'){
       // V184 (2026-05-21): regression test for V178's +/- delta math.
       // Find a pkg ingredient in the slot, pin to a value that creates
@@ -22768,7 +22828,9 @@ window.MPStress=(function(){
              // V185 (2026-05-21): V169/V172/V174 coverage
              'preserveUserPinsAcrossMealChange',     // V169
              'lateSnackCarryAttribution',            // V172
-             'clearAllStateCompleteness'];           // V174
+             'clearAllStateCompleteness',            // V174
+             // V189 (2026-05-21): V161 toggleShared SHARED_UNDO restore
+             'cardSharedToggleUndoRestore'];         // V161
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
@@ -22796,7 +22858,8 @@ window.MPStress=(function(){
             swapVerifyRevertsBadCandidate:{p:0,f:0},
             preserveUserPinsAcrossMealChange:{p:0,f:0},
             lateSnackCarryAttribution:{p:0,f:0},
-            clearAllStateCompleteness:{p:0,f:0}},
+            clearAllStateCompleteness:{p:0,f:0},
+            cardSharedToggleUndoRestore:{p:0,f:0}},
       byGeometry:{solo:{p:0,f:0},anchorBatch:{p:0,f:0},leftoverDiff:{p:0,f:0},sharedSameDay:{p:0,f:0},shake:{p:0,f:0}},
       byAssertion:{},
       failures:[],
