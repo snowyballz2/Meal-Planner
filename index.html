@@ -12012,6 +12012,313 @@ function _tradeBatchesAndSolos(Y, soloSnapSum, newSolos, batches, basicResult, c
   return {solos: solosOut, batches: batchPlan};
 }
 
+// =====================================================================
+// V193 (2026-05-21): carry-absorb pass — attempt to consume excess
+// priorCarry via meal swap. Dead code in Stage 1; activated in Stage 2.
+//
+// User intent: when prior week's cook 2 left a partial jar of marinara,
+// chicken broth, lime, or lemon, this week's selections should ABSORB
+// that carry by either:
+//   (a) cooking meals that consume the carry without buying new jars, OR
+//   (b) cooking meals that consume the carry + buy N full jars cleanly
+//
+// Hard termination: bias commits ONLY when result is fully clean —
+//   priorUnused = 0  (all priorCarry consumed)
+//   newCarryOut = 0  (no new partial jar opened in cook 2 this week)
+// Otherwise revert. No cascading. No endless loops.
+//
+// Algorithm:
+//   1. Compute current weekly demand D for the carry item
+//   2. Pick closest clean target T = priorCarry + N*perUnit (N ≥ 0)
+//   3. Find candidates: slots whose swap could shift D toward T
+//      Priority 1 = slots already in _pendingSwapSlots (other passes
+//                   are going to swap them anyway → consolidate)
+//      Priority 2 = non-MANUAL_SET, non-batch-anchor solo slots
+//   4. Single-swap: try each candidate's alts; commit if clean result
+//   5. Two-swap: full pair enumeration; commit if clean result
+//   6. No clean path found: revert, accept soft INV20 fire
+//
+// SWAP_OUT_EXCLUDE removal (Stage 2): marinara + chicken broth become
+// swappable like any pkg item. The "must be clean" criterion below
+// provides the protection.
+// =====================================================================
+
+// V193: track slots that other swap passes have already touched.
+// Cleared at start of randomizeWeek (Stage 2). _absorbCarryItem reads
+// this Set to give Priority 1 to slots that were already going to change.
+var _pendingSwapSlots = new Set();
+
+// Compute weekly demand for a carry item by summing balanced amounts
+// across cook anchors (skips leftover slots — they're shopped via anchor).
+function _absorbWeeklyDemand(dbKey, days, persons, leftovers){
+  var total = 0;
+  days.forEach(function(d){
+    persons.forEach(function(p){
+      if(p!=='him' && p!=='her') return;
+      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+        var k = sk(p,d,s);
+        if(SKIPPED[k] || EAT_OUT[k]) return;
+        var mid = SEL[k]; if(!mid) return;
+        var lo = leftovers[k];
+        if(lo && lo.isLeftover) return;
+        var portionList = (lo && lo.portions) ? lo.portions : [{p:p,d:d,s:s}];
+        portionList.forEach(function(pt){
+          var bal = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
+          if(!bal) return;
+          var ing = bal.find(function(i){return i.dbKey===dbKey;});
+          if(ing) total += ing.amt;
+        });
+      });
+    });
+  });
+  return total;
+}
+
+// Pick the closest clean target T given current demand D + priorCarry.
+// Clean states: T = priorCarry + N*perUnit for N = 0, 1, 2, ...
+// Returns the T with minimum |D - T|.
+function _absorbPickTarget(D, priorCarry, perUnit){
+  var bestT = priorCarry;
+  var bestDiff = Math.abs(D - priorCarry);
+  for(var N = 1; N <= 20; N++){
+    var T = priorCarry + N * perUnit;
+    var diff = Math.abs(D - T);
+    if(diff < bestDiff){
+      bestDiff = diff;
+      bestT = T;
+    }
+    if(T > D + perUnit * 2) break; // searched far enough
+  }
+  return bestT;
+}
+
+// Check if a weekly demand D produces a clean state given priorCarry +
+// perUnit. Clean = priorUnused (carry not consumed by C1) = 0 AND
+// new partial jar from C2 = 0.
+function _absorbIsClean(D, priorCarry, perUnit){
+  var priorUnused = Math.max(0, priorCarry - D);
+  var effC1 = Math.max(0, D - priorCarry);
+  var jars = effC1 > 0 ? _pkgsNeeded(effC1, perUnit) : 0;
+  var bought = jars * perUnit;
+  var newPartial = effC1 > 0 ? (bought - effC1) : 0;
+  return priorUnused < 0.001 && newPartial < 0.001;
+}
+
+// Find candidate slots to swap toward target T. Returns array sorted
+// by priority (P1 before P2). Each entry includes the candidate
+// alternative meals that would shift demand in the right direction.
+function _absorbFindCandidates(dbKey, delta, days, persons, leftovers){
+  var wantAdd = delta > 0;     // demand needs to go UP → swap to carry-using
+  var wantRemove = delta < 0;  // demand needs to go DOWN → swap away from carry-using
+  if(Math.abs(delta) < 0.001) return [];
+  var candidates = [];
+  days.forEach(function(d){
+    persons.forEach(function(p){
+      if(p!=='him' && p!=='her') return;
+      ['breakfast','lunch','snack','dinner'].forEach(function(s){
+        var k = sk(p,d,s);
+        if(SKIPPED[k] || EAT_OUT[k]) return;
+        if(MANUAL_SET[k]) return;
+        var mid = SEL[k]; if(!mid) return;
+        var lo = leftovers[k];
+        // Skip leftover slots (anchor handles batch)
+        if(lo && lo.isLeftover) return;
+        // Skip batch anchors with multi-portion (would break INV1 + INV12)
+        if(lo && lo.portions && lo.portions.length > 1) return;
+        var meal = getMeal(mid); if(!meal || !meal.ingredients || !meal[p]) return;
+        var mealHasCarry = meal.ingredients.some(function(i){return i.dbKey===dbKey;});
+        if(wantAdd && mealHasCarry) return;     // already uses, can't add
+        if(wantRemove && !mealHasCarry) return; // doesn't use, can't remove
+        // Find alternative meals: opposite carry-presence + variety + bounds
+        var slotPool = getMealsForSlot(s);
+        var sharedSlot = SHARED_SCHEDULE[dk(d,s)] === 'shared';
+        var dayIdx = DAYS.indexOf(d);
+        var recent = (s==='lunch'||s==='dinner') ? getRecentMealIds(dayIdx, DAYS, 4) : [];
+        var lastWk = (s==='lunch'||s==='dinner') ? getLastWeekMealIds() : [];
+        var inv11Blocked = {};
+        if(s==='lunch' || s==='dinner'){
+          [-2,-1,0,1,2].forEach(function(off){
+            var ci = dayIdx + off;
+            if(ci<0 || ci>=DAYS.length) return;
+            var cday = DAYS[ci];
+            ['him','her'].forEach(function(cp){
+              ['lunch','dinner'].forEach(function(cs){
+                var cmid = SEL[sk(cp,cday,cs)];
+                if(cmid) inv11Blocked[cmid] = true;
+              });
+            });
+          });
+        }
+        var slotBudget = getSlotBudget(p, d, s);
+        var alts = slotPool.filter(function(m){
+          if(m.id === mid) return false;
+          if(!m[p]) return false;
+          if(m.noRandomize) return false;
+          if(mealUsesDiscouraged(m)) return false;
+          if(sharedSlot && (!m.him || !m.her)) return false;
+          var altHasCarry = m.ingredients && m.ingredients.some(function(i){return i.dbKey===dbKey;});
+          if(wantAdd && !altHasCarry) return false;
+          if(wantRemove && altHasCarry) return false;
+          // Variety
+          if(s==='lunch' || s==='dinner'){
+            if(lastWk.indexOf(m.id) >= 0) return false;
+            if(recent.indexOf(m.id) >= 0) return false;
+            if(inv11Blocked[m.id]) return false;
+          }
+          // Kcal band (lenient — within 50% of budget)
+          var cBase = 0;
+          m.ingredients.forEach(function(i){var idb = NUTRI_DB[i.dbKey]; if(idb) cBase += idb.kcal*(i.amt||0);});
+          if(slotBudget > 0 && (cBase < slotBudget * 0.5 || cBase > slotBudget * 2.0)) return false;
+          return true;
+        });
+        if(alts.length === 0) return;
+        // Priority: P1 if slot was already going to be swapped by another pass
+        var inPending = (typeof _pendingSwapSlots !== 'undefined') && _pendingSwapSlots.has(k);
+        candidates.push({
+          p:p, d:d, s:s, key:k, mealId:mid, lo:lo, sharedSlot:sharedSlot,
+          alts:alts, priority: inPending ? 1 : 2
+        });
+      });
+    });
+  });
+  candidates.sort(function(a,b){return a.priority - b.priority;});
+  return candidates;
+}
+
+// Snapshot SEL/OVERRIDES/MANUAL_SET for specific slot keys (lightweight
+// — only mutates the listed keys, leaves rest untouched).
+function _absorbSnapshot(slotKeys){
+  var snap = {sel:{}, ov:{}, manual:{}};
+  slotKeys.forEach(function(k){
+    snap.sel[k] = SEL[k];
+    snap.ov[k] = OVERRIDES[k] ? OVERRIDES[k].map(function(o){return Object.assign({},o);}) : null;
+    snap.manual[k] = MANUAL_SET[k];
+  });
+  return snap;
+}
+
+// Restore from snapshot. Invalidates leftover cache so getBalanced reads
+// rebuild against restored state.
+function _absorbRestore(snap){
+  Object.keys(snap.sel).forEach(function(k){
+    if(snap.sel[k] !== undefined) SEL[k] = snap.sel[k];
+    else delete SEL[k];
+    if(snap.ov[k]) OVERRIDES[k] = snap.ov[k];
+    else delete OVERRIDES[k];
+    if(snap.manual[k]) MANUAL_SET[k] = snap.manual[k];
+    else delete MANUAL_SET[k];
+  });
+  invalidateLeftoverCache();
+}
+
+// Apply a single swap: change SEL, clear OVERRIDES (freeze pins from
+// prior pipeline are now stale), invalidate cache. Does NOT set
+// MANUAL_SET — this is randomize-generated, not user-locked.
+function _absorbApplySwap(slotKey, newMealId){
+  SEL[slotKey] = newMealId;
+  delete OVERRIDES[slotKey];
+  invalidateLeftoverCache();
+}
+
+// Check that all HARD invariants pass on the current state.
+// Hard set: INV1-5, 7-13, 17, 19, 23-25, plus INV20 hard count
+// (INV20 - INV20Soft must be 0).
+function _absorbHardINVsClean(){
+  var v;
+  try { v = verifyInvariants(); } catch(e){ return false; }
+  var counts = {};
+  v.forEach(function(line){
+    var m = line.match(/^(INV\d+[A-Za-z]*)\b/);
+    if(m) counts[m[1]] = (counts[m[1]]||0) + 1;
+  });
+  var hardKeys = ['INV1','INV2','INV3','INV4','INV5','INV7','INV8','INV9',
+                  'INV10','INV11','INV12','INV13','INV17','INV19','INV23','INV24','INV25'];
+  for(var i = 0; i < hardKeys.length; i++){
+    if((counts[hardKeys[i]]||0) > 0) return false;
+  }
+  // INV20 hard = INV20 total minus INV20Soft (carry-item soft fires)
+  var inv20Hard = (counts.INV20||0) - (counts.INV20Soft||0);
+  if(inv20Hard > 0) return false;
+  return true;
+}
+
+// Main entry: attempt to absorb priorCarry for one carry item via swap.
+// Returns {committed:N, slots:[...], finalD:X} on success; null on no-op
+// or no clean path found.
+function _absorbCarryItem(dbKey, priorCarry, days, persons, leftovers){
+  var db = NUTRI_DB[dbKey];
+  if(!db) return null;
+  var perUnit = (db.pkg && db.pkg.cups) || (db.produce && db.produce.perWhole) || 0;
+  if(!(perUnit > 0)) return null;
+  if(!(priorCarry > 0.001)) return null;
+
+  // 1. Current weekly demand
+  var D = _absorbWeeklyDemand(dbKey, days, persons, leftovers);
+
+  // 2. Already clean? No action.
+  if(_absorbIsClean(D, priorCarry, perUnit)) return null;
+
+  // 3. Find candidates
+  var T = _absorbPickTarget(D, priorCarry, perUnit);
+  var delta = T - D;
+  var candidates = _absorbFindCandidates(dbKey, delta, days, persons, leftovers);
+  if(candidates.length === 0) return null;
+
+  // 4. Single-swap attempt
+  for(var i = 0; i < candidates.length; i++){
+    var cand = candidates[i];
+    var snap = _absorbSnapshot([cand.key]);
+    // If sharedSlot, also snap+sync the other side
+    var otherKey = null;
+    if(cand.sharedSlot){
+      var otherP = cand.p==='him' ? 'her' : 'him';
+      otherKey = sk(otherP, cand.d, cand.s);
+      snap = _absorbSnapshot([cand.key, otherKey]);
+    }
+    for(var ai = 0; ai < cand.alts.length; ai++){
+      var altId = cand.alts[ai].id;
+      _absorbApplySwap(cand.key, altId);
+      if(otherKey) _absorbApplySwap(otherKey, altId);
+      var newLo = computeLeftovers();
+      var newD = _absorbWeeklyDemand(dbKey, days, persons, newLo);
+      if(_absorbIsClean(newD, priorCarry, perUnit) && _absorbHardINVsClean()){
+        return {committed:1, slots:[cand.key], finalD:newD};
+      }
+      _absorbRestore(snap);
+    }
+  }
+
+  // 5. Two-swap pair enumeration (full N×N×A×A)
+  for(var i = 0; i < candidates.length; i++){
+    for(var j = i + 1; j < candidates.length; j++){
+      var c1 = candidates[i], c2 = candidates[j];
+      if(c1.key === c2.key) continue;
+      var keysToSnap = [c1.key, c2.key];
+      var o1Key = null, o2Key = null;
+      if(c1.sharedSlot){ o1Key = sk(c1.p==='him'?'her':'him', c1.d, c1.s); keysToSnap.push(o1Key); }
+      if(c2.sharedSlot){ o2Key = sk(c2.p==='him'?'her':'him', c2.d, c2.s); keysToSnap.push(o2Key); }
+      for(var a1 = 0; a1 < c1.alts.length; a1++){
+        for(var a2 = 0; a2 < c2.alts.length; a2++){
+          var snap = _absorbSnapshot(keysToSnap);
+          _absorbApplySwap(c1.key, c1.alts[a1].id);
+          if(o1Key) _absorbApplySwap(o1Key, c1.alts[a1].id);
+          _absorbApplySwap(c2.key, c2.alts[a2].id);
+          if(o2Key) _absorbApplySwap(o2Key, c2.alts[a2].id);
+          var newLo2 = computeLeftovers();
+          var newD2 = _absorbWeeklyDemand(dbKey, days, persons, newLo2);
+          if(_absorbIsClean(newD2, priorCarry, perUnit) && _absorbHardINVsClean()){
+            return {committed:2, slots:[c1.key, c2.key], finalD:newD2};
+          }
+          _absorbRestore(snap);
+        }
+      }
+    }
+  }
+
+  // 6. No clean path. Accept soft INV20 fire downstream.
+  return null;
+}
+
 // Measured trip-waste counter — replaces _fastTripWasteForPersons (V115,
 // 2026-05-09). Mirrors the INV20 hard-fire logic from verifyInvariants():
 // reads the post-pipeline shopping list via buildShoppingList(trip,who) +
