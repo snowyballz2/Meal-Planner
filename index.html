@@ -18669,6 +18669,11 @@ window.MPStress=(function(){
   // saveBaseline can refuse to persist a corrupted-state baseline.
   // Excludes SHARED_SCHEDULE because the harness overrides it via
   // _applyStandardSharedSchedule (user's own schedule is restored after).
+  // V195 (2026-05-22): extended pristine check + INV26 enforcement.
+  // Pre-V195: _isPristine checked 8 fields, missing SHARED_SCHEDULE,
+  // ADJ_TARGETS, USER_EDITED, LEFTOVER_LINKS, SHARED_UNDO, all
+  // weekData.last/.next non-sel fields. Pre-V194 _clearAllState's
+  // incompleteness wasn't caught here either. V195 closes the gap.
   function _isPristine(){
     var dirty=[];
     if(Object.keys(SEL).length) dirty.push(Object.keys(SEL).length+' SEL entries');
@@ -18677,9 +18682,55 @@ window.MPStress=(function(){
     if(Object.keys(SKIPPED).length) dirty.push(Object.keys(SKIPPED).length+' SKIPPED');
     if(Object.keys(OVERRIDES).length) dirty.push(Object.keys(OVERRIDES).length+' OVERRIDES');
     if(Object.keys(LATE_SNACK).length) dirty.push(Object.keys(LATE_SNACK).length+' LATE_SNACK');
-    if(weekData.last && Object.keys(weekData.last.sel||{}).length) dirty.push(Object.keys(weekData.last.sel).length+' weekData.last.sel entries');
-    if(weekData.next && Object.keys(weekData.next.sel||{}).length) dirty.push(Object.keys(weekData.next.sel).length+' weekData.next.sel entries');
+    if(Object.keys(SHARED_SCHEDULE).length) dirty.push(Object.keys(SHARED_SCHEDULE).length+' SHARED_SCHEDULE');
+    if(Object.keys(ADJ_TARGETS).length) dirty.push(Object.keys(ADJ_TARGETS).length+' ADJ_TARGETS');
+    if(typeof USER_EDITED === 'object' && USER_EDITED && Object.keys(USER_EDITED).length) dirty.push(Object.keys(USER_EDITED).length+' USER_EDITED');
+    if(Array.isArray(LEFTOVER_LINKS) && LEFTOVER_LINKS.length) dirty.push(LEFTOVER_LINKS.length+' LEFTOVER_LINKS');
+    if(typeof SHARED_UNDO === 'object' && SHARED_UNDO && Object.keys(SHARED_UNDO).length) dirty.push(Object.keys(SHARED_UNDO).length+' SHARED_UNDO');
+    // weekData.last / .next — every field (not just .sel)
+    ['last','next'].forEach(function(wk){
+      if(!weekData[wk]) return;
+      ['sel','overrides','manualSet','skipped','eatOut','sharedSchedule','adjTargets','lateSnack'].forEach(function(f){
+        if(weekData[wk][f] && Object.keys(weekData[wk][f]).length){
+          dirty.push(Object.keys(weekData[wk][f]).length+' weekData.'+wk+'.'+f);
+        }
+      });
+      if(weekData[wk].leftoverLinks && weekData[wk].leftoverLinks.length){
+        dirty.push(weekData[wk].leftoverLinks.length+' weekData.'+wk+'.leftoverLinks');
+      }
+    });
     return dirty;
+  }
+  // V195 (2026-05-22): INV26 — fires when ANY stress test or harness call
+  // starts on polluted (non-pristine) state. Hard failure: aborts the test
+  // run with a thrown error rather than producing skewed numbers. Counters
+  // accumulate in window._inv26Fires so verifyInvariants can report it.
+  //
+  // Called by runStandard (after _clearAllState + prime sequence completes,
+  // expecting clean state), runStandard2/3/4 (which already had warnings),
+  // and runSlotMod (per scenario after freshRestore).
+  //
+  // For Test 2/3/4 which intentionally accept non-pristine starts (state-
+  // evolving, varied configs), the check fires ONCE at the BEGINNING of
+  // the test (before the first run). Subsequent runs' state evolution is
+  // expected, not flagged.
+  function _inv26Assert(testName, allowedFields){
+    var dirty = _isPristine();
+    // Filter out allowed fields (e.g., runStandard's prime sets SHARED_SCHEDULE
+    // + weekData.last.sel — these are intentional, not pollution).
+    if(allowedFields && allowedFields.length){
+      dirty = dirty.filter(function(d){
+        for(var i = 0; i < allowedFields.length; i++){
+          if(d.indexOf(allowedFields[i]) >= 0) return false;
+        }
+        return true;
+      });
+    }
+    if(dirty.length === 0) return; // clean
+    window._inv26Fires = (window._inv26Fires || 0) + 1;
+    var msg = 'INV26 polluted-test-start ('+testName+'): ' + dirty.join('; ');
+    console.error('🛑 ' + msg);
+    throw new Error(msg);
   }
 
   // 2026-05-03: full state clear for runStandard auto-clean. Globals
@@ -18782,6 +18833,11 @@ window.MPStress=(function(){
     // the realistic ongoing-usage baseline.
     var userSnap=snapshot();
     _clearAllState();
+    // V195 INV26: assert _clearAllState left state fully pristine. Throws
+    // if any field still has stale entries (regressed _clearAllState +
+    // localStorage pollution = false baselines). This is the bulletproof
+    // gate the user demanded: no more silently-polluted test results.
+    _inv26Assert('runStandard.afterClearAllState', []);
     _applyStandardSharedSchedule();
     // V187: prime prior week with a realistic randomized state.
     try {
@@ -18864,13 +18920,13 @@ window.MPStress=(function(){
   }
   function runStandard2(runs){
     runs=runs||100;
-    // 2026-05-03: detect pristine state at start. Test 2 intentionally
-    // evolves state (persistState:true) — but if the FIRST run starts from
-    // a contaminated baseline, all numbers are skewed. Warn + tag agg so
-    // saveBaseline can refuse to persist a corrupted-state baseline.
+    // V195 INV26 (2026-05-22): hard-fail on polluted start. Test 2 evolves
+    // state across runs (persistState:true) but the FIRST run's input MUST
+    // be pristine, else all numbers are skewed by carry-over from prior
+    // experiments. Throws via _inv26Assert when state polluted.
     var dirty=_isPristine();
     if(dirty.length){
-      console.warn('⚠ runStandard2: starting from non-pristine state ('+dirty.join(', ')+'). Numbers may not match clean baselines. saveBaseline will refuse this run unless force:true.');
+      _inv26Assert('runStandard2.entry', []); // throws
     }
     var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
     _applyStandardSharedSchedule();
@@ -18909,10 +18965,10 @@ window.MPStress=(function(){
   // so applyVaried's random configs accumulate cleanly without drift.
   function runStandard3(runs){
     runs=runs||100;
-    // 2026-05-03: detect pristine state at start (same rationale as runStandard2).
+    // V195 INV26 (2026-05-22): hard-fail on polluted start (same rationale as runStandard2).
     var dirty=_isPristine();
     if(dirty.length){
-      console.warn('⚠ runStandard3: starting from non-pristine state ('+dirty.join(', ')+'). Numbers may not match clean baselines. saveBaseline will refuse this run unless force:true.');
+      _inv26Assert('runStandard3.entry', []); // throws
     }
     var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
     _applyStandardSharedSchedule();
@@ -19216,12 +19272,10 @@ window.MPStress=(function(){
   }
   function runStandard4(runs){
     runs=runs||100;
-    // 2026-05-03: detect pristine state at start. Test 4 doesn't roll up to
-    // a saveBaseline-able agg, but the warning still surfaces user-visible
-    // contamination so they can clean before drawing conclusions.
+    // V195 INV26 (2026-05-22): hard-fail on polluted start.
     var dirty=_isPristine();
     if(dirty.length){
-      console.warn('⚠ runStandard4: starting from non-pristine state ('+dirty.join(', ')+'). Shopping integrity scenario results may not match clean baselines.');
+      _inv26Assert('runStandard4.entry', []); // throws
     }
     var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
     _applyStandardSharedSchedule();
@@ -23333,6 +23387,13 @@ window.MPStress=(function(){
     var baseSeed=opts.baseSeed||12345;
     var maxSeedScan=opts.maxSeedScan||(nSeeds*4); // hard cap on seed scan
     var verbose=!!opts.verbose;
+    // V195 INV26 (2026-05-22): hard-fail on polluted start. Slot Mod restores
+    // a snapshot per scenario; if the initial snapshot itself was polluted,
+    // every scenario inherits it and produces unreliable results.
+    var smDirty=_isPristine();
+    if(smDirty.length){
+      _inv26Assert('runSlotMod.entry', []); // throws
+    }
     var saved=snapshot();
     var GEOMETRIES=['solo','anchorBatch','leftoverDiff','sharedSameDay','shake'];
     // Ingredient-level ops (existing) + slot-level ops (added 2026-05-06+).
