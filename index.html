@@ -18713,15 +18713,32 @@ window.MPStress=(function(){
     if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
       Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
     }
-    if(weekData.last){
-      if(weekData.last.sel) Object.keys(weekData.last.sel).forEach(function(k){delete weekData.last.sel[k];});
-      if(weekData.last.overrides) Object.keys(weekData.last.overrides).forEach(function(k){delete weekData.last.overrides[k];});
-      if(weekData.last.manualSet) Object.keys(weekData.last.manualSet).forEach(function(k){delete weekData.last.manualSet[k];});
-    }
-    if(weekData.next){
-      if(weekData.next.sel) Object.keys(weekData.next.sel).forEach(function(k){delete weekData.next.sel[k];});
-      if(weekData.next.overrides) Object.keys(weekData.next.overrides).forEach(function(k){delete weekData.next.overrides[k];});
-      if(weekData.next.manualSet) Object.keys(weekData.next.manualSet).forEach(function(k){delete weekData.next.manualSet[k];});
+    // V194 (2026-05-22): bulletproof _clearAllState. Pre-V194 cleared
+    // sel/overrides/manualSet on weekData.last + .next but LEFT stale
+    // skipped/eatOut/sharedSchedule/adjTargets/lateSnack/leftoverLinks/ts
+    // from prior localStorage state. _computePriorCarryover reads
+    // weekData.last.skipped + .eatOut; getLastWeekMealIds reads .sel.
+    // Stale fields on .last/.next from a polluted localStorage gave
+    // different priorCarry → different freeze decisions → different
+    // INV20Soft → false regression signals when comparing baselines
+    // across sessions with different localStorage state. V194 replaces
+    // .last and .next with fresh empty objects so they're guaranteed
+    // clean regardless of what was loaded from localStorage at page init.
+    var _emptyWeek = function(){
+      return {sel:{}, overrides:{}, manualSet:{}, skipped:{}, eatOut:{},
+              sharedSchedule:{}, adjTargets:{}, lateSnack:{},
+              leftoverLinks:[], ts:{}, monday:''};
+    };
+    weekData.last = _emptyWeek();
+    weekData.next = _emptyWeek();
+    // V194: also wipe non-aliased weekData.this fields that pollute.
+    // SEL/OVERRIDES/etc. are aliases that map to weekData[activeWeek].sel/etc.
+    // For active week 'this', the aliases get cleared above. But fields not
+    // aliased to globals (ts, sharedSchedule on non-active weeks, etc.)
+    // stay. Wipe weekData.this's non-aliased fields too for symmetry.
+    if(weekData.this){
+      if(weekData.this.ts) Object.keys(weekData.this.ts).forEach(function(k){delete weekData.this.ts[k];});
+      if(weekData.this.leftoverLinks) weekData.this.leftoverLinks.length = 0;
     }
     invalidateLeftoverCache();
   }
