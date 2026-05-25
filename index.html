@@ -465,7 +465,7 @@ var NUTRI_DB = {
   'zucchini':              {kcal:20,  pro:1.5,fat:0.2, carb:3.5, unit:'cup', produce:{perWhole:1.5,label:'medium zucchini'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
   'brussels sprouts':      {kcal:38,  pro:3,  fat:0.3, carb:8,   unit:'cup', minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
   'asparagus':             {kcal:27,  pro:3,  fat:0.2, carb:5,   unit:'cup', produce:{perWhole:1,label:'bunch asparagus'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
-  'green beans':           {kcal:31,  pro:1.8,fat:0.2, carb:7,   unit:'cup', produce:{perWhole:3,label:'12oz bag green beans',acceptableWaste:true}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
+  'green beans':           {kcal:31,  pro:1.8,fat:0.2, carb:7,   unit:'cup', produce:{perWhole:3,label:'12oz bag green beans',nonWaste:true}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
   'celery':                {kcal:12,  pro:0.6,fat:0.2, carb:2.4, unit:'cup', produce:{perWhole:0.5,label:'stalk celery'}, minAmt:0.125, minAmtSolo:0.5, maxAmt:2},
   'jalapeño':              {kcal:4,   pro:0.2,fat:0.1, carb:0.9, unit:'each', cupsEach:0.07, produce:{perWhole:1,label:'jalapeño',softWaste:true}, minAmt:0.5, maxAmt:2},
   'thai chili':            {kcal:2,   pro:0.1,fat:0,   carb:0.4, unit:'each', produce:{perWhole:1,label:'thai chili',softWaste:true}, minAmt:1, maxAmt:5},
@@ -4984,7 +4984,11 @@ function buildShoppingList(trip,who){
       // fresh-buy heads). Pkg branch above intentionally keeps its warning
       // even for `acceptableWaste:true` items (coconut milk) — pkg waste
       // is in-pantry residual that's worth seeing even when not INV-tracked.
-      if(db&&db.produce&&!db.produce.acceptableWaste){
+      // V203 (2026-05-25): also skip for `nonWaste:true` items (frozen veg
+      // like green beans — unused portion goes back in freezer for next week,
+      // not waste at all). Semantically distinct from acceptableWaste but
+      // identical effect on warnings + INV fires.
+      if(db&&db.produce&&!db.produce.acceptableWaste&&!db.produce.nonWaste){
         const totalNum=(item.hisSum?item.hisSum.num:0)+(item.herSum?item.herSum.num:0);
         const perWhole=db.produce.perWhole;
         if(perWhole>0&&totalNum>0){
@@ -6609,6 +6613,11 @@ function verifyInvariants(){
     //
     // Carve-outs:
     //   - acceptableWaste (lettuce, coconut milk): silent, skip entirely
+    //   - nonWaste (frozen veg — green beans + future frozen items): silent,
+    //     skip entirely. Semantically distinct from acceptableWaste:
+    //     acceptableWaste = "it does waste but accept the cost",
+    //     nonWaste       = "unused goes back in freezer, gets reused next week".
+    //     Both produce identical effect here (silent skip).
     //   - softWaste (banana/avocado/lemon/lime/orange/jalapeño + marinara/
     //     chicken broth): require bought - waste = sum (user-visible math)
     //   - dry-conversion (rice/beans/lentils/pasta/noodles): tolerance
@@ -6623,9 +6632,9 @@ function verifyInvariants(){
         if(sum<=0.001)return;
         const db=NUTRI_DB[item.dbKey];
         if(!db)return;
-        // Silent acceptableWaste — explicit "ignore this divergence"
-        if(db.pkg && db.pkg.acceptableWaste) return;
-        if(db.produce && db.produce.acceptableWaste) return;
+        // Silent acceptableWaste / nonWaste — explicit "ignore this divergence"
+        if(db.pkg && (db.pkg.acceptableWaste || db.pkg.nonWaste)) return;
+        if(db.produce && (db.produce.acceptableWaste || db.produce.nonWaste)) return;
         // Bulk-oz skip (ceil-to-0.5oz over-buy is rounding noise).
         // V157 (2026-05-19): gated on db.bulkOz (was hardcoded names).
         if(db.bulkOz) return;
@@ -6752,7 +6761,9 @@ function verifyInvariants(){
           // recipes so randomize won't pick them, but Test 3's applyVaried
           // can land a manual lock on one. Same intent as INV20/21/22
           // skipping these items.
-          if(db.pkg.acceptableWaste)return false;
+          // V203 (2026-05-25): also skip `nonWaste:true` pkg items (frozen,
+          // unused goes back in freezer — not waste at all).
+          if(db.pkg.acceptableWaste || db.pkg.nonWaste)return false;
           return !PKG_FLEX_CONFIG[ing.dbKey];
         });
         if(nonFlex.length>0){
@@ -7516,7 +7527,7 @@ function verifyInvariants(){
         // shopping covers BOTH trips' demand (so Cook 1's "used" alone
         // looks tiny vs "bought"). The combined-week pass uses weekly
         // demand and total weekly jars purchased.
-        if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.crossTripCarry){
+        if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.nonWaste && !db.pkg.crossTripCarry){
           var perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
           if(perPkg > 0){
             var bought = _pkgsNeeded(totalNum, perPkg) * perPkg;
@@ -7541,6 +7552,10 @@ function verifyInvariants(){
 
         // PRODUCE branch (INV20 + INV22). `db.produce.acceptableWaste:true`
         // skips entirely (lettuce — fresh-buy heads, not tracked).
+        // `db.produce.nonWaste:true` also skips entirely (V203 2026-05-25 —
+        // frozen veg like green beans; unused goes back in freezer for
+        // next week, not waste at all). Semantically distinct from
+        // acceptableWaste but same effect here.
         // `db.produce.softWaste:true` items (whole fruits — banana, avocado,
         // lemon, lime, orange, jalapeño) STILL fire INV20 for visibility but
         // emit a parallel INV20Soft tracking line; aggregator subtracts
@@ -7552,7 +7567,7 @@ function verifyInvariants(){
         // are checked OUTSIDE this per-trip loop via the combined-week
         // pass at the end. Per-trip would falsely fire because Cook 1
         // owns the buy for both trips.
-        if(db.produce && !db.produce.acceptableWaste && !db.produce.crossTripCarry){
+        if(db.produce && !db.produce.acceptableWaste && !db.produce.nonWaste && !db.produce.crossTripCarry){
           var perWhole = db.produce.perWhole;
           if(perWhole > 0){
             var pBought = _pkgsNeeded(totalNum, perWhole) * perWhole;
@@ -8583,12 +8598,14 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
     const db = NUTRI_DB[dbKey];
     if(!db) return '';
     let perUnit = 0, label = '';
-    if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+    if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.nonWaste){
       perUnit = (db.pkg.drained && (db.unit==='cup'||db.unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
       label = db.pkg.type || 'pkg';
-    } else if(db.produce && !db.produce.acceptableWaste){
+    } else if(db.produce && !db.produce.acceptableWaste && !db.produce.nonWaste){
       // V115b (2026-05-09): mirror INV20/_smExpectedWaste — skip acceptableWaste
       // produce items (e.g. lettuce/romaine, single-heart fresh-buy model).
+      // V203 (2026-05-25): also skip nonWaste:true items (frozen veg — green
+      // beans; unused goes back in freezer for next week's use).
       perUnit = db.produce.perWhole;
       label = db.produce.label || 'unit';
     } else return '';
@@ -11423,9 +11440,9 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   var db = NUTRI_DB[dbKey];
   if(!db) return null;
   var perUnit, grid;
-  if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+  if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.nonWaste){
     perUnit = (db.pkg.drained && (db.unit==='cup'||db.unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
-  } else if(db.produce){
+  } else if(db.produce && !db.produce.nonWaste){
     perUnit = db.produce.perWhole;
   } else return null;
   if(!(perUnit > 0)) return null;
@@ -11591,10 +11608,10 @@ function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
   var db = NUTRI_DB[dbKey];
   if(!db) return null;
   var perUnit = 0, isPkg = false;
-  if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+  if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.nonWaste){
     perUnit = (db.pkg.drained && (db.unit==='cup'||db.unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
     isPkg = true;
-  } else if(db.produce && !db.produce.acceptableWaste){
+  } else if(db.produce && !db.produce.acceptableWaste && !db.produce.nonWaste){
     perUnit = db.produce.perWhole;
   } else return null;
   if(!(perUnit > 0)) return null;
@@ -12443,7 +12460,7 @@ function _measuredTripWasteForPersons(persons){
         if(totalNum <= 0) return;
         const unit = (item.hisSum||item.herSum||{}).unit;
         // PKG branch — matches verifyInvariants() INV20 exactly.
-        if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+        if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.nonWaste){
           const perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
           if(perPkg > 0){
             const bought = _pkgsNeeded(totalNum, perPkg) * perPkg;
@@ -12455,7 +12472,7 @@ function _measuredTripWasteForPersons(persons){
           }
         }
         // PRODUCE branch — matches verifyInvariants() INV20 exactly.
-        if(db.produce && !db.produce.acceptableWaste){
+        if(db.produce && !db.produce.acceptableWaste && !db.produce.nonWaste){
           const perWhole = db.produce.perWhole;
           if(perWhole > 0){
             const pBought = _pkgsNeeded(totalNum, perWhole) * perWhole;
@@ -20613,9 +20630,9 @@ window.MPStress=(function(){
   function _smExpectedWaste(dbKey){
     var db=NUTRI_DB[dbKey]; if(!db) return 0;
     var perUnit=0;
-    if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste){
+    if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.nonWaste){
       perUnit=(db.pkg.drained && (db.unit==='cup'||db.unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
-    } else if(db.produce && !db.produce.acceptableWaste){
+    } else if(db.produce && !db.produce.acceptableWaste && !db.produce.nonWaste){
       perUnit=db.produce.perWhole;
     } else return 0;
     if(!(perUnit>0)) return 0;
@@ -23221,9 +23238,9 @@ window.MPStress=(function(){
       var bpdIdx = -1;
       for(var bpi = 0; bpi < preBal.length; bpi++){
         var pbdb = NUTRI_DB[preBal[bpi].dbKey];
-        // Skip carry items (different trip-attribution path); long-shelf/acceptable.
+        // Skip carry items (different trip-attribution path); long-shelf/acceptable/nonWaste.
         if(pbdb && pbdb.pkg && !pbdb.pkg.longShelfLife
-           && !pbdb.pkg.acceptableWaste && !pbdb.pkg.crossTripCarry){
+           && !pbdb.pkg.acceptableWaste && !pbdb.pkg.nonWaste && !pbdb.pkg.crossTripCarry){
           bpdIdx = bpi; break;
         }
       }
