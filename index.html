@@ -18897,23 +18897,27 @@ window.MPStress=(function(){
       cleanSave(); // persist user's restored state to localStorage
     }
   }
-  // Test 2: true-randomized counterpart to runStandard. Differs on THREE axes:
-  // (1) nondeterministic — randomizeWeek uses real Math.random, not the
-  //     seeded PRNG. Each run walks a different combinatoric path.
-  // (2) persistState — no snapshot/restore between runs. Each run starts
-  //     from the prior run's output, simulating real-world repeated
-  //     Randomize clicks. Exercises state-evolution paths (variety filter
-  //     against accumulating recent picks, etc.) that the deterministic
-  //     seeded test cannot reach.
-  // (3) random prior-week SEL pre-population — before each run, weekData.last.sel
-  //     gets ~40% randomly populated. The variety filter reads
-  //     weekData[_prevWeekKey()].sel; varying that prior-week state per run
-  //     exercises filter code paths that natural state-evolution alone
-  //     doesn't reach (since persistState's drift converges into similar
-  //     prior-week states across many runs).
+  // Test 2: true-randomized counterpart to runStandard. Rewritten 2026-05-25
+  // (V197) per user intent: "100 independent Randomize clicks on the same
+  // default schedule as Test 1, with a fresh real-random prior week each
+  // click". Differs from Test 1 on TWO axes:
+  //   (1) nondeterministic — randomizeWeek uses real Math.random throughout.
+  //   (2) prior week is FRESH each click — a real randomize generates last.sel
+  //       per iteration instead of all 100 runs sharing one seed-99999 prime.
+  // Shares with Test 1:
+  //   - Same standard shared schedule (Mon/Wed/Fri/Sun dinner + Wed lunch)
+  //   - snapshot/restore around each measured run (no persistState across
+  //     runs — each click is independent, like a user who started fresh)
+  // Each click runs TWO randomizes: warmup (generates prior week) + measured.
+  // Cost: ~2× per-click time vs Test 1.
   // Tradeoff: failures are NOT directly reproducible (Math.random state
   //   isn't captured). Use postSnap (preserved per run in window._stressRuns)
   //   + MPStress.inspectDay to drill into a failing day after-the-fact.
+  // Pre-V197 (5/21–5/25) Test 2 used persistState + _randomizePriorWeekSel,
+  // which exercised state-evolution paths but no longer matches user's
+  // "what a user would see clicking Randomize 100x" expectation.
+  // _randomizePriorWeekSel is left defined but unused — preserved for now
+  // in case future variant tests want random-mock prior-week SEL.
   function _randomizePriorWeekSel(){
     if(!weekData.last) return;
     if(!weekData.last.sel) weekData.last.sel = {};
@@ -18931,34 +18935,75 @@ window.MPStress=(function(){
   }
   function runStandard2(runs){
     runs=runs||100;
-    // V195 INV26 (2026-05-22): hard-fail on polluted start. Test 2 evolves
-    // state across runs (persistState:true) but the FIRST run's input MUST
-    // be pristine, else all numbers are skewed by carry-over from prior
-    // experiments. Throws via _inv26Assert when state polluted.
-    var dirty=_isPristine();
-    if(dirty.length){
-      _inv26Assert('runStandard2.entry', []); // throws
-    }
-    var userSched=JSON.parse(JSON.stringify(SHARED_SCHEDULE));
+    // V197 (2026-05-25): Test 2 = 100 independent randomize clicks on the
+    // same standard schedule as Test 1, but with real Math.random AND a
+    // fresh randomized prior week each click. Each click runs randomizeWeek
+    // twice: first to generate a unique nondeterministic last.sel (the
+    // "previous week" context the variety filter sees), then runOne does the
+    // measured randomize. No persistState — snapshot/restore between runs.
+    // Cost: ~2× per-click randomize time vs Test 1.
+    // Tradeoff: failures are NOT directly reproducible. Drill in via
+    //   window._stressRuns[i].postSnap + MPStress.inspectDay.
+    var userSnap=snapshot();
+    _clearAllState();
+    _inv26Assert('runStandard2.afterClearAllState', []);
     _applyStandardSharedSchedule();
-    var initSnap=snapshot();
+    // Capture the post-clear-and-applyShared baseline so each iteration can
+    // restore to a known-good empty state before generating its own prior week.
+    var baselineSnap=snapshot();
+    function _v197ClearThisWeek(){
+      Object.keys(SEL).forEach(function(k){delete SEL[k];});
+      Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
+      Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
+      Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
+      Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
+      Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
+      Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
+      Object.keys(ADJ_TARGETS).forEach(function(k){delete ADJ_TARGETS[k];});
+      if(typeof USER_EDITED === 'object' && USER_EDITED){
+        Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];});
+      }
+      if(Array.isArray(LEFTOVER_LINKS)) LEFTOVER_LINKS.length = 0;
+      if(typeof SHARED_UNDO === 'object' && SHARED_UNDO){
+        Object.keys(SHARED_UNDO).forEach(function(k){delete SHARED_UNDO[k];});
+      }
+      invalidateLeftoverCache();
+    }
     try{
       var results=[];
       for(var i=0;i<runs;i++){
-        _randomizePriorWeekSel(); // varies variety-filter input per run
-        results.push(runOne('standard2', i, null, {nondeterministic:true, persistState:true}));
+        // Reset to baseline (clean state + standard schedule, empty last.sel).
+        restore(baselineSnap);
+        // Generate this click's prior week with real Math.random — passing
+        // undefined as the seed leaves Math.random untouched inside randomizeWeek.
+        try{
+          randomizeWeek('shared', undefined);
+          clearTimeout(_selSaveTimer);
+          saveWeeks();
+          clearTimeout(_selSaveTimer);
+          if(!weekData.last) weekData.last = {sel:{}};
+          weekData.last.sel = JSON.parse(JSON.stringify(weekData.this.sel || {}));
+          weekData.last.overrides = JSON.parse(JSON.stringify(weekData.this.overrides || {}));
+          weekData.last.skipped = JSON.parse(JSON.stringify(weekData.this.skipped || {}));
+          weekData.last.eatOut = JSON.parse(JSON.stringify(weekData.this.eatOut || {}));
+          _v197ClearThisWeek();
+          _applyStandardSharedSchedule();
+        } catch(e){
+          console.warn('runStandard2 prior-week randomize failed (i='+i+'):', e && e.message);
+          continue;
+        }
+        // Measured run — runOne snapshot captures this primed-last state,
+        // does the randomize with Math.random, measures, and restores.
+        results.push(runOne('standard2', i, null, {nondeterministic:true}));
       }
-      cleanSave();
       window._stressRuns=results;
       var agg=aggregate(results);
-      agg.startedDirty=dirty.length>0;
-      agg.dirtyDetails=dirty;
+      agg.startedDirty=false; // _clearAllState ran above, always clean
       console.log(formatReport(agg));
       return agg;
     }finally{
-      restore(initSnap);
-      Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
-      Object.keys(userSched).forEach(function(k){SHARED_SCHEDULE[k]=userSched[k];});
+      restore(userSnap);
+      cleanSave(); // persist user's restored state to localStorage
     }
   }
   // Test 3: maximally-random variant. Combines true-random Math.random with
