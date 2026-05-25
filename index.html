@@ -12390,9 +12390,29 @@ function _absorbCarryItem(dbKey, priorCarry, days, persons, leftovers){
       var c1Set = {}; c1Keys.forEach(function(k){c1Set[k]=true;});
       var overlap = c2Keys.some(function(k){return c1Set[k];});
       if(overlap) continue;
+      // V205 (2026-05-25): INV14 cross-pair guard. Both candidates' alts
+      // pools were filtered against `recent` independently in
+      // _absorbFindCandidates, but `recent` reflected pre-swap state. If
+      // c1 and c2 are both lunch/dinner within 5 days of each other AND
+      // their alts pools share a meal, applying that meal to BOTH slots
+      // creates a same-meal-within-5d INV14 fire. _absorbHardINVsClean
+      // doesn't gate on INV14 (tracking-only), so pre-V205 these pairs
+      // could commit. Investigation root cause from V204 Test 2 INV14=1
+      // (lemongrass_salad at him Monday + her Friday, gap 4d, seed 51).
+      var c1DayIdx = DAYS.indexOf(c1.d);
+      var c2DayIdx = DAYS.indexOf(c2.d);
+      var dayDiff = Math.abs(c1DayIdx - c2DayIdx);
+      var bothMain = (c1.s === 'lunch' || c1.s === 'dinner')
+                  && (c2.s === 'lunch' || c2.s === 'dinner');
+      var inv14Risk = bothMain && dayDiff < 5;
       var allKeys = c1Keys.concat(c2Keys);
       for(var a1 = 0; a1 < c1.alts.length; a1++){
         for(var a2 = 0; a2 < c2.alts.length; a2++){
+          // V205: pre-skip same-meal pair when both lunch/dinner < 5d apart.
+          // Cheaper than running the full trial + revert.
+          if(inv14Risk && c1.alts[a1].id === c2.alts[a2].id){
+            continue;
+          }
           if(twoSwapTrials >= _ABSORB_TWO_SWAP_CAP){
             window._absorbDiag.capped++;
             break outer;
