@@ -11099,6 +11099,11 @@ function freezeTripTotals(randTarget, attemptSwap){
                     window._swapDiag.swappedKeys[oKey] = swapRec;
                   }
                 }
+                // V201: track these slots for Stage 2 absorb priority.
+                if(typeof _pendingSwapSlots !== 'undefined'){
+                  _pendingSwapSlots.add(key);
+                  if(swap.sharedSlot) _pendingSwapSlots.add(oKey);
+                }
                 break;
               }
               // === Verify failed — revert SEL + OVERRIDES, try next ===
@@ -11343,6 +11348,11 @@ function freezeTripTotals(randTarget, attemptSwap){
               window._swapDiag.swappedKeys[cOKey] = cRec;
             }
           }
+          // V201: track these slots for Stage 2 absorb priority.
+          if(typeof _pendingSwapSlots !== 'undefined'){
+            _pendingSwapSlots.add(cKey);
+            if(cSwap.sharedSlot) _pendingSwapSlots.add(cOKey);
+          }
           break;
         }
         // === Verify failed — revert + try next ===
@@ -11561,9 +11571,17 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
 // INV20 reports early to surface ALL waste (subtracted from hardFail via
 // INV20Soft for these soft-waste items so it doesn't break tests).
 // Swap pass uses the higher threshold so we don't aggressively swap out
-// meals over small waste — only meals causing egregious package waste get
-// swap-replaced. Both gates are intentional; do not "align" them.
-var SWAP_OUT_EXCLUDE = {'marinara':true, 'chicken broth':true};
+// meals over small meal-introduced waste — only meals causing egregious
+// package waste get swap-replaced. Both gates are intentional; do not "align" them.
+//
+// V201 (2026-05-25): marinara + chicken broth removed from SWAP_OUT_EXCLUDE
+// per V193 Stage 2 plan. The Stage 2 carry-absorb pass (post-Pass-3) provides
+// the protection — its binary clean-only commit criterion means any swap that
+// would absorb priorCarry cleanly gets applied; swaps that don't are reverted.
+// freezeTripTotals' _trySwapForWaste path can now also swap carry items if
+// their meal-introduced waste exceeds the 25% threshold (matches non-carry pkg
+// behavior). Empty object preserved for future explicit-exempt items if needed.
+var SWAP_OUT_EXCLUDE = {};
 
 function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
   // SWAP_OUT_EXCLUDE check moved AFTER waste calculation. Items in
@@ -14703,6 +14721,17 @@ function randomizeWeek(target, seed){
   // swap-on-Pass-1-fallout). Each entry records {p,d,s,pass,oldMealId,
   // newMealId,dbKey} for post-randomize inspection.
   window._swapDiag = {swappedKeys: {}, swaps: [], passLabel: '', refused: []};
+  // V201 (2026-05-25): per-randomize state for Stage 2 carry-absorb.
+  // _pendingSwapSlots: populated by other swap-commit sites (rerollMissDays,
+  // rerollKcalOffSnacks, rerollInv14Violations, freezeTripTotals' _trySwapForWaste
+  // accept path) so _absorbFindCandidates can give Priority 1 to slots that
+  // were already swapped (lower disruption to consolidate swaps).
+  // _absorbDiag: per-randomize counters for absorb attempts / commits / caps;
+  // reset to null so _absorbDiagInit re-initializes on first absorb call.
+  if(typeof _pendingSwapSlots !== 'undefined' && _pendingSwapSlots.clear){
+    _pendingSwapSlots.clear();
+  }
+  window._absorbDiag = null;
   const randTarget=target||person; // use passed target or current person tab
   // Optional seed: replaces Math.random with a deterministic PRNG for the
   // duration of this call. Used by the stress harness so failing cases are
@@ -14914,6 +14943,40 @@ function randomizeWeek(target, seed){
   // post-reroll changes. Most items hit _onBoundary fast-path; cost ~50ms.
   freezeTripTotals(randTarget);
   runBalanceAdjusters();
+  // V201 (2026-05-25): Stage 2 carry-absorb. For each carry item with
+  // non-zero priorCarry from the previous week, attempt a meal swap so
+  // this week's demand lands at exactly priorCarry + N*perUnit (clean).
+  // Runs AFTER Pass 3 freeze so it sees final pipeline state. Each absorb
+  // is binary commit-or-revert: only swaps if newD passes _absorbIsClean
+  // AND no hard INV fires. If any commits, re-freeze (attemptSwap=false
+  // so we don't undo absorb's swaps) + RBA to re-pin amounts based on
+  // post-swap state. See pattern_long_test_completion_signal.md notes +
+  // V193/V200 absorb helper docs for the full algorithm.
+  if(typeof _computePriorCarryover === 'function' && typeof _absorbCarryItem === 'function'){
+    var _pcMap = _computePriorCarryover(_prevWeekKey());
+    var _absorbItems = Object.keys(_pcMap).filter(function(k){return _pcMap[k] > 0.001;});
+    if(_absorbItems.length > 0){
+      var _absorbCommittedAny = false;
+      var _absorbLeftovers = computeLeftovers();
+      _absorbItems.forEach(function(dbKey){
+        var res = _absorbCarryItem(dbKey, _pcMap[dbKey], DAYS, ['him','her'], _absorbLeftovers);
+        if(res){
+          _absorbCommittedAny = true;
+          // Recompute leftovers for the next absorb call — the swap may
+          // have changed batch geometry. Subsequent absorb sees post-swap state.
+          _absorbLeftovers = computeLeftovers();
+        }
+      });
+      if(_absorbCommittedAny){
+        // Re-freeze (no swap) + RBA so non-carry items affected by the swap
+        // (other pkg/produce items in the new meal) get re-pinned cleanly.
+        // attemptSwap=false prevents _trySwapForWaste from undoing absorb's
+        // commits. Most items hit _onBoundary fast-path.
+        freezeTripTotals(randTarget, false);
+        runBalanceAdjusters();
+      }
+    }
+  }
   // 2026-05-05+: Capture pristine snapshot of post-pipeline cache + MANUAL_SET
   // for onIngrReset to restore EXACT pre-edit state without rerunning the
   // pipeline. See _capturePostRandomizeSnapshot.
@@ -15073,9 +15136,12 @@ function rerollMissDays(randTarget){
       // Apply the best swap and iterate
       SEL[bestSwap.key] = bestSwap.id;
       weekData[activeWeek].ts[bestSwap.key] = now;
+      // V201: track this slot for Stage 2 absorb priority.
+      if(typeof _pendingSwapSlots !== 'undefined') _pendingSwapSlots.add(bestSwap.key);
       if (bestSwap.otherKey) {
         SEL[bestSwap.otherKey] = bestSwap.id;
         weekData[activeWeek].ts[bestSwap.otherKey] = now;
+        if(typeof _pendingSwapSlots !== 'undefined') _pendingSwapSlots.add(bestSwap.otherKey);
       }
       invalidateLeftoverCache();
     }
@@ -15267,6 +15333,8 @@ function rerollKcalOffSnacks(randTarget){
       if(bestSwap){
         SEL[key] = bestSwap;
         weekData[activeWeek].ts[key] = now;
+        // V201: track this slot for Stage 2 absorb priority.
+        if(typeof _pendingSwapSlots !== 'undefined') _pendingSwapSlots.add(key);
         const newSnackCache = rebuildSnackCache(p,d);
         if(newSnackCache) cached.snack = newSnackCache;
         _leftoverCache = null; // snack SEL changed — variety filters may read
@@ -15381,6 +15449,11 @@ function rerollInv14Violations(randTarget){
           // Accept — keep SEL mutated
           weekData[activeWeek].ts[key]=now;
           if(otherKey)weekData[activeWeek].ts[otherKey]=now;
+          // V201: track these slots for Stage 2 absorb priority.
+          if(typeof _pendingSwapSlots !== 'undefined'){
+            _pendingSwapSlots.add(key);
+            if(otherKey) _pendingSwapSlots.add(otherKey);
+          }
           accepted=true;
           fixedAny=true;
           break;
