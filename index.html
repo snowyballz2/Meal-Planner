@@ -19642,8 +19642,12 @@ window.MPStress=(function(){
       inv20Hard: _inv20Hard,
       hardFail: Object.keys(a.invTotals).filter(function(k){
         if(k==='INV20') return _inv20Hard > 0;
-        // Tracking-only invariants
-        return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV21'&&k!=='INV22'&&a.invTotals[k]>0;
+        // Tracking-only invariants — V207 (2026-05-25): INV20Leftover added
+        // to exclusion (was missing — caused Key Metrics to say "1 FAILING"
+        // when only an INV20Leftover tracking entry was present, while the
+        // Hard Invariants section correctly read "all 0 ✓"). INV20Leftover
+        // is V181's forward-inventory tracker; never a hard fire.
+        return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV20Leftover'&&k!=='INV21'&&k!=='INV22'&&a.invTotals[k]>0;
       }).length,
       closedPct: (function(){
         var ta=0,tc=0;
