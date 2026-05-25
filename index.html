@@ -18303,6 +18303,17 @@ window.MPStress=(function(){
     // Include weekData.last.sel because the variety filter reads it — runs
     // aren't reproducible otherwise if prior state populated last-week data.
     var lastSel = (weekData.last && weekData.last.sel) ? clone(weekData.last.sel) : {};
+    // V206 (2026-05-25): also capture weekData.last.overrides/.skipped/.eatOut.
+    // `_computePriorCarryover` reads all 4 fields (sel + overrides + skipped +
+    // eatOut). Pre-V206 snapshot only captured .sel → inspectRun gave
+    // mismatched state for Test 2 (per-run warmups change all 4 fields) →
+    // priorCarry differed between runOne-time and inspectRun-time → drill-
+    // downs produced false positives (e.g. seeing INV20Leftover fire when
+    // the actual runOne saw 0). For Test 1 these were harmless (same prime
+    // every run) but worth capturing for symmetry + Test 2 fidelity.
+    var lastOv = (weekData.last && weekData.last.overrides) ? clone(weekData.last.overrides) : {};
+    var lastSk = (weekData.last && weekData.last.skipped) ? clone(weekData.last.skipped) : {};
+    var lastEo = (weekData.last && weekData.last.eatOut) ? clone(weekData.last.eatOut) : {};
     // Capture _dayBalancedCache and _leftoverCache. These hold the
     // post-randomize pipeline mutations (unifyCrossPersonRatios,
     // snapBatchTotals, postBalanceWastePass, snapBatchTotalsToGrid,
@@ -18336,7 +18347,7 @@ window.MPStress=(function(){
     // OFF behavior (restore wrong meal). Symmetric with other transient
     // globals captured above.
     var sharedUndo = (typeof SHARED_UNDO === 'object' && SHARED_UNDO) ? clone(SHARED_UNDO) : {};
-    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),USER_EDITED:clone(USER_EDITED),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),LEFTOVER_LINKS:links,_lastSel:lastSel,_dayBalancedCache:dayBal,_leftoverCache:leftover,_postRandomizeCache:postRand,SHARED_UNDO:sharedUndo};
+    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),USER_EDITED:clone(USER_EDITED),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),LEFTOVER_LINKS:links,_lastSel:lastSel,_lastOv:lastOv,_lastSk:lastSk,_lastEo:lastEo,_dayBalancedCache:dayBal,_leftoverCache:leftover,_postRandomizeCache:postRand,SHARED_UNDO:sharedUndo};
   }
   function replace(g,v){Object.keys(g).forEach(function(k){delete g[k];});Object.keys(v).forEach(function(k){g[k]=v[k];});}
   function restore(s){
@@ -18352,6 +18363,10 @@ window.MPStress=(function(){
       }
     }
     if (s._lastSel && weekData.last) { weekData.last.sel = s._lastSel; }
+    // V206: restore the other 3 prior-week fields _computePriorCarryover reads.
+    if (s._lastOv && weekData.last) { weekData.last.overrides = s._lastOv; }
+    if (s._lastSk && weekData.last) { weekData.last.skipped = s._lastSk; }
+    if (s._lastEo && weekData.last) { weekData.last.eatOut = s._lastEo; }
     // Restore caches AFTER source-state restore. Don't call invalidateLeftoverCache
     // — the snapshot already has the correct cache contents from when it was
     // captured. If the snapshot doesn't include caches (legacy snapshots), fall
