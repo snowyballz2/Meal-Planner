@@ -12121,10 +12121,15 @@ function _absorbFindCandidates(dbKey, delta, days, persons, leftovers){
         if(MANUAL_SET[k]) return;
         var mid = SEL[k]; if(!mid) return;
         var lo = leftovers[k];
-        // Skip leftover slots (anchor handles batch)
+        // Skip leftover slots (anchor handles batch — leftover gets included
+        // via the anchor's portion list, swapping anchor swaps all portions).
         if(lo && lo.isLeftover) return;
-        // Skip batch anchors with multi-portion (would break INV1 + INV12)
-        if(lo && lo.portions && lo.portions.length > 1) return;
+        // V200 (2026-05-25): batch anchors with multi-portion ARE candidates
+        // now. Per user: "these are probably the biggest targets" — a 3-portion
+        // marinara batch consumes 2.25c at recipe-base, swapping that one
+        // anchor's meal eliminates 2.25c from trip demand. Swap is applied to
+        // ALL portion keys atomically (snap → swap all → check clean → restore
+        // all on revert). See _absorbCarryItem main loop.
         var meal = getMeal(mid); if(!meal || !meal.ingredients || !meal[p]) return;
         var mealHasCarry = meal.ingredients.some(function(i){return i.dbKey===dbKey;});
         if(wantAdd && mealHasCarry) return;     // already uses, can't add
@@ -12242,6 +12247,39 @@ function _absorbHardINVsClean(){
   return true;
 }
 
+// V200 (2026-05-25): two-swap pair enumeration trial cap. Worst-case
+// N²×A² could explode (15 candidates × 5 alts × 15 × 5 = 5625 trials).
+// 30 is enough headroom for realistic carry-absorb cases (1-2 fires per
+// click of marinara/broth) without runaway cost on hopeless combinations.
+var _ABSORB_TWO_SWAP_CAP = 30;
+
+// V200: collect all SEL keys this candidate's swap will affect. For a
+// solo: just [cand.key]. For same-day shared or any multi-portion batch:
+// every portion's sk(p,d,s). Swapping a batch anchor must update SEL
+// across all portion keys atomically — leftover detector requires all
+// portions to share the anchor's mealId, and shopping/INV reads sum
+// across portions.
+function _absorbCandKeys(cand){
+  if(cand.lo && cand.lo.portions && cand.lo.portions.length > 0){
+    return cand.lo.portions.map(function(pt){return sk(pt.p,pt.d,pt.s);});
+  }
+  return [cand.key];
+}
+
+// V200: window._absorbDiag tracking. Initialized at start of each
+// randomizeWeek's Stage 2 wire-up. Fields per call:
+//   trials:    total swap trials attempted (single + two-swap)
+//   commits:   successful commits (clean result accepted)
+//   capped:    times two-swap exited due to trial cap
+//   rejClean:  trials rejected because newD not clean
+//   rejHard:   trials rejected because hard INV fired
+//   byItem:    {dbKey: {trials, commits, candCount}, ...}
+function _absorbDiagInit(){
+  if(!window._absorbDiag){
+    window._absorbDiag = {trials:0, commits:0, capped:0, rejClean:0, rejHard:0, byItem:{}};
+  }
+}
+
 // Main entry: attempt to absorb priorCarry for one carry item via swap.
 // Returns {committed:N, slots:[...], finalD:X} on success; null on no-op
 // or no clean path found.
@@ -12251,6 +12289,13 @@ function _absorbCarryItem(dbKey, priorCarry, days, persons, leftovers){
   var perUnit = (db.pkg && db.pkg.cups) || (db.produce && db.produce.perWhole) || 0;
   if(!(perUnit > 0)) return null;
   if(!(priorCarry > 0.001)) return null;
+
+  // V200: diag setup for this item.
+  _absorbDiagInit();
+  if(!window._absorbDiag.byItem[dbKey]){
+    window._absorbDiag.byItem[dbKey] = {trials:0, commits:0, candCount:0};
+  }
+  var diagItem = window._absorbDiag.byItem[dbKey];
 
   // 1. Current weekly demand
   var D = _absorbWeeklyDemand(dbKey, days, persons, leftovers);
@@ -12262,54 +12307,82 @@ function _absorbCarryItem(dbKey, priorCarry, days, persons, leftovers){
   var T = _absorbPickTarget(D, priorCarry, perUnit);
   var delta = T - D;
   var candidates = _absorbFindCandidates(dbKey, delta, days, persons, leftovers);
+  diagItem.candCount = candidates.length;
   if(candidates.length === 0) return null;
 
-  // 4. Single-swap attempt
+  function _trialSwap(keys, newMealId){
+    keys.forEach(function(k){ _absorbApplySwap(k, newMealId); });
+  }
+
+  // 4. Single-swap attempt — handles solos AND multi-portion batch anchors.
   for(var i = 0; i < candidates.length; i++){
     var cand = candidates[i];
-    var snap = _absorbSnapshot([cand.key]);
-    // If sharedSlot, also snap+sync the other side
-    var otherKey = null;
-    if(cand.sharedSlot){
-      var otherP = cand.p==='him' ? 'her' : 'him';
-      otherKey = sk(otherP, cand.d, cand.s);
-      snap = _absorbSnapshot([cand.key, otherKey]);
-    }
+    var portionKeys = _absorbCandKeys(cand);
+    var snap = _absorbSnapshot(portionKeys);
     for(var ai = 0; ai < cand.alts.length; ai++){
       var altId = cand.alts[ai].id;
-      _absorbApplySwap(cand.key, altId);
-      if(otherKey) _absorbApplySwap(otherKey, altId);
+      window._absorbDiag.trials++;
+      diagItem.trials++;
+      _trialSwap(portionKeys, altId);
       var newLo = computeLeftovers();
       var newD = _absorbWeeklyDemand(dbKey, days, persons, newLo);
-      if(_absorbIsClean(newD, priorCarry, perUnit) && _absorbHardINVsClean()){
-        return {committed:1, slots:[cand.key], finalD:newD};
+      if(!_absorbIsClean(newD, priorCarry, perUnit)){
+        window._absorbDiag.rejClean++;
+        _absorbRestore(snap);
+        continue;
       }
-      _absorbRestore(snap);
+      if(!_absorbHardINVsClean()){
+        window._absorbDiag.rejHard++;
+        _absorbRestore(snap);
+        continue;
+      }
+      window._absorbDiag.commits++;
+      diagItem.commits++;
+      return {committed:1, slots:portionKeys, finalD:newD};
     }
   }
 
-  // 5. Two-swap pair enumeration (full N×N×A×A)
-  for(var i = 0; i < candidates.length; i++){
+  // 5. Two-swap pair enumeration, capped at _ABSORB_TWO_SWAP_CAP trials.
+  // Iterate (i, j) pairs and (a1, a2) alt pairs; bail when cap reached.
+  var twoSwapTrials = 0;
+  outer: for(var i = 0; i < candidates.length; i++){
     for(var j = i + 1; j < candidates.length; j++){
       var c1 = candidates[i], c2 = candidates[j];
-      if(c1.key === c2.key) continue;
-      var keysToSnap = [c1.key, c2.key];
-      var o1Key = null, o2Key = null;
-      if(c1.sharedSlot){ o1Key = sk(c1.p==='him'?'her':'him', c1.d, c1.s); keysToSnap.push(o1Key); }
-      if(c2.sharedSlot){ o2Key = sk(c2.p==='him'?'her':'him', c2.d, c2.s); keysToSnap.push(o2Key); }
+      // Two candidates may share a portion key if both are batch anchors
+      // that share a portion slot (rare but possible). Skip the overlap.
+      var c1Keys = _absorbCandKeys(c1);
+      var c2Keys = _absorbCandKeys(c2);
+      var c1Set = {}; c1Keys.forEach(function(k){c1Set[k]=true;});
+      var overlap = c2Keys.some(function(k){return c1Set[k];});
+      if(overlap) continue;
+      var allKeys = c1Keys.concat(c2Keys);
       for(var a1 = 0; a1 < c1.alts.length; a1++){
         for(var a2 = 0; a2 < c2.alts.length; a2++){
-          var snap = _absorbSnapshot(keysToSnap);
-          _absorbApplySwap(c1.key, c1.alts[a1].id);
-          if(o1Key) _absorbApplySwap(o1Key, c1.alts[a1].id);
-          _absorbApplySwap(c2.key, c2.alts[a2].id);
-          if(o2Key) _absorbApplySwap(o2Key, c2.alts[a2].id);
+          if(twoSwapTrials >= _ABSORB_TWO_SWAP_CAP){
+            window._absorbDiag.capped++;
+            break outer;
+          }
+          twoSwapTrials++;
+          window._absorbDiag.trials++;
+          diagItem.trials++;
+          var snap = _absorbSnapshot(allKeys);
+          _trialSwap(c1Keys, c1.alts[a1].id);
+          _trialSwap(c2Keys, c2.alts[a2].id);
           var newLo2 = computeLeftovers();
           var newD2 = _absorbWeeklyDemand(dbKey, days, persons, newLo2);
-          if(_absorbIsClean(newD2, priorCarry, perUnit) && _absorbHardINVsClean()){
-            return {committed:2, slots:[c1.key, c2.key], finalD:newD2};
+          if(!_absorbIsClean(newD2, priorCarry, perUnit)){
+            window._absorbDiag.rejClean++;
+            _absorbRestore(snap);
+            continue;
           }
-          _absorbRestore(snap);
+          if(!_absorbHardINVsClean()){
+            window._absorbDiag.rejHard++;
+            _absorbRestore(snap);
+            continue;
+          }
+          window._absorbDiag.commits++;
+          diagItem.commits++;
+          return {committed:2, slots:allKeys, finalD:newD2};
         }
       }
     }
