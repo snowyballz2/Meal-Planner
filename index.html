@@ -18783,10 +18783,12 @@ window.MPStress=(function(){
     weekData.last = _emptyWeek();
     weekData.next = _emptyWeek();
     // V194: also wipe non-aliased weekData.this fields that pollute.
-    // SEL/OVERRIDES/etc. are aliases that map to weekData[activeWeek].sel/etc.
-    // For active week 'this', the aliases get cleared above. But fields not
-    // aliased to globals (ts, sharedSchedule on non-active weeks, etc.)
-    // stay. Wipe weekData.this's non-aliased fields too for symmetry.
+    // CORRECTION (2026-05-25): SEL/OVERRIDES/etc. are NOT aliases of
+    // weekData[activeWeek].*. They're independent globals synced via
+    // saveWeeks (SEL → weekData.X.sel) and loadWeekState (weekData.X.sel → SEL).
+    // Clearing SEL above does NOT clear weekData.this.sel. Wipe weekData.this's
+    // fields too — both the "non-aliased" ones (ts, leftoverLinks) and the
+    // shadowed ones below — since they're all independent objects.
     if(weekData.this){
       if(weekData.this.ts) Object.keys(weekData.this.ts).forEach(function(k){delete weekData.this.ts[k];});
       if(weekData.this.leftoverLinks) weekData.this.leftoverLinks.length = 0;
@@ -18842,6 +18844,15 @@ window.MPStress=(function(){
     // V187: prime prior week with a realistic randomized state.
     try {
       randomizeWeek('shared', 99999); // deterministic prime seed (unrelated to test seeds)
+      // 2026-05-25 fix: randomizeWeek writes to the SEL global, NOT to
+      // weekData.this.sel. The autoSaveWeek() call at randomizeWeek's end uses
+      // a 500ms setTimeout debounce — but runOne (which the harness will call
+      // shortly) explicitly clearTimeouts that timer. So without an explicit
+      // saveWeeks() here, weekData.this.sel stays empty and the copies below
+      // produce {} (empty prime). This was silently wrong since V187 shipped
+      // 2026-05-21, masquerading as a real prime in every Test 1 baseline.
+      saveWeeks();
+      clearTimeout(_selSaveTimer); // randomizeWeek's autoSaveWeek scheduled a pending timer; we've already saved synchronously, so kill the duplicate
       // Copy this.sel + overrides to last (fresh prior-week SEL).
       if(!weekData.last) weekData.last = {sel:{}};
       weekData.last.sel = JSON.parse(JSON.stringify(weekData.this.sel || {}));
