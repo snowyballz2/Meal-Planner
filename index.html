@@ -16681,6 +16681,29 @@ function loadWeeks(){
   if(!weekData['this'].monday)weekData['this'].monday=currentMonday;
   if(!weekData['next'].monday)weekData['next'].monday=nextMonday();
 
+  // V198 (2026-05-25): also validate last/next stamps against the calendar.
+  // The rollover block above only fires when this.monday !== currentMonday.
+  // If this.monday is current but last.monday or next.monday has drifted
+  // (e.g., a corrupted save, partial sync, or some other edge case left
+  // them with month-old date stamps), the data inside them is from a
+  // different calendar window and should be cleared. Symptom this fixes:
+  // user opens the app, switches to "Next Week" tab, sees stale meals
+  // that were randomized weeks/months ago for what was "next week" then.
+  // (Independent of the DEFAULTS fallback — DEFAULTS only shows when SEL
+  // is empty; this clears actually-populated-but-stale data.)
+  var _expectedLast = lastMonday();
+  var _expectedNext = nextMonday();
+  if(weekData['last'].monday !== _expectedLast){
+    weekData['last'] = {sel:{}, overrides:{}, manualSet:{}, skipped:{}, eatOut:{},
+                       sharedSchedule:{}, adjTargets:{}, lateSnack:{},
+                       leftoverLinks:[], ts:{}, monday:_expectedLast};
+  }
+  if(weekData['next'].monday !== _expectedNext){
+    weekData['next'] = {sel:{}, overrides:{}, manualSet:{}, skipped:{}, eatOut:{},
+                       sharedSchedule:{}, adjTargets:{}, lateSnack:{},
+                       leftoverLinks:[], ts:{}, monday:_expectedNext};
+  }
+
   // V159 (2026-05-19): migrate legacy 'skip-*' shared-schedule values on
   // ALL three weeks. Pre-V159, initSharedSchedule only migrated the active
   // week — last/next stayed in legacy format until visited. With M7's
