@@ -11507,95 +11507,45 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   var tripTotal = soloSum + batchSum;
   if(!(tripTotal > 0.001)) return null;
 
-  // V192 (2026-05-21): restore V180's carry-aware freeze. The freeze should
-  // plan meal amounts such that:
-  //   total cooked = priorCarry consumed + N * perUnit bought
-  // with N jars bought and 0 waste. Per-portion bounds (minAmt/maxAmt) still
-  // act as guardrails — _tryFreezeY returns ok=false if Y would push portions
-  // out of bounds, so freeze can't violate INV13 even when scaling to absorb
-  // priorCarry. User intent: "if it can use the leftovers to correctly balance
-  // out the current meals and leftovers to a clean pkg amount it should."
+  // Carry items (crossTripCarry: marinara, chicken broth) get a c1-aware
+  // target. priorCarry is the previous week's c2 jar partial sitting in
+  // the fridge — it can ONLY be consumed by this week's c1 (Mon-Wed cook).
+  // Anything c1 doesn't use ages out (INV20 actualWaste). So the priorCarry
+  // that actually helps THIS week is capped at c1Demand:
   //
-  // V186's revert was based on a wrong premise (kcalLow concern from polluted-
-  // state testing). Carry items are low kcal (marinara 30/cup, broth 8/cup);
-  // scaling them ±1c moves day kcal by ≤30, well within tolerance.
+  //   carryUsed = min(priorCarry, c1Demand)
   //
-  // Non-carry items: priorCarry = 0, math identical to V186/pre-V180.
+  // Freeze targets: total cooked = N×perUnit (jars bought) + carryUsed.
+  // The trip lands on a clean jar multiple offset by exactly what c1 will
+  // consume from the carryover. Unused priorCarry is unavoidable here —
+  // the c1-aware absorb pass (_absorbCarryItem, runs before final freeze)
+  // is the only path that can grow c1Demand; if absorb couldn't find a
+  // c1 slot to swap, freeze just rounds to the nearest jar multiple.
+  //
+  // Non-carry items: priorCarry = 0, carryUsed = 0, math identical to pre-V180.
+  //
+  // V208 (2026-05-25): introduced the carryUsed = min(priorCarry, c1Demand)
+  // cap. Pre-V208 used priorCarry directly, which pumped the trip up by
+  // (priorCarry - c1Demand) cups whenever c1 couldn't fully consume it →
+  // created spurious c2Leftover (INV20Leftover fires) on top of the
+  // unavoidable actualWaste. See user investigation 2026-05-25 seed 8.
   var isCarry = !!(db && ((db.pkg && db.pkg.crossTripCarry === true)
                        || (db.produce && db.produce.crossTripCarry === true)));
   var priorCarry = 0;
+  var c1Demand = 0;
   if(isCarry && typeof _computePriorCarryover === 'function' && typeof _prevWeekKey === 'function'){
     priorCarry = _computePriorCarryover(_prevWeekKey())[dbKey] || 0;
+    if(priorCarry > 0){
+      c1Demand = _absorbWeeklyDemandSplit(dbKey, days, persons, leftovers).c1;
+    }
   }
+  var carryUsed = Math.min(priorCarry, c1Demand);
+  var effTotal = Math.max(0, tripTotal - carryUsed);
 
-  // V208 (2026-05-25): c1-aware target fallback. priorCarry can ONLY be
-  // consumed by THIS week's c1 (Mon-Wed cook); if c1Demand < priorCarry,
-  // the unused portion ages out as actualWaste (INV20 fires) regardless of
-  // what freeze does to tripTotal. In that case, the V192 priorCarry-aware
-  // target (Y = N*perUnit + priorCarry) is WRONG — it assumes priorCarry
-  // will be consumed, leaving the trip total off-boundary.
-  //
-  // The c1-aware absorb pass (V208 _absorbCarryItem) runs BEFORE the
-  // final freezeTripTotals call in randomizeWeek, attempting to add c1
-  // broth/marinara meals so c1 >= priorCarry. When it succeeds: c1 >=
-  // priorCarry, V192 target works. When it fails (no valid candidates,
-  // variety blocks, bounds infeasible): we fall through here with c1 <
-  // priorCarry. Drop the priorCarry term so freeze still lands the trip
-  // total on a clean perUnit-multiple boundary — c2 partial (INV20Leftover,
-  // tracking-only) shrinks to ≤ perUnit/2, while priorUnused (hard INV20)
-  // stays the same.
-  //
-  // User intent: "freeze should be adjusting pkgs to the nearest full size..
-  // so it should be adjusting 4.1 cups to 4 cups." 4.1c demand with prior-
-  // Carry stuck at 0.1c c1 = 4.0c c2-only demand → Y_round = round(4.0/4)*4
-  // = 4 (no priorCarry term), one jar bought, c2Leftover = 0.
-  var c1Demand = 0;
-  if(isCarry && priorCarry > 0){
-    var _c1DaySetFE = {};
-    (TRIP_DAYS_STATIC.cook1 || []).forEach(function(d){_c1DaySetFE[d] = true;});
-    days.forEach(function(d){
-      if(!_c1DaySetFE[d]) return;
-      persons.forEach(function(p){
-        if(p!=='him' && p!=='her') return;
-        ['breakfast','lunch','snack','dinner'].forEach(function(s){
-          var k = sk(p,d,s);
-          if(SKIPPED[k] || EAT_OUT[k]) return;
-          var lo = leftovers[k];
-          if(lo && lo.isLeftover) return; // anchors only
-          var bal = getBalancedSlotIngredients(p, d, s);
-          if(!bal) return;
-          // For multi-portion batches: count only the portion(s) whose day
-          // is in c1. (Cross-trip batches: anchor in c1 + leftover in c2 —
-          // only the anchor's portion contributes to c1Demand.)
-          var portionList = (lo && lo.portions) ? lo.portions : [{p:p,d:d,s:s}];
-          portionList.forEach(function(pt){
-            if(!_c1DaySetFE[pt.d]) return;
-            var pbal = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
-            if(!pbal) return;
-            var pi = pbal.find(function(i){return i.dbKey===dbKey;});
-            if(pi) c1Demand += pi.amt;
-          });
-        });
-      });
-    });
-  }
-  // effPriorCarry: only the priorCarry that c1 can actually consume.
-  // When c1Demand >= priorCarry (absorb succeeded or it was already fine):
-  // effPriorCarry = priorCarry → V192 math intact.
-  // When c1Demand < priorCarry (absorb failed): effPriorCarry = c1Demand,
-  // matches what actually gets used; the rest ages out (INV20 will fire,
-  // but freeze can't fix that).
-  var effPriorCarry = isCarry && priorCarry > 0
-    ? Math.min(priorCarry, c1Demand)
-    : priorCarry;
-  var effTotal = Math.max(0, tripTotal - effPriorCarry);
-
-  // V192: if priorCarry covers this week's full need, no jars to buy and no
-  // scaling needed. Excess carry stays as inventory and surfaces in next
-  // week's _computePriorCarryover.
-  // V208: use effPriorCarry — when c1 < priorCarry, the "covers full need"
-  // path can't apply (we're not really getting that much consumed).
-  if(effPriorCarry > 0 && effTotal <= 0.001){
+  // If priorCarry actually covers this week's full need (c1Demand large
+  // enough AND the rest of the trip would fit in carry too), no jars to
+  // buy, no scaling. Excess carry surfaces in next week's _computePriorCarryover.
+  if(carryUsed > 0 && effTotal <= 0.001){
     return _onBoundary(solos, batches);
   }
 
@@ -11607,18 +11557,19 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   var floorB    = (typeof db.minAmt==='number') ? db.minAmt : 0;
   var capB      = (typeof db.maxAmt==='number') ? db.maxAmt : Infinity;
 
-  // Already on (effective) perUnit boundary — freeze current values, no scaling.
-  // V192/V208: target = N * perUnit + effPriorCarry (where N is jars to buy).
-  var Y_round = Math.round(effTotal/perUnit) * perUnit + effPriorCarry;
-  if(Math.abs(tripTotal - Y_round) < 0.001 && Y_round >= effPriorCarry){
+  // Target: total cooked = N×perUnit (jars bought) + carryUsed (priorCarry
+  // that c1 actually consumes). Already on boundary? Freeze current values.
+  var Y_round = Math.round(effTotal/perUnit) * perUnit + carryUsed;
+  if(Math.abs(tripTotal - Y_round) < 0.001 && Y_round >= carryUsed){
     return _onBoundary(solos, batches);
   }
-  // Try Y_nearest first, then Y_other. Both anchored to effTotal grid + effPriorCarry shift.
-  // V192/V208: floor target is `effPriorCarry` (use only carry, buy 0 jars) when effPriorCarry > 0;
-  // else `perUnit` (must buy at least 1 jar).
-  var Y_nearest = Math.max(effPriorCarry > 0 ? effPriorCarry : perUnit, Y_round);
-  var floorMult = Math.max(effPriorCarry > 0 ? effPriorCarry : perUnit, Math.floor(effTotal/perUnit) * perUnit + effPriorCarry);
-  var ceilMult  = Math.max(effPriorCarry > 0 ? effPriorCarry : perUnit, Math.ceil(effTotal/perUnit) * perUnit + effPriorCarry);
+  // Try Y_nearest first, then Y_other (the other rounding direction).
+  // Floor target: carryUsed (buy 0 jars, only consume what c1 can of carry)
+  // when carryUsed > 0; else perUnit (must buy at least 1 jar).
+  var floorTarget = carryUsed > 0 ? carryUsed : perUnit;
+  var Y_nearest = Math.max(floorTarget, Y_round);
+  var floorMult = Math.max(floorTarget, Math.floor(effTotal/perUnit) * perUnit + carryUsed);
+  var ceilMult  = Math.max(floorTarget, Math.ceil(effTotal/perUnit) * perUnit + carryUsed);
   var Y_other   = (Y_nearest === ceilMult) ? floorMult : ceilMult;
 
   var ctx = {db:db, grid:grid, floorSolo:floorSolo, capSolo:capSolo, floorB:floorB, capB:capB};
@@ -12210,46 +12161,11 @@ function _absorbWeeklyDemandSplit(dbKey, days, persons, leftovers){
   return {c1:c1, c2:c2, total:c1+c2};
 }
 
-// Pick the closest clean target T given current demand D + priorCarry.
-// Clean states: T = priorCarry + N*perUnit for N = 0, 1, 2, ...
-// Returns the T with minimum |D - T|.
-function _absorbPickTarget(D, priorCarry, perUnit){
-  var bestT = priorCarry;
-  var bestDiff = Math.abs(D - priorCarry);
-  for(var N = 1; N <= 20; N++){
-    var T = priorCarry + N * perUnit;
-    var diff = Math.abs(D - T);
-    if(diff < bestDiff){
-      bestDiff = diff;
-      bestT = T;
-    }
-    if(T > D + perUnit * 2) break; // searched far enough
-  }
-  return bestT;
-}
-
-// Check if a weekly demand D produces a clean state given priorCarry +
-// perUnit. Clean = priorUnused (carry not consumed by C1) = 0 AND
-// new partial jar from C2 = 0.
-function _absorbIsClean(D, priorCarry, perUnit){
-  var priorUnused = Math.max(0, priorCarry - D);
-  var effC1 = Math.max(0, D - priorCarry);
-  var jars = effC1 > 0 ? _pkgsNeeded(effC1, perUnit) : 0;
-  var bought = jars * perUnit;
-  var newPartial = effC1 > 0 ? (bought - effC1) : 0;
-  return priorUnused < 0.001 && newPartial < 0.001;
-}
-
-// V208 (2026-05-25): c1-aware clean check. Mirrors INV20's actualWaste
-// definition (line ~7685): priorCarry can ONLY be consumed by THIS week's
-// c1 cook. If c1 < priorCarry, the leftover priorCarry ages out — INV20
-// actualWaste fires regardless of c2.
-//
-// Clean (for absorb): c1Demand >= priorCarry — priorUnused == 0.
-// We do NOT require c2 to land on a jar boundary; INV20Leftover (forward
-// inventory at end of c2) is tracking-only per V207, and freeze handles
-// trip-total rounding separately. Absorb's job is just to ensure prior-
-// Carry actually gets used.
+// Check if c1's demand absorbs all of priorCarry. priorCarry can ONLY be
+// consumed by THIS week's c1 cook (Mon-Wed); leftover priorCarry that c1
+// can't consume ages out (INV20 actualWaste). We do NOT require c2 to land
+// on a jar boundary — INV20Leftover (forward inventory at end of c2) is
+// tracking-only per V207, and freeze handles trip-total rounding separately.
 function _absorbIsCleanC1Aware(c1Demand, priorCarry){
   return c1Demand >= priorCarry - 0.001;
 }
@@ -15120,15 +15036,15 @@ function randomizeWeek(target, seed){
   // post-reroll changes. Most items hit _onBoundary fast-path; cost ~50ms.
   freezeTripTotals(randTarget);
   runBalanceAdjusters();
-  // V201 (2026-05-25): Stage 2 carry-absorb. For each carry item with
-  // non-zero priorCarry from the previous week, attempt a meal swap so
-  // this week's demand lands at exactly priorCarry + N*perUnit (clean).
-  // Runs AFTER Pass 3 freeze so it sees final pipeline state. Each absorb
-  // is binary commit-or-revert: only swaps if newD passes _absorbIsClean
-  // AND no hard INV fires. If any commits, re-freeze (attemptSwap=false
-  // so we don't undo absorb's swaps) + RBA to re-pin amounts based on
-  // post-swap state. See pattern_long_test_completion_signal.md notes +
-  // V193/V200 absorb helper docs for the full algorithm.
+  // Stage 2 carry-absorb (V201 wire-up 2026-05-25, V208 c1-aware 2026-05-25):
+  // For each carry item with non-zero priorCarry from the previous week,
+  // attempt a meal swap so c1Demand >= priorCarry (so the whole carryover
+  // gets consumed in Mon-Wed cook; nothing ages out). Runs AFTER Pass 3
+  // freeze so it sees final pipeline state. Each absorb is binary commit-
+  // or-revert: only swaps if newC1Demand passes _absorbIsCleanC1Aware AND
+  // no hard INV fires. If any commits, re-freeze (attemptSwap=false so we
+  // don't undo absorb's swaps) + RBA to re-pin amounts based on post-swap
+  // state. See V193/V200/V208 absorb helper docs for the full algorithm.
   if(typeof _computePriorCarryover === 'function' && typeof _absorbCarryItem === 'function'){
     var _pcMap = _computePriorCarryover(_prevWeekKey());
     var _absorbItems = Object.keys(_pcMap).filter(function(k){return _pcMap[k] > 0.001;});
