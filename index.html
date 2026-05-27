@@ -11563,7 +11563,6 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   if(Math.abs(tripTotal - Y_round) < 0.001 && Y_round >= carryUsed){
     return _onBoundary(solos, batches);
   }
-  // Try Y_nearest first, then Y_other (the other rounding direction).
   // Floor target: carryUsed (buy 0 jars, only consume what c1 can of carry)
   // when carryUsed > 0; else perUnit (must buy at least 1 jar).
   var floorTarget = carryUsed > 0 ? carryUsed : perUnit;
@@ -11572,11 +11571,40 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   var ceilMult  = Math.max(floorTarget, Math.ceil(effTotal/perUnit) * perUnit + carryUsed);
   var Y_other   = (Y_nearest === ceilMult) ? floorMult : ceilMult;
 
+  // V210 (2026-05-26): try Y_round ± perUnit as well — i.e. one extra jar
+  // in each direction from the nearest clean amount. The original 2-Y search
+  // (Y_nearest + Y_other) only covers the two perUnit multiples immediately
+  // straddling effTotal; when batch caps are tight, both can fail bounds.
+  //
+  // Concrete case (seed 8 chicken broth, 8 portions across 3 cooks):
+  //   tripTotal=20.1c, Y_nearest=20 → Sunday batch's Him portion lands at
+  //   3.046c > cap; Y_other=24 → Monday's Him portions land at 3.58c > cap.
+  //   Adding Y_minus=16 lets freeze scale the trip 20% down (Him portions
+  //   to 2.39c — well below cap), saves 2 jars vs leaving the trip at 20.1c.
+  //
+  // Order: Y_nearest (least deviation), then Y_other (1 perUnit step), then
+  // the ±1 jar candidates from Y_round (2 perUnit steps). Stop at first success.
+  // Y_minus may equal Y_other (when Y_round=ceilMult) or be a new candidate;
+  // Y_plus likewise. The Set dedups.
+  var Y_minus = Math.max(floorTarget, Y_round - perUnit);
+  var Y_plus  = Y_round + perUnit;
+  var tried = {};
+  var candidates = [Y_nearest];
+  tried[Y_nearest.toFixed(3)] = true;
+  [Y_other, Y_minus, Y_plus].forEach(function(Y){
+    var key = Y.toFixed(3);
+    if(Y >= floorTarget - 0.001 && !tried[key]){
+      candidates.push(Y);
+      tried[key] = true;
+    }
+  });
+
   var ctx = {db:db, grid:grid, floorSolo:floorSolo, capSolo:capSolo, floorB:floorB, capB:capB};
-  var attempt = _tryFreezeY(Y_nearest, solos, batches, tripTotal, ctx);
-  if(!attempt.ok) attempt = _tryFreezeY(Y_other, solos, batches, tripTotal, ctx);
-  if(!attempt.ok) return null;
-  return {solos: attempt.solos, batches: attempt.batches};
+  for(var ci = 0; ci < candidates.length; ci++){
+    var attempt = _tryFreezeY(candidates[ci], solos, batches, tripTotal, ctx);
+    if(attempt.ok) return {solos: attempt.solos, batches: attempt.batches};
+  }
+  return null;
 }
 
 // Last-resort swap when freeze can't reach a package boundary AND the trip
