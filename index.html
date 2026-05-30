@@ -15912,6 +15912,14 @@ function rerollInv14Violations(randTarget){
     });
     return misses;
   }
+  // Audit R12 (L7, 2026-05-30): household-wide miss count across ALL days.
+  // tryResolveCook's accept gate must not measure only t.d — swapping a cook
+  // anchor can orphan its time-shifted leftovers into fresh solo cooks on
+  // OTHER days (those leftover SEL entries keep the old meal id), and a
+  // per-day-only gate would never see the goal-misses that creates elsewhere.
+  function totalMissCount(){
+    var m=0; DAYS.forEach(function(dd){ m+=dayMissCount(dd); }); return m;
+  }
   function findPairs(){
     invalidateLeftoverCache();
     const cooks=_collectHouseholdCooks(computeLeftovers());
@@ -15974,7 +15982,7 @@ function rerollInv14Violations(randTarget){
 
     const baselineWaste=totalWaste();
     const baselineInv14=countInv14();
-    const baselineMisses=dayMissCount(t.d);
+    const baselineMisses=totalMissCount(); // L7: household-wide, not just t.d
     for(let ci=0;ci<candidates.length;ci++){
       const c=candidates[ci];
       const origSel=SEL[key];
@@ -15988,7 +15996,7 @@ function rerollInv14Violations(randTarget){
       invalidateLeftoverCache();
       const newWaste=totalWaste();
       const newInv14=countInv14();
-      const newMisses=dayMissCount(t.d);
+      const newMisses=totalMissCount(); // L7: household-wide, not just t.d
       // Accept if INV14 strictly decreases AND waste doesn't grow AND
       // misses rise by at most 2. The +2 miss tolerance is deliberate: we're
       // willing to trade up to two day-misses for closing an INV14 hard-feeling
