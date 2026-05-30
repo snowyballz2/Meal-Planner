@@ -15374,7 +15374,16 @@ function rerollKcalOffSnacks(randTarget){
       if(SKIPPED[key]||isLockedForRandomize(key))return; // EAT_OUT + MANUAL_SET
       const curId = SEL[key];
       if(!curId)return;
-      if(mealUsesPkg(curId))return;
+      // V212 (2026-05-29): removed blanket `if(mealUsesPkg(curId))return;`.
+      // Pre-V212, the snack reroll bailed entirely when the current snack used
+      // any pkg item (silken tofu, egg white, etc.) — the concern was that
+      // swapping out a pkg snack might leave the remaining trip slots with a
+      // worse pkg-waste situation. But the filter was overzealous: many pkg
+      // snacks (e.g. miso_edamame at 275 kcal) blocked beneficial swaps even
+      // when removing them was waste-neutral or waste-reducing. Per-candidate
+      // waste check below (after each trial swap) catches the actual cases
+      // where removing pkg makes waste worse.
+      const curUsesPkg = mealUsesPkg(curId);
       const curDelta = calcTotals(p,d).kcal - CAL_BASE[p];
       if(Math.abs(curDelta)<=100)return;           // day is on-target
       // Lazy-build via getDayBalancedIngredients so we don't silently bail
@@ -15430,6 +15439,12 @@ function rerollKcalOffSnacks(randTarget){
       const origSnackCache = cached.snack;
       const baselineMisses = dayMissCount(p,d);
       const baselineScore = dayMissScore(p,d);
+      // V212: capture trip waste baseline ONLY when current snack uses pkg.
+      // For non-pkg current snacks, swapping to another non-pkg candidate
+      // can't change waste (no pkg items appear or disappear). Computing
+      // _measuredTripWasteForPersons is ~5-15ms × N candidates; skipping when
+      // unnecessary keeps the reroll fast on the common case.
+      const baselineWaste = curUsesPkg ? _measuredTripWasteForPersons(persons) : 0;
       let bestSwap = null;
       // V89c: track best by macro-aware miss SCORE (lower = better day),
       // not by raw kcal closeness. The kcal-closer swap that worsens
@@ -15448,11 +15463,27 @@ function rerollKcalOffSnacks(randTarget){
         cached.snack = newSnackCache;
         const newMisses = dayMissCount(p,d);
         const newScore = dayMissScore(p,d);
-        // Waste + INV14 invariant: snack swap filters out pkg meals AND
-        // snacks are exempt from 5-day repeat. So waste + inv14 can't change.
-        // Accept lexicographically: fewer misses wins; on ties, lower score wins.
-        const better = (newMisses < bestMisses)
-                    || (newMisses === bestMisses && newScore < bestScore - 0.01);
+        // V212: per-candidate waste check. When current snack uses pkg, the
+        // swap removes that pkg usage from the trip. Other slots in the trip
+        // may share that pkg item — removing this slot's share may drop trip
+        // total below a clean container boundary AND fire INV20. Reject the
+        // swap if it would WORSEN trip waste (candidates that are waste-
+        // neutral or waste-reducing are fine).
+        // Candidates themselves are filtered to non-pkg (line ~15415), so
+        // they never ADD waste; only removing the current snack's pkg can
+        // change waste.
+        let wasteOk = true;
+        if(curUsesPkg){
+          const newWaste = _measuredTripWasteForPersons(persons);
+          if(newWaste > baselineWaste) wasteOk = false;
+        }
+        // Snacks are exempt from the 5-day household-repeat rule (small pool),
+        // so INV14 can't change. Accept lexicographically: fewer misses wins;
+        // on ties, lower score wins.
+        const better = wasteOk && (
+          (newMisses < bestMisses)
+          || (newMisses === bestMisses && newScore < bestScore - 0.01)
+        );
         if(better){
           bestMisses = newMisses;
           bestScore = newScore;
