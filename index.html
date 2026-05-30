@@ -2679,6 +2679,14 @@ var MANUAL_SET={}; // key: 'person_day_slot', true if slot is locked from random
 // specific so the pill/border is meaningful.
 var USER_EDITED={}; // key: 'person_day_slot', true ONLY if user directly edited this slot
 var SKIPPED={}; // key: 'person_day_slot', true if skipped — calories shift to dinner
+// V214 (2026-05-29): transient auto-skips set by skipKcalOverSnacks (last-resort
+// snack removal on extreme over-budget days). Tracked separately from manual
+// skips so randomizeWeek can clear ONLY the auto-skips at its start — manual
+// skips (MANUAL_SET via toggleSkip) persist across randomizes + weeks + sync.
+// User intent (2026-05-29): "each new week.. and each new test will have no
+// existing skips.. only time it would stick is for a specific week that skip
+// was selected for manually."
+var _autoSkipSlots={};
 var EAT_OUT={}; // key: 'person_day_slot', value: {name,restaurant,kcal,pro,fat,carb}
 var LATE_SNACK={}; // key: 'person_day', value: {name,kcal,pro,fat,carb}
 // V146 (2026-05-14): ADJ_TARGETS is now PER-WEEK. The globals below are
@@ -14843,6 +14851,15 @@ function randomizeWeek(target, seed){
   // across runs and pin cook amounts at stale values. User UI overrides
   // (amt-only) are preserved. 2026-05-02.
   _clearFreezeOverrides();
+  // V214 (2026-05-29): clear transient auto-skips from the previous run.
+  // skipKcalOverSnacks may have set SKIPPED on extreme over-budget days last
+  // run; those are re-decided each randomize, NOT persisted. Manual skips
+  // (MANUAL_SET) are preserved — only auto-set ones (tracked in
+  // _autoSkipSlots, never MANUAL_SET) get cleared.
+  Object.keys(_autoSkipSlots).forEach(function(k){
+    if(SKIPPED[k] && !MANUAL_SET[k]) delete SKIPPED[k];
+  });
+  _autoSkipSlots = {};
   // Reset INV18 counters for this randomize. Each runBalanceAdjusters
   // call within this randomize increments _rbaCallCount; cap-hits also
   // increment _rbaCapHits. verifyInvariants reads the ratio at the end.
@@ -15117,6 +15134,14 @@ function randomizeWeek(target, seed){
       }
     }
   }
+  // V214 (2026-05-29): last-resort snack skip. MUST be the final mutation
+  // before the snapshot/verify — it sets SKIPPED, which would cause a later
+  // freeze/RBA's computeSlotBudgets to redistribute the freed snack budget to
+  // dinner (re-scaling dinner up, undoing the reduction). Running last (no
+  // subsequent balance pass) means the snack drops out of the day total while
+  // every other slot stays pinned. Only fires on days >175 over target after
+  // breakfast+snack reroll, and only commits if it reduces the day's misses.
+  skipKcalOverSnacks(randTarget);
   // 2026-05-05+: Capture pristine snapshot of post-pipeline cache + MANUAL_SET
   // for onIngrReset to restore EXACT pre-edit state without rerunning the
   // pipeline. See _capturePostRandomizeSnapshot.
@@ -15675,6 +15700,103 @@ function rerollKcalOffBreakfast(randTarget){
         const newBreakfastCache = rebuildBreakfastCache(p,d);
         if(newBreakfastCache) cached.breakfast = newBreakfastCache;
         _leftoverCache = null;
+      }
+    });
+  });
+}
+
+// V214 (2026-05-29): last-resort snack skip for extreme over-budget days.
+// Runs at the VERY END of the pipeline — after breakfast+snack reroll, after
+// Stage 2 carry-absorb + its re-freeze/RBA — so it's the final mutation before
+// verifyInvariants. CRITICAL: it must NOT be followed by any freeze/RBA pass,
+// because setting SKIPPED triggers computeSlotBudgets to redistribute the
+// freed snack budget FORWARD to dinner — a re-balance would scale dinner up
+// and put the day right back over. By running last and only touching SKIPPED
+// (no cache invalidation), the snack's kcal drops out of calcTotals /
+// computeDailyFV (both honor SKIPPED) while every other slot stays pinned, so
+// the day total drops by exactly the snack's contribution.
+//
+// Trigger: day is OVER target by > 175 kcal (user-chosen threshold 2026-05-29).
+// Only over-target days — skipping a snack reduces calories, so it can't help
+// an under-target day.
+//
+// Trial-based commit: skip the snack only if it REDUCES the day's miss count
+// (or holds miss count and lowers the macro-aware score). This prevents
+// removing a snack that's the day's only fruit/veg/protein source from trading
+// a kcalHigh miss for a fruit/veg miss (net-neutral or worse). The snack reroll
+// already tried to swap the snack low-cal; this is the harder lever when even
+// the lowest-cal swap (or a waste-locked pkg snack) leaves the day extreme.
+//
+// Auto-skips are transient — tracked in _autoSkipSlots, cleared at the start of
+// the next randomizeWeek. Never sets MANUAL_SET, so it's distinguishable from
+// a user's manual skip (which persists).
+function skipKcalOverSnacks(randTarget){
+  const now = Date.now();
+  const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  function dayMissCount(p,d){
+    let misses=0;
+    const calT=CAL_BASE[p], proT=PRO_TARGET[p];
+    const t=calcTotals(p,d);
+    const fv=computeDailyFV(p,d);
+    const mk=t.pro*4+t.fat*9+t.carb*4;
+    const carbPct=mk>0?(t.carb*4)/mk:0;
+    const fatPct=mk>0?(t.fat*9)/mk:0;
+    const proPct=mk>0?(t.pro*4)/mk:0;
+    if(Math.abs(t.kcal-calT)>100)misses++;
+    if(t.pro<proT)misses++;
+    if(carbPct>0.55)misses++;
+    if(fatPct>0.30)misses++;
+    if(proPct>0.40)misses++;
+    if(fatPct<0.15)misses++;
+    if(fv.veg<2.75)misses++;
+    if(fv.fruit<1)misses++;
+    return misses;
+  }
+  function dayMissScore(p,d){
+    var calT=CAL_BASE[p], proT=PRO_TARGET[p];
+    var t=calcTotals(p,d);
+    var fv=computeDailyFV(p,d);
+    var mk=t.pro*4+t.fat*9+t.carb*4;
+    var carbPct=mk>0?(t.carb*4)/mk:0;
+    var fatPct=mk>0?(t.fat*9)/mk:0;
+    var proPct=mk>0?(t.pro*4)/mk:0;
+    var s=0;
+    var kd=t.kcal-calT;
+    if(Math.abs(kd)>100) s += Math.sqrt(Math.abs(kd)-100);
+    if(t.pro<proT) s += Math.sqrt(proT-t.pro);
+    if(carbPct>0.55) s += Math.sqrt((carbPct-0.55)*100);
+    if(fatPct>0.30) s += Math.sqrt((fatPct-0.30)*100);
+    if(proPct>0.40) s += Math.sqrt((proPct-0.40)*100);
+    if(fatPct<0.15) s += Math.sqrt((0.15-fatPct)*100);
+    if(fv.veg<2.75) s += Math.sqrt(2.75-fv.veg);
+    if(fv.fruit<1) s += Math.sqrt(1-fv.fruit);
+    return s;
+  }
+  DAYS.forEach(function(d){
+    persons.forEach(function(p){
+      if(p!=='him'&&p!=='her')return;
+      const key = sk(p,d,'snack');
+      if(SKIPPED[key]||EAT_OUT[key]||isLockedForRandomize(key))return;
+      if(!SEL[key])return;
+      const t=calcTotals(p,d);
+      if(t.kcal - CAL_BASE[p] <= 175) return; // only days OVER by >175
+      const baselineMisses = dayMissCount(p,d);
+      const baselineScore = dayMissScore(p,d);
+      // Trial: skip the snack (SKIPPED honored by calcTotals + computeDailyFV;
+      // no cache invalidation so other slots stay pinned and no budget
+      // redistribution re-scales dinner).
+      SKIPPED[key] = true;
+      const newMisses = dayMissCount(p,d);
+      const newScore = dayMissScore(p,d);
+      const better = (newMisses < baselineMisses)
+                  || (newMisses === baselineMisses && newScore < baselineScore - 0.01);
+      if(better){
+        // Commit — mark transient auto-skip, stamp ts for sync ordering.
+        _autoSkipSlots[key] = true;
+        if(weekData[activeWeek] && weekData[activeWeek].ts) weekData[activeWeek].ts[key] = now;
+        _leftoverCache = null; // SEL effectively changed for this slot
+      } else {
+        delete SKIPPED[key]; // revert — skipping didn't improve the day
       }
     });
   });
