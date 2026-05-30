@@ -12720,22 +12720,21 @@ function _computePriorCarryover(priorWeekKey){
   return result;
 }
 
-// Household-level: returns every meal ID used by EITHER person across all
-// of the chronological previous week's slots.
+// V216 (2026-05-30): last-week restriction REMOVED everywhere. Per user:
+// "We dont want to restrict meals just because they were picked in the
+// previous week. We just dont want to violate our recency restrictions."
+// This function now returns [] so every `lastWk.indexOf(m.id)>=0` rejection
+// across Phase 1 (primary + fallbacks), rerollMissDays, Phase 1.5/3A/3C/4,
+// and the INV14 resolver becomes inert. ALL recency enforcement now flows
+// solely through getRecentMealIds (the ±4-day symmetric window that crosses
+// into last week's tail — which is what actually prevents INV14/INV11
+// same-meal-within-5-days violations). The old blanket "don't repeat any
+// meal from last week's plan" was a broader freshness preference that
+// over-restricted candidate pools (notably starving the INV14 resolver of
+// swap options). The inert call-site plumbing is left in place pending a
+// confirm-and-cosmetic-cleanup pass.
 function getLastWeekMealIds() {
-  const ids = [];
-  const lastSel = (weekData[_prevWeekKey()] && weekData[_prevWeekKey()].sel) || {};
-  DAYS.forEach(function(d){
-    SLOTS.forEach(function(s){
-      if (s === 'late_snack' || s === 'shake') return;
-      ['him','her'].forEach(function(pp){
-        const key = pp + '_' + d + '_' + s;
-        const id = lastSel[key];
-        if (id && ids.indexOf(id) < 0) ids.push(id);
-      });
-    });
-  });
-  return ids;
+  return [];
 }
 
 // Household-level: scans BOTH persons' picks within ±`lookback` days of
@@ -15879,17 +15878,21 @@ function rerollInv14Violations(randTarget){
     const isShared=SHARED_SCHEDULE[dk(t.d,t.s)]==='shared';
     const otherP=t.p==='him'?'her':'him';
     const dIdx=DAYS.indexOf(t.d);
-    // Recent + last-week are household-level. Candidates must not be in either.
+    // V216 (2026-05-30): recency-only. `recent` is the ±4-day window (crosses
+    // into last week's tail) — the actual same-meal-within-5-days enforcement.
+    // The old `lastWk` blanket "don't repeat any meal from last week" check was
+    // removed (getLastWeekMealIds now returns []); for the INV14 resolver it
+    // over-restricted the swap pool. `getMealsForSlot` already requires the
+    // meal be available for the slot+person, so the dead `!m[t.p]` availability
+    // check (only ever excluded the person-specific shakes, never a lunch/
+    // dinner candidate) is dropped too.
     const recent=getRecentMealIds(dIdx,DAYS,4);
-    const lastWk=getLastWeekMealIds();
     const candidates=getMealsForSlot(t.s).filter(function(m){
-      if(!m[t.p])return false;
-      if(noRandomizeIds[m.id])return false;
       if(isShared&&!m[otherP])return false;
+      if(noRandomizeIds[m.id])return false;
       if(mealUsesDiscouraged(m))return false; // never swap TO coconut etc.
       if(m.id===t.mealId)return false;
       if(t.s!=='snack'){
-        if(lastWk.indexOf(m.id)>=0)return false;
         if(recent.indexOf(m.id)>=0 && !isBatchLeftoverEligible(t.d,t.s,m.id))return false;
       }
       return true;
