@@ -14871,6 +14871,11 @@ function randomizeWeek(target, seed){
   // swap-on-Pass-1-fallout). Each entry records {p,d,s,pass,oldMealId,
   // newMealId,dbKey} for post-randomize inspection.
   window._swapDiag = {swappedKeys: {}, swaps: [], passLabel: '', refused: []};
+  // V215 (2026-05-29): per-randomize INV14-resolver diag. laterWins = pairs
+  // resolved by swapping the later cook (old behavior); earlierWins = pairs
+  // resolved by the V215 earlier-cook fallback (would have stayed unresolved
+  // pre-V215). Inspect post-randomize via window._inv14ResolverDiag.
+  window._inv14ResolverDiag = {laterWins: 0, earlierWins: 0};
   // V201 (2026-05-25): per-randomize state for Stage 2 carry-absorb.
   // _pendingSwapSlots: populated by other swap-commit sites (rerollMissDays,
   // rerollKcalOffSnacks, rerollInv14Violations, freezeTripTotals' _trySwapForWaste
@@ -15843,12 +15848,93 @@ function rerollInv14Violations(randTarget){
         if(cooks[i].mealId===cooks[j].mealId
             && Math.abs(cooks[j].dayIdx-cooks[i].dayIdx)<5){
           // `later` = cooks[j]: cooks are built in DAYS-ascending order and j>i,
-          // so cooks[j].dayIdx >= cooks[i].dayIdx always.
-          pairs.push({later:cooks[j]});
+          // so cooks[j].dayIdx >= cooks[i].dayIdx always. `earlier` = cooks[i].
+          // V215 (2026-05-29): also keep the earlier cook so the resolver can
+          // try swapping it when the later cook can't be swapped cleanly.
+          pairs.push({later:cooks[j], earlier:cooks[i]});
         }
       }
     }
     return pairs;
+  }
+
+  // V215 (2026-05-29): try to resolve an INV14 pair by swapping ONE cook `t`
+  // to a non-conflicting meal. Returns true if a swap was accepted+committed
+  // (SEL left mutated, ts + _pendingSwapSlots updated), false otherwise (SEL
+  // fully reverted). Extracted from the inline loop so it can be applied to
+  // BOTH the later and the earlier cook of a pair.
+  //
+  // Why both: the resolver historically only swapped the LATER cook. When the
+  // later cook is a SHARED dinner (changes both persons' portions → enlarges
+  // the trip's pkg footprint → every candidate fails the `newWaste<=baseline`
+  // gate) but the earlier cook is a SOLO, the resolver had a viable fix
+  // available (swap the cheap solo) but never tried it. 2026-05-29 INV14
+  // investigation: every surviving fire was later=shared-dinner (0 accepted
+  // candidates, all rejected by waste) + earlier=solo (multiple accepted
+  // candidates). See system_invariants.md.
+  function tryResolveCook(t){
+    const key=sk(t.p,t.d,t.s);
+    if(EAT_OUT[key]||SKIPPED[key]) return false;
+    if(MANUAL_SET[key]) return false;
+    const isShared=SHARED_SCHEDULE[dk(t.d,t.s)]==='shared';
+    const otherP=t.p==='him'?'her':'him';
+    const dIdx=DAYS.indexOf(t.d);
+    // Recent + last-week are household-level. Candidates must not be in either.
+    const recent=getRecentMealIds(dIdx,DAYS,4);
+    const lastWk=getLastWeekMealIds();
+    const candidates=getMealsForSlot(t.s).filter(function(m){
+      if(!m[t.p])return false;
+      if(noRandomizeIds[m.id])return false;
+      if(isShared&&!m[otherP])return false;
+      if(mealUsesDiscouraged(m))return false; // never swap TO coconut etc.
+      if(m.id===t.mealId)return false;
+      if(t.s!=='snack'){
+        if(lastWk.indexOf(m.id)>=0)return false;
+        if(recent.indexOf(m.id)>=0 && !isBatchLeftoverEligible(t.d,t.s,m.id))return false;
+      }
+      return true;
+    });
+    if(!candidates.length)return false;
+
+    const baselineWaste=totalWaste();
+    const baselineInv14=countInv14();
+    const baselineMisses=dayMissCount(t.d);
+    for(let ci=0;ci<candidates.length;ci++){
+      const c=candidates[ci];
+      const origSel=SEL[key];
+      let otherKey=null, otherOrig=null;
+      SEL[key]=c.id;
+      if(isShared){
+        otherKey=sk(otherP,t.d,t.s);
+        otherOrig=SEL[otherKey];
+        SEL[otherKey]=c.id;
+      }
+      invalidateLeftoverCache();
+      const newWaste=totalWaste();
+      const newInv14=countInv14();
+      const newMisses=dayMissCount(t.d);
+      // Accept if INV14 strictly decreases AND waste doesn't grow AND
+      // misses rise by at most 2. The +2 miss tolerance is deliberate: we're
+      // willing to trade up to two day-misses for closing an INV14 hard-feeling
+      // violation since it's more important to prevent same-meal-within-5d
+      // than to chase a couple of goal misses.
+      if(newInv14<baselineInv14 && newWaste<=baselineWaste && newMisses<=baselineMisses+2){
+        // Accept — keep SEL mutated
+        weekData[activeWeek].ts[key]=now;
+        if(otherKey)weekData[activeWeek].ts[otherKey]=now;
+        // V201: track these slots for Stage 2 absorb priority.
+        if(typeof _pendingSwapSlots !== 'undefined'){
+          _pendingSwapSlots.add(key);
+          if(otherKey) _pendingSwapSlots.add(otherKey);
+        }
+        return true;
+      }
+      // Revert
+      SEL[key]=origSel;
+      if(otherKey)SEL[otherKey]=otherOrig;
+      invalidateLeftoverCache();
+    }
+    return false;
   }
 
   const MAX_ITERS=5;
@@ -15857,72 +15943,22 @@ function rerollInv14Violations(randTarget){
     if(pairs.length===0)break;
     let fixedAny=false;
     for(let pi=0;pi<pairs.length;pi++){
-      const t=pairs[pi].later;
-      const key=sk(t.p,t.d,t.s);
-      if(EAT_OUT[key]||SKIPPED[key])continue;
-      if(MANUAL_SET[key])continue;
-      const isShared=SHARED_SCHEDULE[dk(t.d,t.s)]==='shared';
-      const otherP=t.p==='him'?'her':'him';
-      const dIdx=DAYS.indexOf(t.d);
-      // Recent + last-week are household-level. Candidates must not be in either.
-      const recent=getRecentMealIds(dIdx,DAYS,4);
-      const lastWk=getLastWeekMealIds();
-      const candidates=getMealsForSlot(t.s).filter(function(m){
-        if(!m[t.p])return false;
-        if(noRandomizeIds[m.id])return false;
-        if(isShared&&!m[otherP])return false;
-        if(mealUsesDiscouraged(m))return false; // never swap TO coconut etc.
-        if(m.id===t.mealId)return false;
-        if(t.s!=='snack'){
-          if(lastWk.indexOf(m.id)>=0)return false;
-          if(recent.indexOf(m.id)>=0 && !isBatchLeftoverEligible(t.d,t.s,m.id))return false;
-        }
-        return true;
-      });
-      if(!candidates.length)continue;
-
-      const baselineWaste=totalWaste();
-      const baselineInv14=countInv14();
-      const baselineMisses=dayMissCount(t.d);
-      let accepted=false;
-      for(let ci=0;ci<candidates.length;ci++){
-        const c=candidates[ci];
-        const origSel=SEL[key];
-        let otherKey=null, otherOrig=null;
-        SEL[key]=c.id;
-        if(isShared){
-          otherKey=sk(otherP,t.d,t.s);
-          otherOrig=SEL[otherKey];
-          SEL[otherKey]=c.id;
-        }
-        invalidateLeftoverCache();
-        const newWaste=totalWaste();
-        const newInv14=countInv14();
-        const newMisses=dayMissCount(t.d);
-        // Accept if INV14 strictly decreases AND waste doesn't grow AND
-        // misses rise by at most 2. The +2 miss tolerance is deliberate: we're
-        // willing to trade up to two day-misses for closing an INV14 hard-feeling
-        // violation since it's more important to prevent same-meal-within-5d
-        // than to chase a couple of goal misses.
-        if(newInv14<baselineInv14 && newWaste<=baselineWaste && newMisses<=baselineMisses+2){
-          // Accept — keep SEL mutated
-          weekData[activeWeek].ts[key]=now;
-          if(otherKey)weekData[activeWeek].ts[otherKey]=now;
-          // V201: track these slots for Stage 2 absorb priority.
-          if(typeof _pendingSwapSlots !== 'undefined'){
-            _pendingSwapSlots.add(key);
-            if(otherKey) _pendingSwapSlots.add(otherKey);
-          }
-          accepted=true;
-          fixedAny=true;
-          break;
-        }
-        // Revert
-        SEL[key]=origSel;
-        if(otherKey)SEL[otherKey]=otherOrig;
-        invalidateLeftoverCache();
+      // V215: try the later cook first (preserves prior behavior + the
+      // "the repeat is the later one" intuition); fall back to the earlier
+      // cook when the later one can't be swapped cleanly (e.g. later=shared
+      // dinner where every candidate grows waste, earlier=solo where a swap
+      // is waste-cheap).
+      let accepted = tryResolveCook(pairs[pi].later);
+      if(accepted){
+        if(window._inv14ResolverDiag) window._inv14ResolverDiag.laterWins++;
+      } else {
+        accepted = tryResolveCook(pairs[pi].earlier);
+        // V215 diag: count when the earlier-cook fallback resolved a pair the
+        // later-cook path couldn't. >0 across a run proves V215's new path is
+        // doing real work (the old later-only code would have left these fires).
+        if(accepted && window._inv14ResolverDiag) window._inv14ResolverDiag.earlierWins++;
       }
-      if(accepted)break; // restart outer loop to re-find pairs
+      if(accepted){ fixedAny=true; break; } // restart outer loop to re-find pairs
     }
     if(!fixedAny)break; // no progress, give up
   }
