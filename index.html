@@ -10413,6 +10413,9 @@ function confirmTempIngredient(p,d,s){
     MANUAL_SET[sk(pt.p,pt.d,pt.s)]=true;
     // V53: adding ingredient is a direct edit on each affected slot.
     _markUserEdited(sk(pt.p,pt.d,pt.s));
+    // Audit R12 (M2, 2026-05-30): bump ts so the added temp ingredient
+    // syncs across devices (see _writeUserPin for the full rationale).
+    _bumpSlotTs(sk(pt.p,pt.d,pt.s));
   });
   document.getElementById('calPopupOverlay').style.display='none';
   // 2026-05-05+: SURGICAL append. Push the new ingredient entry directly
@@ -10536,6 +10539,14 @@ function _writeUserPin(p,d,s,idx,opts){
   MANUAL_SET[sk(p,d,s)] = true;
   // V53: ingredient pin = direct user edit on this slot.
   _markUserEdited(sk(p,d,s));
+  // Audit R12 (M2, 2026-05-30): bump the slot ts so surgical ingredient
+  // edits propagate across devices. mergeSyncData merges overrides/manualSet
+  // ONLY on the SEL ts (there is no overridesTs map); a per-ingredient edit
+  // keeps the same meal, so without this the ts never moves and the edit
+  // stays device-local until a Force Push. SEL is unchanged, so the merge's
+  // SEL copy on the other device is a no-op. Covers onIngrAmt + onIngrSwap
+  // (both route every solo/batch-portion write through _writeUserPin).
+  _bumpSlotTs(sk(p,d,s));
   if(slotCache && slotCache[idx]){
     if(opts.amt !== undefined) slotCache[idx].amt = opts.amt;
     if(opts.dbKey !== undefined) slotCache[idx].dbKey = opts.dbKey;
@@ -10793,6 +10804,10 @@ function onIngrReset(p,d,s){
     // V54: same reasoning for USER_EDITED — Reset wipes user state.
     delete MANUAL_SET[k];
     delete USER_EDITED[k];
+    // Audit R12 (M2, 2026-05-30): bump ts so a Reset (which clears the
+    // user override) propagates across devices too — otherwise the revert
+    // stays device-local (mirror of the surgical-edit sync gap).
+    _bumpSlotTs(k);
   });
 
   // V141 — run the full pipeline only when a slot fell into Path B (no
