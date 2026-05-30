@@ -15042,6 +15042,10 @@ function randomizeWeek(target, seed){
     //   late-only (baseline): 98.00% primary
     //   early-only:           98.00%
     //   both (V102):          98.29% (+0.29pp, ~equal timing)
+    // V213 (2026-05-29): rerollKcalOffBreakfast runs first — breakfast has
+    // ~3-4× the swap leverage of snack (~330-512 kcal vs ~120-200), so it
+    // fixes bigger swings first and snack handles the residual.
+    rerollKcalOffBreakfast(randTarget);
     rerollKcalOffSnacks(randTarget);
     freezeTripTotals(randTarget, true);
     runBalanceAdjusters();
@@ -15068,6 +15072,9 @@ function randomizeWeek(target, seed){
   // pkg amounts, balancer trims to compensate, snack ends up off). Pairs
   // with the early call above; both fire only on days where day kcal is
   // off target by >100, so there's no double-application overhead.
+  // V213 (2026-05-29): rerollKcalOffBreakfast runs first for the same reason
+  // as the early-call site — breakfast has 3-4× the swap leverage.
+  rerollKcalOffBreakfast(randTarget);
   rerollKcalOffSnacks(randTarget);
   // Pass 3 (no swap) — rerollKcalOffSnacks may have swapped a snack to/from
   // a meal that uses ROUND_PKG_ITEMS or ROUND_PRODUCE_ITEMS (e.g. swap to
@@ -15502,6 +15509,172 @@ function rerollKcalOffSnacks(randTarget){
         const newSnackCache = rebuildSnackCache(p,d);
         if(newSnackCache) cached.snack = newSnackCache;
         _leftoverCache = null; // snack SEL changed — variety filters may read
+      }
+    });
+  });
+}
+
+// V213 (2026-05-29): mirror of rerollKcalOffSnacks for the breakfast slot.
+// Snack reroll alone can swing ~120-200 kcal (snack budget range); breakfast
+// reroll can swing ~330-512 kcal (breakfast budget range) — much more leverage
+// for catastrophic kcal-off days. Fires only when |day delta| > 100 (same
+// trigger as snack reroll). Same filters: noRandomize, mealUsesDiscouraged,
+// ROUND_PRODUCE_ITEMS introduction guard, per-candidate waste check for pkg
+// swap-outs (V212-style).
+//
+// Like snack, breakfast is essentially always solo (per the leftover detector
+// rule "Anchor must be lunch or dinner") so we can mutate just _dayBalancedCache
+// [pk(p,d)].breakfast directly without batch entanglement.
+//
+// Breakfast is also exempt from INV14 (which is lunch/dinner-only per memory),
+// so no INV14 delta check needed. Variety filter not enforced in reroll either
+// — matches snack-reroll convention (Phase 1 already filtered; reroll prioritizes
+// kcal balance over secondary variety enforcement).
+function rerollKcalOffBreakfast(randTarget){
+  const now = Date.now();
+  const noRandomizeIds={};
+  MEALS.forEach(function(m){if(m.noRandomize)noRandomizeIds[m.id]=true;});
+  const persons = randTarget === 'shared' ? ['him','her'] : [randTarget];
+  function dayMissCount(p,d){
+    let misses=0;
+    const calT=CAL_BASE[p], proT=PRO_TARGET[p];
+    const t=calcTotals(p,d);
+    const fv=computeDailyFV(p,d);
+    const mk=t.pro*4+t.fat*9+t.carb*4;
+    const carbPct=mk>0?(t.carb*4)/mk:0;
+    const fatPct=mk>0?(t.fat*9)/mk:0;
+    const proPct=mk>0?(t.pro*4)/mk:0;
+    if(Math.abs(t.kcal-calT)>100)misses++;
+    if(t.pro<proT)misses++;
+    if(carbPct>0.55)misses++;
+    if(fatPct>0.30)misses++;
+    if(proPct>0.40)misses++;
+    if(fatPct<0.15)misses++;
+    if(fv.veg<2.75)misses++;
+    if(fv.fruit<1)misses++;
+    return misses;
+  }
+  function dayMissScore(p,d){
+    var calT=CAL_BASE[p], proT=PRO_TARGET[p];
+    var t=calcTotals(p,d);
+    var fv=computeDailyFV(p,d);
+    var mk=t.pro*4+t.fat*9+t.carb*4;
+    var carbPct=mk>0?(t.carb*4)/mk:0;
+    var fatPct=mk>0?(t.fat*9)/mk:0;
+    var proPct=mk>0?(t.pro*4)/mk:0;
+    var s=0;
+    var kd=t.kcal-calT;
+    if(Math.abs(kd)>100) s += Math.sqrt(Math.abs(kd)-100);
+    if(t.pro<proT) s += Math.sqrt(proT-t.pro);
+    if(carbPct>0.55) s += Math.sqrt((carbPct-0.55)*100);
+    if(fatPct>0.30) s += Math.sqrt((fatPct-0.30)*100);
+    if(proPct>0.40) s += Math.sqrt((proPct-0.40)*100);
+    if(fatPct<0.15) s += Math.sqrt((0.15-fatPct)*100);
+    if(fv.veg<2.75) s += Math.sqrt(2.75-fv.veg);
+    if(fv.fruit<1) s += Math.sqrt(1-fv.fruit);
+    return s;
+  }
+  function rebuildBreakfastCache(p,d){
+    const port = getPort(p,d,'breakfast');
+    if(!port) return null;
+    const ovrIngr = applyOverrides(port,p,d,'breakfast');
+    if(!ovrIngr || !ovrIngr.length) return null;
+    const slotAdj = getSlotAdjustment(p,d,'breakfast');
+    const hints = buildMacroHints(p,d,'breakfast');
+    const adjusted = adjustIngredients(ovrIngr, slotAdj, 'breakfast', hints, 1);
+    return adjusted.map(function(a){
+      return {dbKey:a.ing.dbKey, amt:a.newAmt, role:a.ing.role, scalable:a.ing.scalable, origAmt:a.ing.amt};
+    });
+  }
+
+  DAYS.forEach(function(d){
+    persons.forEach(function(p){
+      if(p!=='him'&&p!=='her')return;
+      const key = sk(p,d,'breakfast');
+      if(SKIPPED[key]||isLockedForRandomize(key))return;
+      const curId = SEL[key];
+      if(!curId)return;
+      const curUsesPkg = mealUsesPkg(curId);
+      const curDelta = calcTotals(p,d).kcal - CAL_BASE[p];
+      if(Math.abs(curDelta)<=100)return;
+      const cached = getDayBalancedIngredients(p,d);
+      if(!cached.breakfast) return;
+      // Build the trip's produce-already-used set (skip the breakfast slot we're
+      // potentially swapping). Mirrors the snack reroll's filter — prevents
+      // candidates that would introduce NEW produce waste in the trip.
+      const trip = TRIP_DAYS_STATIC.cook1.indexOf(d) >= 0 ? 'cook1' : 'cook2';
+      const tripDays = TRIP_DAYS_STATIC[trip] || [];
+      const tripProduceUsed = {};
+      tripDays.forEach(function(td){
+        ['him','her'].forEach(function(tp){
+          ['breakfast','lunch','snack','dinner'].forEach(function(ts){
+            const tk = sk(tp,td,ts);
+            if(tk === key) return;
+            const tMealId = SEL[tk]; if(!tMealId) return;
+            const tMeal = getMeal(tMealId);
+            if(!tMeal || !tMeal.ingredients) return;
+            tMeal.ingredients.forEach(function(ing){
+              if(ROUND_PRODUCE_ITEMS.indexOf(ing.dbKey) >= 0){
+                tripProduceUsed[ing.dbKey] = true;
+              }
+            });
+          });
+        });
+      });
+      const candidates = getMealsForSlot('breakfast').filter(function(m){
+        if(!m[p])return false;
+        if(noRandomizeIds[m.id])return false;
+        if(mealUsesPkg(m.id))return false;
+        if(mealUsesDiscouraged(m))return false;
+        if(m.id===curId)return false;
+        var introducesNewProduce = m.ingredients.some(function(ing){
+          return ROUND_PRODUCE_ITEMS.indexOf(ing.dbKey) >= 0 && !tripProduceUsed[ing.dbKey];
+        });
+        if(introducesNewProduce) return false;
+        return true;
+      });
+      if(!candidates.length)return;
+
+      const origBreakfastCache = cached.breakfast;
+      const baselineMisses = dayMissCount(p,d);
+      const baselineScore = dayMissScore(p,d);
+      const baselineWaste = curUsesPkg ? _measuredTripWasteForPersons(persons) : 0;
+      let bestSwap = null;
+      let bestScore = baselineScore;
+      let bestMisses = baselineMisses;
+
+      candidates.forEach(function(c){
+        SEL[key] = c.id;
+        const newBreakfastCache = rebuildBreakfastCache(p,d);
+        if(!newBreakfastCache){ SEL[key] = curId; return; }
+        cached.breakfast = newBreakfastCache;
+        const newMisses = dayMissCount(p,d);
+        const newScore = dayMissScore(p,d);
+        let wasteOk = true;
+        if(curUsesPkg){
+          const newWaste = _measuredTripWasteForPersons(persons);
+          if(newWaste > baselineWaste) wasteOk = false;
+        }
+        const better = wasteOk && (
+          (newMisses < bestMisses)
+          || (newMisses === bestMisses && newScore < bestScore - 0.01)
+        );
+        if(better){
+          bestMisses = newMisses;
+          bestScore = newScore;
+          bestSwap = c.id;
+        }
+        SEL[key] = curId;
+        cached.breakfast = origBreakfastCache;
+      });
+
+      if(bestSwap){
+        SEL[key] = bestSwap;
+        weekData[activeWeek].ts[key] = now;
+        if(typeof _pendingSwapSlots !== 'undefined') _pendingSwapSlots.add(key);
+        const newBreakfastCache = rebuildBreakfastCache(p,d);
+        if(newBreakfastCache) cached.breakfast = newBreakfastCache;
+        _leftoverCache = null;
       }
     });
   });
