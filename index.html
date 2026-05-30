@@ -755,10 +755,6 @@ function buildQtyOptions(unit, currentAmt, wholeOnly, minAmt, cookServings) {
   } else if (u === 'slice') {
     const sliceMax = 6 * N;
     for (let i = 1; i <= sliceMax; i++) opts.push({val:i, label:String(i)});
-  } else if (u === 'quarter') {
-    // Quarters of avocado: ¼, ½, ¾, 1, etc
-    const qLabels = [{val:0.5,label:'½'},{val:1,label:'1'},{val:1.5,label:'1½'},{val:2,label:'2'},{val:3,label:'3'},{val:4,label:'4 (whole)'}];
-    opts = [{val:1,label:'1 quarter'},{val:2,label:'2 quarters (½)'},{val:3,label:'3 quarters (¾)'},{val:4,label:'4 quarters (whole)'}];
   } else {
     // Default: whole and half numbers
     const dMax = 20 * N;
@@ -6079,8 +6075,9 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
         if(!trim) trim = bestTrim(['protein'], CAL_SLOTS);
         if(trim) applyDelta(trim.item.slot, trim.item.idx, trim.item.cur - trim.dec);
       } else {
-        // Under target: boost one grid step. Order protein → carb → other → fat.
-        const order = ['protein','carb','other','fat'];
+        // Under target: boost one grid step. Order protein → carb → fat.
+        // (Audit R12 L3: dropped dead 'other' — no ingredient has role 'other'.)
+        const order = ['protein','carb','fat'];
         let added = null;
         for(let oi=0; oi<order.length && !added; oi++){
           added = bestAdd(order[oi], null, CAL_SLOTS);
@@ -14146,7 +14143,6 @@ function unifyCrossPersonRatios(){
       ['breakfast','lunch','snack','dinner'].forEach(function(s){
         var lo=leftovers[sk(p,d,s)];
         if(!lo||lo.isLeftover)return;
-        if(lo.sharedWith)return;            // avoid double-processing
         if(!lo.portions)return;             // solo slot, no batch
         // Need ≥2 distinct people in the batch for unification to matter.
         var peopleSet={};
@@ -14413,9 +14409,6 @@ function snapBatchTotals(){
         var lo=leftovers[sk(p,d,s)];
         if(!lo||lo.isLeftover)return; // only process cook entries
         if(lo.servings<=1&&!lo.crossPersonCook&&!lo.shared)return; // solo, no batch
-        // For shared meals, only process the primary cook (skip sharedWith entry
-        // to avoid double-processing the same batch)
-        if(lo.sharedWith)return;
 
         var mealId=getMealId(p,d,s);
         // Lazy-build day cache: getDayBalancedIngredients returns cached
@@ -14951,7 +14944,6 @@ function randomizeWeek(target, seed){
   let bestInv14 = Infinity;
   let bestInv11 = Infinity;   // V188 (2026-05-21): include hard INV11 in retry selector
   let bestSEL = null;
-  let bestCaches = null;
   for (let retry = 0; retry < maxRetries; retry++) {
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
     Object.keys(savedSel).forEach(function(k){SEL[k]=savedSel[k];});
@@ -15039,18 +15031,16 @@ function randomizeWeek(target, seed){
       bestInv14 = inv14;
       bestInv11 = inv11;
       bestSEL = JSON.parse(JSON.stringify(SEL));
-      bestCaches = null; // force post-retry rerun
     }
     if (totalWaste === 0 && goalMisses === 0 && inv14 === 0 && inv11 === 0) break;
   }
 
-  // Restore best state. The retry-loop's countInv14 step invalidates the
-  // cache at end of every retry, so by the time we exit the loop the
-  // live cache is EMPTY (not "winning retry's state" even on early-break).
-  // If we have bestCaches, restore both SEL and cache unconditionally.
-  // If no bestCaches (lossy retry or no retries completed pipeline), fall
-  // back to SEL restore + invalidate + rebuild via 7-stage pipeline.
-  let cacheFromWinner = false;
+  // Restore the winning SEL, then always re-run the full post-retry pipeline.
+  // (The retry loop's per-retry pipeline has limited convergence, so a
+  // cache-snapshot fast-path was tried — V97 'bestCaches' — but restoring it
+  // produced INV7/INV8 cross-person ratio drift, so it was disabled. Audit R12
+  // 2026-05-30 removed the dead bestCaches/cacheFromWinner scaffolding; the
+  // pipeline always reruns on the winner.)
   if (bestSEL) {
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
     Object.keys(bestSEL).forEach(function(k){SEL[k]=bestSEL[k];});
@@ -15062,27 +15052,14 @@ function randomizeWeek(target, seed){
     // no end-of-loop clear: INV7=9. With this clear: target 0.
     _clearFreezeOverrides();
   }
-  if (bestCaches) {
-    for (const k in _dayBalancedCache) delete _dayBalancedCache[k];
-    // Deep-clone each entry on restore so subsequent in-place mutations
-    // (snapSoloSlotAmountsToGrid, rerollKcalOffSnacks, etc.) don't write
-    // back into bestCaches's stored objects. Symmetric with _leftoverCache
-    // re-clone below.
-    Object.keys(bestCaches.dayBalanced).forEach(function(k){_dayBalancedCache[k]=JSON.parse(JSON.stringify(bestCaches.dayBalanced[k]));});
-    _leftoverCache = bestCaches.leftover ? JSON.parse(JSON.stringify(bestCaches.leftover)) : null;
-    cacheFromWinner = true;
-  } else {
-    invalidateLeftoverCache();
-  }
+  invalidateLeftoverCache();
   // Targeted day re-rolls: fix any remaining miss-days without breaking waste.
   if (bestMisses > 0) {
     rerollMissDays(randTarget);
-    cacheFromWinner = false; // rerolls invalidate cache during candidate trials
   }
-  // INV14 resolver. Skip when bestInv14 === 0 to preserve cacheFromWinner.
+  // INV14 resolver — only runs when the winning retry still had a fire.
   if (bestInv14 > 0) {
     rerollInv14Violations(randTarget);
-    cacheFromWinner = false;
   }
   // V93 (2026-05-08): auto-apply fat-boost on lean days. Runs AFTER all
   // SEL-changing passes (Phase 1-4, rerollMissDays, rerollInv14Violations)
@@ -15090,28 +15067,24 @@ function randomizeWeek(target, seed){
   // so they can compensate kcal via P0 trim. Invalidates cache so freeze
   // and balancer see the boosted state.
   _autoApplyFatBoosts(randTarget);
-  cacheFromWinner = false; // boost overrides need balancer to compensate
-  if (!cacheFromWinner) {
-    runBalanceAdjusters();
-    // V102 (2026-05-09): early snack swap, immediately after first balancer.
-    // Pre-V102 only ran late (post-snap, pre-final-freeze). Adding an early
-    // pass catches obvious kcal-off snacks BEFORE freeze pins their pkg
-    // co-contributors. Late call still runs to catch anything the balancer
-    // smoothing introduced. A/B test 25-seed Test 1:
-    //   late-only (baseline): 98.00% primary
-    //   early-only:           98.00%
-    //   both (V102):          98.29% (+0.29pp, ~equal timing)
-    // V213 (2026-05-29): rerollKcalOffBreakfast runs first — breakfast has
-    // ~3-4× the swap leverage of snack (~330-512 kcal vs ~120-200), so it
-    // fixes bigger swings first and snack handles the residual.
-    rerollKcalOffBreakfast(randTarget);
-    rerollKcalOffSnacks(randTarget);
-    freezeTripTotals(randTarget, true);
-    runBalanceAdjusters();
-  } else {
-    freezeTripTotals(randTarget, true);
-    runBalanceAdjusters();
-  }
+  // First balancer + freeze pass (always runs — pipeline is rebuilt fresh on
+  // the winning SEL; see the retry-loop note re: removed cache-snapshot path).
+  runBalanceAdjusters();
+  // V102 (2026-05-09): early snack swap, immediately after first balancer.
+  // Pre-V102 only ran late (post-snap, pre-final-freeze). Adding an early
+  // pass catches obvious kcal-off snacks BEFORE freeze pins their pkg
+  // co-contributors. Late call still runs to catch anything the balancer
+  // smoothing introduced. A/B test 25-seed Test 1:
+  //   late-only (baseline): 98.00% primary
+  //   early-only:           98.00%
+  //   both (V102):          98.29% (+0.29pp, ~equal timing)
+  // V213 (2026-05-29): rerollKcalOffBreakfast runs first — breakfast has
+  // ~3-4× the swap leverage of snack (~330-512 kcal vs ~120-200), so it
+  // fixes bigger swings first and snack handles the residual.
+  rerollKcalOffBreakfast(randTarget);
+  rerollKcalOffSnacks(randTarget);
+  freezeTripTotals(randTarget, true);
+  runBalanceAdjusters();
   // Pass 2 (with swap) — re-establishes overrides on items whose batches got
   // cleared by the swap pass's co-contributor cleanup but whose cook anchor
   // lives in a trip the first pass already iterated past. Also catches cases
