@@ -5845,8 +5845,19 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     //   2. Skip items whose slot would exceed its budget by >50% after the
     //      add. Prevents actively destroying a slot (e.g. tripling a snack
     //      that's already at 115% budget) while chasing daily protein.
-    // Dinner and shake are exempt from the slot-budget cap (dinner absorbs
-    // residual daily kcal; shake is frozen so it can't be picked anyway).
+    // Shake is exempt (frozen, can't be picked). Dinner used to be exempt
+    // too — design intent was "dinner absorbs residual daily kcal." That
+    // worked for solo dinner slots but broke for cook-anchor dinners feeding
+    // multi-day leftovers: a boost lands on the anchor, then propagates to
+    // every batch portion via unify's kcal-prop split. Seed-14 case (V210
+    // 2026-05-29): street_corn_bowl Him-Sat-dinner cook anchor pumped to
+    // 1.275× its own 896-budget by macro-fix boosts; the 4-portion batch
+    // (Him Sat dinner + Him Sun dinner + Her Sun lunch + Her Sun dinner) all
+    // ended at 1.275× of their respective budgets, throwing Her Sunday +263
+    // over target.
+    // V211 (2026-05-29): drop dinner exemption + tighten cap from 1.5×→1.25×.
+    // Trade-off: solo dinners on low-kcal-elsewhere days lose some absorbing
+    // headroom, but every slot now respects a uniform 25% overshoot ceiling.
     // Protein powder is excluded from protein boosts — user preference: real
     // food choices only, not a supplement loophole.
     // slotFilter (optional): restrict picks to named slots (e.g.
@@ -5874,8 +5885,9 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
       if(typeof trimKcalStep==='number' && trimKcalStep>0){
         if(pInc*item.db.kcal > trimKcalStep*2) continue;
       }
-      // Cap 2: slot budget sanity (non-dinner, non-shake slots)
-      if(item.slot!=='dinner' && item.slot!=='shake' && SLOT_BUDGET[item.slot]){
+      // Cap 2: slot budget sanity (V211: applies to all non-shake slots
+      // including dinner; cap tightened 1.5× → 1.25×).
+      if(item.slot!=='shake' && SLOT_BUDGET[item.slot]){
         const slotBudget=getSlotBudget(p,d,item.slot);
         if(slotBudget>0){
           let slotKcal=0;
@@ -5884,7 +5896,7 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
             const amt = sidx===item.idx ? (si.amt + pInc) : si.amt;
             slotKcal += sdb.kcal * amt;
           });
-          if(slotKcal > slotBudget*1.5) continue;
+          if(slotKcal > slotBudget*1.25) continue;
         }
       }
       // Cap 3: per-serving maxAmt (INV13 threshold), solo-aware via _addCeil.
