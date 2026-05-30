@@ -7676,6 +7676,18 @@ function verifyInvariants(){
     });
     Object.keys(carryDemand).forEach(function(dbKey){
       var db = NUTRI_DB[dbKey];
+      // V219 (2026-05-30): B8 (Audit Round 11) — gate acceptableWaste/nonWaste,
+      // symmetric with the per-trip INV20 check (which skips these). Without
+      // this, a crossTripCarry item ALSO flagged acceptableWaste/nonWaste would
+      // fire a spurious HARD INV20 here even though the per-trip path skips it.
+      // Inert today (no item carries crossTripCarry + acceptableWaste/nonWaste:
+      // marinara/broth are softWaste; lemon/lime lost crossTripCarry in V199;
+      // green beans are nonWaste w/o crossTripCarry) — defensive guard so a
+      // future flag choice can't silently produce a hard fail. Conceptually
+      // sound: acceptableWaste ("don't track waste") and crossTripCarry ("track
+      // partial-jar carryover") are contradictory intents.
+      if(db && db.pkg && (db.pkg.acceptableWaste || db.pkg.nonWaste)) return;
+      if(db && db.produce && (db.produce.acceptableWaste || db.produce.nonWaste)) return;
       // V171: pick perUnit + threshold + labels per item type.
       var isPkg = !!(db && db.pkg && db.pkg.crossTripCarry);
       var isProduce = !isPkg && !!(db && db.produce && db.produce.crossTripCarry);
