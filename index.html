@@ -458,7 +458,7 @@ var NUTRI_DB = {
   'kale':                  {kcal:33,  pro:2.2,fat:0.6, carb:6,   unit:'cup', produce:{perWhole:1.5,label:'3.5 oz container'}, bulkOz:true, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.5, dampScale:0.5},
   'lettuce':               {kcal:10,  pro:0.7,fat:0.2, carb:1.8, unit:'cup', produce:{perWhole:3,label:'romaine heart',acceptableWaste:true}, minAmt:0.5, maxAmt:3, dampScale:0.5},
   'broccoli':              {kcal:31,  pro:2.6,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'head broccoli'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
-  'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, minAmtSolo:0.25, maxAmt:2.0},
+  'bell pepper':           {kcal:30,  pro:1,  fat:0.3, carb:6,   unit:'cup', produce:{perWhole:1.25,label:'bell pepper'}, minAmt:0.25, maxAmt:2.0},
   'carrots':               {kcal:52,  pro:1.2,fat:0.3, carb:12,  unit:'cup', produce:{perWhole:0.75,label:'large carrot'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
   'grape tomatoes':        {kcal:27,  pro:1.3,fat:0.3, carb:6,   unit:'cup', produce:{perWhole:2,label:'pint grape tomatoes'}, minAmt:0.25, minAmtSolo:0.5, maxAmt:2.0},
   'red onion':             {kcal:64,  pro:1.8,fat:0.2, carb:15,  unit:'cup', produce:{perWhole:1,label:'medium red onion'}, minAmt:0.125, minAmtSolo:0.25, maxAmt:1.0},
@@ -10908,6 +10908,11 @@ var ROUND_PKG_ITEMS = ['tofu firm','silken tofu','ground turkey 93','ground chic
 // ROUND_PKG_ITEMS, just a different per-unit value. Parallel structure to
 // ROUND_PKG_ITEMS — keeps the freeze function symmetric across pkg + produce.
 // 2026-04-29.
+// A6 (Audit 11, noted 2026-05-30): lime + lemon are deliberately NOT in this
+// list. They're `acceptableWaste:true` (V204) — we buy them whole and accept
+// the partial, so there's no point freeze-fitting their trip total to a whole
+// count. (They also lost `crossTripCarry` in V199.) Excluding them here is
+// consistent with the per-trip + weekly INV20 checks skipping acceptableWaste.
 var ROUND_PRODUCE_ITEMS = ['baby spinach','kale','broccoli','bell pepper','carrots','grape tomatoes','red onion','zucchini','asparagus','bok choy','cucumber','sweet potato','yukon potato','celery'];
 
 // freezeTripTotals — runs after the per-slot adjuster + day-balancer have
@@ -23638,7 +23643,9 @@ window.MPStress=(function(){
       var cspmC2List = buildShoppingList('cook2', 'both');
       var cspmC1Marinara = _cspmFindMarinara(cspmC1List);
       var cspmC2Marinara = _cspmFindMarinara(cspmC2List);
-      // Compute expected displayed amounts (matches V164 lines 4843-4863)
+      // Compute expected displayed amounts (mirrors the carry-attribution
+      // display logic in buildShoppingList — A3 cleanup 2026-05-30: dropped the
+      // stale "V164 lines 4843-4863" line-number ref that had drifted).
       function _cspmDisplay(trip){
         var byP = {him:0, her:0};
         ['him','her'].forEach(function(p){
