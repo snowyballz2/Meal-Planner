@@ -562,7 +562,7 @@ var NUTRI_DB = {
   // Packaged / grab-and-go
   'rxbar':{kcal:180,pro:12,fat:6,carb:24,unit:'each',brand:'RXBar',altUnits:{g:52},wholeOnly:true,minAmt:1,maxAmt:2},
   'tuna pouch':{kcal:90,pro:20,fat:1,carb:0,unit:'each',pkg:{size:2.6,unit:'oz',type:'pouch'},wholeOnly:true,minAmt:1,maxAmt:1},
-  'triscuit':              {kcal:20,  pro:0.4,fat:0.7, carb:3.3, unit:'each', wholeOnly:true},
+  'triscuit':              {kcal:20,  pro:0.4,fat:0.7, carb:3.3, unit:'each', wholeOnly:true, minAmt:1, maxAmt:10},
   // Milks
   'coconut milk':{kcal:420,pro:1,fat:14,carb:2,unit:'cup',brand:'Chaokoh',pkg:{size:13.5,unit:'oz',cups:1.5,type:'can',acceptableWaste:true},minAmt:0.125,maxAmt:0.5},
   'coconut water':         {kcal:50,  pro:0,  fat:0,   carb:12,  unit:'cup', brand:'H2C', minAmt:0.25, maxAmt:2},
@@ -1321,6 +1321,16 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     // V93 (2026-05-08): auto fat-boost ingredients also bypass min/max.
     // The boost amount is set by _autoApplyFatBoosts based on recipe metadata.
     if(ing._fatBoost === true) return { ing:ing, newAmt:amt };
+    // Audit R12 (L-M1, 2026-05-30): skip FREEZE-pinned items (scalable:false
+    // ∈ ROUND_PKG/PRODUCE_ITEMS) — matches _clampThresh's skip and every snap
+    // pass. Clamping a freeze pin could silently shift a trip total off its
+    // container boundary. Benign today (freeze writes within these same bounds
+    // — verified Audit R12) but keeps the final sweep consistent with the rest
+    // of the pipeline; defense-in-depth if freeze bounds ever diverge.
+    if(ing.scalable===false &&
+       ((typeof ROUND_PKG_ITEMS!=='undefined' && ROUND_PKG_ITEMS.indexOf(ing.dbKey)>=0) ||
+        (typeof ROUND_PRODUCE_ITEMS!=='undefined' && ROUND_PRODUCE_ITEMS.indexOf(ing.dbKey)>=0)))
+      return { ing:ing, newAmt:amt };
     var db = NUTRI_DB[ing.dbKey];
     if (db) {
       var mn = _effMin(db);
@@ -13934,10 +13944,15 @@ function snapSoloSlotAmountsToGrid(){
           else if (unit==='tbsp' || db.halfSnap) grid = 0.5;
           else if (unit==='each') grid = db.wholeOnly ? 1 : 0.25;
           if (db.wholeOnly) grid = 1;
+          // Audit R12 (L5, 2026-05-30): solo-aware bounds — this pass runs
+          // ONLY on solo slots (filtered above), so honor minAmtSolo/maxAmtSolo
+          // (what INV13 checks for solo slots) when defined, else minAmt/maxAmt.
+          var _soloMin = (typeof db.minAmtSolo === 'number') ? db.minAmtSolo : db.minAmt;
+          var _soloMax = (typeof db.maxAmtSolo === 'number') ? db.maxAmtSolo : db.maxAmt;
           var gridSnapped = Math.round(bi.amt / grid) * grid;
           if (gridSnapped < grid) gridSnapped = grid;
-          if (typeof db.minAmt === 'number' && gridSnapped < db.minAmt) gridSnapped = db.minAmt;
-          if (typeof db.maxAmt === 'number' && gridSnapped > db.maxAmt) gridSnapped = db.maxAmt;
+          if (typeof _soloMin === 'number' && gridSnapped < _soloMin) gridSnapped = _soloMin;
+          if (typeof _soloMax === 'number' && gridSnapped > _soloMax) gridSnapped = _soloMax;
           // Check kcal delta of native grid snap
           var gridKcalDelta = Math.abs(gridSnapped - bi.amt) * (db.kcal || 0);
           var KCAL_TOLERANCE = 10;
@@ -13948,8 +13963,8 @@ function snapSoloSlotAmountsToGrid(){
           } else {
             // Large delta → fall back to 2-decimal (INV8 passes, minimal kcal shift)
             snapped = Math.round(bi.amt * 100) / 100;
-            if (typeof db.minAmt === 'number' && snapped < db.minAmt) snapped = db.minAmt;
-            if (typeof db.maxAmt === 'number' && snapped > db.maxAmt) snapped = db.maxAmt;
+            if (typeof _soloMin === 'number' && snapped < _soloMin) snapped = _soloMin;
+            if (typeof _soloMax === 'number' && snapped > _soloMax) snapped = _soloMax;
           }
           if (Math.abs(snapped - bi.amt) < 0.001) return;
           bi.amt = snapped;
