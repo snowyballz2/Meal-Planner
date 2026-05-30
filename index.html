@@ -11737,7 +11737,6 @@ function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
   var slotBudget = getSlotBudget(mu.p, mu.d, mu.s);
   var dayIdx = DAYS.indexOf(mu.d);
   var recent = (mu.s==='lunch'||mu.s==='dinner') ? getRecentMealIds(dayIdx, DAYS, 4) : [];
-  var lastWk = (mu.s==='lunch'||mu.s==='dinner') ? getLastWeekMealIds() : [];
   var sharedSlot = SHARED_SCHEDULE[dk(mu.d, mu.s)] === 'shared';
 
   // V98 (2026-05-08): fallback cascade for candidate filtering. Pre-V98 had
@@ -11798,7 +11797,6 @@ function _trySwapForWaste(dbKey, trip, days, persons, leftovers){
       // L0: strict 4-day variety. L1+: INV11-only (≤1-day gap) protection.
       if(mu.s === 'lunch' || mu.s === 'dinner'){
         if(level < 1){
-          if(lastWk.indexOf(m.id) >= 0) return false;
           if(recent.indexOf(m.id) >= 0) return false;
         } else {
           // L1+ still blocks INV11 fire candidates.
@@ -12261,7 +12259,6 @@ function _absorbFindCandidates(dbKey, delta, days, persons, leftovers, tripDaySe
         var sharedSlot = SHARED_SCHEDULE[dk(d,s)] === 'shared';
         var dayIdx = DAYS.indexOf(d);
         var recent = (s==='lunch'||s==='dinner') ? getRecentMealIds(dayIdx, DAYS, 4) : [];
-        var lastWk = (s==='lunch'||s==='dinner') ? getLastWeekMealIds() : [];
         var inv11Blocked = {};
         if(s==='lunch' || s==='dinner'){
           [-2,-1,0,1,2].forEach(function(off){
@@ -12286,9 +12283,8 @@ function _absorbFindCandidates(dbKey, delta, days, persons, leftovers, tripDaySe
           var altHasCarry = m.ingredients && m.ingredients.some(function(i){return i.dbKey===dbKey;});
           if(wantAdd && !altHasCarry) return false;
           if(wantRemove && altHasCarry) return false;
-          // Variety
+          // Variety (recency-only — last-week restriction removed V216)
           if(s==='lunch' || s==='dinner'){
-            if(lastWk.indexOf(m.id) >= 0) return false;
             if(recent.indexOf(m.id) >= 0) return false;
             if(inv11Blocked[m.id]) return false;
           }
@@ -12720,22 +12716,17 @@ function _computePriorCarryover(priorWeekKey){
   return result;
 }
 
-// V216 (2026-05-30): last-week restriction REMOVED everywhere. Per user:
+// V216 (2026-05-30): the last-week-restriction (getLastWeekMealIds + its
+// `lastWk.indexOf(m.id)>=0` rejections at 8 sites) was REMOVED. Per user:
 // "We dont want to restrict meals just because they were picked in the
 // previous week. We just dont want to violate our recency restrictions."
-// This function now returns [] so every `lastWk.indexOf(m.id)>=0` rejection
-// across Phase 1 (primary + fallbacks), rerollMissDays, Phase 1.5/3A/3C/4,
-// and the INV14 resolver becomes inert. ALL recency enforcement now flows
-// solely through getRecentMealIds (the ±4-day symmetric window that crosses
-// into last week's tail — which is what actually prevents INV14/INV11
-// same-meal-within-5-days violations). The old blanket "don't repeat any
-// meal from last week's plan" was a broader freshness preference that
-// over-restricted candidate pools (notably starving the INV14 resolver of
-// swap options). The inert call-site plumbing is left in place pending a
-// confirm-and-cosmetic-cleanup pass.
-function getLastWeekMealIds() {
-  return [];
-}
+// First neutered to return [] (V216), then the function + all call sites
+// deleted entirely (V217 cosmetic cleanup). ALL recency enforcement now flows
+// solely through getRecentMealIds below — the ±4-day symmetric window that
+// crosses into last week's tail, which is what actually prevents INV14/INV11
+// same-meal-within-5-days violations. The old blanket "don't repeat any meal
+// from last week's plan" was a broader freshness preference that over-
+// restricted candidate pools (notably starving the INV14 resolver of swaps).
 
 // Household-level: scans BOTH persons' picks within ±`lookback` days of
 // `dayIndex` (symmetric window), crossing into the chronological previous
@@ -15256,7 +15247,6 @@ function rerollMissDays(randTarget){
           // and leaves INV14's gap=5 allowance intact.
           const dIdx = DAYS.indexOf(d);
           const personRecentCooks = getRecentMealIds(dIdx, DAYS, 4);
-          const lastWkReroll = getLastWeekMealIds();
           const candidates = getMealsForSlot(s).filter(function(m){
             if (!m[p]) return false;
             if (noRandomizeIds[m.id]) return false;
@@ -15265,9 +15255,9 @@ function rerollMissDays(randTarget){
             if (mealUsesDiscouraged(m)) return false; // never swap TO coconut etc.
             if (m.id === currentId) return false;
             // Variety: reject new cook within 5 days (per person) unless it
-            // would extend an existing batch as leftover.
+            // would extend an existing batch as leftover. (Last-week
+            // restriction removed V216 — recency-only.)
             if (s !== 'snack') {
-              if (lastWkReroll.indexOf(m.id) >= 0) return false;
               if (personRecentCooks.indexOf(m.id) >= 0 && !isBatchLeftoverEligible(d, s, m.id)) return false;
             }
             return true;
@@ -15880,12 +15870,11 @@ function rerollInv14Violations(randTarget){
     const dIdx=DAYS.indexOf(t.d);
     // V216 (2026-05-30): recency-only. `recent` is the ±4-day window (crosses
     // into last week's tail) — the actual same-meal-within-5-days enforcement.
-    // The old `lastWk` blanket "don't repeat any meal from last week" check was
-    // removed (getLastWeekMealIds now returns []); for the INV14 resolver it
-    // over-restricted the swap pool. `getMealsForSlot` already requires the
-    // meal be available for the slot+person, so the dead `!m[t.p]` availability
-    // check (only ever excluded the person-specific shakes, never a lunch/
-    // dinner candidate) is dropped too.
+    // The old blanket "don't repeat any meal from last week" check was removed
+    // (V216/V217); for the INV14 resolver it over-restricted the swap pool.
+    // `getMealsForSlot` already requires the meal be available for the slot+
+    // person, so the dead `!m[t.p]` availability check (only ever excluded the
+    // person-specific shakes, never a lunch/dinner candidate) is dropped too.
     const recent=getRecentMealIds(dIdx,DAYS,4);
     const candidates=getMealsForSlot(t.s).filter(function(m){
       if(isShared&&!m[otherP])return false;
@@ -16008,10 +15997,9 @@ function _randomizeWeekCore(randTarget){
       var bestScore = Infinity;
       var attempts = 60;
       var recentIds = getRecentMealIds(di, days, 4);
-      // Variety filter: prefer meals not picked anywhere in last week. Falls
-      // through to the existing candidate-empty fallback if last week exhausted
-      // all viable options for a slot.
-      var lastWeekIds = getLastWeekMealIds();
+      // V216 (2026-05-30): last-week restriction removed — variety is now
+      // recency-only via recentIds (the ±4-day window that crosses into last
+      // week's tail, i.e. the actual same-meal-within-5-days guard).
       // Pre-compute per-slot kcal budgets so Phase 1 scoring matches reality:
       // the adjuster scales each slot to its budget, so a low-base meal is
       // NOT actually worse than a high-base one — it just gets scaled up.
@@ -16070,13 +16058,12 @@ function _randomizeWeekCore(randTarget){
             if (!m[p]) return false;
             if (noRandomizeIds[m.id]) return false;
             if (used.indexOf(m.id) >= 0) return false;
-            // Variety filters (recent-days + last-week) apply only to main meals.
-            // Snacks have a small pool and are allowed to repeat freely.
-            // Picks that would extend an existing batch (leftover within 3-day
-            // window) bypass the recent filter — eating leftovers of an
+            // Variety filter (recency-only; last-week restriction removed V216)
+            // applies only to main meals. Snacks have a small pool and repeat
+            // freely. Picks that would extend an existing batch (leftover within
+            // 3-day window) bypass the recent filter — eating leftovers of an
             // existing cook is not a "new meal" for variety purposes.
             if (s !== 'snack') {
-              if (lastWeekIds.indexOf(m.id) >= 0) return false;
               if (recentIds.indexOf(m.id) >= 0 && !isBatchLeftoverEligible(d, s, m.id)) return false;
             }
             if (isSharedSlot && (!m.him || !m.her)) return false;
@@ -16094,7 +16081,6 @@ function _randomizeWeekCore(randTarget){
             if (noRandomizeIds[m.id]) return false;
             if (used.indexOf(m.id) >= 0) return false;
             if (s !== 'snack') {
-              if (lastWeekIds.indexOf(m.id) >= 0) return false;
               if (recentIds.indexOf(m.id) >= 0 && !isBatchLeftoverEligible(d, s, m.id)) return false;
             }
             return true;
@@ -16489,11 +16475,10 @@ function _randomizeWeekCore(randTarget){
                 var alreadyUses = curMeal.ingredients.some(function(ing){ return ing.dbKey === pkg.dbKey; });
                 if (alreadyUses) return;
               }
-              // Variety filter for lunch/dinner (breakfast exempt). Both helpers
-              // are household-level — p3aRecent/p3aLastWk are misnomers, retained
-              // to avoid noisy renames; same applies in Strategy C and Phase 4.
+              // Variety filter for lunch/dinner (breakfast exempt). p3aRecent
+              // is household-level (a misnomer kept to avoid noisy renames; same
+              // in Strategy C and Phase 4). Recency-only since V216.
               var p3aRecent = (s==='lunch'||s==='dinner') ? getRecentMealIds(DAYS.indexOf(d), DAYS, 4) : [];
-              var p3aLastWk = (s==='lunch'||s==='dinner') ? getLastWeekMealIds() : [];
               // Find meals for this slot that use the needed ingredient
               var replacements = getMealsForSlot(s).filter(function(m) {
                 if (!m[p] || m.id === curId) return false;
@@ -16502,7 +16487,6 @@ function _randomizeWeekCore(randTarget){
                 if (isSharedSlot && (!m.him || !m.her)) return false;
                 if (!m.ingredients) return false;
                 if (s==='lunch'||s==='dinner') {
-                  if (p3aLastWk.indexOf(m.id) >= 0) return false;
                   if (p3aRecent.indexOf(m.id) >= 0 && !isBatchLeftoverEligible(d, s, m.id)) return false;
                 }
                 return m.ingredients.some(function(ing){ return ing.dbKey === pkg.dbKey; });
@@ -16664,7 +16648,6 @@ function _randomizeWeekCore(randTarget){
           var isSharedSlot = bothPersons && SHARED_SCHEDULE[dk(mu.d, mu.s)] === 'shared';
           // Variety filter for lunch/dinner (breakfast exempt) — household-level.
           var p3cRecent = (mu.s==='lunch'||mu.s==='dinner') ? getRecentMealIds(DAYS.indexOf(mu.d), DAYS, 4) : [];
-          var p3cLastWk = (mu.s==='lunch'||mu.s==='dinner') ? getLastWeekMealIds() : [];
           var candidates = getMealsForSlot(mu.s).filter(function(m) {
             if (!m[mu.p] || m.id === mu.mealId) return false;
             if (noRandomizeIds[m.id]) return false;
@@ -16672,7 +16655,6 @@ function _randomizeWeekCore(randTarget){
             if (mealUsesPkg(m.id)) return false;
             if (mealUsesDiscouraged(m)) return false; // never swap TO coconut etc.
             if (mu.s==='lunch'||mu.s==='dinner') {
-              if (p3cLastWk.indexOf(m.id) >= 0) return false;
               if (p3cRecent.indexOf(m.id) >= 0 && !isBatchLeftoverEligible(mu.d, mu.s, m.id)) return false;
             }
             return true;
@@ -16754,14 +16736,12 @@ function _randomizeWeekCore(randTarget){
       } else if (himId && himId === herId && !MANUAL_SET[sk('him',d,s)] && !MANUAL_SET[sk('her',d,s)]) {
         // Variety filter for lunch/dinner (breakfast exempt) — household-level.
         var p4Recent = (s==='lunch'||s==='dinner') ? getRecentMealIds(DAYS.indexOf(d), DAYS, 4) : [];
-        var p4LastWk = (s==='lunch'||s==='dinner') ? getLastWeekMealIds() : [];
         var candidates = getMealsForSlot(s).filter(function(m){
           if (!m.her || m.id === himId) return false;
           if (mealUsesPkg(m.id)) return false;
           if (mealUsesDiscouraged(m)) return false; // never swap TO coconut etc.
           if (noRandomizeIds[m.id]) return false;
           if (s==='lunch'||s==='dinner') {
-            if (p4LastWk.indexOf(m.id) >= 0) return false;
             if (p4Recent.indexOf(m.id) >= 0 && !isBatchLeftoverEligible(d, s, m.id)) return false;
           }
           return true;
@@ -19450,7 +19430,8 @@ window.MPStress=(function(){
     // sel/overrides/manualSet on weekData.last + .next but LEFT stale
     // skipped/eatOut/sharedSchedule/adjTargets/lateSnack/leftoverLinks/ts
     // from prior localStorage state. _computePriorCarryover reads
-    // weekData.last.skipped + .eatOut; getLastWeekMealIds reads .sel.
+    // weekData.last.skipped + .eatOut; getRecentMealIds reads .sel (cross-week
+    // recency window).
     // Stale fields on .last/.next from a polluted localStorage gave
     // different priorCarry → different freeze decisions → different
     // INV20Soft → false regression signals when comparing baselines
