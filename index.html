@@ -15774,6 +15774,43 @@ function skipKcalOverSnacks(randTarget){
       if(!SEL[key])return;
       const t=calcTotals(p,d);
       if(t.kcal - CAL_BASE[p] <= 175) return; // only days OVER by >175
+      // V218 (2026-05-30): do NOT skip a snack that contributes a ROUND_PKG/
+      // PRODUCE ingredient ALSO used by another non-skipped slot in the same
+      // trip. V214 runs LAST (after all freeze passes) and deliberately has no
+      // re-freeze (a rebuild would redistribute the freed budget + undo the
+      // kcal cut). So skipping a co-contributor strands the OTHER contributors'
+      // frozen pins at a now-non-container total → INV20/INV3 hard waste.
+      // Root cause of seed-45 hard fires (2026-05-30): V214 skipped
+      // miso_edamame (3.5oz silken tofu) on her Thursday; the remaining cook2
+      // silken-tofu cooks (her Fri lunch 6oz + her Sun snack 5oz) stayed pinned
+      // at 11oz → bought 14oz carton → 3oz waste. Skipping a SOLE contributor
+      // is safe (item leaves the trip cleanly); only co-contributors strand pins.
+      var _skMeal = getMeal(SEL[key]);
+      if(_skMeal && _skMeal.ingredients){
+        var _skTrip = TRIP_DAYS_STATIC.cook1.indexOf(d) >= 0 ? 'cook1' : 'cook2';
+        var _skTripDays = TRIP_DAYS_STATIC[_skTrip] || [];
+        var _skBreaksFreeze = _skMeal.ingredients.some(function(ing){
+          if(ROUND_PKG_ITEMS.indexOf(ing.dbKey) < 0 && ROUND_PRODUCE_ITEMS.indexOf(ing.dbKey) < 0) return false;
+          // Any OTHER non-skipped/non-eatout slot in this trip using the same item?
+          for(var _i=0;_i<_skTripDays.length;_i++){
+            var _td=_skTripDays[_i];
+            for(var _pi=0;_pi<2;_pi++){
+              var _tp=['him','her'][_pi];
+              for(var _si=0;_si<4;_si++){
+                var _ts=['breakfast','lunch','snack','dinner'][_si];
+                var _tk=sk(_tp,_td,_ts);
+                if(_tk===key) continue;
+                if(SKIPPED[_tk]||EAT_OUT[_tk]) continue;
+                var _tmid=SEL[_tk]; if(!_tmid) continue;
+                var _tm=getMeal(_tmid);
+                if(_tm && _tm.ingredients && _tm.ingredients.some(function(i2){return i2.dbKey===ing.dbKey;})) return true;
+              }
+            }
+          }
+          return false;
+        });
+        if(_skBreaksFreeze) return; // skipping would strand a co-contributor's freeze pin
+      }
       const baselineMisses = dayMissCount(p,d);
       const baselineScore = dayMissScore(p,d);
       // Trial: skip the snack (SKIPPED honored by calcTotals + computeDailyFV;
