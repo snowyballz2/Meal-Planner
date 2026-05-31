@@ -425,7 +425,7 @@ Visualizes cook+leftover batches as colored bands in the Schedule grid.
 ## Current State (2026-05-30, V220 — `main` @ tip)
 
 - **Quality (100-seed Test 1 + Test 2)**: primary ~**99.9%** (worst day +100 kcal in the cleanest run); hard INVs (1–5, 7–13, 17, 19, 20-hard, 23–26) **all 0**; INV14 **0**; zero-waste (non-soft) 100%; meals closed-off **0.0%**; per-click ~600 ms–1.5 s on a fresh process.
-- **Tracking INVs**: INV6 ~100–125 (max-drift outliers `salmon_stir_fry_din`/`korean_juk`/`sticky_miso_salmon_bowl`, structural); INV20 fires are all-soft (avocado/jalapeño produce, marinara/broth pkg); INV18 cap-rate low.
+- **Tracking INVs**: INV6 ~85–100 after V227 (Audit R12 added `noRatioCheck:true` to `korean_juk` + `sweet_potato_egg_hash` + `turkey_sweet_potato_hash` — structurally macro-skewed dishes whose budget-fit trim/boost swings P/C by design; 0 day-misses across all observed fires, so the drift carried no signal). Remaining drift outliers `sticky_miso_salmon_bowl`/`salmon_stir_fry_din`/`miso_tofu` are still tracked. INV20 fires are all-soft (avocado/jalapeño produce, marinara/broth pkg); INV18 cap-rate low.
 - **Audit Round 11 CLOSED**: all CRITICAL+MEDIUM resolved; LOW A3/A6/E1 → V220. A7 (mirin tight margin) left harmless; E2 (~12 condiment `minAmtSolo`) deferred — do NOT pick up without a specific flagged issue.
 - **Branch tip**: `MP_2026-05-30_V6` == `main` (09fc9ab). Convention: every commit gets an `MP_<date>_V<N>` branch AND `main` fast-forwarded to it; push both immediately.
 
