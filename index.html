@@ -5649,8 +5649,8 @@ function getDayBalancedIngredients(p,d){
     // adjustIngredients now scales veg/fruit like other scalable items;
     // db.minAmt (with db.minAmtSolo for single-portion cooks) handles
     // per-portion floors and db.maxAmt handles ceilings inside adjust-
-    // Ingredients itself. boostFV / boostBatchVegForDailyTarget still
-    // grow veg upward when the daily veg target is missed.
+    // Ingredients itself. boostFV (in balanceDayMacros) still grows veg
+    // upward when the daily veg target is missed.
     slots[s]=adj.map(function(a){
       var amt=a.newAmt;
       var recipeAmt=baseAmts[a.ing.dbKey]||a.ing.amt;
@@ -13722,152 +13722,6 @@ function clearWeek(){
   _syncEatOutsToSharedSchedule();
   invalidateLeftoverCache();renderMeals();if(topTab==='shop')renderShop();autoSaveWeek();
 }
-// ── Boost batch veg across portions to hit daily target ──────
-// Last-resort veg booster for days stuck under 2.75c because their only
-// veg-bearing slot is a frozen batch leftover. The regular boostFV skips
-// frozen slots (can't modify a leftover in isolation without breaking
-// INV1). This step grows the WHOLE BATCH by +0.25c of one veg item at a
-// time, propagating to every portion. Physically: the cook makes a
-// slightly bigger pot of veg. Other days eating from the same batch get
-// the extra veg too — harmless (veg is ~30 kcal/cup at most).
-// 2026-05-03: threshold lowered 3 → 2.75 to match accepted veg range.
-function boostBatchVegForDailyTarget(){
-  // Idempotent: reads via getBalancedSlotIngredients (lazy-build via
-  // getDayBalancedIngredients when day cache missing). The top-of-loop
-  // fast-path `if(fv.veg>=2.75)break` exits immediately when the day's veg
-  // target is already met — so calling this twice in a row is a no-op on
-  // the second call for every day (post-first-pass state has fv.veg >= 2.75
-  // on boosted days, or else the inner loop hit its cap/no-picked break
-  // conditions and veg is stuck below 2.75 regardless of how many times we
-  // call). No affectedDays bookkeeping: this function grows a batch by
-  // 0.25c at a time (~10-30 kcal); the balancer is NOT re-run because
-  // the kcal drift is below meaningful thresholds.
-  var changed=false; // true if any batch veg was grown — return value
-                     // for the convergence loop's steady-state check.
-  var leftovers=computeLeftovers();
-  ['him','her'].forEach(function(p){
-    DAYS.forEach(function(d){
-      var safety=10;
-      while(safety-->0){
-        var fv=computeDailyFV(p,d);
-        if(fv.veg>=2.75)break;
-        // Find a frozen batch slot with a veg item below 3× recipe base
-        var picked=null;
-        SLOTS.forEach(function(s){
-          if(picked)return;
-          if(s==='late_snack'||s==='shake')return;
-          if(SKIPPED[sk(p,d,s)]||EAT_OUT[sk(p,d,s)])return;
-          var lo=leftovers[sk(p,d,s)];
-          if(!lo)return;
-          // Must be part of a multi-portion batch (either the cook anchor or a leftover)
-          var isBatchMember=(lo.isLeftover)||(lo.portions&&lo.portions.length>1);
-          if(!isBatchMember)return;
-          var bal=getBalancedSlotIngredients(p,d,s);
-          if(!bal)return;
-          // Find batch anchor (cook slot + portions list)
-          var anchorKey=null;
-          var anchorLo=null;
-          if(!lo.isLeftover&&lo.portions){
-            anchorKey=sk(p,d,s);anchorLo=lo;
-          } else if(lo.isLeftover){
-            var cookedBy=lo.cookedBy||p;
-            var cookDay=lo.cookDay;
-            var mealId=getMealId(p,d,s);
-            ['lunch','dinner'].forEach(function(cs){
-              if(anchorKey)return;
-              var ck=sk(cookedBy,cookDay,cs);
-              var clo=leftovers[ck];
-              if(clo&&!clo.isLeftover&&clo.portions&&getMealId(cookedBy,cookDay,cs)===mealId){
-                anchorKey=ck;anchorLo=clo;
-              }
-            });
-          }
-          if(!anchorKey||!anchorLo)return;
-          var anchorParts=anchorKey.split('_');
-          var mealAtAnchor=getMeal(getMealId(anchorParts[0],anchorParts[1],anchorParts[2]));
-          if(!mealAtAnchor||!mealAtAnchor.ingredients)return;
-          var recipeBase={};
-          mealAtAnchor.ingredients.forEach(function(ri){recipeBase[ri.dbKey]=ri.amt;});
-          // Find a veg ingredient in the batch with headroom (< 3× base,
-          // 4× for leaf veg spinach/kale/bok choy, all <35 kcal/cup).
-          // Hard user cap: no portion may exceed 3c per serving post-boost.
-          // Cap check scans ALL portions — previously only checked current
-          // person's side, letting the other person balloon past 3× base
-          // when proportional scaling redistributed the boost.
-          for(var k=0;k<bal.length;k++){
-            var bi=bal[k];
-            if(bi.role!=='veg')continue;
-            var db=NUTRI_DB[bi.dbKey];
-            if(!db||db.unit!=='cup')continue;
-            var base=recipeBase[bi.dbKey];
-            var isLeaf=(bi.dbKey==='baby spinach'||bi.dbKey==='kale'||bi.dbKey==='bok choy');
-            if(!base)continue;
-            var relMax=base*(isLeaf?4:3);
-            var absMax=(db.maxAmt!=null)?db.maxAmt:relMax;
-            var capAmt=Math.min(relMax, absMax);
-            // Check the MAX amount across all portions against the cap
-            var maxPortionAmt=0;
-            anchorLo.portions.forEach(function(pt){
-              var pbal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
-              if(!pbal)return;
-              for(var kk=0;kk<pbal.length;kk++){
-                if(pbal[kk].dbKey===bi.dbKey){
-                  if(pbal[kk].amt>maxPortionAmt)maxPortionAmt=pbal[kk].amt;
-                  break;
-                }
-              }
-            });
-            if(maxPortionAmt>=capAmt)continue;
-            picked={anchorKey:anchorKey,anchorLo:anchorLo,dbKey:bi.dbKey};
-            break;
-          }
-        });
-        if(!picked)break;
-        // Grow the BATCH TOTAL by one grid step (0.25c) and redistribute
-        // proportionally. Keeps the batch total on-grid for clean display
-        // and shopping, while preserving each portion's share (so INV7
-        // scoop ratio stays intact). Per-portion amounts are fractional
-        // but land inside the batch-aware 1-decimal display.
-        var batchTotal=0;
-        picked.anchorLo.portions.forEach(function(pt){
-          var pbal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
-          if(!pbal)return;
-          for(var k=0;k<pbal.length;k++){
-            if(pbal[k].dbKey===picked.dbKey){batchTotal+=pbal[k].amt;break;}
-          }
-        });
-        if(batchTotal<0.01)break;
-        var newTotal=batchTotal+0.25;
-        var factor=newTotal/batchTotal;
-        // Per-serving cap: if the boost would push any portion above the
-        // ingredient's db.maxAmt, stop growing this batch.
-        var pickedDb=NUTRI_DB[picked.dbKey];
-        var boostCap=(pickedDb && pickedDb.maxAmt!=null)?pickedDb.maxAmt:Infinity;
-        var wouldExceedCap=false;
-        picked.anchorLo.portions.forEach(function(pt){
-          var pbal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
-          if(!pbal)return;
-          for(var k=0;k<pbal.length;k++){
-            if(pbal[k].dbKey===picked.dbKey){
-              if(pbal[k].amt*factor>boostCap)wouldExceedCap=true;
-              break;
-            }
-          }
-        });
-        if(wouldExceedCap)break;
-        picked.anchorLo.portions.forEach(function(pt){
-          var pbal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
-          if(!pbal)return;
-          for(var k=0;k<pbal.length;k++){
-            if(pbal[k].dbKey===picked.dbKey){pbal[k].amt=pbal[k].amt*factor;break;}
-          }
-        });
-        changed=true;
-      }
-    });
-  });
-  return changed;
-}
 
 // ── Snap batch totals to per-serving grid ─────────────────────
 // Final cleanup after waste + re-unify. Batch totals must land on the
@@ -14589,220 +14443,6 @@ function snapBatchTotals(){
   return Object.keys(affectedDays).length > 0;
 }
 
-// ── Post-balance waste pass ────────────────────────────────────
-// After the full balanced pipeline (adjuster + balancer + calorie correction),
-// check each trip for pkg waste. For each ingredient with waste, nudge the
-// final balanced amounts to hit a clean package boundary. Revert any day
-// where the nudge breaks a primary goal.
-//
-// PKG-ONLY (not produce): unifying with produce was tried 2026-04-27 but
-// produce items with perWhole NOT on 0.5 grid (sweet potato 1.25, bell
-// pepper 1.25, carrots 0.75) conflict with the batch-grid math (grid×N
-// portions = 0.5 for 2-portion batches), causing INV18 oscillation at 81%
-// cap-hit rate. PKG perPkg values are all on 0.5 grid by design (1.5c,
-// 4.0c, 1.75oz drained, etc.) so they don't have this conflict. Produce
-// flex stays at the one-shot `applyTripProduceScaling` pre-loop pass.
-function postBalanceWastePass(){
-  // Idempotent: reads via getBalancedSlotIngredients (lazy-build via
-  // getDayBalancedIngredients when day cache missing). The per-batch
-  // fast-path (`|newBatchTotal-b.batchTotal|<0.001`) skips writes when
-  // the batch total is already at the package boundary — so calling
-  // this twice in a row is a no-op on the second call. The revert logic
-  // also only fires when an adjustment was actually applied.
-  var anyCommitted=false; // true if ≥1 batch adjustment stayed applied
-                          // (not reverted) — return value for the
-                          // convergence loop's steady-state check.
-  var leftovers=computeLeftovers();
-
-  ['cook1','cook2'].forEach(function(trip){
-    var tripDays=TRIP_DAYS_STATIC[trip]||[];
-    var inTrip={};
-    tripDays.forEach(function(d){inTrip[d]=true;});
-
-    // Batch-aware collection: iterate cook anchors (never leftovers) and
-    // gather each batch's contribution as ONE unit. A batch is frozen —
-    // all its portions move together so same-person leftover copies can
-    // never drift from cook (preserves INV1).
-    var pkgInfo={};
-    ['him','her'].forEach(function(p){
-      DAYS.forEach(function(d){
-        SLOTS.forEach(function(s){
-          if(s==='late_snack'||s==='shake')return;
-          if(SKIPPED[sk(p,d,s)]||EAT_OUT[sk(p,d,s)])return;
-          var lo=leftovers[sk(p,d,s)];
-          if(lo&&lo.isLeftover)return;       // process only anchors
-          var bal=getBalancedSlotIngredients(p,d,s);
-          if(!bal)return;
-          // Portions (batch members). For singletons, just this slot.
-          var portionList=(lo&&lo.portions)?lo.portions:[{p:p,d:d,s:s}];
-          // A batch is ONE cooking session using ONE package bought in the
-          // cook-day's trip. Attribute the whole batch to the cook day's
-          // trip — never split the batch's portions across trips (that
-          // produced INV1/INV7 drift: waste pass applied different scale
-          // factors to cook-trip portions vs leftover-trip portions).
-          if(!inTrip[d])return;
-
-          bal.forEach(function(bi,idx){
-            var db=NUTRI_DB[bi.dbKey];
-            if(!db)return;
-            // Determine perUnit: pkg drained/cups OR produce perWhole.
-            var unit=db.unit;
-            var perUnit=0;
-            if(db.pkg && !db.pkg.longShelfLife){
-              perUnit=(db.pkg.drained&&(unit==='cup'||unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
-            } else if(db.produce){
-              perUnit=db.produce.perWhole;
-            }
-            if(perUnit<=0)return;
-            // Skip ingredients with no flex config (can't be reshaped anyway).
-            if(!PKG_FLEX_CONFIG[bi.dbKey] && !PRODUCE_FLEX_CONFIG[bi.dbKey])return;
-
-            // Collect EVERY portion's contribution — including leftovers
-            // on the other trip. They all eat from the same cook-day pkg.
-            var portionContribs=[];
-            var batchTotal=0;
-            portionList.forEach(function(pt){
-              var pbal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
-              if(!pbal)return;
-              for(var k=0;k<pbal.length;k++){
-                if(pbal[k].dbKey===bi.dbKey){
-                  portionContribs.push({p:pt.p,d:pt.d,s:pt.s,idx:k,amt:pbal[k].amt});
-                  batchTotal+=pbal[k].amt;
-                  break;
-                }
-              }
-            });
-            if(portionContribs.length===0||batchTotal<0.001)return;
-
-            if(!pkgInfo[bi.dbKey])pkgInfo[bi.dbKey]={total:0,perPkg:perUnit,unit:unit,batches:[]};
-            pkgInfo[bi.dbKey].total+=batchTotal;
-            pkgInfo[bi.dbKey].batches.push({portions:portionContribs,batchTotal:batchTotal});
-          });
-        });
-      });
-    });
-
-    Object.keys(pkgInfo).forEach(function(dbKey){
-      var info=pkgInfo[dbKey];
-      var pkgs=Math.ceil(info.total/info.perPkg);
-      var waste=pkgs*info.perPkg-info.total;
-      if(waste<0.05)return;
-
-      var db=NUTRI_DB[dbKey];
-      var upDelta=waste;
-      var downDelta=info.total-(pkgs-1)*info.perPkg;
-      var direction=(upDelta<=downDelta)?'up':'down';
-      var target=direction==='up'?upDelta:downDelta;
-
-      // Read flex caps from PKG_FLEX_CONFIG or PRODUCE_FLEX_CONFIG, picking
-      // by direction. Falls back to legacy 0.25 default for pkg items not
-      // in the config (none currently, but defensive).
-      var cfg=PKG_FLEX_CONFIG[dbKey]||PRODUCE_FLEX_CONFIG[dbKey];
-      var maxFlexPct=cfg ? (direction==='up'?(cfg.maxUp||0):(cfg.maxDown||0)) : 0.25;
-      // Produce items: bypass maxFlexPct clamp so the waste pass can always
-      // round to nearest perWhole boundary. Per-portion db.minAmt and
-      // db.maxAmt caps below + the day-goal revert downstream still bound
-      // the actual scale (so it's "round to nearest whole within per-portion
-      // bounds" — not unlimited). For pkg, keep the configured cap since
-      // pkg has cost per-unit and recipe distortion concerns are tighter.
-      var isProduce = !!(db.produce && !db.pkg);
-
-      var grid=0.25;
-      if(info.unit==='oz')grid=1;
-      else if(info.unit==='cup')grid=0.25;
-
-      // For each batch, compute its share of the delta and apply uniformly
-      // to every portion. Scaling by one factor preserves unified ratios
-      // (cross-person batches) AND keeps equal portions equal (same-person
-      // leftovers). Snap batch total to the per-ingredient grid (0.25 for
-      // cup, 1 for oz). Per-portion amounts within multi-portion batches are
-      // NOT constrained to the grid — INV8 only checks batch totals + solo
-      // per-serving. This lets perWhole values like 1.25 (sweet potato) land
-      // exactly on grid (1.25 IS on 0.25 grid) without the old batchGrid×N
-      // forcing a 0.5-grid snap that would round 1.25 → 1.5 off perWhole.
-      var batchAdjustments=[];
-      info.batches.forEach(function(b){
-        var batchShare=(info.total>0)?(b.batchTotal/info.total)*target:0;
-        if(!isProduce){
-          var maxFlex=b.batchTotal*maxFlexPct;
-          if(batchShare>maxFlex)batchShare=maxFlex;
-        }
-        var newBatchTotal=direction==='up'?b.batchTotal+batchShare:b.batchTotal-batchShare;
-        newBatchTotal=Math.round(newBatchTotal/grid)*grid;
-        if(newBatchTotal<grid)newBatchTotal=grid;
-        if(db.minAmt){
-          var minBatch=db.minAmt*b.portions.length;
-          if(newBatchTotal<minBatch)newBatchTotal=minBatch;
-        }
-        // Per-serving maxAmt cap — prevent the waste-scaling from pushing
-        // any portion past its ceiling (INV13 gap otherwise). Compute the
-        // largest per-serving share of the batch; if scaling would exceed
-        // db.maxAmt, floor newBatchTotal so max portion = maxAmt.
-        if(typeof db.maxAmt==='number'){
-          var largestShare=0;
-          b.portions.forEach(function(pc){var sh=pc.amt/b.batchTotal; if(sh>largestShare)largestShare=sh;});
-          if(largestShare>0){
-            var maxAllowedBatch=db.maxAmt/largestShare;
-            if(newBatchTotal>maxAllowedBatch){
-              newBatchTotal=Math.floor(maxAllowedBatch/grid)*grid;
-              if(newBatchTotal<grid)newBatchTotal=grid;
-            }
-          }
-        }
-        if(Math.abs(newBatchTotal-b.batchTotal)<0.001)return;
-        // Redistribute proportionally by each portion's existing share.
-        var newPortions=[];
-        b.portions.forEach(function(pc){
-          var share=pc.amt/b.batchTotal;
-          var newAmt=newBatchTotal*share;
-          newPortions.push({p:pc.p,d:pc.d,s:pc.s,idx:pc.idx,oldAmt:pc.amt,newAmt:newAmt});
-        });
-        batchAdjustments.push({portions:newPortions});
-      });
-
-      if(batchAdjustments.length===0)return;
-
-      // Apply tentatively (whole batch atomically)
-      batchAdjustments.forEach(function(ba){
-        ba.portions.forEach(function(pc){
-          var daySlots=_dayBalancedCache[pk(pc.p,pc.d)];
-          if(daySlots&&daySlots[pc.s])daySlots[pc.s][pc.idx].amt=pc.newAmt;
-        });
-      });
-
-      // Revert whole batch if any of its affected days broke primary goals.
-      batchAdjustments.forEach(function(ba){
-        var affectedDays={};
-        ba.portions.forEach(function(pc){affectedDays[pc.p+'_'+pc.d]=true;});
-        var anyBroken=false;
-        Object.keys(affectedDays).forEach(function(key){
-          if(anyBroken)return;
-          var parts=key.split('_');
-          var ap=parts[0],ad=parts[1];
-          var t=calcTotals(ap,ad);
-          var tgt=CAL_BASE[ap],pm=ap==='him'?180:120;
-          var mk=t.pro*4+t.fat*9+t.carb*4;
-          var fatPct=mk>0?(t.fat*9)/mk:0;
-          var carbPct=mk>0?(t.carb*4)/mk:0;
-          var proPct=mk>0?(t.pro*4)/mk:0;
-          var fv=computeDailyFV(ap,ad);
-          if(Math.abs(t.kcal-tgt)>100||t.pro<pm||carbPct>0.55||fatPct>0.30||proPct>0.40||fatPct<0.15||fv.veg<2.75||fv.fruit<1){
-            anyBroken=true;
-          }
-        });
-        if(anyBroken){
-          ba.portions.forEach(function(pc){
-            var daySlots=_dayBalancedCache[pk(pc.p,pc.d)];
-            if(daySlots&&daySlots[pc.s])daySlots[pc.s][pc.idx].amt=pc.oldAmt;
-          });
-        } else {
-          anyCommitted=true;
-        }
-      });
-    });
-  });
-  return anyCommitted;
-}
 
 // ── Balance-adjuster pipeline ──────────────────────────────────
 // Convergence loop over 5 balance-adjusters. Each returns `true` if it
@@ -14851,23 +14491,17 @@ function runBalanceAdjusters(){
     changed=false;
     var u=unifyCrossPersonRatios();                    // always run — feeds s/g; not tracked for exit
     var s=snapBatchTotals();            if(s)changed=true;
-    // 2026-04-28: disabled — round-pass freezes pkg trip totals upstream, so
-    // postBalanceWastePass has no remaining job. Kept defined for now while
-    // the round-pass rewrite lands; re-enable here only if reverting the
-    // freeze-based architecture.
-    var w=false; // var w=postBalanceWastePass();       if(w)changed=true;
     var g=snapBatchTotalsToGrid();      if(g)changed=true;
-    // 2026-04-29: disabled — boost was growing frozen veg batches by 0.25c
-    // increments, ignoring the scalable:false flag, which pushed trip totals
-    // off perWhole boundaries set by freezeTripTotals. Will re-enable after
-    // it's taught to skip frozen items (or moved to run BEFORE freeze).
-    var b=false; // var b=boostBatchVegForDailyTarget(); if(b)changed=true;
+    // Audit R12 (2026-05-30): postBalanceWastePass + boostBatchVegForDailyTarget
+    // were long-disabled in this loop (freeze owns trip-total rounding; the veg
+    // boost broke perWhole boundaries) and are now deleted. Revert via git if
+    // the freeze-based architecture is ever rolled back.
     // 2026-05-06+: Equalize per-person batch portions (1 pot, N portions
     // for each person). Runs INSIDE the convergence loop so subsequent
     // snap/unify iterations see equal portions and stabilize. NOT tracked
     // for `changed` exit (asymptotic convergence, similar to unify).
     _syncSamePersonBatchPortions();
-    if(_rec)_rec.iters.push({u:u,s:s,w:w,g:g,b:b});
+    if(_rec)_rec.iters.push({u:u,s:s,g:g});
   }
   // Hit safety cap: still `changed` after exhausting iterations.
   if(changed) _rbaCapHits++;
@@ -18822,8 +18456,8 @@ window.MPStress=(function(){
     var lastEo = (weekData.last && weekData.last.eatOut) ? clone(weekData.last.eatOut) : {};
     // Capture _dayBalancedCache and _leftoverCache. These hold the
     // post-randomize pipeline mutations (unifyCrossPersonRatios,
-    // snapBatchTotals, postBalanceWastePass, snapBatchTotalsToGrid,
-    // boostBatchVegForDailyTarget, snapSoloSlotAmountsToGrid). Without
+    // snapBatchTotals, snapBatchTotalsToGrid, snapSoloSlotAmountsToGrid).
+    // Without
     // capturing them, restore() invalidates the cache and a rebuild
     // produces different (day-balancer-only) numbers — meaning inspectDay
     // showed totals that didn't match what runOne measured. Bug fix.
