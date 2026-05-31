@@ -21213,7 +21213,17 @@ window.MPStress=(function(){
         pickedVal = newAmt;
       }
       var predictedKcalPerPortion=Math.round(db.kcal*(newAmt - preAmt));
+      // M2 (V221) coverage: a surgical edit must re-stamp the slot ts so the
+      // edit propagates across devices via sync (mergeSyncData merges overrides
+      // on the SEL ts). Force the ts stale (=1), then assert onIngrAmt re-stamps
+      // it to a real Date.now() value. Regressing _bumpSlotTs leaves it at 1.
+      var _tsKE=sk(p,d,s);
+      if(weekData[activeWeek]&&weekData[activeWeek].ts) weekData[activeWeek].ts[_tsKE]=1;
       onIngrAmt(p, d, s, idx, pickedVal);
+      add('tsBumped',
+        !!(weekData[activeWeek]&&weekData[activeWeek].ts&&weekData[activeWeek].ts[_tsKE]>1e12),
+        'slot ts not re-stamped after edit (M2 device-sync regression)',
+        '>1e12', (weekData[activeWeek]&&weekData[activeWeek].ts)?weekData[activeWeek].ts[_tsKE]:null);
       var postCard=computeCardMacros(getPort(p,d,s), p, d, s, baseline.cookServings, false, 1);
       var slotKcalDelta=(postCard.pm.kcal - preCard.pm.kcal);
       var tolE=Math.max(2, Math.ceil(baseline.cookServings/2));
@@ -21253,7 +21263,14 @@ window.MPStress=(function(){
     else if(op==='swap'){
       var preIng2=preBal[idx];
       var newKey=_smPickSwap(preIng2.dbKey);
+      // M2 (V221) coverage: surgical swap must re-stamp the slot ts (see edit op).
+      var _tsKS=sk(p,d,s);
+      if(weekData[activeWeek]&&weekData[activeWeek].ts) weekData[activeWeek].ts[_tsKS]=1;
       onIngrSwap(p,d,s,idx,newKey);
+      add('tsBumped',
+        !!(weekData[activeWeek]&&weekData[activeWeek].ts&&weekData[activeWeek].ts[_tsKS]>1e12),
+        'slot ts not re-stamped after swap (M2 device-sync regression)',
+        '>1e12', (weekData[activeWeek]&&weekData[activeWeek].ts)?weekData[activeWeek].ts[_tsKS]:null);
       var postBal=getBalancedSlotIngredients(p,d,s);
       add('dbKeyProp_anchor',
         postBal[idx] && postBal[idx].dbKey === newKey,
@@ -23836,13 +23853,17 @@ window.MPStress=(function(){
     var baseSeed=opts.baseSeed||12345;
     var maxSeedScan=opts.maxSeedScan||(nSeeds*4); // hard cap on seed scan
     var verbose=!!opts.verbose;
-    // V195 INV26 (2026-05-22): hard-fail on polluted start. Slot Mod restores
-    // a snapshot per scenario; if the initial snapshot itself was polluted,
-    // every scenario inherits it and produces unreliable results.
-    var smDirty=_isPristine();
-    if(smDirty.length){
-      _inv26Assert('runSlotMod.entry', []); // throws
-    }
+    // V195 INV26 (2026-05-22): the snapshot taken here is restored per scenario,
+    // so a polluted initial snapshot taints every scenario. Audit R12 (2026-05-30):
+    // self-clean at entry so the harness runs STANDALONE, matching runStandard.
+    // The default page has 7 shared dinners (initSharedSchedule) that _isPristine
+    // flags — so the prior V195 entry-guard threw on every fresh-page invocation,
+    // making runSlotMod unrunnable without manual pre-clearing. runSlotMod sets
+    // its OWN deterministic shared cells per seed (prepopShared below), so it
+    // doesn't depend on the page-default schedule. Post-clean INV26 assert is
+    // the sanity check that the clear actually left pristine state.
+    _clearAllState();
+    _inv26Assert('runSlotMod.afterClearAllState', []); // throws if clear incomplete
     var saved=snapshot();
     var GEOMETRIES=['solo','anchorBatch','leftoverDiff','sharedSameDay','shake'];
     // Ingredient-level ops (existing) + slot-level ops (added 2026-05-06+).
@@ -24146,6 +24167,13 @@ window.MPStress=(function(){
     var nSeeds=opts.nSeeds||5;
     var baseSeed=opts.baseSeed||12345;
     var maxSeedScan=opts.maxSeedScan||(nSeeds*4);
+    // Audit R12 (2026-05-30): self-clean at entry (same as runSlotMod /
+    // runStandard) so the sequential chains start from a pristine, reproducible
+    // baseline instead of silently inheriting the polluted page state into
+    // `saved`. Pre-Audit-R12 this had no guard at all — it ran on whatever
+    // state happened to be loaded.
+    _clearAllState();
+    _inv26Assert('runSlotModSequential.afterClearAllState', []);
     var saved=snapshot();
     function freshRestore(snap){
       // V150 (2026-05-14): defensive activeWeek reset (same reasoning as
