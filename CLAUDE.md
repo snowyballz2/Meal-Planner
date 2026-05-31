@@ -116,7 +116,7 @@ pass knows the true batch size for shared/leftover cooks:
 
 ## Cross-Person Unification
 
-`unifyCrossPersonRatios(skipRebuild)` enforces "one pot, one recipe" for multi-person batches.
+`unifyCrossPersonRatios()` enforces "one pot, one recipe" for multi-person batches.
 
 **Math:**
 ```
@@ -175,9 +175,9 @@ Fallback cascade (preserves variety as long as possible): primary → drop `used
 
 ## Randomize Pipeline (order matters)
 
-**This section was rewritten 2026-05-30; full pass-by-pass detail in `system_freeze_and_overrides.md`.** The old `applyTripFlexScaling → unify → snapBatchTotals → postBalanceWastePass → unify → snapBatchTotalsToGrid → boostVeg` linear sequence was superseded. Today those adjusters (unify, snapBatchTotals, snapBatchTotalsToGrid, boostBatchVegForDailyTarget, and a disabled postBalanceWastePass) live INSIDE an idempotent convergence loop, **`runBalanceAdjusters` (RBA)**, that runs until downstream state stabilizes (INV18 tracks its cap-hit rate). Package waste is handled by **`freezeTripTotals`** (see Package Waste Elimination), not the old flex/nudge passes.
+**This section was rewritten 2026-05-30; full pass-by-pass detail in `system_freeze_and_overrides.md`.** The old `applyTripFlexScaling → unify → snapBatchTotals → postBalanceWastePass → unify → snapBatchTotalsToGrid → boostVeg` linear sequence was superseded. Today those adjusters (unify, snapBatchTotals, snapBatchTotalsToGrid) live INSIDE an idempotent convergence loop, **`runBalanceAdjusters` (RBA)**, that runs until downstream state stabilizes (INV18 tracks its cap-hit rate). (`boostBatchVegForDailyTarget` + `postBalanceWastePass` were disabled in RBA and deleted in Audit R12, 2026-05-30.) Package waste is handled by **`freezeTripTotals`** (see Package Waste Elimination), not the old flex/nudge passes.
 
-**Retry loop**: 60 iterations of `_randomizeWeekCore` (Phase 1 picks → Phase 2 waste → Phase 3 A/B/C swaps → Phase 4 shared-schedule). When a retry hits `totalWaste===0`, it runs the FULL post-balance pipeline (RBA + freeze) inside the measurement so the goal-miss count reflects the true final state, not pre-snap estimates. Winner = lexicographic best by (totalWaste, goalMisses, inv14Count); its cache is snapshotted (`bestCaches`) so the post-retry path can skip re-running an identical pipeline (Stage 1a, 2026-04-24).
+**Retry loop**: 60 iterations of `_randomizeWeekCore` (Phase 1 picks → Phase 2 waste → Phase 3 A/B/C swaps → Phase 4 shared-schedule). When a retry hits `totalWaste===0`, it runs the FULL post-balance pipeline (RBA + freeze) inside the measurement so the goal-miss count reflects the true final state, not pre-snap estimates. Winner = lexicographic best by (inv11, goalMisses, totalWaste, inv14Count). (The old `bestCaches` snapshot-skip optimization was disabled by V97 and its dead scaffolding removed in Audit R12, 2026-05-30; the post-retry path always reruns the full pipeline on the winning SEL.)
 
 **Post-retry sequence on the winning SEL** (each step on `randTarget`):
 1. `rerollMissDays` — per-miss-day single-slot swaps
@@ -234,8 +234,8 @@ For `crossTripCarry` items only (marinara, chicken broth), `_computePriorCarryov
 ### Waste-flag taxonomy (`db.pkg` and/or `db.produce`)
 | Flag | Effect |
 |---|---|
-| `softWaste:true` | Fires INV20 (visibility) **and** parallel INV20Soft; hard count subtracts soft. marinara/broth (pkg); banana/avocado/lemon/lime/orange/jalapeño (produce). |
-| `acceptableWaste:true` | **Silent** skip (no fire, no warning) — "waste happens, accept it." lettuce, coconut milk. |
+| `softWaste:true` | Fires INV20 (visibility) **and** parallel INV20Soft; hard count subtracts soft. marinara/broth (pkg); banana/avocado/orange/jalapeño/thai chili/thai basil (produce). |
+| `acceptableWaste:true` | **Silent** skip (no fire, no warning) — "waste happens, accept it." lettuce, coconut milk, lemon, lime (lemon/lime moved here from softWaste in V204). |
 | `nonWaste:true` | **Silent** skip — "NOT waste, reused next week." green beans (frozen, back in freezer). Distinct framing from acceptableWaste (V203). |
 | `crossTripCarry:true` | Activates `_computePriorCarryover` + Stage 2 absorb. marinara, chicken broth only. |
 | `longShelfLife:true` (pkg) | Excluded from waste analysis + nudge — carton carries indefinitely. egg white. |
@@ -252,9 +252,10 @@ For `crossTripCarry` items only (marinara, chicken broth), `_computePriorCarryov
 `randomizeWeek(target, seed?)` wraps **60** retries of `_randomizeWeekCore(target)`, then runs the post-retry sequence (see Randomize Pipeline). Optional `seed` swaps in a deterministic PRNG for the call (restored in a `finally`) — used by the stress harness for reproducible runs.
 
 **Retry selection** (lexicographic, lower is better):
-1. Total waste
+1. INV11 count (hard invariant — must be 0)
 2. Goal misses (person-days that fail any of the 6 primary daily goals)
-3. INV14 count (household same-meal-within-5-days)
+3. Total waste (INV20 hard)
+4. INV14 count (household same-meal-within-5-days)
 
 **Recency gap** enforced by `getRecentMealIds(dayIndex, days, lookback)` — household-level, symmetric ±window. Formalized as INV11 (≥2-day batch gap) + INV14 (≥5-day same-meal cook gap).
 
@@ -343,7 +344,7 @@ GitHub Gist API push/pull. **Payload version 4** (2026-04-26): per-key timestamp
 | **INV11** | ≥2-day gap between batches of the same meal within a week (excludes `noLeftover`) | exact | hard |
 | **INV12** | `lo.totalServings === lo.portions.length` AND every portion shares the anchor's meal ID — detector consistency | exact | hard |
 | **INV13** | Per-serving amount for any ingredient with `db.minAmt`/`db.maxAmt` within bounds (solo AND batch). Solo slots (no leftover-map entry) use `db.minAmtSolo` when defined for pan-oil/aromatic-quality floor | 0.001 | hard |
-| **INV14** | Per person, no two NEW cooks (non-leftover) of the same meal within 5 days (lunch/dinner only). Breakfast/snack exempt — pool too small | exact | **tracking-only** (promote when breakfast normalization grows pool) |
+| **INV14** | Household-level: no two NEW cooks (non-leftover, either person) of the same meal within 5 days (lunch/dinner only). Breakfast/snack exempt — pool too small | exact | **tracking-only** (promote when breakfast normalization grows pool) |
 | **INV15** | Tracking-only: count of lunch/dinner leftovers **him** eats per week (regardless of cook). MPStress aggregates as `avgLeftoversEaten.him` | — | **tracking-only** |
 | **INV16** | Tracking-only: count of lunch/dinner leftovers **her** eats per week. MPStress aggregates as `avgLeftoversEaten.her` | — | **tracking-only** |
 | **INV17** | Balancer↔calcTotals kcal canary: `balanceDayMacros.dailyMacros()` view matches `calcTotals(p,d)` per person-day. Catches `sameDayCookServings` double-count/under-count bugs in post-pipeline re-runs (silent ~500-700 kcal drift) | within 2 kcal | hard |
@@ -373,7 +374,7 @@ Uses CSS custom properties (`:root` vars) for theming. Key reusable classes:
 - `computeLeftovers()` — unified detector (see Leftover & Batch Detector section)
 - `getDayBalancedIngredients(p, d)` — **single source of truth** for all ingredient amounts. Cached map of `{slot: [{dbKey, amt, role, scalable, origAmt}, …]}`.
 - `getBalancedSlotIngredients(p, d, s)` — shortcut for one slot. Every consumer reads from here: `calcTotals`, `buildShoppingList`, `computeCardMacros`, `renderSharedCard`, `computeDailyFV`.
-- `unifyCrossPersonRatios(skipRebuild)` — batch ratio enforcement (floor-aware).
+- `unifyCrossPersonRatios()` — batch ratio enforcement (floor-aware).
 - `snapBatchTotals()` — per-serving grid snap of batch totals, rebuilt via `getDayBalancedIngredients` first.
 - `snapBatchTotalsToGrid()` — final floor-aware snap after unify.
 - `boostBatchVegForDailyTarget()` — scales frozen batch veg across portions to hit daily 3c floor.

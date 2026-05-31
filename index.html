@@ -1164,7 +1164,7 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
     // Per-portion snap to unit-appropriate grid.
     // Packaged items also get snapped here so per-portion reads cleanly
     // (e.g. 1.75 cup chicken broth, not 1.597). Trip-level package fitting
-    // is handled by applyTripFlexScaling (runs later in the pipeline).
+    // is handled by freezeTripTotals (runs later in the pipeline).
     else {
       const unit = db.unit || '';
       const snapFn = Math.round;
@@ -1302,8 +1302,9 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
   // flex for marinara (and lesser flex for beans/coconut). The problem: it
   // stacked on top of applyTripFlexScaling's own +100% cap, letting marinara
   // scale 3.55× (0.75c → 2.66c on turkey_meatballs_din) — well above either
-  // layer's intent. applyTripFlexScaling now owns all trip-level package
-  // fitting; per-meal nudge was redundant and only created the double-scale
+  // layer's intent. freezeTripTotals now owns all trip-level package fitting
+  // (it replaced the later-removed applyTripFlexScaling); per-meal nudge was
+  // redundant and only created the double-scale
   // bug. See PKG_FLEX_CONFIG for per-ingredient flex caps enforced at trip level.
 
   // Final minAmt/maxAmt sweep — catches non-scalable items (never touched by
@@ -4678,8 +4679,9 @@ function buildShoppingList(trip,who){
     days.forEach(function(d){tripDaySet[d]=true;});
     function _isCarry(dbKey){
       // V171 (2026-05-19): also check produce.crossTripCarry. Pkg items
-      // (marinara, broth) use db.pkg.crossTripCarry; produce items
-      // (lime, lemon) use db.produce.crossTripCarry. Both pool weekly.
+      // (marinara, broth) use db.pkg.crossTripCarry; produce items would use
+      // db.produce.crossTripCarry. (No produce item sets it today — lime/lemon
+      // moved to acceptableWaste in V204; the branch is kept for future items.)
       var db = NUTRI_DB[dbKey];
       return !!(db && ((db.pkg && db.pkg.crossTripCarry === true)
                     || (db.produce && db.produce.crossTripCarry === true)));
@@ -6413,7 +6415,8 @@ function verifyInvariants(){
   // buildShoppingList. Skip them in the per-trip expected accumulation
   // below; add via the carry-attribution pass after.
   function _inv3IsCarry(dbKey){
-    // V171: also check produce.crossTripCarry (lime, lemon).
+    // V171: also check produce.crossTripCarry (no produce item uses it today —
+    // lime/lemon → acceptableWaste in V204; kept for future produce carry items).
     var db = NUTRI_DB[dbKey];
     return !!(db && ((db.pkg && db.pkg.crossTripCarry === true)
                   || (db.produce && db.produce.crossTripCarry === true)));
@@ -6756,7 +6759,7 @@ function verifyInvariants(){
 
   // ── Invariant 4: Solo pkg meal must be flex-resolvable ──
   // A pkg meal that ends up solo (not shared, not in a leftover chain) will
-  // waste a package unless `applyTripFlexScaling` can nudge its per-serving
+  // waste a package unless `freezeTripTotals` can nudge its per-serving
   // amount to a pkg boundary. That requires the pkg ingredient to be in
   // `PKG_FLEX_CONFIG`. If a non-flex-configured pkg ingredient ends up on
   // a solo slot, it's a bug — either the meal shouldn't be allowed solo,
@@ -7590,7 +7593,8 @@ function verifyInvariants(){
         // displays and visible waste warning, without freeze-pinning the
         // recipes to whole trip totals (would over-bump per-portion macros).
         //
-        // V171 (2026-05-19): crossTripCarry produce items (lime, lemon)
+        // V171 (2026-05-19): crossTripCarry produce items (none today —
+        // lime/lemon → acceptableWaste V204; kept for future produce items)
         // are checked OUTSIDE this per-trip loop via the combined-week
         // pass at the end. Per-trip would falsely fire because Cook 1
         // owns the buy for both trips.
@@ -9868,10 +9872,12 @@ function setLateSnackField(p,d,field,val){
 // Late-snack ingredient mode. When LATE_SNACK[k].ingredients is non-empty,
 // macros (kcal/pro/fat/carb) are derived from them and shopping picks them
 // up. Manual-mode (no ingredients) keeps existing behavior — user types
-// macros directly and nothing is shopped. Late snack does NOT participate
-// in the day balancer or any auto-adjust cycle (the cache builder + balancer
-// already skip 'late_snack'), so adding ingredients here can never disturb
-// other slots in the day.
+// macros directly and nothing is shopped. Adding/removing ingredients here
+// does not TRIGGER a rebalance (this edit path mutates only the late-snack
+// entry), so it can't disturb other slots in this edit. NOTE: a standing late
+// snack IS counted by calcTotals and, at the next full getDayBalancedIngredients
+// rebuild, by the dinner-residual + balanceDayMacros day total — so it's not
+// invisible to the balancer, just not auto-rebalanced on a manual post-edit.
 function recomputeLateSnackMacros(p,d){
   const k=pk(p,d);
   const ls=LATE_SNACK[k]; if(!ls) return;
@@ -10850,7 +10856,9 @@ function mealUsesPkg(mealId) {
   });
 }
 
-// Flex ranges for trip-level pkg fitting. `applyTripFlexScaling` uses this
+// Flex ranges for trip-level pkg fitting. Now consulted only by INV4's
+// solo-pkg flex-resolvability gate (the trip-scaling pass that used these,
+// applyTripFlexScaling, was replaced by freezeTripTotals). Originally `applyTripFlexScaling` used this
 // to nudge per-serving amounts within [1-maxDown, 1+maxUp] ratio to hit a
 // package boundary, backfilling kcal via carb/fat trim. Defined at module
 // scope so the retry-loop waste check can anticipate what flex scaling
@@ -11004,7 +11012,8 @@ function freezeTripTotals(randTarget, attemptSwap){
   // buys a remainder if Cook 1's purchased leftover can't cover Cook 2's
   // demand. See buildShoppingList for the attribution math.
   function _isCarryItem(dbKey){
-    // V171: also check produce.crossTripCarry (lime, lemon).
+    // V171: also check produce.crossTripCarry (no produce item uses it today —
+    // lime/lemon → acceptableWaste in V204; kept for future produce carry items).
     var db = NUTRI_DB[dbKey];
     return !!(db && ((db.pkg && db.pkg.crossTripCarry === true)
                   || (db.produce && db.produce.crossTripCarry === true)));
@@ -15937,7 +15946,8 @@ function _randomizeWeekCore(randTarget){
 
   // ── PHASE 1.5 removed 2026-04-21 ──
   // Previously: replaced solo pkg meals with non-pkg alternatives to avoid
-  // opening a full package for one serving. Superseded by `applyTripFlexScaling`
+  // opening a full package for one serving. Superseded by trip-level package
+  // fitting (`applyTripFlexScaling`, later replaced by `freezeTripTotals`)
   // which now handles every pkg ingredient in the DB (all are in
   // `PKG_FLEX_CONFIG`). Enforcement moved to **INV4** in `verifyInvariants` as
   // a hard invariant: if a solo pkg meal uses a pkg ingredient NOT in
@@ -16291,7 +16301,7 @@ function _randomizeWeekCore(randTarget){
         var targetPerServing = targetTotal / totalServings;
 
         // Per-ingredient flex ranges
-        // Strategy B predicts whether `applyTripFlexScaling` can resolve this
+        // Strategy B predicts whether trip-level pkg fitting (`freezeTripTotals`) can resolve this
         // package's waste. Read flex ranges from the single source of truth
         // so this check matches what flex actually does. Ingredients not in
         // PKG_FLEX_CONFIG fall through to the conservative 0.25/0.25 default.
