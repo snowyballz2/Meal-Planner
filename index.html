@@ -20943,6 +20943,21 @@ window.MPStress=(function(){
     function add(assertion, ok, issue, expected, actual){
       checks.push({assertion:assertion, ok:!!ok, issue:ok?null:(issue||''), expected:expected, actual:actual});
     }
+    // M2 (V221/V228/V229) sync-contract helpers: any op that mutates a slot's
+    // persisted state must re-stamp weekData[activeWeek].ts[k] so the change
+    // propagates across devices (mergeSyncData merges overrides/skip/eatOut/sel
+    // on the per-slot ts). _smTsStale(k) BEFORE the mutation forces the ts to a
+    // sentinel (1); _smTsBumped(k,label) AFTER asserts it was re-stamped to a
+    // real Date.now() (>1e12). Regressing _bumpSlotTs/stampSel leaves it at 1.
+    function _smTsStale(k){
+      if(weekData[activeWeek] && weekData[activeWeek].ts) weekData[activeWeek].ts[k]=1;
+    }
+    function _smTsBumped(k, label){
+      var t = (weekData[activeWeek] && weekData[activeWeek].ts) ? weekData[activeWeek].ts[k] : null;
+      add('tsBumped', !!(t && t>1e12),
+        'slot ts not re-stamped after '+label+' (M2 device-sync regression)',
+        '>1e12', t);
+    }
     // V35 (2026-05-07): grid taps are V25 edit-mode-only — outside edit
     // mode they no-op. Pre-V25 tests (scheduleTapCycle, schedTapCenter,
     // tapAlreadyShared, gridSkipPlusPillSkip, randomizePersist) expected
@@ -21213,17 +21228,9 @@ window.MPStress=(function(){
         pickedVal = newAmt;
       }
       var predictedKcalPerPortion=Math.round(db.kcal*(newAmt - preAmt));
-      // M2 (V221) coverage: a surgical edit must re-stamp the slot ts so the
-      // edit propagates across devices via sync (mergeSyncData merges overrides
-      // on the SEL ts). Force the ts stale (=1), then assert onIngrAmt re-stamps
-      // it to a real Date.now() value. Regressing _bumpSlotTs leaves it at 1.
-      var _tsKE=sk(p,d,s);
-      if(weekData[activeWeek]&&weekData[activeWeek].ts) weekData[activeWeek].ts[_tsKE]=1;
+      _smTsStale(sk(p,d,s));        // M2 (V221): edit must re-stamp slot ts (device sync)
       onIngrAmt(p, d, s, idx, pickedVal);
-      add('tsBumped',
-        !!(weekData[activeWeek]&&weekData[activeWeek].ts&&weekData[activeWeek].ts[_tsKE]>1e12),
-        'slot ts not re-stamped after edit (M2 device-sync regression)',
-        '>1e12', (weekData[activeWeek]&&weekData[activeWeek].ts)?weekData[activeWeek].ts[_tsKE]:null);
+      _smTsBumped(sk(p,d,s), 'edit');
       var postCard=computeCardMacros(getPort(p,d,s), p, d, s, baseline.cookServings, false, 1);
       var slotKcalDelta=(postCard.pm.kcal - preCard.pm.kcal);
       var tolE=Math.max(2, Math.ceil(baseline.cookServings/2));
@@ -21263,14 +21270,9 @@ window.MPStress=(function(){
     else if(op==='swap'){
       var preIng2=preBal[idx];
       var newKey=_smPickSwap(preIng2.dbKey);
-      // M2 (V221) coverage: surgical swap must re-stamp the slot ts (see edit op).
-      var _tsKS=sk(p,d,s);
-      if(weekData[activeWeek]&&weekData[activeWeek].ts) weekData[activeWeek].ts[_tsKS]=1;
+      _smTsStale(sk(p,d,s));        // M2 (V221): swap must re-stamp slot ts
       onIngrSwap(p,d,s,idx,newKey);
-      add('tsBumped',
-        !!(weekData[activeWeek]&&weekData[activeWeek].ts&&weekData[activeWeek].ts[_tsKS]>1e12),
-        'slot ts not re-stamped after swap (M2 device-sync regression)',
-        '>1e12', (weekData[activeWeek]&&weekData[activeWeek].ts)?weekData[activeWeek].ts[_tsKS]:null);
+      _smTsBumped(sk(p,d,s), 'swap');
       var postBal=getBalancedSlotIngredients(p,d,s);
       add('dbKeyProp_anchor',
         postBal[idx] && postBal[idx].dbKey === newKey,
@@ -21294,8 +21296,10 @@ window.MPStress=(function(){
       var preLen=(getBalancedSlotIngredients(p,d,s)||[]).length;
       var preSlotKcal=preCard?preCard.pm.kcal:0;
       _smMockTempIngrPopup(dbKey);
+      _smTsStale(sk(p,d,s));        // M2 (V221): adding a temp ingredient must re-stamp slot ts
       try { confirmTempIngredient(p,d,s); }
       finally { _smUnmockTempIngrPopup(); }
+      _smTsBumped(sk(p,d,s), 'addIngr');
       var postBalA=getBalancedSlotIngredients(p,d,s)||[];
       add('cacheLenGrew',
         postBalA.length === preLen+1,
@@ -21348,7 +21352,9 @@ window.MPStress=(function(){
       var preIng4=preBal[idx];
       var preAmt4=preIng4.amt;
       onIngrAmt(p, d, s, idx, preAmt4*2);
+      _smTsStale(sk(p,d,s));        // M2 (V221): Reset must ALSO re-stamp slot ts (revert propagates cross-device)
       onIngrReset(p, d, s);
+      _smTsBumped(sk(p,d,s), 'reset');
       // Determine slots to verify: edited slot + all batch portions if any.
       var slotsToVerify = [{p:p, d:d, s:s}];
       if(slot.lo && slot.lo.portions && slot.lo.portions.length > 1){
@@ -21445,7 +21451,9 @@ window.MPStress=(function(){
       var spK=sk(p,d,s);
       var preEatOut=!!EAT_OUT[spK];
       // Toggle ON
+      _smTsStale(spK);             // M2: toggleSkip must re-stamp slot ts (skip state syncs)
       toggleSkip(p,d,s);
+      _smTsBumped(spK, 'skipPill ON');
       add('skipOn_set', !!SKIPPED[spK], 'SKIPPED not set after toggleSkip ON');
       add('skipOn_manualSet', !!MANUAL_SET[spK], 'MANUAL_SET not set after toggleSkip ON');
       add('skipOn_eatOutCleared', !EAT_OUT[spK],
@@ -21466,7 +21474,9 @@ window.MPStress=(function(){
       var eoK=sk(p,d,s);
       var preSkipped=!!SKIPPED[eoK];
       // Toggle ON
+      _smTsStale(eoK);             // M2: toggleEatOut must re-stamp slot ts (eat-out state syncs)
       toggleEatOut(p,d,s);
+      _smTsBumped(eoK, 'eatOutPill ON');
       add('eoOn_set', !!EAT_OUT[eoK], 'EAT_OUT not set after toggleEatOut ON');
       add('eoOn_manualSet', !!MANUAL_SET[eoK], 'MANUAL_SET not set after toggleEatOut ON');
       add('eoOn_skippedCleared', !SKIPPED[eoK],
@@ -21578,8 +21588,10 @@ window.MPStress=(function(){
       }
       var prevPerson=person, prevDay=day;
       person=p; day=d;
+      _smTsStale(cmK);             // M2: changeMeal (stampSel) must re-stamp slot ts
       try { changeMeal(s, newMealId); }
       finally { person=prevPerson; day=prevDay; }
+      _smTsBumped(cmK, 'changeMealOp');
       add('cm_sel', SEL[cmK]===newMealId,
         'SEL not updated to '+newMealId+' (got '+SEL[cmK]+')');
       add('cm_manualSet', !!MANUAL_SET[cmK], 'changeMeal should set MANUAL_SET');
