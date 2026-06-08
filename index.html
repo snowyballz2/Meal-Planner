@@ -17887,6 +17887,14 @@ function buildCustomMeal(){
       else if(db.unit==='each')fruitCups+=1*i.amt; // fallback: 1 fruit ≈ 1c
     }
   });
+  // Audit R13 (2026-06-02): enforce INV10 — every lunch/dinner recipe must have
+  // >0 cups veg. INV10 is a STATIC check over MEALS, so a veg-less lunch/dinner
+  // custom meal fires it permanently (whether or not it's ever picked). Reject
+  // here, mirroring INV10's veg-cups computation exactly.
+  if((selectedSlots.indexOf('lunch')>=0||selectedSlots.indexOf('dinner')>=0)&&vegCups<=0){
+    alert('Lunch and dinner recipes need at least one vegetable — add a veg-role ingredient (with a cup or "each" amount), or remove the lunch/dinner slot.');
+    return null;
+  }
   let fv='';
   if(vegCups>0)fv+=vegCups+'c veg';
   if(fruitCups>0)fv+=(fv?' + ':'')+fruitCups+'c fruit';
@@ -18092,6 +18100,21 @@ function addNewDbIngredient(){
     if(pkgDrained>0)entry.pkg.drained=pkgDrained;
     if(pkgUnit==='cups'&&pkgDrained>0)entry.pkg.cups=pkgDrained;
     if(pkgType)entry.pkg.type=pkgType;
+  }
+
+  // Audit R13 (2026-06-02): prevent creating ingredients that violate INV19
+  // (cooked/dry shopping-unit consistency). Mirrors INV19's checks exactly so
+  // the form can't introduce a permanent hard-INV fire.
+  if(/\bcooked\b/.test(name) && !(entry.pkg && (entry.pkg.drained || entry.pkg.cups)) && !entry.dry){
+    alert('A "cooked" ingredient needs a package so the shopping list can show real units — set Package Size + Drained/Cups (a can/carton), or rename it without "cooked".');
+    return;
+  }
+  if(/\b(dry|dried|uncooked)\b/.test(name) && !entry.halfSnap){
+    var _base19=name.replace(/\b(dry|dried|uncooked)\b/g,'').replace(/\s+/g,' ').trim();
+    if(!NUTRI_DB[_base19+' cooked'] && !NUTRI_DB[_base19+' canned']){
+      alert('A "dry/dried" ingredient needs a matching "'+_base19+' cooked" (or canned) ingredient in the database first — add that, or rename this one.');
+      return;
+    }
   }
 
   entry._ts=Date.now();
