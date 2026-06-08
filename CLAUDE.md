@@ -312,6 +312,7 @@ Three collapsible sections:
 - **New Recipe**: Compact form with slot/person chips, bordered ingredient list, steps textarea.
 - **New Ingredient**: 2-row compact form (Name/Unit/Role + Kcal/Pro/Fat/Carb).
 - **Edit Recipes**: Slot/meal picker with inline preview. Edit mode shows quantity dropdowns.
+- **Validation (Audit R13, 2026-06-02)**: New Recipe rejects a lunch/dinner meal with no veg (would otherwise fire INV10, which is static over MEALS). New Ingredient rejects a `cooked`-named entry lacking pkg/dry and a `dry/dried/uncooked`-named entry lacking a cooked/canned sibling (would fire INV19), and has an optional **Max Amt** (so scalable custom ingredients are INV13-bounded).
 
 **Meal categories**: Dropdowns group meals by category. Lunch/dinner dropdowns additionally expose a **Vegetarian** group.
 
@@ -321,7 +322,7 @@ Each meal card shows a `+` button in the ingredient section header. Tapping open
 
 ## Cloud Sync
 
-GitHub Gist API push/pull. **Payload version 4** (2026-04-26): per-key timestamps give true last-write-wins on weekData (all 3 weeks: sel, lateSnack, sharedSchedule, manualSet, overrides), `ADJ_TARGETS`, `customMeals` (per-meal `_ts` — edits propagate), `customIngredients`, `EAT_OUT_DB`. v3 entries read as `ts=0` so any v4 local entry wins (clean migration). **Force Push** button bumps every timestamp to now + PATCHes directly (overwrite remote). Per-device **Sync Protection** toggle (`LOCK_MANUAL_SLOTS`, not synced) makes local `manualSet` slots immune to incoming overwrites.
+GitHub Gist API push/pull. **Payload version 4** (2026-04-26): per-key timestamps give true last-write-wins on weekData (all 3 weeks: sel, lateSnack, sharedSchedule, manualSet, overrides), `ADJ_TARGETS`, `customMeals` (per-meal `_ts` — edits propagate), `customIngredients`, `EAT_OUT_DB`. v3 entries read as `ts=0` so any v4 local entry wins (clean migration). **Force Push** button bumps every timestamp to now + PATCHes directly (overwrite remote). Per-device **Sync Protection** toggle (`LOCK_MANUAL_SLOTS`, not synced) makes local `manualSet` slots immune to incoming overwrites. **Audit R13 (2026-06-02)**: `calBase`/`proTarget` now sync last-write-wins via `calBaseTs`/`proTargetTs` (was a blind pull-wins overwrite); `userEdited` (the Set-pill display flag) now merges on the SEL ts (was sent in the payload but ignored on receive).
 
 ## Runtime Invariants
 
