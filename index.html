@@ -5389,6 +5389,11 @@ function renderDayTabs(){
 // ── Calorie Adjustment ──────────────────────────────────────
 var CAL_BASE=lsGet('mealPlannerCalBase',{him:2800,her:1900});
 var PRO_TARGET=lsGet('mealPlannerProTarget',{him:180,her:120});
+// Audit R13 (2026-06-02): per-value LWW timestamps so a calorie/protein-target
+// change syncs by last-write-wins instead of being clobbered by an older remote
+// value on pull. 0 = never set locally (any remote value, incl. legacy, wins).
+var CAL_BASE_TS=lsGet('mealPlannerCalBaseTs',0);
+var PRO_TARGET_TS=lsGet('mealPlannerProTargetTs',0);
 // Macro ratio limits: carbs < 50% of kcal calories, fat < 30% of kcal calories
 var MACRO_LIMITS={maxFatPct:0.30}; // carbPct threshold is hardcoded in balanceDayMacros; no live reads of MACRO_LIMITS.maxCarbPct.
 // Ingredients the randomizer should avoid unless needed for macros/waste.
@@ -7839,6 +7844,7 @@ function confirmCal(){
   const idx=Math.max(0,Math.min(Math.round(d.scrollTop/52),50));
   CAL_BASE[p]=idx*100;
   lsSet('mealPlannerCalBase',CAL_BASE);
+  CAL_BASE_TS=Date.now();lsSet('mealPlannerCalBaseTs',CAL_BASE_TS); // Audit R13: LWW stamp
   closeCalPopup();
   renderMeals();
 }
@@ -7894,6 +7900,7 @@ function confirmPro(){
   const idx=Math.max(0,Math.min(Math.round(d.scrollTop/52),80));
   PRO_TARGET[p]=idx*5;
   lsSet('mealPlannerProTarget',PRO_TARGET);
+  PRO_TARGET_TS=Date.now();lsSet('mealPlannerProTargetTs',PRO_TARGET_TS); // Audit R13: LWW stamp
   closeProPopup();
   renderMeals();
 }
@@ -17012,7 +17019,12 @@ function loadWeeks(){
       weekData['this']={sel:{},monday:currentMonday};
       weekData['next']={sel:{},monday:nextMonday()};
     }
-    // Clear manual overrides for the new week
+    // Defensive global wipe. NOTE (Audit R13, 2026-06-02): loadWeeks runs only
+    // at init, when these globals are already empty, so this is effectively a
+    // no-op — it does NOT clear the rolled week's persisted overrides. The new
+    // 'this' week intentionally inherits whatever was planned in 'next' (via the
+    // clone above); the '>1 week' branch already reset everything. loadWeekState
+    // (end of loadWeeks) loads the inherited per-week state into these globals.
     Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
     Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
     Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
@@ -17290,7 +17302,9 @@ function getSyncPayload(){
     customIngredients:customIngredients,
     eatOutDB:EAT_OUT_DB,
     calBase:CAL_BASE,
+    calBaseTs:CAL_BASE_TS,
     proTarget:PRO_TARGET,
+    proTargetTs:PRO_TARGET_TS,
     adjTargets:ADJ_TARGETS,
     adjTargetsTs:ADJ_TARGETS_TS,
     version:4
@@ -17354,12 +17368,13 @@ function mergeSyncData(remote){
       Object.keys(localSel).forEach(function(k){allKeys[k]=true;});
 
       // Bundled per-week state from remote
-      const remoteState={skipped:remoteWeek.skipped||{},eatOut:remoteWeek.eatOut||{},overrides:remoteWeek.overrides||{},lateSnack:remoteWeek.lateSnack||{},manualSet:remoteWeek.manualSet||{}};
+      const remoteState={skipped:remoteWeek.skipped||{},eatOut:remoteWeek.eatOut||{},overrides:remoteWeek.overrides||{},lateSnack:remoteWeek.lateSnack||{},manualSet:remoteWeek.manualSet||{},userEdited:remoteWeek.userEdited||{}};
       if(!weekData[w].skipped)weekData[w].skipped={};
       if(!weekData[w].eatOut)weekData[w].eatOut={};
       if(!weekData[w].overrides)weekData[w].overrides={};
       if(!weekData[w].lateSnack)weekData[w].lateSnack={};
       if(!weekData[w].manualSet)weekData[w].manualSet={};
+      if(!weekData[w].userEdited)weekData[w].userEdited={}; // Audit R13 (2026-06-02): sync the Set-pill display flag (was saved+sent but never merged)
 
       Object.keys(allKeys).forEach(function(k){
         const localTime=localTs[k]||0;
@@ -17378,6 +17393,7 @@ function mergeSyncData(remote){
           if(remoteState.eatOut[k]!==undefined) weekData[w].eatOut[k]=remoteState.eatOut[k]; else delete weekData[w].eatOut[k];
           if(remoteState.overrides[k]!==undefined) weekData[w].overrides[k]=remoteState.overrides[k]; else delete weekData[w].overrides[k];
           if(remoteState.manualSet[k]!==undefined) weekData[w].manualSet[k]=remoteState.manualSet[k]; else delete weekData[w].manualSet[k];
+          if(remoteState.userEdited[k]!==undefined) weekData[w].userEdited[k]=remoteState.userEdited[k]; else delete weekData[w].userEdited[k]; // Audit R13
         }
       });
       // Late snack: per-key last-write-wins via remoteWeek.lateSnackTs (v4+).
@@ -17531,8 +17547,12 @@ function mergeSyncData(remote){
   }
   
   // Calorie and protein targets: take remote if present
-  if(remote.calBase){CAL_BASE=remote.calBase;lsSet('mealPlannerCalBase',CAL_BASE);}
-  if(remote.proTarget){PRO_TARGET=remote.proTarget;lsSet('mealPlannerProTarget',PRO_TARGET);}
+  // Audit R13 (2026-06-02): LWW on calBase/proTarget (was a blind overwrite
+  // that could clobber a newer local target with an older remote on pull).
+  // Legacy payloads lack the Ts fields → remote ts 0; a changed local value
+  // (ts>0) wins, while a fresh install (local ts 0) still takes remote on tie.
+  if(remote.calBase && (remote.calBaseTs||0) >= CAL_BASE_TS){CAL_BASE=remote.calBase;CAL_BASE_TS=remote.calBaseTs||0;lsSet('mealPlannerCalBase',CAL_BASE);lsSet('mealPlannerCalBaseTs',CAL_BASE_TS);}
+  if(remote.proTarget && (remote.proTargetTs||0) >= PRO_TARGET_TS){PRO_TARGET=remote.proTarget;PRO_TARGET_TS=remote.proTargetTs||0;lsSet('mealPlannerProTarget',PRO_TARGET);lsSet('mealPlannerProTargetTs',PRO_TARGET_TS);}
 
   // Custom meals: per-meal last-write-wins via entry._ts (v4+). Remote with
   // newer ts overwrites local; v3 remote has no _ts so treated as ts=0
@@ -17664,6 +17684,7 @@ function pushSync(){
   fetch(GIST_API+'/'+syncId,{headers:gistHeaders()}).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
   }).then(function(gist){
+    if(!gist.files||!gist.files['meal-planner-sync.json']) throw new Error('Not a Meal Planner sync gist (sync file missing)');
     const content=gist.files['meal-planner-sync.json'].content;
     const remote=JSON.parse(content);
     mergeSyncData(remote);
@@ -17724,6 +17745,7 @@ function forcePushSync(){
   Object.keys(customMeals).forEach(function(k){customMeals[k]._ts=now;});
   Object.keys(customIngredients).forEach(function(k){customIngredients[k]._ts=now;});
   EAT_OUT_DB.forEach(function(e){e._ts=now;});
+  CAL_BASE_TS=now;lsSet('mealPlannerCalBaseTs',now);PRO_TARGET_TS=now;lsSet('mealPlannerProTargetTs',now); // Audit R13: force-push wins calBase/proTarget too
   saveWeeks();saveAdjTargets();saveCustomMeals();saveCustomIngredients();saveEatOutDB();
   // Upload directly — no pull/merge first. This DOES drop any concurrent
   // remote edits made after our last pull. Confirmation above made the
@@ -17744,6 +17766,7 @@ function pullSync(){
   fetch(GIST_API+'/'+syncId,{headers:gistHeaders()}).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
   }).then(function(gist){
+    if(!gist.files||!gist.files['meal-planner-sync.json']) throw new Error('Not a Meal Planner sync gist (sync file missing)');
     const content=gist.files['meal-planner-sync.json'].content;
     const data=JSON.parse(content);
     mergeSyncData(data);
@@ -18082,6 +18105,14 @@ function addNewDbIngredient(){
   // Optional behavior fields
   const minAmt=parseFloat(document.getElementById('rf_new_minAmt').value);
   if(minAmt>0)entry.minAmt=minAmt;
+  // Audit R13 (2026-06-02): optional maxAmt so scalable custom ingredients can
+  // be bounded by INV13 (every other scalable ingredient has a maxAmt).
+  var _maxEl=document.getElementById('rf_new_maxAmt');
+  var maxAmt=_maxEl?parseFloat(_maxEl.value):NaN;
+  if(maxAmt>0){
+    if(minAmt>0 && maxAmt<minAmt){alert('Max Amt must be greater than or equal to Min Amt.');return;}
+    entry.maxAmt=maxAmt;
+  }
   if(document.getElementById('rf_new_halfSnap').value==='yes')entry.halfSnap=true;
   if(document.getElementById('rf_new_wholeOnly').value==='yes')entry.wholeOnly=true;
   // V157 (2026-05-19): bulkOz flag — sold by oz, varying container size
@@ -18130,7 +18161,7 @@ function addNewDbIngredient(){
     ROLE_INGR.all.push(name);ROLE_INGR.all.sort();
   }
   alert('Added "'+name+'" to the database!');
-  ['rf_new_name','rf_new_kcal','rf_new_pro','rf_new_fat','rf_new_carb','rf_new_minAmt','rf_new_pkgSize','rf_new_pkgDrained'].forEach(function(id){document.getElementById(id).value='';});
+  ['rf_new_name','rf_new_kcal','rf_new_pro','rf_new_fat','rf_new_carb','rf_new_minAmt','rf_new_maxAmt','rf_new_pkgSize','rf_new_pkgDrained'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('rf_new_unit').value='oz';
   document.getElementById('rf_new_role').value='protein';
   document.getElementById('rf_new_halfSnap').value='no';
@@ -18298,6 +18329,7 @@ function renderRecipesView(){
     +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray);margin:8px 0 4px">Optional — Package &amp; Behavior</div>'
     +'<div class="ni-row">'
     +'<div class="ni-field" style="flex:1"><label>Min Amt</label><input id="rf_new_minAmt" type="number" min="0" step="0.25" placeholder="—"></div>'
+    +'<div class="ni-field" style="flex:1"><label>Max Amt</label><input id="rf_new_maxAmt" type="number" min="0" step="0.25" placeholder="—"></div>'
     +'<div class="ni-field" style="flex:1"><label>½ Snap</label><select id="rf_new_halfSnap"><option value="no">No</option><option value="yes">Yes</option></select></div>'
     +'<div class="ni-field" style="flex:1"><label>Whole Only</label><select id="rf_new_wholeOnly"><option value="no">No</option><option value="yes">Yes</option></select></div>'
     +'</div>'
