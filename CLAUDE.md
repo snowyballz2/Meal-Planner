@@ -2,7 +2,7 @@
 
 Single-file HTML/JS PWA (`index.html`, ~24,000 lines) for two people ("Him"/"Her") with nutrition tracking, shopping lists, package waste elimination, and cloud sync. Installable on mobile via `manifest.json` + `sw.js` service worker.
 
-> **Doc map (read this first):** This file is the evergreen architecture reference. Detailed per-session change history lives in (1) `Archive/CLAUDE_sessions.md` (verbatim logs 2026-04-17 → 2026-05-05) and (2) the `~/.claude/projects/-Users-chris-Desktop-Meal-Planner/memory/` topic files (the current distilled detail — `system_freeze_and_overrides.md`, `system_invariants.md`, `system_schedule_edit_mode.md`, `system_data_model.md`, etc., indexed by `MEMORY.md`). When this doc and a memory topic file disagree, the memory file is newer. The compact 2026-05-06 → 2026-05-30 digest is at the bottom of this file.
+> **Doc map (read this first):** This file is the evergreen architecture reference. Detailed per-session change history lives in (1) `Archive/CLAUDE_sessions.md` (verbatim logs 2026-04-17 → 2026-05-05) and (2) the `~/.claude/projects/-Users-chris-Developer-Meal-Planner/memory/` topic files (the current distilled detail — `system_freeze_and_overrides.md`, `system_invariants.md`, `system_schedule_edit_mode.md`, `system_data_model.md`, etc., indexed by `MEMORY.md`). When this doc and a memory topic file disagree, the memory file is newer. The compact 2026-05-06 → 2026-05-30 digest is at the bottom of this file.
 
 ## ⚠ Invariant & Communication Rules (read first)
 
@@ -397,7 +397,7 @@ Uses CSS custom properties (`:root` vars) for theming. Key reusable classes:
 - `INVARIANTS.md` — standalone INV quick-reference
 - `Archive/CLAUDE_sessions.md` — verbatim session logs 2026-04-17 → 2026-05-05 (archived 2026-05-30 to keep this doc lean)
 - `Archive/` — backup copies of previous versions
-- `~/.claude/projects/-Users-chris-Desktop-Meal-Planner/memory/` — current distilled detail (topic files indexed by `MEMORY.md`)
+- `~/.claude/projects/-Users-chris-Developer-Meal-Planner/memory/` — current distilled detail (topic files indexed by `MEMORY.md`)
 
 ## Schedule Edit Mode
 
