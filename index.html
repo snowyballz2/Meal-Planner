@@ -3738,6 +3738,18 @@ function _hasUserOverrides(p,d,s){
 // can't trim them, surfacing as kcalHigh days (e.g., seed 70 him Wed +617).
 // 2026-05-02.
 function _clearFreezeOverrides(){
+  // R14-C1 final design (2026-07-05): the clear itself is UNSCOPED (as
+  // pre-R14) — per-retry freeze legitimately writes pins on the OTHER
+  // person's slots for pots the target eats from, and when the next retry
+  // rerolls the target those pins are stale garbage that MUST die (three
+  // rejected scoped-clear schemes each left stale/mixed pins → INV7/INV8/
+  // INV13/INV20; traces in the R14 fix log). Single-person preservation is
+  // handled by the CALLER: randomizeWeek captures the non-target person's
+  // PRE-RUN pins once (_captureNonTargetFreezePins) and re-applies them
+  // after every clear (_restorePreservedPins) — so mid-run transients die
+  // each retry while the other person's durable frozen state survives the
+  // run. _freezeOneItem counts those preserved pins' pots as fixed when
+  // choosing household boundary targets (participation rule).
   // V158 (2026-05-19): switched to POSITIVE identification — drop only
   // entries explicitly tagged _freezePin:true (set by freezeTripTotals).
   // Also drop _fatBoost entries (re-applied each randomize by
@@ -3766,6 +3778,69 @@ function _clearFreezeOverrides(){
     });
     if(filtered.length === 0) delete OVERRIDES[k];
     else if(filtered.length !== ov.length) OVERRIDES[k] = filtered;
+  });
+}
+
+// R14-C1 (2026-07-05): capture the non-target person's durable freeze/
+// fat-boost pins at randomize start. "Writable" (NOT preserved) = the
+// target's solos plus every portion of any pot the target eats from, per
+// the run-START geometry; everything else is the other person's untouched
+// plan, whose pins must survive every per-retry _clearFreezeOverrides so
+// her amounts stay at their previously-frozen (boundary-clean) values.
+function _captureNonTargetFreezePins(randTarget){
+  if(!randTarget || randTarget === 'shared') return null;
+  var scopeP = randTarget;
+  var los = computeLeftovers();
+  var writableK = {};
+  Object.keys(los).forEach(function(ak){
+    var alo = los[ak];
+    if(alo.isLeftover || !alo.portions) return;
+    var participates = alo.portions.some(function(pt){return pt.p===scopeP;});
+    if(participates) alo.portions.forEach(function(pt){ writableK[sk(pt.p,pt.d,pt.s)] = true; });
+  });
+  var preserved = {};
+  Object.keys(OVERRIDES).forEach(function(k){
+    var lo = los[k];
+    var writable = lo ? !!writableK[k] : (k.split('_')[0] === scopeP);
+    if(writable) return;
+    var keep = OVERRIDES[k].filter(function(o){
+      return o._userSet !== true && (o._freezePin === true || o._fatBoost === true);
+    });
+    if(keep.length) preserved[k] = JSON.parse(JSON.stringify(keep));
+  });
+  return preserved;
+}
+// Re-apply captured pins after a clear. An existing entry at the same idx
+// (user pin — the only survivor of the clear) wins over the preserved one.
+// Participation is re-evaluated against the CURRENT geometry on every
+// restore: Phase 1 can make the target JOIN the other person's pot mid-run
+// (batch extension), and restoring her pre-run pins onto a now-shared pot
+// leaves mixed pinned/raw rows that unify skips → INV7 drift (verified
+// 2026-07-05, cannellini_kale_soup trace). A pot the target eats from in
+// the current SEL gets NO restored pins — it re-unifies and re-freezes
+// whole.
+function _restorePreservedPins(preserved, randTarget){
+  if(!preserved) return;
+  var scopeP = (randTarget && randTarget !== 'shared') ? randTarget : null;
+  var los = computeLeftovers();
+  var joinedK = {};
+  if(scopeP){
+    Object.keys(los).forEach(function(ak){
+      var alo = los[ak];
+      if(alo.isLeftover || !alo.portions) return;
+      if(alo.portions.some(function(pt){return pt.p===scopeP;})){
+        alo.portions.forEach(function(pt){ joinedK[sk(pt.p,pt.d,pt.s)] = true; });
+      }
+    });
+  }
+  Object.keys(preserved).forEach(function(k){
+    if(joinedK[k]) return; // target now participates in this pot — stay raw
+    var ov = OVERRIDES[k] || (OVERRIDES[k] = []);
+    preserved[k].forEach(function(entry){
+      for(var i=0;i<ov.length;i++){ if(ov[i].idx === entry.idx) return; }
+      ov.push(JSON.parse(JSON.stringify(entry)));
+    });
+    if(!OVERRIDES[k].length) delete OVERRIDES[k];
   });
 }
 
@@ -5434,10 +5509,23 @@ function invalidateDayBalancedCache(){for(const k in _dayBalancedCache)delete _d
 // and before manually running the pipeline.. nothing needs to be run or
 // calculated.. just put back exact values."
 var _postRandomizeCache={};
+// R14-C6 (2026-07-05): parallel map pkkey -> {slot: mealId} recorded at capture
+// time. onIngrReset must only restore a snapshot slot when the slot still holds
+// the SAME meal — changeMeal/sync/edit-mode can swap SEL after capture, and the
+// snapshot entries themselves carry no meal identity, so an unguarded restore
+// wrote the OLD meal's ingredient array under the NEW meal's card.
+var _postRandomizeSel={};
 function _capturePostRandomizeSnapshot(){
   _postRandomizeCache={};
+  _postRandomizeSel={};
   Object.keys(_dayBalancedCache).forEach(function(k){
     _postRandomizeCache[k]=JSON.parse(JSON.stringify(_dayBalancedCache[k]));
+    var us=k.indexOf('_');
+    var pp=k.slice(0,us), dd=k.slice(us+1);
+    _postRandomizeSel[k]={};
+    Object.keys(_dayBalancedCache[k]).forEach(function(ss){
+      _postRandomizeSel[k][ss]=getMealId(pp,dd,ss)||null;
+    });
   });
 }
 
@@ -8286,8 +8374,14 @@ function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day){
   }
   const himOne = perPersonPerServing('him');
   const herOne = perPersonPerServing('her');
-  const himOneByKey = {}; himOne.forEach(i => himOneByKey[i.dbKey] = i);
-  const herOneByKey = {}; herOne.forEach(i => herOneByKey[i.dbKey] = i);
+  // R14-C3 (2026-07-05): ACCUMULATE duplicates instead of overwriting. The
+  // combined total row (bucket below) merges duplicate dbKeys into one row,
+  // so the per-person reference columns must sum them too — the old
+  // last-entry-wins maps showed only one duplicate's per-serving amount
+  // against a row total that merged both. (himOne/herOne entries are fresh
+  // copies from perPersonPerServing, safe to mutate.)
+  const himOneByKey = {}; himOne.forEach(i => { if(himOneByKey[i.dbKey]) himOneByKey[i.dbKey].amt += i.amt; else himOneByKey[i.dbKey] = i; });
+  const herOneByKey = {}; herOne.forEach(i => { if(herOneByKey[i.dbKey]) herOneByKey[i.dbKey].amt += i.amt; else herOneByKey[i.dbKey] = i; });
 
   // Total batch amount per ingredient = sum across every portion
   const orderedKeys = [];
@@ -9117,6 +9211,14 @@ function buildMealCardHtml(s, person, day, other){
       ingrHtml=cookBal.map(function(ci,idx){
         var combinedAmt=0;
         batchPortions.forEach(function(bp){
+          // R14-C3 (2026-07-05): match by INDEX first — idx space is aligned
+          // across batch portions by contract (INV1/INV12; temp-adds and
+          // swaps write the same idx to every portion). The old dbKey-scan
+          // with first-match break summed the FIRST occurrence for EVERY
+          // duplicate-dbKey row (reachable via + temp ingredient or a row
+          // swap to an existing key), rendering wrong batch amounts. dbKey
+          // scan kept only as a defensive fallback when idx disagrees.
+          if(bp.bal[idx] && bp.bal[idx].dbKey===ci.dbKey){combinedAmt+=bp.bal[idx].amt;return;}
           for(var k=0;k<bp.bal.length;k++){
             if(bp.bal[k].dbKey===ci.dbKey){combinedAmt+=bp.bal[k].amt;break;}
           }
@@ -10634,7 +10736,13 @@ function onIngrAmt(p,d,s,idx,val){
   const isBatch = portions.length > 1;
   // showCombined mirrors cardShowsCombinedHeader: anchor view shows batch
   // totals in the dropdown.
-  const showCombined = !!(lo && !lo.isLeftover && (lo.servings > 1 || lo.crossPersonCook) && !(lo.shared || lo.sameDayShared));
+  // R14-C4 (2026-07-05): must ALSO mirror the per-serving toggle. When
+  // perServingMode is on for this card, buildMealCardHtml renders the
+  // dropdown with cookServings=1 (per-portion values) — interpreting the
+  // pick as a batch total here scaled every portion by ~1/N (e.g. picking
+  // "9 oz" per-serving on a 24 oz 3-portion batch pinned 3 oz/serving).
+  const showCombined = !!(lo && !lo.isLeftover && (lo.servings > 1 || lo.crossPersonCook) && !(lo.shared || lo.sameDayShared))
+    && !perServingMode[sk(p,d,s)];
 
   if(isBatch){
     let currentCombined = 0, currentThisSlot = 0;
@@ -10805,9 +10913,15 @@ function onIngrReset(p,d,s){
       if(filtered.length === 0) delete OVERRIDES[k];
       else if(filtered.length !== ov.length) OVERRIDES[k] = filtered;
     }
-    // 2. Restore cache slot from snapshot if available
+    // 2. Restore cache slot from snapshot if available.
+    // R14-C6: only when the slot still holds the meal the snapshot was taken
+    // for — otherwise (meal changed via dropdown/sync/edit-mode since capture)
+    // fall through to the V142 rebuild path, which computes correct values
+    // for the CURRENT meal.
     var pkkey = pk(pt.p, pt.d);
-    if(_postRandomizeCache[pkkey] && _postRandomizeCache[pkkey][pt.s]){
+    var snapMealOk = _postRandomizeSel[pkkey]
+      && _postRandomizeSel[pkkey][pt.s] === (getMealId(pt.p, pt.d, pt.s) || null);
+    if(snapMealOk && _postRandomizeCache[pkkey] && _postRandomizeCache[pkkey][pt.s]){
       if(!_dayBalancedCache[pkkey]) _dayBalancedCache[pkkey] = {};
       _dayBalancedCache[pkkey][pt.s] = JSON.parse(JSON.stringify(_postRandomizeCache[pkkey][pt.s]));
     } else {
@@ -11143,7 +11257,14 @@ function freezeTripTotals(randTarget, attemptSwap){
                   _snapV175(p, d, s); // V175: snapshot before mutation
                   var changed = false;
                   for(var jj=ovList.length-1; jj>=0; jj--){
-                    if(ovList[jj].idx === idx){ ovList.splice(jj, 1); changed = true; }
+                    // R14-C8 (2026-07-05): preserve _userSet pins. This
+                    // cleanup exists to drop FREEZE overrides sized to the
+                    // old trip composition (per the V161 note above); user
+                    // pins are absolute per contract and the V175 snapshot
+                    // only restores them on verify-FAIL — an ACCEPTED swap
+                    // was silently reverting the user's edit on slots whose
+                    // meal never changed.
+                    if(ovList[jj].idx === idx && ovList[jj]._userSet !== true){ ovList.splice(jj, 1); changed = true; }
                   }
                   if(ovList.length === 0) delete OVERRIDES[k2];
                   if(changed) affectedDays[p+'_'+d] = {p:p, d:d};
@@ -11392,7 +11513,8 @@ function freezeTripTotals(randTarget, attemptSwap){
             _cSnapV175(p, d, s); // V175: snapshot before mutation
             var changed = false;
             for(var ll=ovList.length-1; ll>=0; ll--){
-              if(ovList[ll].idx === ii){ ovList.splice(ll,1); changed = true; }
+              // R14-C8: preserve _userSet pins (see _clearIngOverride twin).
+              if(ovList[ll].idx === ii && ovList[ll]._userSet !== true){ ovList.splice(ll,1); changed = true; }
             }
             if(ovList.length === 0) delete OVERRIDES[k3];
             if(changed) affectedDays[p+'_'+d] = {p:p, d:d};
@@ -11545,11 +11667,34 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   if(db.wholeOnly) grid = 1;
 
   // Collect contributors from cook anchors only.
+  // R14-C9/C1 (2026-07-05): contributors freeze must COUNT but cannot WRITE
+  // are pooled into fixedSum instead of solos/batches:
+  //   - C9: rows user-pinned (_userSet). Pre-fix the plan scaled them and
+  //     the write-gate skipped them — the trip landed off the container
+  //     boundary while freeze reported success (hard INV20; the swap
+  //     fallback never ran because no failure was seen). A batch with ANY
+  //     pinned portion is fixed whole (onIngrAmt pins every portion of a
+  //     batch; partial pins are handled defensively the same way).
+  //   - C1: on a single-person randomize, the OTHER person's anchored
+  //     contributions. Pre-fix they were invisible here — freeze rounded
+  //     the target person's pool alone while INV20/shopping measure the
+  //     HOUSEHOLD trip total, which landed off-boundary.
+  // Y candidates below are HOUSEHOLD totals; each converts to a writable-
+  // pool target (Y - fixedSum) before _tryFreezeY scales the pool.
   var solos = []; // [{p, d, s, idx, amt}]
   var batches = []; // [{portions:[{p,d,s,idx,amt,kcal}], batchTotal, batchKcal}]
+  var fixedSum = 0;
+  function _pinnedAt(pp, dd, ss, ii){
+    var ov = OVERRIDES[sk(pp, dd, ss)];
+    if(!ov) return false;
+    for(var vi=0; vi<ov.length; vi++){
+      if(ov[vi].idx === ii && ov[vi]._userSet === true) return true;
+    }
+    return false;
+  }
   days.forEach(function(d){
-    persons.forEach(function(p){
-      if(p!=='him' && p!=='her') return;
+    ['him','her'].forEach(function(p){
+      var writable = persons.indexOf(p) >= 0;
       ['breakfast','lunch','snack','dinner'].forEach(function(s){
         var key = sk(p, d, s);
         if(SKIPPED[key] || EAT_OUT[key]) return;
@@ -11564,12 +11709,16 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
         if(idx < 0) return;
         var portionList = (lo && lo.portions) ? lo.portions : [{p:p, d:d, s:s}];
         if(portionList.length === 1){
-          solos.push({p:p, d:d, s:s, idx:idx, amt:bal[idx].amt});
+          if(!writable || _pinnedAt(p, d, s, idx)) fixedSum += bal[idx].amt;
+          else solos.push({p:p, d:d, s:s, idx:idx, amt:bal[idx].amt});
         } else {
           var portions = [];
           var batchTotal = 0;
           var batchKcal = 0;
+          var anyPinned = false;
+          var participates = false; // R14-C1: pot writable if target eats from it
           portionList.forEach(function(pt){
+            if(persons.indexOf(pt.p) >= 0) participates = true;
             var pbal = getBalancedSlotIngredients(pt.p, pt.d, pt.s);
             if(!pbal) return;
             var pidx = -1;
@@ -11577,6 +11726,7 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
               if(pbal[kk].dbKey === dbKey){ pidx = kk; break; }
             }
             if(pidx < 0) return;
+            if(_pinnedAt(pt.p, pt.d, pt.s, pidx)) anyPinned = true;
             var pkcal = 0;
             pbal.forEach(function(it){var idb = NUTRI_DB[it.dbKey]; if(idb) pkcal += idb.kcal * it.amt;});
             portions.push({p:pt.p, d:pt.d, s:pt.s, idx:pidx, amt:pbal[pidx].amt, kcal:pkcal});
@@ -11584,17 +11734,19 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
             batchKcal += pkcal;
           });
           if(portions.length > 0 && batchTotal > 0.001 && batchKcal > 0.001){
-            batches.push({portions:portions, batchTotal:batchTotal, batchKcal:batchKcal});
+            if((!writable && !participates) || anyPinned) fixedSum += batchTotal;
+            else batches.push({portions:portions, batchTotal:batchTotal, batchKcal:batchKcal});
           }
         }
       });
     });
   });
-  if(solos.length === 0 && batches.length === 0) return null;
+  if(solos.length === 0 && batches.length === 0 && fixedSum <= 0.001) return null;
 
   var soloSum = solos.reduce(function(a,x){return a+x.amt;}, 0);
   var batchSum = batches.reduce(function(a,b){return a+b.batchTotal;}, 0);
-  var tripTotal = soloSum + batchSum;
+  var poolTotal = soloSum + batchSum;
+  var tripTotal = poolTotal + fixedSum;
   if(!(tripTotal > 0.001)) return null;
 
   // Carry items (crossTripCarry: marinara, chicken broth) get a c1-aware
@@ -11689,9 +11841,19 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
     }
   });
 
+  // R14-C9/C1: nothing writable to scale — the boundary check above already
+  // returned success if the fixed contributors happen to land clean; here
+  // they don't, and freeze cannot fix it without touching pinned/non-target
+  // amounts. Return null so the caller's swap fallback can try.
+  if(poolTotal <= 0.001) return null;
+
   var ctx = {db:db, grid:grid, floorSolo:floorSolo, capSolo:capSolo, floorB:floorB, capB:capB};
   for(var ci = 0; ci < candidates.length; ci++){
-    var attempt = _tryFreezeY(candidates[ci], solos, batches, tripTotal, ctx);
+    // R14-C9/C1: candidates are HOUSEHOLD totals; the writable pool must
+    // land at (Y - fixedSum) so pool + fixed = Y.
+    var Ypool = candidates[ci] - fixedSum;
+    if(Ypool <= 0.001) continue;
+    var attempt = _tryFreezeY(Ypool, solos, batches, poolTotal, ctx);
     if(attempt.ok) return {solos: attempt.solos, batches: attempt.batches};
   }
   return null;
@@ -14545,7 +14707,12 @@ function randomizeWeek(target, seed){
   // this, scalable:false overrides on shared-schedule slots accumulate
   // across runs and pin cook amounts at stale values. User UI overrides
   // (amt-only) are preserved. 2026-05-02.
+  // R14-C1: capture the non-target person's durable pins ONCE (run-start
+  // geometry), then restore them after every clear this run — mid-run
+  // freeze transients die each retry, her pre-run frozen state survives.
+  var _preservedPins = _captureNonTargetFreezePins(target||person);
   _clearFreezeOverrides();
+  _restorePreservedPins(_preservedPins, target||person);
   // V214 (2026-05-29): clear transient auto-skips from the previous run.
   // skipKcalOverSnacks may have set SKIPPED on extreme over-budget days last
   // run; those are re-decided each randomize, NOT persisted. Manual skips
@@ -14621,6 +14788,7 @@ function randomizeWeek(target, seed){
     // pollution → INV7/INV8 fires (cross-person ratio + batch grid).
     // Confirmed in V97 first attempt: INV7=46, INV8=23 across 25 seeds.
     _clearFreezeOverrides();
+    _restorePreservedPins(_preservedPins, randTarget); // R14-C1
 
     _randomizeWeekCore(randTarget);
 
@@ -14716,6 +14884,11 @@ function randomizeWeek(target, seed){
     // Confirmed: V97 first attempt INV7=46, with freeze-clear-per-retry but
     // no end-of-loop clear: INV7=9. With this clear: target 0.
     _clearFreezeOverrides();
+    // R14-C1: invalidate BEFORE the restore — its participation check reads
+    // computeLeftovers(), which must reflect the just-restored bestSEL, not
+    // the last retry's stale geometry.
+    invalidateLeftoverCache();
+    _restorePreservedPins(_preservedPins, randTarget); // R14-C1
   }
   invalidateLeftoverCache();
   // Targeted day re-rolls: fix any remaining miss-days without breaking waste.
@@ -15208,6 +15381,13 @@ function rerollKcalOffSnacks(randTarget){
       if(bestSwap){
         SEL[key] = bestSwap;
         weekData[activeWeek].ts[key] = now;
+        // R14-C2 (2026-07-05): the slot's meal changed — its idx-keyed
+        // overrides (_fatBoost avocado-oil entries, freeze pins from Pass
+        // 1/2) belong to the OLD meal. applyOverrides matches by idx only,
+        // so without this clear the rebuild substituted/mis-pinned rows in
+        // the swapped-in meal. Mirrors Phase 1's clearOverrides on re-pick
+        // and the freeze-swap path's commit cleanup.
+        clearOverrides(p,d,'snack');
         // V201: track this slot for Stage 2 absorb priority.
         if(typeof _pendingSwapSlots !== 'undefined') _pendingSwapSlots.add(key);
         const newSnackCache = rebuildSnackCache(p,d);
@@ -15375,6 +15555,9 @@ function rerollKcalOffBreakfast(randTarget){
       if(bestSwap){
         SEL[key] = bestSwap;
         weekData[activeWeek].ts[key] = now;
+        // R14-C2: meal changed — drop the old meal's idx-keyed overrides
+        // (see snack-reroll commit above for the full rationale).
+        clearOverrides(p,d,'breakfast');
         if(typeof _pendingSwapSlots !== 'undefined') _pendingSwapSlots.add(key);
         const newBreakfastCache = rebuildBreakfastCache(p,d);
         if(newBreakfastCache) cached.breakfast = newBreakfastCache;
@@ -15953,6 +16136,14 @@ function _randomizeWeekCore(randTarget){
             if (isLockedForRandomize(sk('her',d,s))) return;
             var himId = getMealId('him', d, s);
             if (himId) {
+              // R14-C7 (2026-07-05): if the mirror CHANGES her meal, her
+              // slot's idx-keyed overrides belong to the OLD meal — incl.
+              // orphaned _userSet pins that survived a skip/eat-out toggle
+              // (those clears drop MANUAL_SET but not OVERRIDES). Without
+              // this, applyOverrides pinned the old meal's amount onto the
+              // new meal's same-idx row, silently. Same-meal mirrors keep
+              // their overrides (still meal-consistent).
+              if (SEL[sk('her',d,s)] !== himId) clearOverrides('her',d,s);
               SEL[sk('her',d,s)] = himId;
               weekData[activeWeek].ts[sk('her',d,s)] = now;
               locked[sk('her',d,s)] = true;
@@ -17224,6 +17415,7 @@ function switchWeek(w){
   // rebuilds fresh from the new SEL.
   invalidateLeftoverCache();
   Object.keys(_postRandomizeCache).forEach(function(k){delete _postRandomizeCache[k];});
+  Object.keys(_postRandomizeSel).forEach(function(k){delete _postRandomizeSel[k];}); // R14-C6
   // V156 (2026-05-19): also clear _autoLinkColorCache on week switch. Cache
   // key is groupId composed from (anchor p,d,s,mealId). Two weeks can produce
   // identical groupIds (same meal on same anchor day/slot), so a color
@@ -17647,6 +17839,14 @@ function mergeSyncData(remote){
   // the user sees it.
   if(typeof _syncEatOutsToSharedSchedule === 'function') _syncEatOutsToSharedSchedule();
   if(typeof _resolveStateContradictions === 'function') _resolveStateContradictions();
+
+  // R14-C5 (2026-07-05): merge replaces weekData sel/overrides but nothing in
+  // this chain invalidated the balanced/leftover caches (only switchWeek did),
+  // so pullSync's renderMeals — which by design does NOT invalidate — showed
+  // the NEW meal titles with the OLD meals' cached ingredient amounts, and
+  // buildShoppingList summed the stale amounts. Mutation paths must invalidate
+  // before renderMeals; sync merge is a mutation path.
+  invalidateLeftoverCache();
 
   saveWeeks();saveCustomMeals();saveCustomIngredients();saveEatOutDB();
   injectCustomMeals();renderWeekBar();
@@ -18547,6 +18747,8 @@ window.MPStress=(function(){
     // Without this, calling randomizeWeek() inside a scenario rewrites the
     // global _postRandomizeCache, contaminating subsequent reset assertions.
     var postRand = (typeof _postRandomizeCache==='object' && _postRandomizeCache) ? clone(_postRandomizeCache) : {};
+    // R14-C6: capture the parallel meal-id map with the snapshot it validates.
+    var postRandSel = (typeof _postRandomizeSel==='object' && _postRandomizeSel) ? clone(_postRandomizeSel) : {};
     // V85 (2026-05-08): include USER_EDITED in snapshot. Pre-V85 it
     // wasn't captured, so prior ops' USER_EDITED stamps leaked into
     // later ops via freshRestore. Now that V85 makes first-tap clear
@@ -18567,7 +18769,7 @@ window.MPStress=(function(){
     // OFF behavior (restore wrong meal). Symmetric with other transient
     // globals captured above.
     var sharedUndo = (typeof SHARED_UNDO === 'object' && SHARED_UNDO) ? clone(SHARED_UNDO) : {};
-    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),USER_EDITED:clone(USER_EDITED),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),LEFTOVER_LINKS:links,_lastSel:lastSel,_lastOv:lastOv,_lastSk:lastSk,_lastEo:lastEo,_dayBalancedCache:dayBal,_leftoverCache:leftover,_postRandomizeCache:postRand,SHARED_UNDO:sharedUndo};
+    return{SEL:clone(SEL),SKIPPED:clone(SKIPPED),EAT_OUT:clone(EAT_OUT),MANUAL_SET:clone(MANUAL_SET),USER_EDITED:clone(USER_EDITED),SHARED_SCHEDULE:clone(SHARED_SCHEDULE),ADJ_TARGETS:clone(ADJ_TARGETS),OVERRIDES:clone(OVERRIDES),LATE_SNACK:clone(LATE_SNACK),LEFTOVER_LINKS:links,_lastSel:lastSel,_lastOv:lastOv,_lastSk:lastSk,_lastEo:lastEo,_dayBalancedCache:dayBal,_leftoverCache:leftover,_postRandomizeCache:postRand,_postRandomizeSel:postRandSel,SHARED_UNDO:sharedUndo};
   }
   function replace(g,v){Object.keys(g).forEach(function(k){delete g[k];});Object.keys(v).forEach(function(k){g[k]=v[k];});}
   function restore(s){
@@ -18608,6 +18810,13 @@ window.MPStress=(function(){
     if (s._postRandomizeCache) {
       Object.keys(_postRandomizeCache).forEach(function(k){delete _postRandomizeCache[k];});
       Object.keys(s._postRandomizeCache).forEach(function(k){_postRandomizeCache[k]=JSON.parse(JSON.stringify(s._postRandomizeCache[k]));});
+    }
+    // R14-C6: restore the parallel meal-id map alongside its snapshot.
+    // Legacy snapshots without the field clear to empty (guard then falls
+    // back to the rebuild path — safe).
+    Object.keys(_postRandomizeSel).forEach(function(k){delete _postRandomizeSel[k];});
+    if (s._postRandomizeSel) {
+      Object.keys(s._postRandomizeSel).forEach(function(k){_postRandomizeSel[k]=JSON.parse(JSON.stringify(s._postRandomizeSel[k]));});
     }
     // V167 (2026-05-19): restore SHARED_UNDO. If snapshot is missing the
     // field (legacy pre-V167), clear to empty.
