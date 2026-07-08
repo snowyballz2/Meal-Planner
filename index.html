@@ -13407,6 +13407,124 @@ function closeRandomizePopup(){
   const o=document.getElementById('calPopupOverlay');
   if(o)o.style.display='none';
 }
+// ── R14 follow-up (V233, 2026-07-07): partner-waste fix dialog ──
+// A single-person randomize keeps the OTHER person's plan frozen (R14-C1
+// participation rule), so when the target's contributors move out of a trip
+// the partner's pots/solos can strand partial packages — real waste that
+// only adjusting the partner's AMOUNTS can fix. Per user decision: after a
+// UI-triggered single-person randomize, detect those cases and offer a
+// per-instance choice — adjust the partner's amounts (household amounts-only
+// re-freeze; meals unchanged) or leave their plan alone (waste stays,
+// INV20 reports it). Harness runs never see the dialog (suppress flag set
+// by runSlotMod/…; MPStress calls randomizeWeek directly anyway).
+var _suppressPartnerWasteDialog = false;
+function _detectPartnerWasteFixables(randTarget){
+  if(randTarget !== 'him' && randTarget !== 'her') return [];
+  var out = [];
+  ['cook1','cook2'].forEach(function(trip){
+    var grouped = buildShoppingList(trip, 'both');
+    Object.keys(grouped).forEach(function(cat){
+      grouped[cat].forEach(function(item){
+        var db = NUTRI_DB[item.dbKey];
+        if(!db) return;
+        var totalNum = (item.hisSum?item.hisSum.num:0) + (item.herSum?item.herSum.num:0);
+        if(totalNum <= 0) return;
+        // If the partner contributes nothing to this item·trip, adjusting
+        // their amounts can't help — don't offer.
+        var otherNum = randTarget==='him' ? (item.herSum?item.herSum.num:0)
+                                          : (item.hisSum?item.hisSum.num:0);
+        if(otherNum <= 0.001) return;
+        var unit = (item.hisSum||item.herSum||{}).unit;
+        // Gating mirrors the INV20-HARD per-trip sites (soft/acceptable/
+        // nonWaste/longShelfLife/carry excluded — those are accepted by
+        // design and shouldn't nag).
+        if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.nonWaste
+           && !db.pkg.crossTripCarry && !db.pkg.softWaste){
+          var perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
+          if(perPkg > 0){
+            var bought = _pkgsNeeded(totalNum, perPkg) * perPkg;
+            var waste = bought - totalNum;
+            if(bought > 0 && waste/bought > 0.01){
+              out.push({dbKey:item.dbKey, trip:trip, used:totalNum, bought:bought, waste:waste, unit:unit});
+            }
+          }
+        }
+        if(db.produce && !db.produce.acceptableWaste && !db.produce.nonWaste
+           && !db.produce.crossTripCarry && !db.produce.softWaste){
+          var perWhole = db.produce.perWhole;
+          if(perWhole > 0){
+            var pBought = _pkgsNeeded(totalNum, perWhole) * perWhole;
+            var pWaste = pBought - totalNum;
+            if(pWaste > perWhole * 0.5){
+              out.push({dbKey:item.dbKey, trip:trip, used:totalNum, bought:pBought, waste:pWaste, unit:unit});
+            }
+          }
+        }
+      });
+    });
+  });
+  return out;
+}
+function _maybeOfferPartnerWasteFix(randTarget){
+  if(_suppressPartnerWasteDialog) return;
+  if(randTarget !== 'him' && randTarget !== 'her') return;
+  if(document.getElementById('partnerWasteModal')) return;
+  var fx = _detectPartnerWasteFixables(randTarget);
+  if(!fx.length) return;
+  var other = randTarget === 'him' ? 'Her' : 'Him';
+  var tripLabel = {cook1:'Mon–Wed', cook2:'Thu–Sun'};
+  var rows = fx.map(function(f){
+    return '<div style="padding:3px 0;font-size:13px">• <b>'+f.dbKey+'</b> ('+tripLabel[f.trip]+'): '
+      + (Math.round(f.used*100)/100)+f.unit+' cooked / '+(Math.round(f.bought*100)/100)+f.unit
+      + ' bought → <b style="color:#FBBF24">'+(Math.round(f.waste*100)/100)+f.unit+' unused</b></div>';
+  }).join('');
+  var el = document.createElement('div');
+  el.id = 'partnerWasteModal';
+  el.innerHTML =
+    '<div style="position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)_dismissPartnerWasteFix()">'
+    + '<div style="background:var(--card,#1F2937);border:1px solid var(--border,#374151);border-radius:14px;max-width:420px;width:100%;padding:18px;color:var(--text,#F3F4F6)">'
+    + '<div style="font-weight:700;font-size:15px;margin-bottom:8px">📦 Package waste in '+other+'’s plan</div>'
+    + '<div style="font-size:13px;opacity:0.85;margin-bottom:10px">This randomize changed shared shopping. '+other+'’s unchanged amounts now leave partial packages:</div>'
+    + rows
+    + '<div style="font-size:12px;opacity:0.7;margin:10px 0 14px">Adjusting updates '+other+'’s ingredient <b>amounts only</b> (no meal changes) so trips land on package boundaries. Items that can’t fit within per-serving limits stay flagged in Shopping.</div>'
+    + '<div style="display:flex;gap:10px">'
+    + '<button class="rand-btn" style="flex:1" onclick="_applyPartnerWasteFix()">Adjust '+other+'’s amounts</button>'
+    + '<button class="rand-btn" style="flex:1;background:var(--border,#374151)" onclick="_dismissPartnerWasteFix()">Leave '+other+'’s alone</button>'
+    + '</div></div></div>';
+  document.body.appendChild(el);
+}
+function _dismissPartnerWasteFix(){
+  var el = document.getElementById('partnerWasteModal');
+  if(el) el.remove();
+}
+function _applyPartnerWasteFix(){
+  _dismissPartnerWasteFix();
+  // Household amounts-only re-freeze — the shared-run freeze tail on the
+  // current SEL. Meals stay; the partner's pkg/produce amounts re-round
+  // with full household writability. _userSet pins remain absolute
+  // (R14-C9 fixedSum); MANUAL_SET meals are untouched (amounts only).
+  _clearFreezeOverrides();
+  invalidateLeftoverCache();
+  runBalanceAdjusters();
+  freezeTripTotals('shared', false);
+  runBalanceAdjusters();
+  if(typeof snapSoloSlotAmountsToGrid === 'function') snapSoloSlotAmountsToGrid();
+  verifyInvariants();
+  renderMeals();
+  autoSaveWeek();
+  // Amounts alone can't always reach a boundary (e.g. a single-eater solo
+  // whose per-serving cap is below one container). Say so instead of
+  // silently under-delivering; the Shopping tab keeps its waste warning.
+  var remaining = _detectPartnerWasteFixables('him').concat(_detectPartnerWasteFixables('her'));
+  var seen = {}, rem = remaining.filter(function(f){ var k=f.trip+'|'+f.dbKey; if(seen[k])return false; seen[k]=true; return true; });
+  if(rem.length){
+    var toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card,#1F2937);border:1px solid #FBBF24;border-radius:10px;padding:10px 16px;z-index:9999;font-size:13px;color:var(--text,#F3F4F6);max-width:90%';
+    toast.textContent = '⚠️ Could not fully fit: ' + rem.map(function(f){ return f.dbKey+' ('+(Math.round(f.waste*100)/100)+f.unit+' unused)'; }).join(', ') + ' — amounts capped by per-serving limits.';
+    document.body.appendChild(toast);
+    setTimeout(function(){ toast.remove(); }, 6000);
+  }
+}
 function runRandomizeFromPopup(){
   closeRandomizePopup();
   let randTarget;
@@ -13418,6 +13536,7 @@ function runRandomizeFromPopup(){
   setDay('Monday');
   renderMeals();
   requestAnimationFrame(function(){window.scrollTo(0,0);});
+  _maybeOfferPartnerWasteFix(randTarget); // V233
 }
 // 2026-05-06+: Schedule edit mode — opt-in sandbox for restructuring the
 // schedule.
@@ -13734,6 +13853,7 @@ function applyScheduleEdit(){
   renderMeals();
   if(topTab==='shop') renderShop();
   autoSaveWeek();
+  _maybeOfferPartnerWasteFix(rTarget); // V233
 }
 function clearScheduleEdit(){
   // Clear all painting / highlights / per-cell state inside edit mode.
@@ -21279,8 +21399,21 @@ window.MPStress=(function(){
 
     function checkInv(){
       var n=_smHardCount();
-      add('hardInv', n<=baseline.hardCount,
-        'op introduced '+(n-baseline.hardCount)+' hard INV fires', baseline.hardCount, n);
+      // V233 (2026-07-08): on failure, capture the ACTUAL violation lines in
+      // the failure record. randomizePersist is nondeterministic (unseeded
+      // randomize from mutated state, per its own comment) and flaked ~2/80
+      // instances during R14 verification with no way to see WHICH invariant
+      // fired — reruns wouldn't reproduce. Self-documenting failures beat
+      // post-hoc instrumented reruns.
+      var detail = 'op introduced '+(n-baseline.hardCount)+' hard INV fires';
+      if(n > baseline.hardCount){
+        var lines = verifyInvariants().filter(function(v){
+          return _SM_HARD_KEYS.some(function(k){return v.indexOf(k+' ')===0||v.indexOf(k+':')===0;})
+            && v.indexOf('INV20Soft')!==0;
+        });
+        detail += ' :: ' + lines.join(' | ').slice(0, 600);
+      }
+      add('hardInv', n<=baseline.hardCount, detail, baseline.hardCount, n);
     }
     function checkSchedEatOut(){
       var r=_smCheckSchedEatOutConsistency();
@@ -24129,6 +24262,11 @@ window.MPStress=(function(){
     var baseSeed=opts.baseSeed||12345;
     var maxSeedScan=opts.maxSeedScan||(nSeeds*4); // hard cap on seed scan
     var verbose=!!opts.verbose;
+    // V233: harness ops call applyScheduleEdit, which may pop the partner-
+    // waste dialog on single-person targets — suppress for the whole run.
+    _suppressPartnerWasteDialog = true;
+    try{ return _runSlotModBody(); }finally{ _suppressPartnerWasteDialog = false; _dismissPartnerWasteFix(); }
+    function _runSlotModBody(){
     // V195 INV26 (2026-05-22): the snapshot taken here is restored per scenario,
     // so a polluted initial snapshot taints every scenario. Audit R12 (2026-05-30):
     // self-clean at entry so the harness runs STANDALONE, matching runStandard.
@@ -24433,6 +24571,7 @@ window.MPStress=(function(){
     });
     restore(saved);
     return agg;
+    } // _runSlotModBody (V233)
   }
 
   // Sequential mode: per-spec, run 6 ordered chains on a fresh slot per seed
@@ -24443,6 +24582,10 @@ window.MPStress=(function(){
     var nSeeds=opts.nSeeds||5;
     var baseSeed=opts.baseSeed||12345;
     var maxSeedScan=opts.maxSeedScan||(nSeeds*4);
+    // V233: same dialog suppression as runSlotMod.
+    _suppressPartnerWasteDialog = true;
+    try{ return _runSeqBody(); }finally{ _suppressPartnerWasteDialog = false; _dismissPartnerWasteFix(); }
+    function _runSeqBody(){
     // Audit R12 (2026-05-30): self-clean at entry (same as runSlotMod /
     // runStandard) so the sequential chains start from a pristine, reproducible
     // baseline instead of silently inheriting the polluted page state into
@@ -24738,6 +24881,7 @@ window.MPStress=(function(){
     }
     restore(saved);
     return agg;
+    } // _runSeqBody (V233)
   }
 
   function formatSlotModSequentialReport(agg){
