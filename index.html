@@ -7536,6 +7536,20 @@ function verifyInvariants(){
       });
       var balancerKcal=0;
       Object.keys(cache).forEach(function(s){
+        // V234 (2026-07-09): mirror calcTotals's SKIPPED/EAT_OUT gating.
+        // V214's skipKcalOverSnacks sets SKIPPED as the LAST pipeline stage
+        // WITHOUT cache invalidation (by design — see its header comment),
+        // so the skipped snack's cache entry legitimately persists while
+        // calcTotals (truth) drops the slot. This reconstruction summed it
+        // → INV17 false-fired with drift == the skipped snack's kcal on
+        // every auto-skip day (the rare randomizePersist flake, drift=58 =
+        // a 58-kcal fruit snack). Proven deterministically by simulating
+        // V214's exact state: drift tracked the snack's cache kcal (275).
+        // False positive by construction — no balancer runs between V214
+        // and the next rebuild (which omits the slot). EAT_OUT gated for
+        // the same reason: eo slots contribute eo.kcal (added below),
+        // never their cache rows.
+        if(SKIPPED[sk(p,d,s)] || EAT_OUT[sk(p,d,s)]) return;
         var mult=sameDayCookServings[s]||1;
         cache[s].forEach(function(i){
           var db=NUTRI_DB[i.dbKey]; if(!db)return;
