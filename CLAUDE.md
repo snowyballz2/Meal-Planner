@@ -6,7 +6,7 @@ Single-file HTML/JS PWA (`index.html`, ~24,000 lines) for two people ("Him"/"Her
 
 ## ⚠ Invariant & Communication Rules (read first)
 
-**Invariants are contracts, not targets.** There are now **26 invariants** (INV1–26). Any hard-INV violation — the hard set is **INV1–5, INV7–13, INV17, INV19, INV20 (hard count = INV20 − INV20Soft), INV23, INV24, INV25, INV26** — even one, even "rare," even "can't reproduce" — is a bug and MUST be investigated until root-caused. The following justifications are banned in this repo:
+**Invariants are contracts, not targets.** There are now **27 invariants** (INV1–27). Any hard-INV violation — the hard set is **INV1–5, INV7–13, INV17, INV19, INV20 (hard count = INV20 − INV20Soft), INV23, INV24, INV25, INV26, INV27** — even one, even "rare," even "can't reproduce" — is a bug and MUST be investigated until root-caused. The following justifications are banned in this repo:
 
 - "stochastic edge"
 - "close enough" / "within tolerance"
@@ -190,7 +190,7 @@ Fallback cascade (preserves variety as long as possible): primary → drop `used
 8. **freeze Pass 3** — catch pkg/produce contributors introduced by snack swaps (mostly fast-path)
 9. **Stage 2 carry-absorb** — for each `crossTripCarry` item with prior-week `priorCarry`, swap a meal so this week's c1 demand lands clean; if any committed, post-absorb `freezeTripTotals(target,false)` + RBA
 10. **`skipKcalOverSnacks`** — last-resort snack removal for days still >175 over target. **Runs LAST** (after absorb's re-freeze): setting SKIPPED redistributes the freed budget, so any later freeze/RBA would undo it. Touches only SKIPPED (transient `_autoSkipSlots`, cleared at next randomize)
-11. `verifyInvariants()` — runs **INV1–26**; INV6/14/15/16/18/20Soft/20Leftover/21/22 are tracking-only
+11. `verifyInvariants()` — runs **INV1–27**; INV6/14/15/16/18/20Soft/20Leftover/21/22 are tracking-only
 12. `renderMeals()` + `autoSaveWeek()`
 
 **Critical: `renderMeals()` does NOT invalidate the balanced cache.** Earlier versions did and wiped all post-pipeline mutations (snap, unify, waste, boost) before the user saw them. Mutation paths (meal swap, override, skip/eat-out, randomize) must explicitly invalidate *before* calling `renderMeals`.
@@ -264,7 +264,7 @@ For `crossTripCarry` items only (marinara, chicken broth), `_computePriorCarryov
 **Result quality** (current, 100-seed runs — Test 1 deterministic + Test 2 nondeterministic):
 - Primary goal hit rate: **~99.9%** (worst observed day in the cleanest run: +100 kcal; misses are rare borderline fat%/veg)
 - Secondary goal hit rate: ~100%
-- Hard invariants (INV1–5, 7–13, 17, 19, 20-hard, 23–26): **0**
+- Hard invariants (INV1–5, 7–13, 17, 19, 20-hard, 23–27): **0**
 - INV14: **0**; zero-waste (non-soft): 100%; meals closed-off: 0.0%
 - Per-click time: ~600 ms–1.5 s (see the timing-measurement caveat — restart the preview server before any timing batch; a long-lived process inflates it)
 
@@ -328,7 +328,7 @@ GitHub Gist API push/pull. **Payload version 4** (2026-04-26): per-key timestamp
 
 ## Runtime Invariants
 
-`verifyInvariants()` runs after every `randomizeWeek` and emits **INV1–26**. Any violation warns to console with a specific message. **>0 hard violations = bug** (tracking-only: INV6/14/15/16/18/20Soft/20Leftover/21/22 — signals, not fails, but not noise either). `verifyInvariants()` does NOT invalidate cache — it validates the current post-pipeline state.
+`verifyInvariants()` runs after every `randomizeWeek` and emits **INV1–27**. Any violation warns to console with a specific message. **>0 hard violations = bug** (tracking-only: INV6/14/15/16/18/20Soft/20Leftover/21/22 — signals, not fails, but not noise either). `verifyInvariants()` does NOT invalidate cache — it validates the current post-pipeline state.
 
 **Full detailed rules: see [INVARIANTS.md](INVARIANTS.md)** and `~/.claude/.../memory/system_invariants.md` (current).
 
@@ -362,6 +362,7 @@ GitHub Gist API push/pull. **Payload version 4** (2026-04-26): per-key timestamp
 | **INV24** | State-mutation mutual-exclusion: `SHARED_SCHEDULE='shared'` ∧ `EAT_OUT` contradict; `'eo-{side}'` ∧ `SKIPPED` same side contradict; `'eo-both'` ∧ `SKIPPED` either side contradict. Catches stale state from sync / pre-V31 data | exact | hard |
 | **INV25** | Card ingredient amount display coherence: displayed amount text round-trips to within 0.02 of the balanced amount (solo + combined-batch view; skips fractional leftover/shared per-portion). Cooking-surface analog of INV3 | 0.02 | hard |
 | **INV26** | Stress-harness guard: hard-fails any stress test / harness call that STARTS on polluted (non-pristine) state. Not a runtime-app invariant — protects against false baselines | exact | hard (harness) |
+| **INV27** | NUTRI_DB kcal↔macro consistency: per entry, kcal ≈ 4·pro + 4·carb + 9·fat. Fires when \|diff\| > 25 kcal AND relative > 25% (threshold set empirically from the 149-entry sweep — separates basis-mismatch/typo bugs from label noise). New Ingredient form mirrors it with a confirm(). Found coconut milk's label-serving macros vs per-cup kcal on introduction (V240) | 25 kcal ∧ 25% | hard (static) |
 
 ## CSS Architecture
 
@@ -427,7 +428,7 @@ Visualizes cook+leftover batches as colored bands in the Schedule grid.
 
 ## Current State (2026-07-10, V239 — `main` @ tip)
 
-- **Quality (100-seed Test 1 + Test 2, V238)**: primary ~**99.6–99.8%** (Test 1 99.64% / Test 2 99.79%; misses are exclusively borderline proPct 40–45% and veg 2.5–3.0c classes — zero kcal-bucket misses; cumulative Waves B+C cost ~−0.22pp vs V236 for honest waste accounting, phantom-INV14 elimination, and fat-drops that actually stick); hard INVs (1–5, 7–13, 17, 19, 20-hard, 23–26) **all 0**; INV14 **0**; zero-waste (non-soft) 100%, soft fires ~17/100 runs (M11b tiebreaker; plan-space shifted by the V238 adjuster fixes); INV6 ~71/100 runs (improved); meals closed-off **0.0%**; per-click ~600 ms–1.5 s on a fresh process.
+- **Quality (100-seed Test 1 + Test 2, V238)**: primary ~**99.6–99.8%** (Test 1 99.64% / Test 2 99.79%; misses are exclusively borderline proPct 40–45% and veg 2.5–3.0c classes — zero kcal-bucket misses; cumulative Waves B+C cost ~−0.22pp vs V236 for honest waste accounting, phantom-INV14 elimination, and fat-drops that actually stick); hard INVs (1–5, 7–13, 17, 19, 20-hard, 23–27) **all 0**; INV14 **0**; zero-waste (non-soft) 100%, soft fires ~17/100 runs (M11b tiebreaker; plan-space shifted by the V238 adjuster fixes); INV6 ~71/100 runs (improved); meals closed-off **0.0%**; per-click ~600 ms–1.5 s on a fresh process.
 - **Tracking INVs**: INV6 ~85–100 after V227 (Audit R12 added `noRatioCheck:true` to `korean_juk` + `sweet_potato_egg_hash` + `turkey_sweet_potato_hash` — structurally macro-skewed dishes whose budget-fit trim/boost swings P/C by design; 0 day-misses across all observed fires, so the drift carried no signal). Remaining drift outliers `sticky_miso_salmon_bowl`/`salmon_stir_fry_din`/`miso_tofu` are still tracked. INV20 fires are all-soft (avocado/jalapeño produce, marinara/broth pkg); INV18 cap-rate low.
 - **Audit Rounds 11–13 CLOSED**: R11 — all CRITICAL+MEDIUM resolved, LOW A3/A6/E1 → V220 (A7 mirin tight margin left harmless; E2 ~12 condiment `minAmtSolo` deferred — do NOT pick up without a specific flagged issue). R12 (V227–V229) — deleted the already-disabled `postBalanceWastePass`/`boostBatchVegForDailyTarget` from RBA (behavior-neutral) + `noRatioCheck:true` on 3 macro-skewed dishes; detail in `AUDIT_ROUND_12.md`. R13 (V230–V231, 2026-06-02) — recipe-form INV10/INV19 validation + sync LWW for `calBase`/`proTarget`/`userEdited`.
 - **Audit Round 14 (2026-07-04/07, V232)**: 46 findings (9 CRITICAL / 23 MEDIUM / 14 LOW), all adversarially confirmed — full detail + verdict traces in `AUDIT_ROUND_14.md`. **All 9 CRITICALs fixed in V232**: sync-pull cache invalidation, Reset stale-snapshot meal-id guard (`_postRandomizeSel`), per-serving-mode edit scaling, duplicate-dbKey combined rows, clearOverrides on kcal-reroll + shared-mirror commits, `_userSet`-preserving freeze-swap cleanup, freeze fixed-contributor accounting (user pins counted-not-written), single-person-randomize freeze scoping (participation rule + pre-run pin capture/restore — see Package Waste Elimination). Verified: Tests 1+2 clean (primary 99.86%/99.57%, hard INVs 0, INV14 0, INV20 all-soft), targeted reproducers per fix, A/B vs V231 on single-person runs (hard fires 11/9/13 → 5/6/1; remainder is the pre-existing structural class — the untouched person's frozen pots stranding partial packages, honestly INV20-reported). **CLOSED 2026-07-10 (V239)** — all 46 findings resolved: 9 CRITICALs (V232), 23 MEDIUMs (V233 partner-dialog + V235–V238 Waves A–C), 14 LOWs (V239 Wave D).
