@@ -25547,7 +25547,273 @@ window.MPStress=(function(){
     return {total:checks.length, passed:passed, failed:checks.length-passed, checks:checks};
   }
 
-  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runStandard3:runStandard3,runStandard4:runStandard4,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline,runSlotMod:runSlotMod,formatSlotModReport:formatSlotModReport,runSlotModSequential:runSlotModSequential,formatSlotModSequentialReport:formatSlotModSequentialReport,runIntegrationTests:runIntegrationTests};
+  // ── V241 (2026-07-10): invariant self-test — negative controls ──
+  // Audit R14's recurring defect class was CHECKER BLIND SPOTS: INV25 was
+  // tautological (could never fire), INV23 skipped the most common batch
+  // shape, INV17 false-fired. Each was found by hand-building "prove it can
+  // fire" probes. This institutionalizes that: for every hard invariant,
+  // one targeted state corruption or function patch that MUST make it fire.
+  // A checker silently going dead now fails this test instead of being
+  // discovered by the next audit round.
+  //
+  // Statuses: pass (fired as expected, silent after restore), FAIL (did not
+  // fire — the checker is blind, or fired after restore — leaky cleanup),
+  // inconclusive (the seeded plan lacks the geometry the case needs, e.g.
+  // no cross-person batch; reported honestly, never silently skipped),
+  // skip (structural: tracking-only INVs excluded by design; INV26 is the
+  // meta-guard this very function runs under).
+  function selfTestInvariants(){
+    _suppressPartnerWasteDialog = true;
+    try{ return _stiBody(); }
+    finally{ _suppressPartnerWasteDialog = false; }
+    function _stiBody(){
+    _clearAllState();
+    _inv26Assert('selfTestInvariants.afterClearAllState', []);
+    var saved=snapshot();
+    randomizeWeek('shared', 4242);
+    var base=snapshot();
+    var results=[];
+    function fires(inv){
+      // Exact-token match — a bare prefix would collide ('INV1' matches the
+      // INV15/16 tracking lines, 'INV2' matches INV20-27). Same pattern as
+      // _smHardCount.
+      return verifyInvariants().some(function(l){return l.indexOf(inv+' ')===0 || l.indexOf(inv+':')===0;});
+    }
+    function runCase(inv, method, setup){
+      restore(base);
+      var st={inv:inv, method:method, status:'FAIL', detail:''};
+      var cleanup=null;
+      try{
+        var r = setup();
+        if(r && r.skip){ st.status='inconclusive'; st.detail=r.skip; results.push(st); restore(base); return; }
+        cleanup = r && r.undo;
+        st.status = fires(inv) ? 'pass' : 'FAIL';
+        if(st.status==='FAIL') st.detail='corruption did not make '+inv+' fire — checker may be blind';
+      }catch(e){ st.status='FAIL'; st.detail='case error: '+String(e).slice(0,120); }
+      finally{ if(cleanup){ try{cleanup();}catch(e){} } }
+      restore(base);
+      if(st.status==='pass' && fires(inv)){ st.status='FAIL'; st.detail='still firing after restore — leaky cleanup'; }
+      results.push(st);
+    }
+    function patchFn(name, wrap){
+      var orig=window[name];
+      window[name]=wrap(orig);
+      return function(){ window[name]=orig; };
+    }
+    function findSolo(){
+      var los=computeLeftovers();
+      var out=null;
+      DAYS.forEach(function(d){ ['lunch','dinner'].forEach(function(s){ ['him','her'].forEach(function(p){
+        if(out) return; var k=sk(p,d,s);
+        if(!los[k] && SEL[k] && !SKIPPED[k] && !EAT_OUT[k]) out={p:p,d:d,s:s};
+      });});});
+      return out;
+    }
+
+    // INV1: same-person time-shifted leftover diverges from its cook
+    runCase('INV1','data',function(){
+      var los=computeLeftovers(), t=null;
+      Object.keys(los).forEach(function(k){
+        if(t) return; var lo=los[k];
+        if(lo.isLeftover && !lo.crossPerson && !lo.sameDayShared){ var p=k.split('_'); t={p:p[0],d:p[1],s:p[2]}; }
+      });
+      if(!t) return {skip:'no same-person time-shifted leftover in seeded plan'};
+      getBalancedSlotIngredients(t.p,t.d,t.s);
+      _dayBalancedCache[pk(t.p,t.d)][t.s][0].amt += 1;
+      return {};
+    });
+    // INV2: stats-bar totals vs card sums (function-level fault)
+    runCase('INV2','patch',function(){
+      var undo=patchFn('calcTotals',function(orig){return function(p,d){var r=orig(p,d);var c={};for(var k in r)c[k]=r[k];c.kcal=r.kcal+50;return c;};});
+      return {undo:undo};
+    });
+    // INV3: shopping display-vs-helper twin drift (function-level fault)
+    runCase('INV3','patch',function(){
+      var undo=patchFn('shopQtyAsCacheUnits',function(orig){return function(){return orig.apply(null,arguments)+1;};});
+      return {undo:undo};
+    });
+    // INV4: solo pkg meal loses its PKG_FLEX_CONFIG entry. Mirror the
+    // checker's own gates: no lo entry, not SHARED_SCHEDULE 'shared' (the
+    // default plan's dinners all are), pkg ingredient non-exempt.
+    runCase('INV4','data',function(){
+      var los=computeLeftovers(), hit=null;
+      DAYS.forEach(function(d){ ['lunch','dinner','breakfast','snack'].forEach(function(s){ ['him','her'].forEach(function(p){
+        if(hit) return; var k=sk(p,d,s);
+        if(los[k] || !SEL[k] || SKIPPED[k] || EAT_OUT[k]) return;
+        if(SHARED_SCHEDULE[dk(d,s)]==='shared') return;
+        var bal=getBalancedSlotIngredients(p,d,s); if(!bal) return;
+        bal.forEach(function(i){
+          if(hit) return;
+          var db=NUTRI_DB[i.dbKey];
+          if(db && db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.nonWaste
+             && PKG_FLEX_CONFIG[i.dbKey]) hit=i.dbKey;
+        });
+      });});});
+      if(!hit) return {skip:'no non-shared solo slot with an eligible PKG_FLEX_CONFIG ingredient'};
+      var savedCfg=PKG_FLEX_CONFIG[hit]; delete PKG_FLEX_CONFIG[hit];
+      return {undo:function(){PKG_FLEX_CONFIG[hit]=savedCfg;}};
+    });
+    // INV5: card header macros vs cache (function-level fault)
+    runCase('INV5','patch',function(){
+      var undo=patchFn('computeCardMacros',function(orig){return function(){var r=orig.apply(null,arguments);if(r&&r.pm)r.pm.kcal+=50;return r;};});
+      return {undo:undo};
+    });
+    // INV7: one portion of a cross-person batch drifts off the kcal-prop ratio
+    runCase('INV7','data',function(){
+      var los=computeLeftovers(), t=null, idx=-1;
+      Object.keys(los).forEach(function(k){
+        if(t) return; var lo=los[k];
+        if(lo.isLeftover || !lo.portions) return;
+        var persons={}; lo.portions.forEach(function(pt){persons[pt.p]=1;});
+        if(Object.keys(persons).length<2) return;
+        var pt0=lo.portions[0];
+        var bal=getBalancedSlotIngredients(pt0.p,pt0.d,pt0.s); if(!bal) return;
+        for(var i=0;i<bal.length;i++){
+          var db=NUTRI_DB[bal[i].dbKey];
+          if(bal[i].scalable!==false && bal[i].amt>0.2 && db
+             && ROUND_PKG_ITEMS.indexOf(bal[i].dbKey)<0 && ROUND_PRODUCE_ITEMS.indexOf(bal[i].dbKey)<0){
+            t=pt0; idx=i; break;
+          }
+        }
+      });
+      if(!t) return {skip:'no cross-person batch with a scalable non-ROUND ingredient'};
+      _dayBalancedCache[pk(t.p,t.d)][t.s][idx].amt *= 1.5;
+      return {};
+    });
+    // INV8: solo amount off every legal grid
+    runCase('INV8','data',function(){
+      var t=findSolo();
+      if(!t) return {skip:'no solo slot'};
+      getBalancedSlotIngredients(t.p,t.d,t.s);
+      var bal=_dayBalancedCache[pk(t.p,t.d)][t.s];
+      var i=-1; for(var j=0;j<bal.length;j++){ var db=NUTRI_DB[bal[j].dbKey]; if(db && !db.pkg && bal[j].scalable!==false){i=j;break;} }
+      if(i<0) return {skip:'no non-pkg row on solo slot'};
+      bal[i].amt = 0.317;
+      return {};
+    });
+    // INV10: lunch recipe with zero veg (static over MEALS)
+    runCase('INV10','data',function(){
+      MEALS.push({id:'__st_noveg',label:'SelfTest NoVeg',slots:['lunch'],him:{},her:{},
+        ingredients:[I('chicken breast',4,'protein'),I('brown rice cooked',1,'carb')]});
+      return {undo:function(){ for(var i=MEALS.length-1;i>=0;i--){ if(MEALS[i].id==='__st_noveg') MEALS.splice(i,1); } }};
+    });
+    // INV11: two BATCHES of the same meal too close together. Adjacent
+    // same-meal days just merge into ONE batch (window = cook+2), so the
+    // construction is: anchor day d, leftover d+2 (extends the batch's
+    // lastDay), re-anchor d+3 (outside the window → a second batch).
+    // countInv11 gap = (d+3) − (d+2) − 1 = 0 < 2 → fires.
+    runCase('INV11','data',function(){
+      var free={}; DAYS.forEach(function(d,i){
+        var k=sk('him',d,'lunch');
+        if(!SKIPPED[k] && !EAT_OUT[k]) free[i]=k;
+      });
+      var i0=-1; for(var ii=0; ii<4; ii++){ if(free[ii]&&free[ii+2]&&free[ii+3]){ i0=ii; break; } }
+      if(i0<0) return {skip:'no free him-lunch triplet (d, d+2, d+3)'};
+      var m=null; MEALS.forEach(function(mm){ if(!m && mm.slots && mm.slots.indexOf('lunch')>=0 && !mm.noLeftover && mm.him) m=mm.id; });
+      if(!m) return {skip:'no lunch meal found'};
+      SEL[free[i0]]=m; SEL[free[i0+2]]=m; SEL[free[i0+3]]=m;
+      invalidateLeftoverCache();
+      return {};
+    });
+    // INV12: detector output corrupted
+    runCase('INV12','data',function(){
+      var los=computeLeftovers(), k=null;
+      Object.keys(los).forEach(function(kk){ if(!k && !los[kk].isLeftover && los[kk].portions) k=kk; });
+      if(!k) return {skip:'no batch anchor'};
+      _leftoverCache[k].totalServings += 1;
+      return {};
+    });
+    // INV13: amount below a defined minAmt
+    runCase('INV13','data',function(){
+      var t=findSolo();
+      if(!t) return {skip:'no solo slot'};
+      getBalancedSlotIngredients(t.p,t.d,t.s);
+      var bal=_dayBalancedCache[pk(t.p,t.d)][t.s];
+      var i=-1; for(var j=0;j<bal.length;j++){ var db=NUTRI_DB[bal[j].dbKey]; if(db && typeof db.minAmt==='number' && db.minAmt>0.01 && bal[j].scalable!==false){i=j;break;} }
+      if(i<0) return {skip:'no minAmt row on solo slot'};
+      bal[i].amt = Math.max(0.002, bal[i].amt*0 + NUTRI_DB[bal[i].dbKey].minAmt*0.5);
+      return {};
+    });
+    // INV17: incomplete cache day (missing slot) vs calcTotals fallback
+    runCase('INV17','data',function(){
+      var t=findSolo();
+      if(!t) return {skip:'no solo slot'};
+      getBalancedSlotIngredients(t.p,t.d,t.s);
+      delete _dayBalancedCache[pk(t.p,t.d)][t.s];
+      return {};
+    });
+    // INV19: cooked entry without pkg/dry
+    runCase('INV19','data',function(){
+      NUTRI_DB['__selftest cooked']={kcal:100,pro:5,fat:5,carb:5,unit:'cup'};
+      return {undo:function(){delete NUTRI_DB['__selftest cooked'];}};
+    });
+    // INV20: strand a non-soft pkg item off its container boundary
+    runCase('INV20','data',function(){
+      var los=computeLeftovers(), t=null, idx=-1, per=0;
+      DAYS.forEach(function(d){ ['lunch','dinner','breakfast','snack'].forEach(function(s){ ['him','her'].forEach(function(p){
+        if(t) return; var k=sk(p,d,s);
+        if(los[k] && los[k].isLeftover) return;
+        if(SKIPPED[k]||EAT_OUT[k]||!SEL[k]) return;
+        var bal=getBalancedSlotIngredients(p,d,s); if(!bal) return;
+        for(var i=0;i<bal.length;i++){
+          var db=NUTRI_DB[bal[i].dbKey];
+          if(db && db.pkg && !db.pkg.softWaste && !db.pkg.acceptableWaste && !db.pkg.nonWaste
+             && !db.pkg.longShelfLife && !db.pkg.crossTripCarry && ROUND_PKG_ITEMS.indexOf(bal[i].dbKey)>=0){
+            t={p:p,d:d,s:s}; idx=i;
+            per=(db.pkg.drained&&(db.unit==='cup'||db.unit==='oz'))?db.pkg.drained:(db.pkg.cups||0);
+            break;
+          }
+        }
+      });});});
+      if(!t || !(per>0)) return {skip:'no non-soft ROUND pkg contributor in seeded plan'};
+      _dayBalancedCache[pk(t.p,t.d)][t.s][idx].amt += per*0.4;
+      return {};
+    });
+    // INV23: header vs rows on a same-person combined view (shares the
+    // computeCardMacros fault — the render header path)
+    runCase('INV23','patch',function(){
+      var los=computeLeftovers(), found=false;
+      Object.keys(los).forEach(function(k){
+        var lo=los[k];
+        if(!lo.isLeftover && lo.portions && (lo.servings>1||lo.crossPersonCook) && !(lo.shared||lo.sameDayShared)) found=true;
+      });
+      if(!found) return {skip:'no combined-view batch in seeded plan'};
+      var undo=patchFn('computeCardMacros',function(orig){return function(){var r=orig.apply(null,arguments);if(r&&r.pm)r.pm.kcal+=50;return r;};});
+      return {undo:undo};
+    });
+    // INV24: skip + eat-out contradiction
+    runCase('INV24','data',function(){
+      var t=findSolo();
+      if(!t) return {skip:'no solo slot'};
+      var k=sk(t.p,t.d,t.s);
+      SKIPPED[k]=true; EAT_OUT[k]={name:'st',kcal:1,pro:0,fat:0,carb:0};
+      return {};
+    });
+    // INV25: dropdown label lies about its value (function-level fault)
+    runCase('INV25','patch',function(){
+      var undo=patchFn('_parseQtyLabel',function(orig){return function(l){var v=orig(l);return isNaN(v)?v:v+1;};});
+      return {undo:undo};
+    });
+    // INV27: DB entry with mismatched kcal/macros
+    runCase('INV27','data',function(){
+      NUTRI_DB['__st bogus']={kcal:500,pro:1,fat:1,carb:1,unit:'cup'};
+      return {undo:function(){delete NUTRI_DB['__st bogus'];}};
+    });
+
+    restore(saved);
+    var skips=[
+      {inv:'INV6/14/15/16/18/20Soft/20Leftover/21/22', status:'skip', detail:'tracking-only — excluded by design'},
+      {inv:'INV9', status:'skip', detail:'render-gate contract; no reliable state-level corruption (gate reads live loInfo). Revisit if the gate logic is ever refactored.'},
+      {inv:'INV26', status:'skip', detail:'meta-guard — this function runs under it (asserted at entry)'}
+    ];
+    var fails=results.filter(function(r){return r.status==='FAIL';}).length;
+    var inconclusive=results.filter(function(r){return r.status==='inconclusive';}).length;
+    return {results:results.concat(skips),
+      summary:{cases:results.length, pass:results.length-fails-inconclusive, fail:fails, inconclusive:inconclusive}};
+    }
+  }
+
+  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runStandard3:runStandard3,runStandard4:runStandard4,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline,runSlotMod:runSlotMod,formatSlotModReport:formatSlotModReport,runSlotModSequential:runSlotModSequential,formatSlotModSequentialReport:formatSlotModSequentialReport,runIntegrationTests:runIntegrationTests,selfTestInvariants:selfTestInvariants};
 })();
 
 </script>
