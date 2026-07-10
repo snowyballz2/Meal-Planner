@@ -366,7 +366,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <div class="hdr-row">
     <div class="hdr-title">Meal Planner</div>
     <div id="weekBar" class="week-bar" style="flex:1;margin:0 6px;justify-content:center"></div>
-    <button class="sync-icon-btn" id="syncToggleBtn" onclick="toggleSyncPanel()">☁️</button>
+    <button class="sync-icon-btn" id="syncToggleBtn" onclick="toggleSyncPanel()">⚙️</button>
   </div>
   <div class="top-tabs">
     <div class="top-tab on-meals" id="ttMeals" onclick="setTopTab('meals')">🍽️ Meals</div>
@@ -2793,6 +2793,22 @@ function setLockManualSlots(v){LOCK_MANUAL_SLOTS=!!v;lsSet('mealPlannerLockManua
 // one fridge, so this is shared state, not per-device.
 var PANTRY = lsGet('mealPlannerPantry', {});
 function savePantry(){ lsSet('mealPlannerPantry', PANTRY); }
+// V244 (2026-07-10): pantry subtraction — when on, the shopping list's
+// Both-view quantity shows NET to buy (gross − pantry stock). Household
+// setting, synced LWW. LABEL-LEVEL ONLY by design: hisSum/herSum and every
+// invariant (INV3/INV20) stay on gross usage — pantry stock came from
+// already-purchased packages, so waste math still evaluates what cooking
+// USES. Per-person views also stay gross (one physical pantry can't be
+// subtracted from both views without double-counting — the M22 lesson);
+// they show the 🏠 hint instead.
+var PANTRY_SUBTRACT = lsGet('mealPlannerPantrySubtract', false);
+var PANTRY_SUBTRACT_TS = lsGet('mealPlannerPantrySubtractTs', 0);
+function setPantrySubtract(v){
+  PANTRY_SUBTRACT=!!v; PANTRY_SUBTRACT_TS=Date.now();
+  lsSet('mealPlannerPantrySubtract',PANTRY_SUBTRACT); lsSet('mealPlannerPantrySubtractTs',PANTRY_SUBTRACT_TS);
+  if(topTab==='shop')renderShop(); if(topTab==='shelf')renderShelf();
+  if(typeof renderSyncView==='function')renderSyncView();
+}
 
 // ── V242 (2026-07-10): household person toggle ──
 // {him:true, her:true}. Disabling a person hides their tabs and stops the
@@ -3538,6 +3554,7 @@ function schedTapLeft(d,s){
   // V25 (2026-05-07): grid editing is edit-mode-only. Outside edit mode,
   // per-card pills (toggleSkip / toggleEatOut / toggleShared) handle state.
   if(!_scheduleEditMode) return;
+  if(PERSON_ENABLED.him===false) return; // V244: solo mode — Him disabled
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   // V85: first tap clears Him's visual state if any. Returns true =
@@ -3557,6 +3574,7 @@ function schedTapLeft(d,s){
 }
 function schedTapRight(d,s){
   if(!_scheduleEditMode) return;
+  if(PERSON_ENABLED.her===false) return; // V244: solo mode — Her disabled
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   if(_v85ClearSideVisualIfAny('her', d, s)){
@@ -3576,6 +3594,8 @@ function schedTapRight(d,s){
 function schedTapCenter(d,s){
   // V25 (2026-05-07): grid editing is edit-mode-only.
   if(!_scheduleEditMode) return;
+  // V244: no shared toggling in solo mode.
+  if(PERSON_ENABLED.him===false||PERSON_ENABLED.her===false) return;
   const k=dk(d,s);
   const cur=SHARED_SCHEDULE[k]||'';
   // V25: treat auto-shared as "currently shared" so first tap un-shares
@@ -3623,6 +3643,30 @@ function schedTapDay(d){
   // V25 (2026-05-07): grid editing is edit-mode-only.
   if(!_scheduleEditMode) return;
   const slots=['breakfast','lunch','dinner'];
+  // V244: solo mode — day tap cycles normal ↔ eat-out for the enabled
+  // person only ('shared' is meaningless with one eater, so it's skipped).
+  const _soloTap=_soloPerson();
+  if(_soloTap){
+    const _eoKey='eo-'+_soloTap;
+    const allSoloEO=slots.every(function(s){
+      const st=SHARED_SCHEDULE[dk(d,s)];
+      return st===_eoKey||st==='eo-both';
+    });
+    slots.forEach(function(s){
+      const k=dk(d,s);
+      if(allSoloEO){
+        _v70UndoEatOutSide(_soloTap,d,s);
+        delete SHARED_SCHEDULE[k];
+      } else {
+        if(/^eo-/.test(SHARED_SCHEDULE[k]||'')) _v70UndoEatOutSide(_soloTap,d,s);
+        SHARED_SCHEDULE[k]=_eoKey;
+      }
+      _scheduleEditTouchedCells[k]=true;
+      _scheduleEditTouchedSides[sk(_soloTap,d,s)]=true;
+    });
+    updateSchedule();
+    return;
+  }
   // V25: count auto-shared (V13) as "shared" for the cycle so a row of
   // auto-shared cells advances to eat-out on first tap (rather than first
   // becoming explicit-shared then taking another tap to advance).
@@ -3677,6 +3721,9 @@ function setSharedPreset(preset){
   // Outside edit mode, per-card pills handle shared toggling.
   if(!_scheduleEditMode) return;
   if(preset==='clear'){SHARED_SCHEDULE={};_syncEatOutsToSharedSchedule();saveSharedSchedule();renderMeals();return;}
+  // V244: shared column presets are meaningless with one eater ('clear'
+  // above still works — it also clears eat-outs).
+  if(PERSON_ENABLED.him===false||PERSON_ENABLED.her===false) return;
   // Toggle: if all days for this slot are already shared, remove them. Otherwise add them.
   const slot=preset==='breakfasts'?'breakfast':preset==='lunches'?'lunch':preset==='dinners'?'dinner':null;
   if(slot){
@@ -3698,6 +3745,7 @@ function setSharedPreset(preset){
 function setSharedPresetSide(preset,side){
   // V25 (2026-05-07): grid editing (incl. column zones) is edit-mode-only.
   if(!_scheduleEditMode) return;
+  if(PERSON_ENABLED[side]===false) return; // V244: solo mode
   const slot=preset==='breakfasts'?'breakfast':preset==='lunches'?'lunch':preset==='dinners'?'dinner':null;
   if(!slot) return;
   // Toggle eat-out for this person on all days for this slot
@@ -4514,6 +4562,19 @@ function _pkgsNeeded(total, perUnit){
   return Math.ceil(total/perUnit - 1e-9);
 }
 
+// V244: Both-view label with pantry netting (see PANTRY_SUBTRACT notes).
+// Pantry units are free text — only subtract when the entry's unit matches
+// the shopping unit (blank pantry unit = "the item's natural unit").
+// Mismatched units fall back to the gross label + the 🏠 hint.
+function _pantryNetLabel(dbKey, qtyObj){
+  if(!PANTRY_SUBTRACT || !qtyObj || !PANTRY[dbKey] || !(PANTRY[dbKey].qty>0)) return shopQtyWithCount(dbKey, qtyObj);
+  var pu=(PANTRY[dbKey].unit||'').trim().toLowerCase();
+  var su=(qtyObj.unit||'').trim().toLowerCase();
+  if(pu && su && pu!==su) return shopQtyWithCount(dbKey, qtyObj);
+  var net=Math.max(0, qtyObj.num-PANTRY[dbKey].qty);
+  if(net<=0.001) return '✓ pantry';
+  return shopQtyWithCount(dbKey,{num:net,unit:qtyObj.unit});
+}
 function shopQtyWithCount(dbKey,qtyObj){
   const base=fmtQty(qtyObj);
   if(!qtyObj)return base;
@@ -5152,12 +5213,14 @@ function buildShoppingList(trip,who){
       item.hisQty=item.hisSum?fmtQty(item.hisSum):item.hisRaw;
       item.herQty=item.herSum?fmtQty(item.herSum):item.herRaw;
       // Combined total with produce count conversion for Both view
+      // V244 (2026-07-10): Both-view label nets out pantry stock when the
+      // subtraction setting is on (label-level only — sums/invariants gross).
       if(item.hisSum&&item.herSum&&item.hisSum.unit===item.herSum.unit){
-        item.bothQty=shopQtyWithCount(item.dbKey,{num:item.hisSum.num+item.herSum.num,unit:item.hisSum.unit});
+        item.bothQty=_pantryNetLabel(item.dbKey,{num:item.hisSum.num+item.herSum.num,unit:item.hisSum.unit});
       } else if(item.hisSum){
-        item.bothQty=shopQtyWithCount(item.dbKey,item.hisSum);
+        item.bothQty=_pantryNetLabel(item.dbKey,item.hisSum);
       } else if(item.herSum){
-        item.bothQty=shopQtyWithCount(item.dbKey,item.herSum);
+        item.bothQty=_pantryNetLabel(item.dbKey,item.herSum);
       } else {
         item.bothQty='';
       }
@@ -8609,7 +8672,9 @@ function buildShopItemHtml(item, ck, checked){
   let pantryHint='';
   if(item.dbKey && PANTRY[item.dbKey] && PANTRY[item.dbKey].qty>0){
     const pe=PANTRY[item.dbKey];
-    pantryHint='<span class="si-waste" style="background:rgba(52,211,153,.15);color:#34D399;border-color:rgba(52,211,153,.3)">🏠 have '+fmtFrac(pe.qty)+(pe.unit?' '+pe.unit:'')+'</span>';
+    // V244: when subtraction is on, the hint reads as an applied deduction.
+    const pfx=PANTRY_SUBTRACT?'🏠 −':'🏠 have ';
+    pantryHint='<span class="si-waste" style="background:rgba(52,211,153,.15);color:#34D399;border-color:rgba(52,211,153,.3)">'+pfx+fmtFrac(pe.qty)+(pe.unit?' '+pe.unit:'')+'</span>';
   }
   return '<div class="shop-item'+(checked?' checked':'')+'" id="'+sid+'" onclick="toggleCheck(\''+ckEsc+'\')">'
     +'<div class="si-left"><div class="si-check">'+(checked?'✓':'')+'</div><div>'
@@ -9770,10 +9835,20 @@ function renderMeals(){
         if(_paintMode){
           html+='<div class="sched-slot-hdr" style="color:var(--gray)">'+SLOT_LABEL[ss]+'</div>';
         } else {
+          // V244: solo mode — only the enabled person's preset zone renders
+          // (full-width); the shared center zone drops with one eater.
+          const _zHim=PERSON_ENABLED.him!==false, _zHer=PERSON_ENABLED.her!==false;
+          let _zones;
+          if(_zHim&&_zHer){
+            _zones='<div class="sched-zone sched-zone-l" onclick="event.stopPropagation();setSharedPresetSide(\''+_prId+'\',\'him\')"></div>'
+              +'<div class="sched-zone sched-zone-c" onclick="event.stopPropagation();setSharedPreset(\''+_prId+'\')"></div>'
+              +'<div class="sched-zone sched-zone-r" onclick="event.stopPropagation();setSharedPresetSide(\''+_prId+'\',\'her\')"></div>';
+          } else {
+            const _zSide=_zHim?'him':'her';
+            _zones='<div class="sched-zone" style="left:0;right:0" onclick="event.stopPropagation();setSharedPresetSide(\''+_prId+'\',\''+_zSide+'\')"></div>';
+          }
           html+='<div class="sched-slot-hdr" style="color:var(--gray);cursor:pointer">'
-            +'<div class="sched-zone sched-zone-l" onclick="event.stopPropagation();setSharedPresetSide(\''+_prId+'\',\'him\')"></div>'
-            +'<div class="sched-zone sched-zone-c" onclick="event.stopPropagation();setSharedPreset(\''+_prId+'\')"></div>'
-            +'<div class="sched-zone sched-zone-r" onclick="event.stopPropagation();setSharedPresetSide(\''+_prId+'\',\'her\')"></div>'
+            +_zones
             +SLOT_LABEL[ss]+'</div>';
         }
       });
@@ -9794,7 +9869,9 @@ function renderMeals(){
           if(SHARED_SCHEDULE[dk(dd,ss)]==='eo-both') return true;
           const himOut=!!SKIPPED[sk('him',dd,ss)]||!!EAT_OUT[sk('him',dd,ss)];
           const herOut=!!SKIPPED[sk('her',dd,ss)]||!!EAT_OUT[sk('her',dd,ss)];
-          return himOut && herOut;
+          // V244: a disabled person doesn't need to be out for the day to
+          // count as all-skip in solo mode.
+          return (PERSON_ENABLED.him===false||himOut)&&(PERSON_ENABLED.her===false||herOut);
         });
         const dayCol=dayAllShared?'#34D399':dayAllSkip?'#EF4444':'var(--text)';
         const dde=dd.replace(/'/g,"\\'");
@@ -10141,11 +10218,14 @@ function renderMeals(){
           // edited big cook" without losing the group's identity color.
           const lShadow = lInsetShadow ? ';box-shadow:'+lInsetShadow : '';
           const rShadow = rInsetShadow ? ';box-shadow:'+rInsetShadow : '';
+          // V244 (2026-07-10): solo mode — a disabled person's half is not
+          // rendered (the remaining half flex-fills the wrap) and the shared
+          // mid zone is dropped (sharing is meaningless with one eater).
+          const _gHimOn=PERSON_ENABLED.him!==false, _gHerOn=PERSON_ENABLED.her!==false;
           html+='<div class="sched-pill-wrap" style="'+dimStyle+'">'
-            +'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+';border-right:'+lBdrRightFinal+';color:'+lCol+lShadow+'" '+lClick+'>'+lLabel+'</div>'
-            +'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+';border-left:'+rBdrLeftFinal+';color:'+rCol+rShadow+'" '+rClick+'>'+rLabel+'</div>'
-            +splitCenter
-            +'<div class="sched-pill-mid" '+cClick+'></div>'
+            +(_gHimOn?'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+(_gHerOn?';border-right:'+lBdrRightFinal:'')+';color:'+lCol+lShadow+'" '+lClick+'>'+lLabel+'</div>':'')
+            +(_gHerOn?'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+(_gHimOn?';border-left:'+rBdrLeftFinal:'')+';color:'+rCol+rShadow+'" '+rClick+'>'+rLabel+'</div>':'')
+            +(_gHimOn&&_gHerOn?splitCenter+'<div class="sched-pill-mid" '+cClick+'></div>':'')
             +'</div>';
         });
       });
@@ -17564,9 +17644,9 @@ function checkCategory(cat){
 // what's open in the fridge (_computePriorCarryover), what returns to the
 // freezer (nonWaste), and which cartons carry (longShelfLife) — but only
 // told the invariant telemetry. This surfaces it, plus manual pantry
-// entries (synced). Deliberately NO buy-math subtraction yet: that changes
-// what INV3 verifies and is a separate decision once the tab has been
-// lived with.
+// entries (synced). V244 (2026-07-10): opt-in subtraction (PANTRY_SUBTRACT)
+// nets pantry stock out of the shopping list's Both-view LABEL only —
+// hisSum/herSum and everything INV3 verifies stay gross.
 function _shelfEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
 function shelfAddPantry(){
   var n=document.getElementById('shelfName'), q=document.getElementById('shelfQty'), u=document.getElementById('shelfUnit');
@@ -17631,7 +17711,10 @@ function renderShelf(){
   html+=staples.length?staples.map(function(r){return '<div style="padding:4px 0;font-size:13px">'+r+'</div>';}).join(''):'<div style="padding:4px 0;font-size:12px;opacity:.6">None in this week\'s plan.</div>';
   // 4. Manual pantry
   html+='<div class="sync-desc" style="font-weight:700;margin-top:14px">✍️ Pantry (manual)</div>';
-  html+='<div style="font-size:11px;opacity:.6;margin-bottom:6px">Track what you already own. Items appear as "🏠 have" hints on the shopping list (they don\'t change quantities to buy — yet).</div>';
+  html+='<div style="font-size:11px;opacity:.6;margin-bottom:6px">Track what you already own. '
+    +(PANTRY_SUBTRACT
+      ?'Subtraction is ON (⚙️): the shopping list\'s Both view shows net-to-buy.'
+      :'Items appear as "🏠 have" hints on the shopping list. Turn on subtraction in ⚙️ settings to net them out of the Both view.')+'</div>';
   var pKeys=Object.keys(PANTRY).filter(function(k){return PANTRY[k]&&PANTRY[k].qty>0;}).sort();
   pKeys.forEach(function(k){
     var e=PANTRY[k];
@@ -18170,6 +18253,14 @@ function loadWeekState(w){
   rebindAdjTargets(); // V146 (2026-05-14): bind ADJ_TARGETS to wd.adjTargets
 }
 function switchWeek(w){
+  // V244 (2026-07-10): a week-pill tap while the ⚙️ settings panel is open
+  // should land you ON that week's tab, not re-render into hidden views.
+  // Close the panel and restore the current tab first.
+  var _svW=document.getElementById('syncView');
+  if(_svW && _svW.style.display!=='none'){
+    _svW.style.display='none';
+    setTopTab(topTab);
+  }
   // V30 (2026-05-07): if user is in schedule edit mode, switching weeks
   // would corrupt state — the snapshot was captured for the old week,
   // _restoreScheduleState writes leftoverLinks into weekData[activeWeek]
@@ -18295,6 +18386,8 @@ function getSyncPayload(){
     adjTargets:ADJ_TARGETS,
     adjTargetsTs:ADJ_TARGETS_TS,
     pantry:PANTRY,                    // V242: per-entry _ts LWW
+    pantrySubtract:PANTRY_SUBTRACT,   // V244: household toggle, LWW
+    pantrySubtractTs:PANTRY_SUBTRACT_TS,
     personEnabled:PERSON_ENABLED,     // V242: household toggle, LWW
     personEnabledTs:PERSON_ENABLED_TS,
     version:4
@@ -18596,6 +18689,14 @@ function mergeSyncData(remote){
     });
     savePantry();
   }
+  // V244: pantry-subtract toggle — LWW, M23 tie rule (default false).
+  if(remote.pantrySubtract!==undefined){
+    var _psForce = Math.max(remote.pantrySubtractTs||0, _mergeForceTs);
+    if(_psForce > PANTRY_SUBTRACT_TS || (_psForce === PANTRY_SUBTRACT_TS && PANTRY_SUBTRACT===false)){
+      PANTRY_SUBTRACT=!!remote.pantrySubtract; PANTRY_SUBTRACT_TS=_psForce;
+      lsSet('mealPlannerPantrySubtract',PANTRY_SUBTRACT); lsSet('mealPlannerPantrySubtractTs',PANTRY_SUBTRACT_TS);
+    }
+  }
   // V242: person toggle — LWW with the M23 tie rule (remote wins a tie only
   // when local is factory default, so a customized local survives legacy
   // partners that never send the field... which send nothing here anyway;
@@ -18812,6 +18913,7 @@ function forcePushSync(){
   CAL_BASE_TS=now;lsSet('mealPlannerCalBaseTs',now);PRO_TARGET_TS=now;lsSet('mealPlannerProTargetTs',now); // Audit R13: force-push wins calBase/proTarget too
   Object.keys(PANTRY).forEach(function(k){if(PANTRY[k])PANTRY[k]._ts=now;});savePantry(); // V242
   PERSON_ENABLED_TS=now;lsSet('mealPlannerPersonEnabledTs',now); // V242
+  PANTRY_SUBTRACT_TS=now;lsSet('mealPlannerPantrySubtractTs',now); // V244
   saveWeeks();saveAdjTargets();saveCustomMeals();saveCustomIngredients();saveEatOutDB();
   // Upload directly — no pull/merge first. This DOES drop any concurrent
   // remote edits made after our last pull. Confirmation above made the
@@ -18879,11 +18981,19 @@ function toggleSyncPanel(){
   const sv=document.getElementById('syncView');
   const isVisible=sv.style.display!=='none';
   if(isVisible){
+    // V244 (2026-07-10): closing must RESTORE the previously open tab.
+    // The old close branch only hid syncView — every other view was
+    // already display:none from the open branch, leaving a blank page
+    // until the user tapped a tab. setTopTab(topTab) rebuilds visibility,
+    // tab highlights, and re-renders (topTab was never changed while the
+    // panel was open, so it IS the previous tab).
     sv.style.display='none';
+    setTopTab(topTab);
   } else {
     // Hide other views, show sync
     document.getElementById('mealView').style.display='none';
     document.getElementById('shopView').style.display='none';
+    document.getElementById('shelfView').style.display='none'; // V244
     document.getElementById('recipesView').style.display='none';
     document.getElementById('mealHdrExtra').style.display='none';
     sv.style.display='';
@@ -18891,6 +19001,7 @@ function toggleSyncPanel(){
     // Deselect top tabs
     document.getElementById('ttMeals').className='top-tab';
     document.getElementById('ttShop').className='top-tab';
+    document.getElementById('ttShelf').className='top-tab'; // V244
     document.getElementById('ttRecipes').className='top-tab';
   }
 }
@@ -18946,6 +19057,10 @@ function renderSyncView(){
     +_cbRow('tabPrefShelf', TAB_PREFS.shelf!==false, 'setTabPref(\'shelf\',this.checked)', '🧺 Shelf','')
     +_cbRow('tabPrefRecipes', TAB_PREFS.recipes!==false, 'setTabPref(\'recipes\',this.checked)', '✚ Recipes','')
     +'<div style="font-size:11px;color:var(--gray)">Meals is always visible. Per-device — not synced.</div>'
+    +'</div>';
+  html+='<div class="sync-panel" style="margin-top:12px"><div class="sync-title">🧺 Pantry (household)</div>'
+    +_cbRow('pantrySubCB', PANTRY_SUBTRACT===true, 'setPantrySubtract(this.checked)', 'Subtract pantry stock from the shopping list',
+      'The Both view shows net-to-buy (fully covered items show "✓ pantry"). Him/Her-only views keep gross amounts with the 🏠 hint — one physical pantry can\'t be split across both views. Waste warnings stay usage-based.')
     +'</div>';
   html+='<div class="sync-panel" style="margin-top:12px"><div class="sync-title">👥 People (household)</div>'
     +_cbRow('personEnHim', PERSON_ENABLED.him!==false, 'setPersonEnabled(\'him\',this.checked)', 'Him','')
