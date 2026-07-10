@@ -371,6 +371,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <div class="top-tabs">
     <div class="top-tab on-meals" id="ttMeals" onclick="setTopTab('meals')">🍽️ Meals</div>
     <div class="top-tab" id="ttShop" onclick="setTopTab('shop')">🛒 Shopping</div>
+    <div class="top-tab" id="ttShelf" onclick="setTopTab('shelf')">🧺 Shelf</div>
     <div class="top-tab" id="ttRecipes" onclick="setTopTab('recipes')">✚ Recipes</div>
   </div>
   <div id="mealHdrExtra">
@@ -385,6 +386,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div id="calPopupOverlay" style="display:none"></div>
 <div id="mealView" class="content"></div>
 <div id="shopView" class="shop-view" style="display:none"></div>
+<div id="shelfView" class="content" style="display:none"></div>
 <div id="syncView" class="content" style="display:none"></div>
 <div id="recipesView" class="content" style="display:none"></div>
 <script>
@@ -2784,6 +2786,34 @@ var ADJ_TARGETS_TS={}; // alias to weekData[activeWeek].adjTargetsTs
 // Phase 4 mirror, and rerollMissDays/rerollKcalOffSnacks.
 var LOCK_MANUAL_SLOTS=lsGet('mealPlannerLockManualSlots', false);
 function setLockManualSlots(v){LOCK_MANUAL_SLOTS=!!v;lsSet('mealPlannerLockManualSlots',LOCK_MANUAL_SLOTS);}
+
+// ── V242 (2026-07-10): Shelf/Fridge tab data ──
+// Manual pantry entries: {name: {qty, unit, note, _ts}}. Synced per-entry
+// LWW (same shape as customIngredients). Physical household inventory —
+// one fridge, so this is shared state, not per-device.
+var PANTRY = lsGet('mealPlannerPantry', {});
+function savePantry(){ lsSet('mealPlannerPantry', PANTRY); }
+
+// ── V242 (2026-07-10): household person toggle ──
+// {him:true, her:true}. Disabling a person hides their tabs and stops the
+// planner from cooking/shopping/scoring for them (gated at getMealId — the
+// single choke point every consumer flows through, which also kills the
+// DEFAULTS fallback). Their SEL/overrides data is PRESERVED for re-enable.
+// Synced LWW like calBase (household semantics, not per-device).
+var PERSON_ENABLED = lsGet('mealPlannerPersonEnabled', {him:true, her:true});
+var PERSON_ENABLED_TS = lsGet('mealPlannerPersonEnabledTs', 0);
+function _soloPerson(){
+  // The single enabled person, or null when both are enabled.
+  if(PERSON_ENABLED.him===false) return 'her';
+  if(PERSON_ENABLED.her===false) return 'him';
+  return null;
+}
+
+// ── V242: device-local tab visibility (like LOCK_MANUAL_SLOTS, not synced;
+// which tabs you want on YOUR phone is a per-device preference). Meals is
+// always visible.
+var TAB_PREFS = lsGet('mealPlannerTabPrefs', {shop:true, shelf:true, recipes:true});
+function saveTabPrefs(){ lsSet('mealPlannerTabPrefs', TAB_PREFS); }
 function isLockedForRandomize(k){
   // Always-on lock: EAT_OUT slots are excluded from the randomizer's
   // meal-pick logic (existing behavior); MANUAL_SET slots also keep their
@@ -4080,7 +4110,15 @@ function isIfLow(name){const n=name.toLowerCase();return IF_LOW_ITEMS.some(funct
 const CAT_ORDER=['Meat','Seafood','Dairy','Dairy alt','Refrigerated','Produce','Frozen','Bread','Pantry','Grab & go','If Low'];
 const CAT_ICONS={Meat:'🥩',Seafood:'🐟',Dairy:'🥛','Dairy alt':'🥛',Refrigerated:'❄️',Produce:'🥦',Frozen:'🧊',Bread:'🍞',Pantry:'🫙','Grab & go':'🧃','If Low':'📦',Spices:'🧂',Supplements:'💊',Sauces:'🫙',Oils:'🫒'};
 
-function getMealId(p,d,s){return SEL[sk(p,d,s)]||(DEFAULTS[p][d]&&DEFAULTS[p][d][s])||null}
+function getMealId(p,d,s){
+  // V242 (2026-07-10): disabled person = no meals anywhere. This single
+  // gate cascades through every consumer (calcTotals, shopping, detector,
+  // invariants, card render) and — critically — kills the DEFAULTS
+  // fallback, which would otherwise keep "feeding" a disabled person.
+  // SEL data is preserved untouched for re-enable.
+  if((p==='him'||p==='her') && PERSON_ENABLED[p]===false) return null;
+  return SEL[sk(p,d,s)]||(DEFAULTS[p][d]&&DEFAULTS[p][d][s])||null;
+}
 function getMeal(id){return MEALS.find(function(m){return m.id===id})}
 function getActiveMeal(p,d,s){const id=getMealId(p,d,s);return id?getMeal(id):null}
 
@@ -5485,6 +5523,44 @@ function restoreRecipeFormState(){
     }
   },20);
 }
+// ── V242 (2026-07-10): tab visibility + person toggles ──
+function applyTabPrefs(){
+  var m={shop:'ttShop', shelf:'ttShelf', recipes:'ttRecipes'};
+  Object.keys(m).forEach(function(t){
+    var el=document.getElementById(m[t]);
+    if(el) el.style.display = TAB_PREFS[t]===false?'none':'';
+  });
+  if((topTab==='shop'&&TAB_PREFS.shop===false)
+   ||(topTab==='shelf'&&TAB_PREFS.shelf===false)
+   ||(topTab==='recipes'&&TAB_PREFS.recipes===false)) setTopTab('meals');
+}
+function setTabPref(t,v){ TAB_PREFS[t]=!!v; saveTabPrefs(); applyTabPrefs(); renderSyncView(); }
+function applyPersonPrefs(){
+  var solo=_soloPerson();
+  var himT=document.querySelector('.ptab.him'), herT=document.querySelector('.ptab.her'), shT=document.querySelector('.ptab.shared');
+  if(himT) himT.style.display = PERSON_ENABLED.him===false?'none':'';
+  if(herT) herT.style.display = PERSON_ENABLED.her===false?'none':'';
+  if(shT) shT.style.display = solo?'none':''; // Shared view is meaningless solo
+  if(solo){
+    _randHim = (solo==='him'); _randHer = (solo==='her');
+    if(person!==solo) setPerson(solo);
+  }
+}
+function setPersonEnabled(p, v){
+  v=!!v;
+  if(!v && PERSON_ENABLED[p==='him'?'her':'him']===false){
+    alert('At least one person must stay enabled.'); renderSyncView(); return;
+  }
+  if(!v && !confirm('Turn off '+(p==='him'?'Him':'Her')+'?\n\nTheir tab disappears and the planner stops cooking, shopping, and scoring for them. Their meal data is PRESERVED — turning them back on restores everything.')){
+    renderSyncView(); return;
+  }
+  PERSON_ENABLED[p]=v; PERSON_ENABLED_TS=Date.now();
+  lsSet('mealPlannerPersonEnabled',PERSON_ENABLED); lsSet('mealPlannerPersonEnabledTs',PERSON_ENABLED_TS);
+  invalidateLeftoverCache();
+  applyPersonPrefs();
+  renderMeals(); if(topTab==='shop')renderShop(); if(topTab==='shelf')renderShelf();
+  renderSyncView();
+}
 function setTopTab(t){
   // Save recipe form before leaving
   if(topTab==='recipes')saveRecipeFormState();
@@ -5498,14 +5574,17 @@ function setTopTab(t){
     mealsTab.style.color='';mealsTab.style.borderBottomColor='';
   }
   document.getElementById('ttShop').className='top-tab'+(t==='shop'?' on-shop':'');
+  document.getElementById('ttShelf').className='top-tab'+(t==='shelf'?' on-shop':''); // V242: reuse shop accent
   document.getElementById('ttRecipes').className='top-tab'+(t==='recipes'?' on-recipes':'');
   document.getElementById('mealHdrExtra').style.display=t==='meals'?'':'none';
   document.getElementById('mealView').style.display=t==='meals'?'':'none';
   document.getElementById('shopView').style.display=t==='shop'?'':'none';
+  document.getElementById('shelfView').style.display=t==='shelf'?'':'none';
   document.getElementById('syncView').style.display='none';
   document.getElementById('recipesView').style.display=t==='recipes'?'':'none';
   renderWeekBar();
   if(t==='shop')renderShop();
+  if(t==='shelf')renderShelf();
   if(t==='recipes'){renderRecipesView();restoreRecipeFormState();}
 }
 function setPerson(p){
@@ -8523,9 +8602,18 @@ function buildShopItemHtml(item, ck, checked){
     qtyText=item.bothQty?'<span class="qty-tot">'+item.bothQty+'</span>':'';
   }
   const ckEsc=ck.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  // V242 (2026-07-10): pantry hint. Display-only — the quantity to buy is
+  // untouched (subtraction is a separate decision; it would change what
+  // INV3 verifies). Matched by dbKey; PANTRY names are free-text so a
+  // pantry entry named exactly like the DB key lights up here.
+  let pantryHint='';
+  if(item.dbKey && PANTRY[item.dbKey] && PANTRY[item.dbKey].qty>0){
+    const pe=PANTRY[item.dbKey];
+    pantryHint='<span class="si-waste" style="background:rgba(52,211,153,.15);color:#34D399;border-color:rgba(52,211,153,.3)">🏠 have '+fmtFrac(pe.qty)+(pe.unit?' '+pe.unit:'')+'</span>';
+  }
   return '<div class="shop-item'+(checked?' checked':'')+'" id="'+sid+'" onclick="toggleCheck(\''+ckEsc+'\')">'
     +'<div class="si-left"><div class="si-check">'+(checked?'✓':'')+'</div><div>'
-    +'<div class="si-name">'+item.name+(item.wasteLabel?'<span class="si-waste">⚠️ '+item.wasteLabel+'</span>':'')+'</div>'
+    +'<div class="si-name">'+item.name+(item.wasteLabel?'<span class="si-waste">⚠️ '+item.wasteLabel+'</span>':'')+pantryHint+'</div>'
     +'</div></div><div class="si-qty">'+qtyText+'</div></div>';
 }
 
@@ -13729,7 +13817,7 @@ var _randHim=true,_randHer=true;
 function showRandomizePopup(){
   const overlay=document.getElementById('calPopupOverlay');
   if(!overlay)return;
-  _randHim=true;_randHer=true;
+  _randHim=PERSON_ENABLED.him!==false;_randHer=PERSON_ENABLED.her!==false; // V242: disabled person can't be targeted
   renderRandomizePopup();
 }
 function renderRandomizePopup(){
@@ -13745,8 +13833,10 @@ function renderRandomizePopup(){
     +'<div class="rand-box">'
     +'<div class="rand-title">Randomize Other Meals</div>'
     +'<div class="rand-grid" style="margin-bottom:12px">'
-    +'<div class="rand-btn" style="background:'+himBg+';border:'+himBdr+';color:'+himCol+'" onclick="_randHim=!_randHim;renderRandomizePopup()">Him</div>'
-    +'<div class="rand-btn" style="background:'+herBg+';border:'+herBdr+';color:'+herCol+'" onclick="_randHer=!_randHer;renderRandomizePopup()">Her</div>'
+    // V242: a disabled person's button is hidden (their flag is already
+    // forced off by openRandomizePopup/applyPersonPrefs).
+    +(PERSON_ENABLED.him!==false?'<div class="rand-btn" style="background:'+himBg+';border:'+himBdr+';color:'+himCol+'" onclick="_randHim=!_randHim;renderRandomizePopup()">Him</div>':'')
+    +(PERSON_ENABLED.her!==false?'<div class="rand-btn" style="background:'+herBg+';border:'+herBdr+';color:'+herCol+'" onclick="_randHer=!_randHer;renderRandomizePopup()">Her</div>':'')
     +'</div>'
     +'<div class="rand-grid">'
     +'<div class="rand-btn" style="border:1.5px solid var(--border);color:var(--gray)" onclick="closeRandomizePopup()">Cancel</div>'
@@ -15230,7 +15320,14 @@ function randomizeWeek(target, seed){
     _pendingSwapSlots.clear();
   }
   window._absorbDiag = null;
-  const randTarget=target||person; // use passed target or current person tab
+  // V242 (2026-07-10): solo mode — a disabled person can never be a
+  // randomize target. Coerce here (single choke point for the whole
+  // pipeline: bothPersons/mirror/persons derivations all flow from
+  // randTarget, and the post-R14 single-person machinery handles the rest).
+  let _rt0=target||person;
+  const _solo=_soloPerson();
+  if(_solo && _rt0!==_solo) _rt0=_solo;
+  const randTarget=_rt0; // use passed target or current person tab (solo-coerced)
   // Optional seed: replaces Math.random with a deterministic PRNG for the
   // duration of this call. Used by the stress harness so failing cases are
   // reproducible. Always restored in a finally block.
@@ -17375,6 +17472,98 @@ function checkCategory(cat){
   _pushShopUndo(changes);
   renderShop();
 }
+// ── V242 (2026-07-10): Shelf/Fridge tab ──
+// Rolling household inventory, display-first: the app has known for weeks
+// what's open in the fridge (_computePriorCarryover), what returns to the
+// freezer (nonWaste), and which cartons carry (longShelfLife) — but only
+// told the invariant telemetry. This surfaces it, plus manual pantry
+// entries (synced). Deliberately NO buy-math subtraction yet: that changes
+// what INV3 verifies and is a separate decision once the tab has been
+// lived with.
+function _shelfEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
+function shelfAddPantry(){
+  var n=document.getElementById('shelfName'), q=document.getElementById('shelfQty'), u=document.getElementById('shelfUnit');
+  var name=(n&&n.value||'').trim(); var qty=parseFloat(q&&q.value); var unit=(u&&u.value||'').trim();
+  if(!name){alert('Name required.');return;}
+  if(isNaN(qty)||qty<0){alert('Qty must be a number ≥ 0.');return;}
+  PANTRY[name]={qty:qty, unit:unit, _ts:Date.now()};
+  savePantry(); renderShelf();
+}
+function shelfSetQty(name, v){
+  var qty=parseFloat(v);
+  if(isNaN(qty)||qty<0) return renderShelf();
+  if(!PANTRY[name]) return;
+  PANTRY[name].qty=qty; PANTRY[name]._ts=Date.now();
+  savePantry();
+  if(topTab==='shop') renderShop();
+}
+function shelfDeletePantry(name){
+  if(!PANTRY[name]) return;
+  // Soft delete (qty 0 + fresh ts) so the removal syncs; hidden from UI.
+  PANTRY[name]={qty:0, unit:PANTRY[name].unit||'', _ts:Date.now()};
+  savePantry(); renderShelf();
+}
+function renderShelf(){
+  var el=document.getElementById('shelfView');
+  if(!el) return;
+  var html='<div style="padding:0 0 80px"><div class="sync-panel">';
+  html+='<div class="sync-title">🧺 Shelf &amp; Fridge</div>';
+  // 1. Open jars/cartons carried from last week (usable by this week's cook 1)
+  var carry=(typeof _computePriorCarryover==='function')?_computePriorCarryover(_prevWeekKey()):{};
+  var carryKeys=Object.keys(carry).filter(function(k){return carry[k]>0.01;});
+  html+='<div class="sync-desc" style="font-weight:700;margin-top:6px">🫙 Open from last week</div>';
+  if(carryKeys.length){
+    carryKeys.forEach(function(k){
+      var db=NUTRI_DB[k]||{};
+      html+='<div style="padding:4px 0;font-size:13px">• <b>'+_shelfEsc(k)+'</b> — '+fmtFrac(carry[k])+' '+(db.unit||'')+' open (use in Mon–Wed cooking)</div>';
+    });
+  } else html+='<div style="padding:4px 0;font-size:12px;opacity:.6">Nothing open — last week ended clean.</div>';
+  // 2. Freezer (nonWaste) + 3. Long-shelf staples (longShelfLife): this week's usage
+  var frz=[], staples=[];
+  ['cook1','cook2'].forEach(function(trip){
+    var grouped=buildShoppingList(trip,'both');
+    Object.keys(grouped).forEach(function(cat){
+      grouped[cat].forEach(function(item){
+        var db=NUTRI_DB[item.dbKey]; if(!db) return;
+        var tot=(item.hisSum?item.hisSum.num:0)+(item.herSum?item.herSum.num:0);
+        if(tot<=0) return;
+        var unit=(item.hisSum||item.herSum||{}).unit||'';
+        if((db.produce&&db.produce.nonWaste)||(db.pkg&&db.pkg.nonWaste)){
+          var per=db.produce?db.produce.perWhole:((db.pkg.drained&&(db.unit==='cup'||db.unit==='oz'))?db.pkg.drained:db.pkg.cups);
+          var back=(per>0)?(Math.ceil(tot/per-1e-9)*per-tot):0;
+          frz.push('• <b>'+_shelfEsc(item.dbKey)+'</b> — using '+fmtFrac(tot)+' '+unit+' ('+trip.replace('cook1','Mon–Wed').replace('cook2','Thu–Sun')+')'+(back>0.01?' → '+fmtFrac(back)+' '+unit+' back in freezer':''));
+        } else if(db.pkg&&db.pkg.longShelfLife){
+          staples.push('• <b>'+_shelfEsc(item.dbKey)+'</b> — using '+fmtFrac(tot)+' '+unit+' ('+trip.replace('cook1','Mon–Wed').replace('cook2','Thu–Sun')+'); carton carries between trips');
+        }
+      });
+    });
+  });
+  html+='<div class="sync-desc" style="font-weight:700;margin-top:12px">🧊 Freezer</div>';
+  html+=frz.length?frz.map(function(r){return '<div style="padding:4px 0;font-size:13px">'+r+'</div>';}).join(''):'<div style="padding:4px 0;font-size:12px;opacity:.6">No frozen items in this week\'s plan.</div>';
+  html+='<div class="sync-desc" style="font-weight:700;margin-top:12px">🥫 Long-shelf staples</div>';
+  html+=staples.length?staples.map(function(r){return '<div style="padding:4px 0;font-size:13px">'+r+'</div>';}).join(''):'<div style="padding:4px 0;font-size:12px;opacity:.6">None in this week\'s plan.</div>';
+  // 4. Manual pantry
+  html+='<div class="sync-desc" style="font-weight:700;margin-top:14px">✍️ Pantry (manual)</div>';
+  html+='<div style="font-size:11px;opacity:.6;margin-bottom:6px">Track what you already own. Items appear as "🏠 have" hints on the shopping list (they don\'t change quantities to buy — yet).</div>';
+  var pKeys=Object.keys(PANTRY).filter(function(k){return PANTRY[k]&&PANTRY[k].qty>0;}).sort();
+  pKeys.forEach(function(k){
+    var e=PANTRY[k];
+    html+='<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px">'
+      +'<span style="flex:1">'+_shelfEsc(k)+'</span>'
+      +'<input type="number" step="0.25" min="0" value="'+e.qty+'" style="width:64px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 6px" onchange="shelfSetQty(\''+_shelfEsc(k).replace(/'/g,"\\'")+'\',this.value)">'
+      +'<span style="width:44px;opacity:.7">'+_shelfEsc(e.unit||'')+'</span>'
+      +'<span style="cursor:pointer;opacity:.6" onclick="shelfDeletePantry(\''+_shelfEsc(k).replace(/'/g,"\\'")+'\')">✕</span></div>';
+  });
+  if(!pKeys.length) html+='<div style="padding:4px 0;font-size:12px;opacity:.6">Nothing tracked yet.</div>';
+  html+='<div style="display:flex;gap:6px;margin-top:8px">'
+    +'<input id="shelfName" placeholder="item (e.g. brown rice dry)" style="flex:1;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px">'
+    +'<input id="shelfQty" type="number" step="0.25" min="0" placeholder="qty" style="width:64px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px">'
+    +'<input id="shelfUnit" placeholder="unit" style="width:56px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px">'
+    +'<button class="rand-btn" style="padding:6px 12px" onclick="shelfAddPantry()">Add</button></div>';
+  html+='</div></div>';
+  el.innerHTML=html;
+}
+
 function renderShop(){
   const shopEl=document.getElementById('shopView');
   const prevHeight=shopEl.offsetHeight;
@@ -17970,7 +18159,7 @@ function switchWeek(w){
 function renderWeekBar(){
   const bar=document.getElementById('weekBar');if(!bar)return;
   const thisLabel=fmtWeekLabel(todayMonday());
-  const theme=topTab==='shop'?'shop':topTab==='recipes'?'recipes':person==='shared'?'shared':person==='her'?'her':'him';
+  const theme=(topTab==='shop'||topTab==='shelf')?'shop':topTab==='recipes'?'recipes':person==='shared'?'shared':person==='her'?'her':'him';
   function pill(w,label){
     const isOn=activeWeek===w;
     return '<div class="week-pill'+(isOn?' on on-'+theme:'')+'" onclick="switchWeek(\''+w+'\')">'+label+'</div>';
@@ -18018,6 +18207,9 @@ function getSyncPayload(){
     proTargetTs:PRO_TARGET_TS,
     adjTargets:ADJ_TARGETS,
     adjTargetsTs:ADJ_TARGETS_TS,
+    pantry:PANTRY,                    // V242: per-entry _ts LWW
+    personEnabled:PERSON_ENABLED,     // V242: household toggle, LWW
+    personEnabledTs:PERSON_ENABLED_TS,
     version:4
   };
 }
@@ -18306,6 +18498,31 @@ function mergeSyncData(remote){
   var _ptIsDefault = JSON.stringify(PRO_TARGET) === JSON.stringify({him:180,her:120});
   if(remote.proTarget && (_ptForce > PRO_TARGET_TS || (_ptForce === PRO_TARGET_TS && _ptIsDefault))){PRO_TARGET=remote.proTarget;PRO_TARGET_TS=_ptForce;lsSet('mealPlannerProTarget',PRO_TARGET);lsSet('mealPlannerProTargetTs',PRO_TARGET_TS);}
 
+  // V242 (2026-07-10): pantry — per-entry LWW (customIngredients pattern).
+  // Deletion is soft (qty:0 entry with fresh _ts) so removals propagate.
+  if(remote.pantry){
+    Object.keys(remote.pantry).forEach(function(k){
+      var rE=remote.pantry[k], lE=PANTRY[k];
+      var rt=Math.max(remoteIsLegacy?0:(rE&&rE._ts||0), _mergeForceTs);
+      var lt=lE&&lE._ts||0;
+      if(!lE || rt>lt) PANTRY[k]=rE;
+    });
+    savePantry();
+  }
+  // V242: person toggle — LWW with the M23 tie rule (remote wins a tie only
+  // when local is factory default, so a customized local survives legacy
+  // partners that never send the field... which send nothing here anyway;
+  // the tie rule guards same-ts races).
+  if(remote.personEnabled){
+    var _peForce = Math.max(remote.personEnabledTs||0, _mergeForceTs);
+    var _peIsDefault = JSON.stringify(PERSON_ENABLED) === JSON.stringify({him:true,her:true});
+    if(_peForce > PERSON_ENABLED_TS || (_peForce === PERSON_ENABLED_TS && _peIsDefault)){
+      PERSON_ENABLED=remote.personEnabled; PERSON_ENABLED_TS=_peForce;
+      lsSet('mealPlannerPersonEnabled',PERSON_ENABLED); lsSet('mealPlannerPersonEnabledTs',PERSON_ENABLED_TS);
+      if(typeof applyPersonPrefs==='function') applyPersonPrefs();
+    }
+  }
+
   // Custom meals: per-meal last-write-wins via entry._ts (v4+). Remote with
   // newer ts overwrites local; v3 remote has no _ts so treated as ts=0
   // (local v4 entries always win). Adds new meals from either side.
@@ -18506,6 +18723,8 @@ function forcePushSync(){
   Object.keys(customIngredients).forEach(function(k){customIngredients[k]._ts=now;});
   EAT_OUT_DB.forEach(function(e){e._ts=now;});
   CAL_BASE_TS=now;lsSet('mealPlannerCalBaseTs',now);PRO_TARGET_TS=now;lsSet('mealPlannerProTargetTs',now); // Audit R13: force-push wins calBase/proTarget too
+  Object.keys(PANTRY).forEach(function(k){if(PANTRY[k])PANTRY[k]._ts=now;});savePantry(); // V242
+  PERSON_ENABLED_TS=now;lsSet('mealPlannerPersonEnabledTs',now); // V242
   saveWeeks();saveAdjTargets();saveCustomMeals();saveCustomIngredients();saveEatOutDB();
   // Upload directly — no pull/merge first. This DOES drop any concurrent
   // remote edits made after our last pull. Confirmation above made the
@@ -18627,6 +18846,24 @@ function renderSyncView(){
     +'<input type="checkbox" id="lockManualSlotsCB" '+(LOCK_MANUAL_SLOTS?'checked':'')+' onchange="setLockManualSlots(this.checked)" style="width:20px;height:20px;cursor:pointer">'
     +'<div style="flex:1"><div style="font-weight:600;color:var(--text)">Protect manual picks from sync overwrites</div>'
     +'<div style="font-size:11px;color:var(--gray);margin-top:2px">When on, slots you\'ve manually picked (Set pill) won\'t be overwritten by incoming sync data, even if the other phone has a newer timestamp. The other phone\'s Force Push still works. Off by default.</div></div></label>'
+    +'</div>';
+  // ── V242 (2026-07-10): Settings — tab visibility (this device) + people (household) ──
+  function _cbRow(id, checked, onchange, title, sub){
+    return '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0">'
+      +'<input type="checkbox" id="'+id+'" '+(checked?'checked':'')+' onchange="'+onchange+'" style="width:20px;height:20px;cursor:pointer">'
+      +'<div style="flex:1"><div style="font-weight:600;color:var(--text)">'+title+'</div>'
+      +(sub?'<div style="font-size:11px;color:var(--gray);margin-top:2px">'+sub+'</div>':'')+'</div></label>';
+  }
+  html+='<div class="sync-panel" style="margin-top:12px"><div class="sync-title">⚙️ Tabs (this device)</div>'
+    +_cbRow('tabPrefShop', TAB_PREFS.shop!==false, 'setTabPref(\'shop\',this.checked)', '🛒 Shopping','')
+    +_cbRow('tabPrefShelf', TAB_PREFS.shelf!==false, 'setTabPref(\'shelf\',this.checked)', '🧺 Shelf','')
+    +_cbRow('tabPrefRecipes', TAB_PREFS.recipes!==false, 'setTabPref(\'recipes\',this.checked)', '✚ Recipes','')
+    +'<div style="font-size:11px;color:var(--gray)">Meals is always visible. Per-device — not synced.</div>'
+    +'</div>';
+  html+='<div class="sync-panel" style="margin-top:12px"><div class="sync-title">👥 People (household)</div>'
+    +_cbRow('personEnHim', PERSON_ENABLED.him!==false, 'setPersonEnabled(\'him\',this.checked)', 'Him','')
+    +_cbRow('personEnHer', PERSON_ENABLED.her!==false, 'setPersonEnabled(\'her\',this.checked)', 'Her','')
+    +'<div style="font-size:11px;color:var(--gray)">Turning someone off hides their tab and stops the planner from cooking, shopping, or scoring for them (the Shared tab hides too). Their data is preserved and comes back on re-enable. Synced to both phones.</div>'
     +'</div>';
   html+='</div>';
   el.innerHTML=html;
@@ -19273,7 +19510,7 @@ if(typeof _resolveStateContradictions === 'function') _resolveStateContradiction
 if(typeof autoSaveWeek === 'function') autoSaveWeek();
 MEALS.forEach(function(m){expandMealIngredients(m);});
 MEALS.forEach(function(m){buildColorizedSteps(m);});
-renderDayTabs();setTopTab(topTab);renderMeals();
+renderDayTabs();setTopTab(topTab);applyTabPrefs();applyPersonPrefs();renderMeals(); // V242: apply prefs at boot
 
 // Restore scroll position after render
 (function(){
