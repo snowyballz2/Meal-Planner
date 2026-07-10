@@ -775,7 +775,17 @@ function buildQtyOptions(unit, currentAmt, wholeOnly, minAmt, cookServings) {
     // off-grid fall back to 2-decimal — never raw 3-decimal "9.746".
     // Earlier (2026-05-04) this code preserved 3-decimal precision for
     // batch totals; reversed by user 2026-05-06 in favor of cleaner display.
-    opts.push({val:currentAmt, label:fmtFrac(currentAmt)});
+    //
+    // R14-M6 (2026-07-09): dedupe guard. When the glyph snap collides with
+    // an EXISTING grid option's label (e.g. stored 0.29 → "¼" sitting next
+    // to the real ¼=0.25), two visually identical options with different
+    // values is ambiguity, not cleaner display — fall back to 2-decimal for
+    // the pushed option in that case only. The user-approved glyph-snap
+    // aesthetic (2026-05-06 decision) is otherwise unchanged.
+    var pushLabel = fmtFrac(currentAmt);
+    var labelCollides = opts.some(function(o){ return o.label === pushLabel && Math.abs(o.val - currentAmt) >= 0.02; });
+    if(labelCollides) pushLabel = String(Math.round(currentAmt*100)/100);
+    opts.push({val:currentAmt, label:pushLabel});
     opts.sort(function(a,b){return a.val - b.val;});
   }
 
@@ -783,6 +793,22 @@ function buildQtyOptions(unit, currentAmt, wholeOnly, minAmt, cookServings) {
   opts.unshift({val:0, label:'—'});
 
   return opts;
+}
+
+// R14-M6 (2026-07-09): parse a dropdown option label back to a number
+// ('9¾' → 9.75, '⅓' → 0.333, '2.29' → 2.29, '—' → 0). Lets INV25 verify
+// the RENDERED text round-trips to the stored amount — the old check only
+// looked at option VALUES, which buildQtyOptions guarantees by construction
+// (tautology; the invariant could never fire).
+function _parseQtyLabel(label){
+  if(label === '—') return 0;
+  var glyphs = {'⅛':0.125,'¼':0.25,'⅓':1/3,'⅜':0.375,'½':0.5,'⅝':0.625,'⅔':2/3,'¾':0.75,'⅞':0.875};
+  var m = String(label).match(/^(\d+)?([⅛¼⅓⅜½⅝⅔¾⅞])?$/);
+  if(m && (m[1] !== undefined || m[2])){
+    return (m[1] ? parseInt(m[1],10) : 0) + (m[2] ? glyphs[m[2]] : 0);
+  }
+  var f = parseFloat(label);
+  return isNaN(f) ? NaN : f;
 }
 
 var ROLE_COLORS={protein:'#60A5FA',carb:'#4ADE80',fat:'#FBBF24',veg:'#4ADE80',condiment:'#C08B5C',fixed:'#C08B5C',liquid:'#A78BFA',fruit:'#F87171'};
@@ -6944,18 +6970,47 @@ function verifyInvariants(){
         // per-row Math.round and computeCardMacros' header-level rounding.
         // All 4 macros checked. Hard. 2026-05-04.
         const lo23 = (typeof computeLeftovers==='function') ? computeLeftovers()[key2] : null;
-        const showCombined23 = !!(lo23 && !lo23.isLeftover && lo23.crossPersonCook
+        // R14-M5 (2026-07-09): gate now mirrors cardShowsCombinedHeader —
+        // the render shows the combined ×N view for servings>1 OR
+        // crossPersonCook, but this check used to require crossPersonCook,
+        // leaving the MOST COMMON Big Cook shape (same-person batch, e.g.
+        // him cooks Monday + eats Wednesday leftover) permanently unchecked
+        // at ×N. A rounding regression in that path could never fire INV23.
+        const showCombined23 = !!(lo23 && !lo23.isLeftover
+                                && ((lo23.servings > 1) || lo23.crossPersonCook)
                                 && !(lo23.shared || lo23.sameDayShared));
         const cookServings23 = showCombined23 ? (lo23.totalServings || lo23.servings || 1) : 1;
+        const xp23 = !!(showCombined23 && lo23.crossPersonCook);
         // For batch combined view, card pm is computed with the same
         // cookServings the render uses — not 1. Use a fresh call so
         // header reflects the rendered display.
         const card23 = (cookServings23 === 1) ? card
                      : computeCardMacros(port2, p, d, s2, cookServings23, false, 1);
         let rowKcal=0, rowPro=0, rowFat=0, rowCarb=0;
-        bal.forEach(function(i){
+        // R14-M5: cross-person combined views REPLACE their rows with true
+        // per-portion sums (buildMealCardHtml rebuild block, idx-matched
+        // post-R14-C3) — the old anchor×N reconstruction here verified rows
+        // the card never renders. Mirror the rendered row model, and check
+        // it against the unrounded CACHE truth (below) so drift in the
+        // rebuild block itself — e.g. the pre-C3 duplicate-dbKey bug — is
+        // catchable.
+        let xpTrueKcal=0, xpTruePro=0, xpTrueFat=0, xpTrueCarb=0;
+        bal.forEach(function(i, idx23){
           const db=NUTRI_DB[i.dbKey]; if(!db) return;
-          const displayAmt = i.amt * cookServings23;
+          let displayAmt;
+          if(xp23){
+            let cAmt=0;
+            lo23.portions.forEach(function(pt){
+              const pb=getBalancedSlotIngredients(pt.p,pt.d,pt.s); if(!pb) return;
+              if(pb[idx23] && pb[idx23].dbKey===i.dbKey){cAmt+=pb[idx23].amt;return;}
+              for(let kk=0;kk<pb.length;kk++){ if(pb[kk].dbKey===i.dbKey){cAmt+=pb[kk].amt;break;} }
+            });
+            displayAmt = cAmt;
+            xpTrueKcal += db.kcal*cAmt; xpTruePro += db.pro*cAmt;
+            xpTrueFat  += db.fat*cAmt;  xpTrueCarb += db.carb*cAmt;
+          } else {
+            displayAmt = i.amt * cookServings23;
+          }
           rowKcal += Math.round(db.kcal * displayAmt);
           rowPro  += Math.round(db.pro  * displayAmt);
           rowFat  += Math.round(db.fat  * displayAmt);
@@ -6974,7 +7029,23 @@ function verifyInvariants(){
         // per macro. Pre-V156 used ceil(N/2) uniformly which allowed ±1
         // drift on solo — a silent regression mask.
         const tol23 = cookServings23 <= 1 ? 0 : Math.ceil(cookServings23 / 2);
-        if(Math.abs(rowKcal-headerBatchKcal) > tol23
+        if(xp23){
+          // R14-M5: rendered rows (rounded per-row) vs unrounded cache truth.
+          // Header comparison is skipped here — the render recomputes its
+          // header FROM these rows (round(rowSum/N)), so rows-vs-header is
+          // true by arithmetic; rows-vs-cache is the real coherence claim.
+          // Tolerance: per-row rounding accumulates up to 0.5/row.
+          const tolXp = Math.ceil(bal.length / 2);
+          if(Math.abs(rowKcal-xpTrueKcal) > tolXp
+             || Math.abs(rowPro-xpTruePro) > tolXp
+             || Math.abs(rowFat-xpTrueFat) > tolXp
+             || Math.abs(rowCarb-xpTrueCarb) > tolXp){
+            violations.push('INV23 xp-rows-vs-cache: '+p+' '+d+'/'+s2
+              +' (×'+cookServings23+') rowSum=('+rowKcal+'k/'+rowPro+'p/'+rowFat+'f/'+rowCarb
+              +'c) cacheTruth=('+Math.round(xpTrueKcal)+'k/'+Math.round(xpTruePro)+'p/'
+              +Math.round(xpTrueFat)+'f/'+Math.round(xpTrueCarb)+'c)');
+          }
+        } else if(Math.abs(rowKcal-headerBatchKcal) > tol23
            || Math.abs(rowPro-headerBatchPro) > tol23
            || Math.abs(rowFat-headerBatchFat) > tol23
            || Math.abs(rowCarb-headerBatchCarb) > tol23){
@@ -7080,14 +7151,39 @@ function verifyInvariants(){
           // Find any option whose value matches displayAmt within 0.02.
           // If found, user sees the correct amount; if not, dropdown
           // defaults to first option (display lies).
-          var matched = false;
+          var matched = null;
           for(var k25=0; k25<qtyOpts25.length; k25++){
-            if(Math.abs(qtyOpts25[k25].val - displayAmt) < 0.02){ matched = true; break; }
+            if(Math.abs(qtyOpts25[k25].val - displayAmt) < 0.02){ matched = qtyOpts25[k25]; break; }
           }
           if(!matched){
             violations.push('INV25 card-amount-no-match: '+p+' '+d+'/'+s2+' '+bi25.dbKey
               +' displayAmt='+displayAmt.toFixed(3)+(db25.unit||'')
               +' (no dropdown option within 0.02 — card defaults to first option, display lies)');
+          } else {
+            // R14-M6 (2026-07-09): the check used to end at the value match,
+            // which buildQtyOptions guarantees by construction (it pushes an
+            // exact-value option) — the invariant was TAUTOLOGICAL and gave
+            // zero live coverage. Verify the RENDERED text instead:
+            // (a) the selected option's LABEL parses back within fmtFrac's
+            //     user-approved glyph band (0.0601, + parse slack for ⅓/⅔);
+            // (b) no OTHER option renders the identical label for a different
+            //     value (ambiguous duplicate — the user can't tell which
+            //     entry is theirs; the buildQtyOptions dedupe guard prevents
+            //     this, this catches regressions in it).
+            var parsed25 = _parseQtyLabel(matched.label);
+            if(!isNaN(parsed25) && Math.abs(parsed25 - displayAmt) > 0.0701){
+              violations.push('INV25 label-drift: '+p+' '+d+'/'+s2+' '+bi25.dbKey
+                +' displayAmt='+displayAmt.toFixed(3)+(db25.unit||'')
+                +' label="'+matched.label+'" parses='+parsed25.toFixed(3));
+            }
+            for(var k26=0; k26<qtyOpts25.length; k26++){
+              var o26=qtyOpts25[k26];
+              if(o26!==matched && o26.label===matched.label && Math.abs(o26.val-matched.val)>=0.02){
+                violations.push('INV25 ambiguous-label: '+p+' '+d+'/'+s2+' '+bi25.dbKey
+                  +' label="'+matched.label+'" values '+matched.val.toFixed(3)+' vs '+o26.val.toFixed(3));
+                break;
+              }
+            }
           }
         });
       });
@@ -9222,6 +9318,7 @@ function buildMealCardHtml(s, person, day, other){
       // V26 (2026-05-07): simplified label.
       ingrSectionTitle='🥗 Ingredients (serves '+batchPortions.length+')';
       var ovrIngr2=applyOverrides(port,person,day,s);
+      var rb23K=0, rb23P=0, rb23F=0, rb23C=0; // R14-M5: accumulate rendered-row macros
       ingrHtml=cookBal.map(function(ci,idx){
         var combinedAmt=0;
         batchPortions.forEach(function(bp){
@@ -9237,10 +9334,26 @@ function buildMealCardHtml(s, person, day, other){
             if(bp.bal[k].dbKey===ci.dbKey){combinedAmt+=bp.bal[k].amt;break;}
           }
         });
+        var db23=NUTRI_DB[ci.dbKey];
+        if(db23){
+          rb23K+=Math.round(db23.kcal*combinedAmt); rb23P+=Math.round(db23.pro*combinedAmt);
+          rb23F+=Math.round(db23.fat*combinedAmt);  rb23C+=Math.round(db23.carb*combinedAmt);
+        }
         var origIng=ovrIngr2[idx]||{dbKey:ci.dbKey,amt:ci.origAmt||ci.amt,role:ci.role,scalable:ci.scalable};
         return buildIngrEditRow(origIng,Math.round(combinedAmt*1000)/1000,person,day,s,idx,batchPortions.length);
       }).join('');
       ingrHtml='<div class="ingr-edit-grid">'+ingrHtml+'</div>';
+      // R14-M5 (2026-07-09): the header pm was the ANCHOR's per-serving × N
+      // while these rebuilt rows show TRUE per-portion sums — kcal-prop
+      // portions are always unequal (him 2800 vs her 1900 budgets), so the
+      // on-screen rows didn't sum to the header (INV23's own contract).
+      // Recompute the per-serving header from the rows the card actually
+      // shows, matching computeCardMacros's round(sum-of-rounded-rows / N)
+      // model. Audit R14 finding M5 (render side).
+      pm.kcal=Math.round(rb23K/batchPortions.length);
+      pm.pro =Math.round(rb23P/batchPortions.length);
+      pm.fat =Math.round(rb23F/batchPortions.length);
+      pm.carb=Math.round(rb23C/batchPortions.length);
     }
   }
   const mFat=pm.fat||0,mCarb=pm.carb||0;
@@ -17643,6 +17756,18 @@ function mergeSyncData(remote){
   // locally is "remote has data, local doesn't" → take remote).
   var remoteV = remote.version || 3;
   var remoteIsLegacy = remoteV < 4;
+  // R14-M3 (2026-07-09): Force Push authority. forcePushSync stamps the
+  // payload with forcePushTs=now; the receiver treats it as a FLOOR for
+  // every per-key remote timestamp in weekData state. Pre-M3, Force Push
+  // only bumped timestamps for keys PRESENT in the sender's maps — a skip/
+  // SEL pick/late-snack that only the receiver had kept rt=0 < lt and
+  // survived, leaving the phones divergent after the operation whose whole
+  // promise is "replace its state with yours". With the floor, receiver-
+  // only keys see rt=forcePushTs > lt → remote's undefined value applies →
+  // key deleted. Normal pushes don't carry the field (floor 0 = no change);
+  // legacy receivers ignore it. LOCK_MANUAL_SLOTS still wins (explicit
+  // local protection beats remote authority).
+  var _mergeForceTs = (!remoteIsLegacy && remote.forcePushTs) || 0;
   // V159 (2026-05-19): force-flush pending autoSaveWeek before merge. Pre-
   // V159 the LOCK_MANUAL_SLOTS check below read weekData[w].manualSet,
   // which is debounced 500ms behind the runtime MANUAL_SET global via
@@ -17704,7 +17829,7 @@ function mergeSyncData(remote){
 
       Object.keys(allKeys).forEach(function(k){
         const localTime=localTs[k]||0;
-        const remoteTime=remoteTs[k]||0;
+        const remoteTime=Math.max(remoteTs[k]||0, _mergeForceTs); // R14-M3
         // Sync lock: when LOCK_MANUAL_SLOTS is on, skip remote overwrite if
         // local has MANUAL_SET[k]=true (the "Set" pill). Local user picked
         // this slot intentionally — sync shouldn't change it without an
@@ -17731,7 +17856,7 @@ function mergeSyncData(remote){
       Object.keys(weekData[w].lateSnack).forEach(function(k){lsKeys[k]=true;});
       Object.keys(lsKeys).forEach(function(k){
         var lt=weekData[w].lateSnackTs[k]||0;
-        var rt=remoteIsLegacy?0:(remoteLsTs[k]||0);
+        var rt=Math.max(remoteIsLegacy?0:(remoteLsTs[k]||0), _mergeForceTs); // R14-M3
         if(rt>lt){
           if(remoteState.lateSnack[k]!==undefined) weekData[w].lateSnack[k]=remoteState.lateSnack[k];
           else delete weekData[w].lateSnack[k];
@@ -17754,7 +17879,7 @@ function mergeSyncData(remote){
       Object.keys(weekData[w].sharedSchedule).forEach(function(k){ssKeys[k]=true;});
       Object.keys(ssKeys).forEach(function(k){
         var lt=weekData[w].sharedScheduleTs[k]||0;
-        var rt=remoteIsLegacy?0:(remSchedTs[k]||0);
+        var rt=Math.max(remoteIsLegacy?0:(remSchedTs[k]||0), _mergeForceTs); // R14-M3
         if(rt>lt){
           if(remSched[k]!==undefined) {
             // V71 (2026-05-07): migrate legacy 'skip-*' from remote
@@ -17796,8 +17921,14 @@ function mergeSyncData(remote){
       Object.keys(remSkip).forEach(function(k){skKeys[k]=true;});
       Object.keys(weekData[w].skipped).forEach(function(k){skKeys[k]=true;});
       Object.keys(skKeys).forEach(function(k){
+        // R14-M2 (2026-07-09): honor the sync lock here too. The lock check
+        // existed only in the SEL-bundle loop — this independent V51 merge
+        // used the same sk(p,d,s) namespace and happily overwrote a locked
+        // slot's skip state, contradicting the documented contract ("makes
+        // local manualSet slots immune to incoming overwrites").
+        if(LOCK_MANUAL_SLOTS && weekData[w].manualSet && weekData[w].manualSet[k]) return;
         var lt=weekData[w].skippedTs[k]||0;
-        var rt=remoteIsLegacy?0:(remSkipTs[k]||0);
+        var rt=Math.max(remoteIsLegacy?0:(remSkipTs[k]||0), _mergeForceTs);
         if(rt>lt){
           if(remSkip[k]!==undefined) weekData[w].skipped[k]=remSkip[k];
           else delete weekData[w].skipped[k];
@@ -17812,8 +17943,10 @@ function mergeSyncData(remote){
       Object.keys(remEO).forEach(function(k){eoKeys[k]=true;});
       Object.keys(weekData[w].eatOut).forEach(function(k){eoKeys[k]=true;});
       Object.keys(eoKeys).forEach(function(k){
+        // R14-M2: same lock as the skipped merge above.
+        if(LOCK_MANUAL_SLOTS && weekData[w].manualSet && weekData[w].manualSet[k]) return;
         var lt=weekData[w].eatOutTs[k]||0;
-        var rt=remoteIsLegacy?0:(remEOTs[k]||0);
+        var rt=Math.max(remoteIsLegacy?0:(remEOTs[k]||0), _mergeForceTs);
         if(rt>lt){
           if(remEO[k]!==undefined) weekData[w].eatOut[k]=remEO[k];
           else delete weekData[w].eatOut[k];
@@ -17828,7 +17961,7 @@ function mergeSyncData(remote){
       // ts, replace the whole local array with remote. Legacy v3 has no ts
       // (ts=0) so local v4 arrays always win.
       var remLeftLinks = remoteWeek.leftoverLinks;
-      var remLeftLinksTs = remoteIsLegacy ? 0 : (remoteWeek.leftoverLinksTs || 0);
+      var remLeftLinksTs = Math.max(remoteIsLegacy ? 0 : (remoteWeek.leftoverLinksTs || 0), _mergeForceTs); // R14-M3
       var locLeftLinksTs = weekData[w].leftoverLinksTs || 0;
       if(remLeftLinks !== undefined && remLeftLinksTs > locLeftLinksTs){
         if(!weekData[w].leftoverLinks) weekData[w].leftoverLinks = [];
@@ -17858,7 +17991,7 @@ function mergeSyncData(remote){
         Object.keys(weekData[w].adjTargets).forEach(function(k){adjKeys[k]=true;});
         Object.keys(adjKeys).forEach(function(k){
           var lt = weekData[w].adjTargetsTs[k] || 0;
-          var rt = remoteIsLegacy ? 0 : (remAdjTs[k] || 0);
+          var rt = Math.max(remoteIsLegacy ? 0 : (remAdjTs[k] || 0), _mergeForceTs); // R14-M3
           if(rt > lt){
             if(remAdj[k] !== undefined) weekData[w].adjTargets[k] = remAdj[k];
             else delete weekData[w].adjTargets[k];
@@ -17877,8 +18010,8 @@ function mergeSyncData(remote){
   // that could clobber a newer local target with an older remote on pull).
   // Legacy payloads lack the Ts fields → remote ts 0; a changed local value
   // (ts>0) wins, while a fresh install (local ts 0) still takes remote on tie.
-  if(remote.calBase && (remote.calBaseTs||0) >= CAL_BASE_TS){CAL_BASE=remote.calBase;CAL_BASE_TS=remote.calBaseTs||0;lsSet('mealPlannerCalBase',CAL_BASE);lsSet('mealPlannerCalBaseTs',CAL_BASE_TS);}
-  if(remote.proTarget && (remote.proTargetTs||0) >= PRO_TARGET_TS){PRO_TARGET=remote.proTarget;PRO_TARGET_TS=remote.proTargetTs||0;lsSet('mealPlannerProTarget',PRO_TARGET);lsSet('mealPlannerProTargetTs',PRO_TARGET_TS);}
+  if(remote.calBase && Math.max(remote.calBaseTs||0, _mergeForceTs) >= CAL_BASE_TS){CAL_BASE=remote.calBase;CAL_BASE_TS=Math.max(remote.calBaseTs||0, _mergeForceTs);lsSet('mealPlannerCalBase',CAL_BASE);lsSet('mealPlannerCalBaseTs',CAL_BASE_TS);} // R14-M3: force floor
+  if(remote.proTarget && Math.max(remote.proTargetTs||0, _mergeForceTs) >= PRO_TARGET_TS){PRO_TARGET=remote.proTarget;PRO_TARGET_TS=Math.max(remote.proTargetTs||0, _mergeForceTs);lsSet('mealPlannerProTarget',PRO_TARGET);lsSet('mealPlannerProTargetTs',PRO_TARGET_TS);} // R14-M3
 
   // Custom meals: per-meal last-write-wins via entry._ts (v4+). Remote with
   // newer ts overwrites local; v3 remote has no _ts so treated as ts=0
@@ -18085,6 +18218,13 @@ function forcePushSync(){
   // remote edits made after our last pull. Confirmation above made the
   // user explicitly accept that.
   var payload=getSyncPayload();
+  // R14-M3 (2026-07-09): stamp force authority. The receiver's merge treats
+  // this as a floor for every per-key remote ts, so keys only the RECEIVER
+  // has (its skips, SEL picks, late snacks) also resolve remote-wins →
+  // deleted — the per-key bumps above can't reach those. Normal pushes
+  // never set this field (a later regular push overwrites the gist without
+  // it, so force semantics apply only to this snapshot).
+  payload.forcePushTs = now;
   fetch(GIST_API+'/'+syncId,{method:'PATCH',headers:gistHeaders(),body:JSON.stringify({
     files:{'meal-planner-sync.json':{content:JSON.stringify(payload)}}
   })}).then(function(r){
@@ -20661,7 +20801,12 @@ window.MPStress=(function(){
         var inv20Hard = (agg.invTotals.INV20||0) - (agg.invTotals.INV20Soft||0);
         return Object.keys(agg.invTotals).filter(function(k){
           if(k==='INV20') return inv20Hard > 0;
-          return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV21'&&k!=='INV22'&&agg.invTotals[k]>0;
+          // R14 (2026-07-09): INV20Leftover added — the V207 fix landed in
+          // formatReport's filter but missed this saveBaseline twin, so an
+          // otherwise-clean run stored hardFail=1 whenever the routine
+          // INV20Leftover forward-inventory line was present, poisoning
+          // every later baseline comparison with a false hard-INV delta.
+          return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV20Leftover'&&k!=='INV21'&&k!=='INV22'&&agg.invTotals[k]>0;
         }).length;
       })(),
       closedPct: (function(){
