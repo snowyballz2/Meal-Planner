@@ -17855,6 +17855,16 @@ function mergeSyncData(remote){
       Object.keys(remoteState.lateSnack).forEach(function(k){lsKeys[k]=true;});
       Object.keys(weekData[w].lateSnack).forEach(function(k){lsKeys[k]=true;});
       Object.keys(lsKeys).forEach(function(k){
+        // R14-M2b (2026-07-09): Sync Protection for late snacks. A late
+        // snack is ALWAYS a manual entry (no randomizer/pipeline path
+        // creates one), so its existence IS the manual flag — no manualSet
+        // lookup possible or needed (manualSet holds slot keys; late snacks
+        // are keyed pk(p,d)). With the lock on, an existing local entry is
+        // immune to incoming overwrite/delete; a day with NO local entry
+        // still receives new remote snacks; local deletions still push
+        // outward via their newer ts. Lock beats force authority (same
+        // hierarchy as M3).
+        if(LOCK_MANUAL_SLOTS && weekData[w].lateSnack[k]) return;
         var lt=weekData[w].lateSnackTs[k]||0;
         var rt=Math.max(remoteIsLegacy?0:(remoteLsTs[k]||0), _mergeForceTs); // R14-M3
         if(rt>lt){
