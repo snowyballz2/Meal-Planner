@@ -1019,8 +1019,11 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
   if (Math.abs(targetDelta) < 5) return _clampThresh(ingredients);
 
   // If the recipe is close to budget, leave it unchanged.
-  // Per-slot threshold (15% of base kcal OR 80 kcal). Day-level correction below
-  // handles any residual mismatch.
+  // Per-slot threshold = min(15% of base kcal, 80 kcal) — the TIGHTER of the
+  // two bounds (R14-L 2026-07-10: comment previously said "OR", implying
+  // max() semantics; the shipped Math.min is intentional — for meals under
+  // ~533 base kcal the 15% band governs, never the 80-kcal band). Day-level
+  // correction below handles any residual mismatch.
   var baseKcal = 0;
   ingredients.forEach(function(ing) {
     var db = NUTRI_DB[ing.dbKey]; if (!db) return;
@@ -4093,10 +4096,14 @@ var _leftoverCache=null;
 //   Cook anchor: {isLeftover:false, cookDay, servings (same-person count),
 //                 totalServings (batch size), crossPersonCook, feedsAlso,
 //                 feedsDay, shared, portions [{p,d,s}]}
-//   Shared co-anchor (same day/slot as anchor, other person):
-//                {isLeftover:false, cookDay, servings, totalServings,
-//                 shared:true, sharedWith:<anchor person>}
-//   Leftover: {isLeftover:true, cookDay, crossPerson?, cookedBy}
+//   Leftover: {isLeftover:true, cookDay, crossPerson?, cookedBy,
+//              sameDayShared? (same day/slot as anchor, other person — the
+//              old "shared co-anchor" concept; rendered as a normal
+//              per-serving card with a Shared pill, NOT a Lo pill)}
+// R14-L (2026-07-10): the old "Shared co-anchor {isLeftover:false,
+// shared:true, sharedWith}" output shape documented here was never emitted
+// by the one-cook/no-parallel-chains rewrite — sameDayShared leftovers
+// replaced it, and `sharedWith` is assigned nowhere. CLAUDE.md had it right.
 function computeLeftovers(){
   if(_leftoverCache)return _leftoverCache;
   const result={};
@@ -7956,6 +7963,12 @@ function verifyInvariants(){
       // partial-jar carryover") are contradictory intents.
       if(db && db.pkg && (db.pkg.acceptableWaste || db.pkg.nonWaste)) return;
       if(db && db.produce && (db.produce.acceptableWaste || db.produce.nonWaste)) return;
+      // R14-L (2026-07-10): gate longShelfLife too — the per-trip INV20 site
+      // skips all three flags but this weekly site (V219) only gained
+      // acceptableWaste/nonWaste. A future {longShelfLife, crossTripCarry}
+      // carton would skip per-trip yet hard-fire here whenever priorCarry
+      // exceeded c1 demand. Same defensive class V219 itself fixed.
+      if(db && db.pkg && db.pkg.longShelfLife) return;
       // V171: pick perUnit + threshold + labels per item type.
       var isPkg = !!(db && db.pkg && db.pkg.crossTripCarry);
       var isProduce = !isPkg && !!(db && db.produce && db.produce.crossTripCarry);
@@ -9245,12 +9258,16 @@ function buildMealCardHtml(s, person, day, other){
   const leftovers=computeLeftovers();
   const loKey=sk(person,day,s);
   const loInfo=leftovers[loKey];
-  let leftoverBadge='';
   let leftoverPill='';
   if(loInfo&&loInfo.isLeftover&&!loInfo.sameDayShared){
-    const fromLabel=loInfo.crossPerson?(loInfo.cookedBy==='him'?'his':'her')+' '+loInfo.cookDay:loInfo.cookDay;
-    leftoverBadge='<span class="leftover-badge">🍱 '+fromLabel+'</span>';
-    leftoverPill='<div class="mc-pill mc-pill-leftover on no-click">Leftovers</div>';
+    // R14-L (2026-07-10): fold the cook-day (and his/her attribution for
+    // cross-person) into the pill — the documented contract is a
+    // "Leftovers <day>" pill, but the day info was built into a separate
+    // leftoverBadge var that was never concatenated into the card HTML
+    // (dead since the pill refactor); users had no way to see which day's
+    // cook the food comes from outside the Shared view.
+    const fromLabel=loInfo.crossPerson?(loInfo.cookedBy==='him'?'his':'her')+' '+loInfo.cookDay.slice(0,3):loInfo.cookDay.slice(0,3);
+    leftoverPill='<div class="mc-pill mc-pill-leftover on no-click">Leftovers · '+fromLabel+'</div>';
   }
   let cookPill='';
   if(loInfo&&!loInfo.isLeftover){
@@ -10823,8 +10840,14 @@ function _writeUserPin(p,d,s,idx,opts){
   if(opts.dbKey !== undefined && !cacheDbKeyDiffers && (!existing || existing.dbKey === undefined)){
     const _mid = SEL[sk(p,d,s)];
     const _meal = _mid ? getMeal(_mid) : null;
-    if(_meal && _meal.ingredients && _meal.ingredients[idx]
-       && _meal.ingredients[idx].dbKey !== opts.dbKey){
+    // R14-L (2026-07-10): index the PER-PERSON filtered list, not the raw
+    // recipe. expandMealIngredients drops amt<=0 entries when building
+    // meal[p].ingredients, so cache/override idx space is shifted for any
+    // recipe with a zero-amt row (her_shake: raw idx 4 = zero-amt peanut
+    // butter, filtered idx 4 = oats). The raw-list fallback misidentified
+    // the swap source in that window. Mirrors _captureUserPinsForMealChange.
+    const _mlist = _meal && _meal[p] && _meal[p].ingredients ? _meal[p].ingredients : null;
+    if(_mlist && _mlist[idx] && _mlist[idx].dbKey !== opts.dbKey){
       recipeDbKeyDiffers = true;
     }
   }
@@ -10859,8 +10882,10 @@ function _writeUserPin(p,d,s,idx,opts){
     if(priorDbKey === null){
       const _mid2 = SEL[sk(p,d,s)];
       const _meal2 = _mid2 ? getMeal(_mid2) : null;
-      if(_meal2 && _meal2.ingredients && _meal2.ingredients[idx]){
-        priorDbKey = _meal2.ingredients[idx].dbKey;
+      // R14-L: per-person filtered list (see recipeDbKeyDiffers above).
+      const _mlist2 = _meal2 && _meal2[p] && _meal2[p].ingredients ? _meal2[p].ingredients : null;
+      if(_mlist2 && _mlist2[idx]){
+        priorDbKey = _mlist2[idx].dbKey;
       }
     }
     setOverride(p,d,s,idx,'_priorAmt', priorAmt);
@@ -13227,9 +13252,15 @@ function _computePriorCarryover(priorWeekKey){
 // is rejected if it would create an N-day gap in EITHER direction.
 //
 // Reads SEL directly (not via getMealId) so DEFAULTS doesn't pollute the
-// recent set. Variety is about what's been actively picked this randomize,
-// not about the static starter plan. Mirrors getLastWeekMealIds which also
-// reads weekData[...].sel directly.
+// recent set.
+// R14-L (2026-07-10) honesty note: during Phase 1's day-by-day commit, the
+// today/forward-window reads see SEL entries not yet re-picked THIS retry —
+// i.e., the previous retry's (or the incumbent plan's) picks. That's an
+// over-blocking search bias only (additive to `recent`; the fallback
+// cascade + 60-retry selection recover, no invariant reachable) — accepted
+// as-is rather than re-architecting Phase 1's commit order. The old claim
+// here ("variety is about what's been actively picked this randomize")
+// overstated the isolation.
 function getRecentMealIds(dayIndex, days, lookback) {
   const recent = [];
   const leftovers = computeLeftovers();
@@ -14586,9 +14617,11 @@ function unifyCrossPersonRatios(){
   var leftovers=computeLeftovers();
   var affectedDays={};
 
-  // Process each cook anchor exactly once. sharedWith entries are skipped
-  // (processed via their main anchor). Only unify batches with multi-person
-  // portions; same-person-only batches have uniform ratios by construction.
+  // Process each cook anchor exactly once. Leftover entries (incl.
+  // sameDayShared portions — the old "sharedWith co-anchor" shape no longer
+  // exists; R14-L 2026-07-10) are skipped and processed via their anchor.
+  // Only unify batches with multi-person portions; same-person-only batches
+  // have uniform ratios by construction.
   ['him','her'].forEach(function(p){
     DAYS.forEach(function(d){
       ['breakfast','lunch','snack','dinner'].forEach(function(s){
