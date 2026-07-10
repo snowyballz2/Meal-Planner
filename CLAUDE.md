@@ -434,7 +434,7 @@ Visualizes cook+leftover batches as colored bands in the Schedule grid.
 - **Auto-groups** (`_autoLinkGroups`, transient): rebuilt every `renderMeals` from `computeLeftovers()` cook anchors (multi-portion lunch/dinner not already manual-grouped). Never persisted → can't drift. Manual wins on conflict. Selecting one in the picker materializes it into a manual group.
 - `_validateManualLinkGroups()` self-heals on every render (drops slots whose meal no longer matches the group).
 
-## Current State (2026-07-10, V239 — `main` @ tip)
+## Current State (2026-07-10, V242 — `main` @ tip)
 
 - **Quality (100-seed Test 1 + Test 2, V238)**: primary ~**99.6–99.8%** (Test 1 99.64% / Test 2 99.79%; misses are exclusively borderline proPct 40–45% and veg 2.5–3.0c classes — zero kcal-bucket misses; cumulative Waves B+C cost ~−0.22pp vs V236 for honest waste accounting, phantom-INV14 elimination, and fat-drops that actually stick); hard INVs (1–5, 7–13, 17, 19, 20-hard, 23–27) **all 0**; INV14 **0**; zero-waste (non-soft) 100%, soft fires ~17/100 runs (M11b tiebreaker; plan-space shifted by the V238 adjuster fixes); INV6 ~71/100 runs (improved); meals closed-off **0.0%**; per-click ~600 ms–1.5 s on a fresh process.
 - **Tracking INVs**: INV6 ~85–100 after V227 (Audit R12 added `noRatioCheck:true` to `korean_juk` + `sweet_potato_egg_hash` + `turkey_sweet_potato_hash` — structurally macro-skewed dishes whose budget-fit trim/boost swings P/C by design; 0 day-misses across all observed fires, so the drift carried no signal). Remaining drift outliers `sticky_miso_salmon_bowl`/`salmon_stir_fry_din`/`miso_tofu` are still tracked. INV20 fires are all-soft (avocado/jalapeño produce, marinara/broth pkg); INV18 cap-rate low.
