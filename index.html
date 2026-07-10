@@ -1159,6 +1159,12 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
           const swaps=Math.min(Math.ceil(excessFatCal/fatSaved),wholeAmt);
           if(swaps>0){
             adjustments[eggWholeIdx]=wholeAmt-swaps;
+            // R14-M16 (2026-07-09): a FULL swap zeroes the whole egg — tag it
+            // fatDropped like Step 2's drop loop, or the wholeOnly snap floor
+            // (Math.round(0)=0 → amt<1→1) resurrects it while the egg-white
+            // addition sticks: net zero fat removed (the swap's entire
+            // purpose) plus a free egg-white kcal bump.
+            if(wholeAmt-swaps===0) fatDropped[eggWholeIdx]=true;
             if(eggWhiteIdx>=0){
               // 1 egg whole = 0.125 cups liquid egg white
               adjustments[eggWhiteIdx]=(adjustments[eggWhiteIdx]!==undefined?adjustments[eggWhiteIdx]:ingredients[eggWhiteIdx].amt)+(swaps*0.125);
@@ -1341,6 +1347,13 @@ function adjustIngredients(ingredients, targetDelta, slot, macroHints, mealTotal
   return ingredients.map(function(ing, idx) {
     var amt = adjustments[idx] !== undefined ? adjustments[idx] : ing.amt;
     if(ing._userSet === true) return { ing:ing, newAmt:amt };
+    // R14-M15 (2026-07-09): honor fatDropped here too. The snap pass (above)
+    // and the minAmt recheck both skip intentionally-zeroed fat items, but
+    // this sweep clamped them back up to _effMin AFTER backfill had already
+    // refilled their calories with protein/carb — silently re-adding the
+    // dropped fat (e.g. avocado resurrected at 0.25 each = +80 kcal/+7.5g
+    // fat post-budget-accounting).
+    if(fatDropped[idx]) return { ing:ing, newAmt: 0 };
     // V93 (2026-05-08): auto fat-boost ingredients also bypass min/max.
     // The boost amount is set by _autoApplyFatBoosts based on recipe metadata.
     if(ing._fatBoost === true) return { ing:ing, newAmt:amt };
@@ -4906,8 +4919,17 @@ function buildShoppingList(trip,who){
     const c1DaySet = {}; c1Days.forEach(function(d){c1DaySet[d]=true;});
     const c2DaySet = {}; c2Days.forEach(function(d){c2DaySet[d]=true;});
     // {dbKey: {him: {cook1, cook2}, her: {cook1, cook2}}}
+    // R14-M22 (2026-07-09): demand is accumulated for the WHOLE HOUSEHOLD
+    // regardless of view — the prior-week carryover is one physical open
+    // jar shared by both people, and the him-first depletion below must
+    // see both persons' demand to allocate it. Pre-fix this loop iterated
+    // only the VIEW's persons, so in the Her-only view him's demand was 0
+    // and the entire carry credited her — her marinara/broth line could
+    // vanish entirely while him's cooking had actually consumed the jar
+    // (each single view under-bought; only 'both' was right). The view
+    // filter lives at DISPLAY time (persons.indexOf below), not here.
     const carryDemand = {};
-    persons.forEach(function(p){
+    ['him','her'].forEach(function(p){
       DAYS.forEach(function(d){
         SLOTS.forEach(function(s){
           if(s==='late_snack') return;
@@ -5970,7 +5992,7 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
         if(role&&i.role!==role)return;
         const db=NUTRI_DB[i.dbKey]; if(!db)return;
         const isPkg=!!(db.pkg&&!db.pkg.longShelfLife);
-        out.push({slot:s,idx:idx,db:db,cur:i.amt,isPkg:isPkg,role:i.role,origAmt:i.origAmt,recipeAmt:i.recipeAmt,dbKey:i.dbKey,scalable:i.scalable});
+        out.push({slot:s,idx:idx,db:db,cur:i.amt,isPkg:isPkg,role:i.role,origAmt:i.origAmt,recipeAmt:i.recipeAmt,dbKey:i.dbKey,scalable:i.scalable,_userSet:i._userSet}); // R14-M17: forward _userSet
       });
     });
     return out;
@@ -6114,6 +6136,13 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
     // touching snack (handled at end-of-pipeline).
     const items=itemsByRole(role, true).filter(function(x){
       if(slotFilter && slotFilter.indexOf(x.slot) === -1) return false;
+      // R14-M17 (2026-07-09): never mutate user pins. boostFV deliberately
+      // bypasses scalable:false (ignoreScalableFalse=true, to reach frozen
+      // batch veg) and its filter only excluded ROUND-item freeze pins — a
+      // user-pinned lettuce/green-beans/corn amount (not in the ROUND lists)
+      // was silently boosted, violating the "user edits are absolute"
+      // contract every other writer honors.
+      if(x._userSet === true) return false;
       if(x.db.unit!=='cup' && !(x.db.unit==='each' && x.db.cupsEach))return false;
       // 2026-04-29: skip FREEZE-set frozen items. boostFV grew frozen veg
       // by 0.25c increments, which (a) pushed trip totals off perWhole and
@@ -8588,16 +8617,18 @@ function renderSharedView(day, scrollY, mealEl, prefixHtml){
       badges='<span class="mc-pill mc-pill-leftover on no-click" style="vertical-align:middle">Leftovers</span>'
         +'<span class="mc-pill mc-pill-cook on no-click" style="margin-left:3px;vertical-align:middle;font-size:9px;padding:1px 6px">'+himLo.cookDay.slice(0,3)+'</span>';
     } else if(batchSize>2){
-      // Find which days get leftovers and who eats them
+      // Find which days get leftovers and who eats them.
+      // R14-M18 (2026-07-09): read THIS batch's authoritative portion list.
+      // The old scan collected EVERY leftover in the week whose cookDay
+      // matched this day — an unrelated batch cooked the same day (e.g. a
+      // Monday LUNCH batch) donated phantom day-badges to the Monday DINNER
+      // shared card, and the sameDayShared portion (per contract a normal
+      // per-serving card, not a leftover) also showed as a feeds-day.
       const loDayMap={};
-      Object.keys(leftovers).forEach(function(lk){
-        const lo=leftovers[lk];
-        if(lo&&lo.isLeftover&&lo.cookDay===day){
-          const parts=lk.split('_');
-          const who=parts[0],loDay=parts[1];
-          if(!loDayMap[loDay])loDayMap[loDay]=[];
-          if(loDayMap[loDay].indexOf(who)<0)loDayMap[loDay].push(who);
-        }
+      (anchorLoSV ? anchorLoSV.portions : []).forEach(function(pt){
+        if(pt.d===day) return; // anchor + same-day shared portions: not leftover days
+        if(!loDayMap[pt.d])loDayMap[pt.d]=[];
+        if(loDayMap[pt.d].indexOf(pt.p)<0)loDayMap[pt.d].push(pt.p);
       });
       const feedsDays=Object.keys(loDayMap).map(function(d){
         const who=loDayMap[d];
@@ -8895,15 +8926,30 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
     const c2Days = TRIP_DAYS_STATIC.cook2 || [];
     const isCook1Slot = c1Days.indexOf(_bannerDay) >= 0;
     const slotTrip = isCook1Slot ? 'cook1' : 'cook2';
-    // Helper: sum household carry-item demand across a set of days.
+    // Helper: sum household demand across a set of days.
+    // R14-M19 (2026-07-09): ANCHOR-attributed — a batch's FULL total counts
+    // in its cook anchor's trip, mirroring buildShoppingList, freeze, and
+    // INV20. The old per-eaten-day split disagreed with all three on
+    // cross-trip batches: a boundary-clean Wed-cook batch with a Thu
+    // leftover produced a phantom "⚠ waste · +X or -Y" hint on the Wed
+    // card — following which CREATED real waste. Skips SKIPPED/EAT_OUT
+    // slots like the freeze collector.
+    const losWH = computeLeftovers();
     const sumDays = function(days){
       let s = 0;
       days.forEach(function(_d){
         ['him','her'].forEach(function(_p){
           ['breakfast','lunch','snack','dinner'].forEach(function(_s){
-            const _bal = getBalancedSlotIngredients(_p,_d,_s);
-            if(!_bal) return;
-            _bal.forEach(function(_i){ if(_i.dbKey===dbKey) s += _i.amt; });
+            const _k = sk(_p,_d,_s);
+            if(SKIPPED[_k] || EAT_OUT[_k]) return;
+            const _lo = losWH[_k];
+            if(_lo && _lo.isLeftover) return; // counted via its anchor's trip
+            const _pl = (_lo && _lo.portions) ? _lo.portions : [{p:_p,d:_d,s:_s}];
+            _pl.forEach(function(_pt){
+              const _bal = getBalancedSlotIngredients(_pt.p,_pt.d,_pt.s);
+              if(!_bal) return;
+              _bal.forEach(function(_i){ if(_i.dbKey===dbKey) s += _i.amt; });
+            });
           });
         });
       });
@@ -10091,6 +10137,15 @@ function toggleSkip(p,d,s){
     // so the Set pill reflects current state ("nothing user-set on this slot
     // anymore"), not historical interaction.
     delete USER_EDITED[k];
+    // R14-M21 (2026-07-09): un-skipping must not orphan user ingredient
+    // pins. _writeUserPin set MANUAL_SET when the edit was made; deleting
+    // it above left the slot UNLOCKED for randomize (Phase 1 clearOverrides
+    // silently discards the edit) while the ✏️ banner + Reset button still
+    // rendered (they read OVERRIDES._userSet). Restore the lock the edit
+    // created — skip-off returns the slot to its pre-skip state. (Grid
+    // edit-mode clears — _v85 purple-clear / _v70 cascades — intentionally
+    // keep their release-the-slot semantics.)
+    if(_hasUserOverrides(p,d,s)){ MANUAL_SET[k]=true; USER_EDITED[k]=true; }
   } else {
     delete EAT_OUT[k];
     MANUAL_SET[k]=true;
@@ -10267,6 +10322,9 @@ function toggleEatOut(p,d,s){
     // V54 (2026-05-07): toggleEatOut OFF un-sets the slot — clear
     // USER_EDITED. Symmetric with toggleSkip OFF.
     delete USER_EDITED[k];
+    // R14-M21: restore the lock when user ingredient pins exist —
+    // symmetric with toggleSkip OFF (see its comment).
+    if(_hasUserOverrides(p,d,s)){ MANUAL_SET[k]=true; USER_EDITED[k]=true; }
   } else {
     _applyEatOutOn(p, d, s, {name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null});
   }
@@ -10663,11 +10721,6 @@ function confirmTempIngredient(p,d,s){
   // Find next unused idx (recipe.length OR past-recipe idx if user has
   // added ingredients before; appended overrides have idx >= recipe.length).
   const recipeLen=meal[p].ingredients?meal[p].ingredients.length:0;
-  const ovr=OVERRIDES[sk(p,d,s)]||[];
-  let nextIdx=recipeLen;
-  ovr.forEach(function(o){if(o.idx>=nextIdx)nextIdx=o.idx+1;});
-  // Default amount per unit type
-  const defaultAmt=db.unit==='cup'?0.5:db.unit==='tbsp'?1:db.unit==='oz'?4:1;
   // 2026-05-06+: BATCH-AWARE append. For multi-portion batches (cook
   // anchors, leftovers, same-day shared), the new ingredient must appear
   // on EVERY portion in the batch — otherwise INV1 fires (cook has X,
@@ -10675,6 +10728,18 @@ function confirmTempIngredient(p,d,s){
   // For solo slots, just the one slot.
   const _portionsForAdd = (typeof _getBatchPortions === 'function')
     ? _getBatchPortions(p,d,s) : [{p:p,d:d,s:s}];
+  // R14-M20 (2026-07-09): nextIdx must clear EVERY batch portion's
+  // overrides, not just the tapped slot's. The batch loop below writes
+  // idx=nextIdx to ALL portions; computed from the tapped slot alone, a
+  // '+' tapped on a portion that lacked an earlier append's override made
+  // setOverride MERGE into the other portions' existing idx entry —
+  // silently replacing the first added ingredient's dbKey/amt there.
+  let nextIdx=recipeLen;
+  _portionsForAdd.forEach(function(pt){
+    (OVERRIDES[sk(pt.p,pt.d,pt.s)]||[]).forEach(function(o){if(o.idx>=nextIdx)nextIdx=o.idx+1;});
+  });
+  // Default amount per unit type
+  const defaultAmt=db.unit==='cup'?0.5:db.unit==='tbsp'?1:db.unit==='oz'?4:1;
   _portionsForAdd.forEach(function(pt){
     // 2026-05-05+: stamp as user pin so `+ ingredient` triggers banner,
     // is recognized by `_hasUserOverrides`, bypasses min/max clamps +
@@ -18157,8 +18222,19 @@ function mergeSyncData(remote){
   // that could clobber a newer local target with an older remote on pull).
   // Legacy payloads lack the Ts fields → remote ts 0; a changed local value
   // (ts>0) wins, while a fresh install (local ts 0) still takes remote on tie.
-  if(remote.calBase && Math.max(remote.calBaseTs||0, _mergeForceTs) >= CAL_BASE_TS){CAL_BASE=remote.calBase;CAL_BASE_TS=Math.max(remote.calBaseTs||0, _mergeForceTs);lsSet('mealPlannerCalBase',CAL_BASE);lsSet('mealPlannerCalBaseTs',CAL_BASE_TS);} // R14-M3: force floor
-  if(remote.proTarget && Math.max(remote.proTargetTs||0, _mergeForceTs) >= PRO_TARGET_TS){PRO_TARGET=remote.proTarget;PRO_TARGET_TS=Math.max(remote.proTargetTs||0, _mergeForceTs);lsSet('mealPlannerProTarget',PRO_TARGET);lsSet('mealPlannerProTargetTs',PRO_TARGET_TS);} // R14-M3
+  // R14-M23 (2026-07-09): the `>=` tie let a remote value clobber a LOCAL
+  // customization whenever both timestamps were 0 — exactly the pre-R13-
+  // migrated case R13 claimed to fix (values customized before the Ts
+  // fields existed carry ts=0 forever until re-edited). Tie rule now:
+  // remote wins a tie ONLY when the local value is still factory default
+  // (the R13 fresh-install intent); a customized local value needs a
+  // strictly newer remote ts to be replaced. Strictly-newer always wins.
+  var _cbForce = Math.max(remote.calBaseTs||0, _mergeForceTs);
+  var _cbIsDefault = JSON.stringify(CAL_BASE) === JSON.stringify({him:2800,her:1900});
+  if(remote.calBase && (_cbForce > CAL_BASE_TS || (_cbForce === CAL_BASE_TS && _cbIsDefault))){CAL_BASE=remote.calBase;CAL_BASE_TS=_cbForce;lsSet('mealPlannerCalBase',CAL_BASE);lsSet('mealPlannerCalBaseTs',CAL_BASE_TS);}
+  var _ptForce = Math.max(remote.proTargetTs||0, _mergeForceTs);
+  var _ptIsDefault = JSON.stringify(PRO_TARGET) === JSON.stringify({him:180,her:120});
+  if(remote.proTarget && (_ptForce > PRO_TARGET_TS || (_ptForce === PRO_TARGET_TS && _ptIsDefault))){PRO_TARGET=remote.proTarget;PRO_TARGET_TS=_ptForce;lsSet('mealPlannerProTarget',PRO_TARGET);lsSet('mealPlannerProTargetTs',PRO_TARGET_TS);}
 
   // Custom meals: per-meal last-write-wins via entry._ts (v4+). Remote with
   // newer ts overwrites local; v3 remote has no _ts so treated as ts=0
