@@ -9578,10 +9578,26 @@ function buildMealCardHtml(s, person, day, other){
   const eoKey=sk(person,day,s);
   const isEatOut=!!EAT_OUT[eoKey];
   const eoPill='<div class="mc-pill mc-pill-eo'+(isEatOut?' on':'')+'" onclick="event.stopPropagation();toggleEatOut(\''+person+'\',\''+day+'\',\''+s+'\')">Eat Out</div>';
+  // V243 (2026-07-10): meal move/swap pills. "⇄" arms move mode from this
+  // card; while armed, eligible destination cards show "⤓ Here".
+  let movePill='', herePill='';
+  if(!isSkipped && !isEatOut && ['breakfast','lunch','snack','dinner'].indexOf(s)>=0){
+    if(_movePending && !(_movePending.p===person&&_movePending.d===day&&_movePending.s===s)){
+      if(_moveEligible(person,day,s)){
+        herePill='<div class="mc-pill mc-pill-cook on" style="background:rgba(52,211,153,.2);color:#34D399;border-color:rgba(52,211,153,.45)" onclick="event.stopPropagation();completeMoveMeal(\''+person+'\',\''+day+'\',\''+s+'\')">⤓ Here</div>';
+      }
+    } else if(!_movePending){
+      movePill='<div class="mc-pill no-click" style="cursor:pointer;opacity:.75" onclick="event.stopPropagation();startMoveMeal(\''+person+'\',\''+day+'\',\''+s+'\')">⇄</div>';
+    } else if(_movePending.p===person&&_movePending.d===day&&_movePending.s===s){
+      movePill='<div class="mc-pill on" style="background:rgba(251,191,36,.2);color:#FBBF24;border-color:rgba(251,191,36,.45)" onclick="event.stopPropagation();cancelMoveMeal()">Moving… ✕</div>';
+    }
+  }
   const topRowPills='<div class="mc-pills">'+(isSkipped||isEatOut?'':leftoverPill+cookPill)
     +(isSkipped?'':isEatOut?'':sharedPill)
     +skipPill
     +eoPill
+    +herePill
+    +movePill
     +'</div>';
 
   // Build skip summary when skipped
@@ -10582,6 +10598,77 @@ function _gcEatOutTombstones(){
     }
   }
 }
+// ── V243 (2026-07-10): manual meal move/swap (pinned proposal 2026-05-06) ──
+// Swap two slots' meals WITHOUT any pipeline re-run — SEL, overrides, and
+// the balanced-cache rows travel VERBATIM (surgical-edit philosophy: "I
+// make a small change, I see the result of just my change"). Every slot
+// resolves to SOME meal via DEFAULTS, so "move" is implemented as SWAP —
+// a one-way move would just surface the DEFAULTS meal at the source,
+// which reads as data loss. Both slots get MANUAL_SET (locked from the
+// next randomize) + USER_EDITED + ts bumps for sync. Like changeMeal,
+// this is a MANUAL action: invariants judge randomizer output, not user
+// rearrangement — a user-made same-meal adjacency is their call.
+var _movePending=null; // {p,d,s} while move mode is armed
+function _slotTypeGroup(s){ return (s==='lunch'||s==='dinner')?'main':s; }
+function _moveEligible(p,d,s){
+  if(!_movePending) return false;
+  var src=_movePending;
+  if(src.p===p&&src.d===d&&src.s===s) return false;
+  if(_slotTypeGroup(src.s)!==_slotTypeGroup(s)) return false;
+  var k=sk(p,d,s);
+  if(SKIPPED[k]||EAT_OUT[k]) return false;
+  // Person availability BOTH directions (meals are person-conditional).
+  var srcMeal=getMeal(getMealId(src.p,src.d,src.s));
+  var dstMeal=getMeal(getMealId(p,d,s));
+  if(!srcMeal||!srcMeal[p]) return false;
+  if(!dstMeal||!dstMeal[src.p]) return false;
+  return true;
+}
+function startMoveMeal(p,d,s){ _movePending={p:p,d:d,s:s}; renderMeals(); }
+function cancelMoveMeal(){ _movePending=null; renderMeals(); }
+function completeMoveMeal(p,d,s){
+  if(!_movePending) return;
+  var src=_movePending;
+  if(!_moveEligible(p,d,s)) return;
+  _movePending=null;
+  swapMeals(src.p,src.d,src.s, p,d,s);
+}
+function swapMeals(aP,aD,aS, bP,bD,bS){
+  var ka=sk(aP,aD,aS), kb=sk(bP,bD,bS);
+  var idA=getMealId(aP,aD,aS), idB=getMealId(bP,bD,bS);
+  if(!idA||!idB||ka===kb) return false;
+  // Force-materialize both cache slots BEFORE swapping — a missing side
+  // would otherwise leave a partial day object (getDayBalancedIngredients
+  // returns days as-is, so a hole never lazily rebuilds).
+  getBalancedSlotIngredients(aP,aD,aS);
+  getBalancedSlotIngredients(bP,bD,bS);
+  var da=pk(aP,aD), db2=pk(bP,bD);
+  if(!_dayBalancedCache[da]||!_dayBalancedCache[da][aS]||!_dayBalancedCache[db2]||!_dayBalancedCache[db2][bS]) return false;
+  SEL[ka]=idB; SEL[kb]=idA;
+  // Overrides travel with their meal (user pins, freeze pins, temp adds).
+  var ovA=OVERRIDES[ka], ovB=OVERRIDES[kb];
+  if(ovB!==undefined) OVERRIDES[ka]=ovB; else delete OVERRIDES[ka];
+  if(ovA!==undefined) OVERRIDES[kb]=ovA; else delete OVERRIDES[kb];
+  // Cache rows travel verbatim.
+  var ca=_dayBalancedCache[da][aS];
+  _dayBalancedCache[da][aS]=_dayBalancedCache[db2][bS];
+  _dayBalancedCache[db2][bS]=ca;
+  // A swap that changes one side of a 'shared' cell breaks the pairing —
+  // mirror changeMeal's rule (manual pick dissolves 'shared').
+  [dk(aD,aS), dk(bD,bS)].forEach(function(c){
+    if(SHARED_SCHEDULE[c]==='shared'){
+      delete SHARED_SCHEDULE[c];
+      if(weekData[activeWeek]&&weekData[activeWeek].sharedScheduleTs) weekData[activeWeek].sharedScheduleTs[c]=Date.now();
+    }
+  });
+  MANUAL_SET[ka]=true; MANUAL_SET[kb]=true;
+  _markUserEdited(ka); _markUserEdited(kb);
+  _bumpSlotTs(ka); _bumpSlotTs(kb);
+  _leftoverCache=null; // detector re-derives; balanced cache kept verbatim
+  renderMeals(); if(topTab==='shop')renderShop(); autoSaveWeek();
+  return true;
+}
+
 function changeMeal(slot,mealId){
   const selKey=sk(person,day,slot);
   // V169 (2026-05-19): capture user pins for ROUND_*_ITEMS that exist
@@ -22662,6 +22749,46 @@ window.MPStress=(function(){
       checkCoherence();
     }
 
+    else if(op==='moveMealOp'){
+      // V243 (2026-07-10): manual meal swap between two slots (pinned
+      // proposal's harness requirement). Verify SEL + overrides exchanged,
+      // MANUAL_SET set on both, coherence checks hold. Destination is
+      // restricted to meals that occur ONCE in the week (both sides) so the
+      // swap can't create batch-adjacency interactions that would make the
+      // hard-INV baseline check nondeterministic across seeds.
+      if(s!=='lunch'&&s!=='dinner'){ add('setup', true, '', null, 'main-group slots only'); return {checks:checks}; }
+      function _mmCount(id){
+        var n=0; DAYS.forEach(function(_d){ ['lunch','dinner'].forEach(function(_s){ ['him','her'].forEach(function(_p){
+          if(SEL[sk(_p,_d,_s)]===id) n++;
+        });});}); return n;
+      }
+      var mmSrcId=getMealId(p,d,s);
+      if(!mmSrcId || _mmCount(mmSrcId)!==1){ add('setup', true, '', null, 'src meal not a singleton'); return {checks:checks}; }
+      var mmDst=null;
+      DAYS.forEach(function(_d){ ['lunch','dinner'].forEach(function(_s){
+        if(mmDst) return; if(_d===d&&_s===s) return;
+        var k2=sk(p,_d,_s);
+        if(SKIPPED[k2]||EAT_OUT[k2]||MANUAL_SET[k2]) return;
+        var id2=getMealId(p,_d,_s);
+        if(!id2||id2===mmSrcId||_mmCount(id2)!==1) return;
+        var m1=getMeal(mmSrcId), m2=getMeal(id2);
+        if(!m1||!m1[p]||!m2||!m2[p]) return;
+        mmDst={d:_d,s:_s,id:id2};
+      });});
+      if(!mmDst){ add('setup', true, '', null, 'no eligible singleton destination'); return {checks:checks}; }
+      var mmKSrc=sk(p,d,s), mmKDst=sk(p,mmDst.d,mmDst.s);
+      var mmOvSrc=JSON.stringify(OVERRIDES[mmKSrc]||null), mmOvDst=JSON.stringify(OVERRIDES[mmKDst]||null);
+      var mmOk=swapMeals(p,d,s, p,mmDst.d,mmDst.s);
+      add('mm_returned', mmOk===true, 'swapMeals returned '+mmOk);
+      add('mm_selSwapped', SEL[mmKSrc]===mmDst.id && SEL[mmKDst]===mmSrcId, 'SEL not exchanged');
+      add('mm_ovSwapped', JSON.stringify(OVERRIDES[mmKSrc]||null)===mmOvDst && JSON.stringify(OVERRIDES[mmKDst]||null)===mmOvSrc, 'overrides not exchanged');
+      add('mm_manualSet', !!MANUAL_SET[mmKSrc] && !!MANUAL_SET[mmKDst], 'MANUAL_SET missing on an endpoint');
+      add('mm_userEdited', !!USER_EDITED[mmKSrc] && !!USER_EDITED[mmKDst], 'USER_EDITED missing');
+      checkInv();
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
     else if(op==='changeMealOp'){
       // changeMeal swaps meal ID. Verify SEL + MANUAL_SET set, no batch
       // propagation (per-slot only).
@@ -24988,7 +25115,7 @@ window.MPStress=(function(){
     // meal swaps, and randomize-persist behavior. All ops also run the
     // cross-cutting schedEatOutConsistency invariant.
     var OPS=['edit','swap','addIngr','reset','rebalance',
-             'skipPill','eatOutPill','scheduleTapCycle','changeMealOp','randomizePersist',
+             'skipPill','eatOutPill','scheduleTapCycle','changeMealOp','moveMealOp','randomizePersist',
              'schedTapCenter','clearWeekOp','paintAcceptOp','lateSnackOp',
              'editLinkGroupSlot','editSkippedSlot','tapAlreadyShared','pinAndRandomize','gridSkipPlusPillSkip',
              'editToChangeMeal','skipToEatOut',
@@ -25038,7 +25165,7 @@ window.MPStress=(function(){
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
-            skipPill:{p:0,f:0},eatOutPill:{p:0,f:0},scheduleTapCycle:{p:0,f:0},changeMealOp:{p:0,f:0},randomizePersist:{p:0,f:0},
+            skipPill:{p:0,f:0},eatOutPill:{p:0,f:0},scheduleTapCycle:{p:0,f:0},changeMealOp:{p:0,f:0},moveMealOp:{p:0,f:0},randomizePersist:{p:0,f:0},
             schedTapCenter:{p:0,f:0},clearWeekOp:{p:0,f:0},paintAcceptOp:{p:0,f:0},lateSnackOp:{p:0,f:0},
             editLinkGroupSlot:{p:0,f:0},editSkippedSlot:{p:0,f:0},tapAlreadyShared:{p:0,f:0},pinAndRandomize:{p:0,f:0},gridSkipPlusPillSkip:{p:0,f:0},
             editToChangeMeal:{p:0,f:0},skipToEatOut:{p:0,f:0},
