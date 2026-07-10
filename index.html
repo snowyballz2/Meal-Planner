@@ -4202,7 +4202,17 @@ function _collectHouseholdCooks(los){
   DAYS.forEach(function(dd, di){
     ['lunch','dinner'].forEach(function(ss){
       ['him','her'].forEach(function(p){
-        var lo = los[sk(p,dd,ss)];
+        var key = sk(p,dd,ss);
+        // R14-M8 (2026-07-09): a skipped/eat-out slot is not a cook.
+        // toggleSkip retains SEL by design, and an eat-out slot with no SEL
+        // falls back to DEFAULTS via getMealId — both produced phantom
+        // INV14 "repeat-cook-within-5d" pairs on slots where nothing is
+        // cooked, which the resolver then churned on (or couldn't fix at
+        // all: tryResolveCook rightly refuses EAT_OUT/SKIPPED/MANUAL_SET
+        // slots, so the phantom fire survived every randomize). Mirrors
+        // computeLeftovers' and the INV11 collector's gates.
+        if (SKIPPED[key] || EAT_OUT[key]) return;
+        var lo = los[key];
         if (lo && lo.isLeftover) return;
         var mid = getMealId(p,dd,ss);
         if (mid) cooks.push({dayIdx:di, mealId:mid, p:p, d:dd, s:ss});
@@ -12938,8 +12948,11 @@ function _measuredTripWasteForPersons(persons){
         const totalNum = (item.hisSum?item.hisSum.num:0) + (item.herSum?item.herSum.num:0);
         if(totalNum <= 0) return;
         const unit = (item.hisSum||item.herSum||{}).unit;
-        // PKG branch — matches verifyInvariants() INV20 exactly.
-        if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.nonWaste){
+        // PKG branch — matches verifyInvariants() INV20-HARD exactly.
+        // R14-M11 (2026-07-09): crossTripCarry gate added — the verifier's
+        // per-trip sites skip carry items (checked week-combined instead);
+        // this mirror counted their per-trip partials as waste.
+        if(db.pkg && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.nonWaste && !db.pkg.crossTripCarry){
           const perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
           if(perPkg > 0){
             const bought = _pkgsNeeded(totalNum, perPkg) * perPkg;
@@ -12950,15 +12963,61 @@ function _measuredTripWasteForPersons(persons){
             }
           }
         }
-        // PRODUCE branch — matches verifyInvariants() INV20 exactly.
-        if(db.produce && !db.produce.acceptableWaste && !db.produce.nonWaste){
+        // PRODUCE branch — matches verifyInvariants() INV20-HARD exactly.
+        // R14-M11: the pkg branch subtracted soft fires but this one counted
+        // banana/avocado/jalapeño (produce softWaste — accepted by design)
+        // as HARD: rerollMissDays' waste guard rejected swaps that fixed
+        // real kcal-miss days to "protect" accepted soft waste, and the
+        // retry loop's totalWaste===0 early-exit was unreachable in any
+        // week with a single soft produce fire (all 60 retries always ran).
+        if(db.produce && !db.produce.acceptableWaste && !db.produce.nonWaste && !db.produce.crossTripCarry){
           const perWhole = db.produce.perWhole;
           if(perWhole > 0){
             const pBought = _pkgsNeeded(totalNum, perWhole) * perWhole;
             const pWaste = pBought - totalNum;
             if(pWaste > perWhole * 0.5){
-              total++;
+              if(!db.produce.softWaste) total++;
             }
+          }
+        }
+      });
+    });
+  });
+  return total;
+}
+
+// R14-M11b (2026-07-09, user decision): SOFT-waste counter — the FINAL
+// retry-selection tiebreaker. Hard criteria rank first (the documented
+// contract M11 restored); among otherwise-equal retries prefer fewer soft
+// fires so accepted-but-visible waste (banana/avocado/jalapeño) isn't
+// gratuitously chosen. The ablation that motivated this (deterministic
+// Test 1, same build): strict-hard selection → primary 99.79% but 39 soft
+// fires/100 runs; old soft-as-hard → 99.71% / 8. The tiebreaker targets
+// goals-first AND low soft. crossTripCarry items excluded per-trip like
+// the hard measure (their partials are absorb/freeze-managed).
+function _measuredSoftTripWasteForPersons(persons){
+  const who = persons.length === 1 ? persons[0] : 'both';
+  let total = 0;
+  ['cook1','cook2'].forEach(function(trip){
+    const grouped = buildShoppingList(trip, who);
+    Object.keys(grouped).forEach(function(cat){
+      grouped[cat].forEach(function(item){
+        const db = NUTRI_DB[item.dbKey]; if(!db) return;
+        const totalNum = (item.hisSum?item.hisSum.num:0) + (item.herSum?item.herSum.num:0);
+        if(totalNum <= 0) return;
+        const unit = (item.hisSum||item.herSum||{}).unit;
+        if(db.pkg && db.pkg.softWaste && !db.pkg.longShelfLife && !db.pkg.acceptableWaste && !db.pkg.nonWaste && !db.pkg.crossTripCarry){
+          const perPkg = (db.pkg.drained && (unit==='cup'||unit==='oz')) ? db.pkg.drained : (db.pkg.cups||0);
+          if(perPkg > 0){
+            const bought = _pkgsNeeded(totalNum, perPkg) * perPkg;
+            if(bought > 0 && ((bought-totalNum)/bought) > 0.01) total++;
+          }
+        }
+        if(db.produce && db.produce.softWaste && !db.produce.acceptableWaste && !db.produce.nonWaste && !db.produce.crossTripCarry){
+          const perWhole = db.produce.perWhole;
+          if(perWhole > 0){
+            const pBought = _pkgsNeeded(totalNum, perWhole) * perWhole;
+            if((pBought-totalNum) > perWhole * 0.5) total++;
           }
         }
       });
@@ -13135,13 +13194,39 @@ function getRecentMealIds(dayIndex, days, lookback) {
       const lastWeekDayIdx = 7 + prevIdx;
       if (lastWeekDayIdx >= 0 && lastWeekDayIdx < 7) {
         const lastDay = DAYS[lastWeekDayIdx];
-        const lastSel = weekData[_prevWeekKey()] && weekData[_prevWeekKey()].sel || {};
+        const prevWk = weekData[_prevWeekKey()] || {};
+        const lastSel = prevWk.sel || {};
+        const lastSkip = prevWk.skipped || {};
+        const lastEo = prevWk.eatOut || {};
         SLOTS.forEach(function(s) {
           if (s === 'late_snack' || s === 'shake') return;
           ['him','her'].forEach(function(pp){
             const key = pp + '_' + lastDay + '_' + s;
             const id = lastSel[key];
-            if (id && recent.indexOf(id) < 0) recent.push(id);
+            if (!id || recent.indexOf(id) >= 0) return;
+            // R14-M10 (2026-07-09): mirror the current-week reads. The
+            // current-week branch excludes leftover entries ("eating a
+            // leftover isn't a new cook" — the docstring contract) but this
+            // tail pushed every raw prev-week id, so a prev-Wednesday cook
+            // with Thu/Fri leftovers blocked Monday/Tuesday picks even
+            // though the actual cook gap was 5+ days (INV14-legal). No
+            // detector runs for the prev week, so classify a lunch/dinner
+            // entry as a leftover when the SAME meal appears within the
+            // 2-day batch window before it — the cook occurrence blocks on
+            // its own if the window reaches it. Skipped/eat-out prev-week
+            // slots aren't cooks at all (same rationale as M8/M9).
+            if (lastSkip[key] || lastEo[key]) return;
+            if (s === 'lunch' || s === 'dinner') {
+              const dIdx2 = DAYS.indexOf(lastDay);
+              for (let bb = 1; bb <= 2; bb++) {
+                const eIdx = dIdx2 - bb;
+                if (eIdx < 0) break;
+                const eDay = DAYS[eIdx];
+                if (lastSel['him_'+eDay+'_lunch'] === id || lastSel['him_'+eDay+'_dinner'] === id
+                 || lastSel['her_'+eDay+'_lunch'] === id || lastSel['her_'+eDay+'_dinner'] === id) return;
+              }
+            }
+            recent.push(id);
           });
         });
       }
@@ -13184,6 +13269,13 @@ function isBatchLeftoverEligible(d, s, mealId) {
       for (let j = 0; j < anchorSlots.length; j++) {
         const prevKey = sk(persons[i], prevDay, anchorSlots[j]);
         if (SEL[prevKey] !== mealId) continue;
+        // R14-M9 (2026-07-09): a skipped/eat-out slot retains its SEL but
+        // computeLeftovers excludes it from batching — no anchor exists or
+        // can form there. Granting the batch-extension bypass anyway made
+        // Phase 1 place a FRESH solo cook 1-2 days after the phantom,
+        // manufacturing exactly the INV14 pair M8's collector fix stops
+        // counting.
+        if (SKIPPED[prevKey] || EAT_OUT[prevKey]) continue;
         const lo = los[prevKey];
         if (lo && lo.isLeftover) continue; // leftover, not an anchor — skip
         return true;
@@ -14965,6 +15057,13 @@ function randomizeWeek(target, seed){
   // run; those are re-decided each randomize, NOT persisted. Manual skips
   // (MANUAL_SET) are preserved — only auto-set ones (tracked in
   // _autoSkipSlots, never MANUAL_SET) get cleared.
+  // R14-M12 (2026-07-09): identify auto-skips by VALUE ('auto'), not via
+  // the memory-only tracker — survives reload and sync (see the marker
+  // comment in skipKcalOverSnacks). The tracker loop is kept for any
+  // legacy pre-V237 in-session entries still valued `true`.
+  Object.keys(SKIPPED).forEach(function(k){
+    if(SKIPPED[k] === 'auto' && !MANUAL_SET[k]) delete SKIPPED[k];
+  });
   Object.keys(_autoSkipSlots).forEach(function(k){
     if(SKIPPED[k] && !MANUAL_SET[k]) delete SKIPPED[k];
   });
@@ -15022,6 +15121,7 @@ function randomizeWeek(target, seed){
   let bestMisses = Infinity;
   let bestInv14 = Infinity;
   let bestInv11 = Infinity;   // V188 (2026-05-21): include hard INV11 in retry selector
+  let bestSoft = Infinity;    // R14-M11b: soft waste, FINAL tiebreaker
   let bestSEL = null;
   for (let retry = 0; retry < maxRetries; retry++) {
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
@@ -15101,18 +15201,28 @@ function randomizeWeek(target, seed){
     //   2. goalMisses (day-level primary goals)
     //   3. totalWaste (INV20 hard waste)
     //   4. inv14 (tracking, same-meal cooks within 5 days)
+    //   5. softWaste (R14-M11b, user decision 2026-07-09): FINAL tiebreaker —
+    //      among retries equal on all hard criteria, prefer fewer soft fires.
+    //      Also part of the early-exit below: without it, the first
+    //      hard-perfect retry short-circuits before the tiebreaker can act
+    //      (measured: soft fires 6→39/100 runs with hard-only selection).
+    const softWaste = _measuredSoftTripWasteForPersons(
+      randTarget === 'shared' ? ['him','her'] : [randTarget]
+    );
     const better = (inv11 < bestInv11)
       || (inv11 === bestInv11 && goalMisses < bestMisses)
       || (inv11 === bestInv11 && goalMisses === bestMisses && totalWaste < bestWaste)
-      || (inv11 === bestInv11 && goalMisses === bestMisses && totalWaste === bestWaste && inv14 < bestInv14);
+      || (inv11 === bestInv11 && goalMisses === bestMisses && totalWaste === bestWaste && inv14 < bestInv14)
+      || (inv11 === bestInv11 && goalMisses === bestMisses && totalWaste === bestWaste && inv14 === bestInv14 && softWaste < bestSoft);
     if (better) {
       bestWaste = totalWaste;
       bestMisses = goalMisses;
       bestInv14 = inv14;
       bestInv11 = inv11;
+      bestSoft = softWaste;
       bestSEL = JSON.parse(JSON.stringify(SEL));
     }
-    if (totalWaste === 0 && goalMisses === 0 && inv14 === 0 && inv11 === 0) break;
+    if (totalWaste === 0 && goalMisses === 0 && inv14 === 0 && inv11 === 0 && softWaste === 0) break;
   }
 
   // Restore the winning SEL, then always re-run the full post-retry pipeline.
@@ -15215,8 +15325,15 @@ function randomizeWeek(target, seed){
     if(_absorbItems.length > 0){
       var _absorbCommittedAny = false;
       var _absorbLeftovers = computeLeftovers();
+      // R14-M14 (2026-07-09): scope absorb's swap candidates to the
+      // randomize target. Every other post-retry stage derives persons from
+      // randTarget; this hardcoded ['him','her'] let a him-only randomize
+      // silently swap HER meals (SEL + clearOverrides on her slots), and the
+      // post-commit re-pin below runs freezeTripTotals(randTarget) — which
+      // wouldn't even re-freeze the her-side slot absorb just changed.
+      var _absorbPersons = randTarget === 'shared' ? ['him','her'] : [randTarget];
       _absorbItems.forEach(function(dbKey){
-        var res = _absorbCarryItem(dbKey, _pcMap[dbKey], DAYS, ['him','her'], _absorbLeftovers);
+        var res = _absorbCarryItem(dbKey, _pcMap[dbKey], DAYS, _absorbPersons, _absorbLeftovers);
         if(res){
           _absorbCommittedAny = true;
           // Recompute leftovers for the next absorb call — the swap may
@@ -15931,7 +16048,18 @@ function skipKcalOverSnacks(randTarget){
       // Trial: skip the snack (SKIPPED honored by calcTotals + computeDailyFV;
       // no cache invalidation so other slots stay pinned and no budget
       // redistribution re-scales dinner).
-      SKIPPED[key] = true;
+      // R14-M12 (2026-07-09): 'auto' value-marker instead of true. SKIPPED
+      // persists via saveWeeks and syncs as ordinary skip state, but the
+      // _autoSkipSlots tracker is memory-only — after a reload (or on the
+      // receiving phone) the tracker was empty, so the "transient" skip
+      // became permanent: the clear loop couldn't identify it and
+      // skipKcalOverSnacks itself early-returns on SKIPPED slots. The
+      // marker travels WITH the entry through persist/sync/rollover. Every
+      // consumer reads SKIPPED truthiness ('auto' is truthy; zero strict-
+      // equality checks exist — verified). Can't just clear all non-manual
+      // skips instead: a partner's real skip can arrive via the V51 merge
+      // without its manualSet flag (separate ts), and would be wiped.
+      SKIPPED[key] = 'auto';
       const newMisses = dayMissCount(p,d);
       const newScore = dayMissScore(p,d);
       const better = (newMisses < baselineMisses)
@@ -16023,6 +16151,15 @@ function rerollInv14Violations(randTarget){
   // candidates). See system_invariants.md.
   function tryResolveCook(t){
     const key=sk(t.p,t.d,t.s);
+    // R14-M13 (2026-07-09): on a single-person randomize, only the TARGET's
+    // cooks may be swapped. findPairs is correctly household-wide (INV14 is
+    // a household rule), but the resolver committed SEL changes to the
+    // non-target person's slots while its accept gates (totalMissCount /
+    // totalWaste via persons=[target]) never measured that person — an
+    // unmeasured meal mutation on the side the user explicitly scoped away
+    // from. If neither side of a pair is target-swappable, the fire stands:
+    // INV14 is tracking-only.
+    if(persons.indexOf(t.p) < 0) return false;
     if(EAT_OUT[key]||SKIPPED[key]) return false;
     if(MANUAL_SET[key]) return false;
     const isShared=SHARED_SCHEDULE[dk(t.d,t.s)]==='shared';
