@@ -10318,15 +10318,15 @@ function renderMeals(){
           // below (flagged here).
           const lIsAnchorFill = !!(lGroup && !lIsLeftover && lGroupRgb);
           const rIsAnchorFill = !!(rGroup && !rIsLeftover && rGroupRgb);
+          // V259 (user): shared no longer paints the halves green — the lit
+          // ⚭ center chip is the sole shared signal.
           let lBg = lGroup
                   ? (lGroupRgb ? 'rgba('+lGroupRgb+(lIsLeftover?',.5)':',.7)') : 'transparent')
-                  : isShared ? grn+'.32)'
                   : himSkippedSlot ? SKIP_BG
                   : himEatOut ? red+'.3)'
                   : 'transparent';
           let rBg = rGroup
                   ? (rGroupRgb ? 'rgba('+rGroupRgb+(rIsLeftover?',.5)':',.7)') : 'transparent')
-                  : isShared ? grn+'.32)'
                   : herSkippedSlot ? SKIP_BG
                   : herEatOut ? red+'.3)'
                   : 'transparent';
@@ -10392,8 +10392,8 @@ function renderMeals(){
           // V73: skip text color = SKIP_TEXT (faded) instead of light grey.
           // V258: any group member (solid anchor OR leftover wash) gets
           // white text.
-          let lCol=lGroup?'#fff':(himManual&&lNormal)?'#fff':isShared?'#fff':himSkippedSlot?SKIP_TEXT:himEatOut?'#fff':'var(--gray)';
-          let rCol=rGroup?'#fff':(herManual&&rNormal)?'#fff':isShared?'#fff':herSkippedSlot?SKIP_TEXT:herEatOut?'#fff':'var(--gray)';
+          let lCol=lGroup?'#fff':(himManual&&lNormal)?'#fff':himSkippedSlot?SKIP_TEXT:himEatOut?'#fff':'var(--gray)';
+          let rCol=rGroup?'#fff':(herManual&&rNormal)?'#fff':herSkippedSlot?SKIP_TEXT:herEatOut?'#fff':'var(--gray)';
           const lLabel='Him';
           const rLabel='Her';
           const de=dd.replace(/'/g,"\\'");const se=ss.replace(/'/g,"\\'");
@@ -10477,7 +10477,8 @@ function renderMeals(){
           // old invisible sched-pill-mid overlay as the tap-both target;
           // in normal mode it has no handler (the wrap opens the menu).
           const cenBothQueued=isPaintCol&&himQueued&&herQueued;
-          const cenBg=cenBothQueued?'rgba('+_paintRgb+',.3)':isShared?grn+'.3)':'rgba(0,0,0,.25)';
+          // V259: the chip is now the SOLE shared indicator — brighter.
+          const cenBg=cenBothQueued?'rgba('+_paintRgb+',.3)':isShared?grn+'.45)':'rgba(0,0,0,.25)';
           const cenCol=cenBothQueued?'#fff':isShared?'#34D399':'rgba(156,163,175,.45)';
           const cenSeg='<div class="sched-pill-cen" style="background:'+cenBg+';color:'+cenCol+(isPaintCol?';cursor:pointer':'')+'"'+(isPaintCol?' '+cClick:'')+'>⚭</div>';
           html+='<div class="sched-pill-wrap" style="'+dimStyle+(!isPaintCol&&_scheduleEditMode?';cursor:pointer':'')+'"'+wrapClick+'>'
@@ -25338,7 +25339,10 @@ window.MPStress=(function(){
       // Pre-Reset: ensure at least one cell shows green (Friday-dinner
       // has matching SEL + SHARED='shared'). Render queries DOM via class.
       function _hasGreenSharedAnyCell(){
-        var halves = document.querySelectorAll('.sched-pill-half');
+        // V259: shared green moved from the halves to the ⚭ center chip
+        // (.sched-pill-cen) — scan both so this probe tracks the current
+        // shared visual, wherever it renders.
+        var halves = document.querySelectorAll('.sched-pill-half,.sched-pill-cen');
         for(var i=0; i<halves.length; i++){
           var s = halves[i].getAttribute('style') || '';
           // Shared green is rgba(52,211,153,...). Match without spaces;
