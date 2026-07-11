@@ -10,7 +10,7 @@
 <link rel="icon" type="image/jpeg" href="icon.jpeg">
 <link rel="apple-touch-icon" href="icon.jpeg">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0F172A">
+<meta name="theme-color" content="#0B0C0E">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
@@ -18,11 +18,11 @@
 :root{
 --his:#60A5FA;--his-mid:#3B82F6;--his-light:rgba(59,130,246,.12);
 --her:#F472B6;--her-mid:#EC4899;--her-light:rgba(236,72,153,.12);
---shop:#F59E0B;--gray:#9CA3AF;--gray-light:#1F2937;
---border:#374151;--radius:14px;--radius-sm:10px;
+--shop:#F59E0B;--gray:#9CA3AF;--gray-light:#1E2124;
+--border:#26292E;--radius:14px;--radius-sm:10px;
 --shadow:0 1px 4px rgba(0,0,0,.3);
---bg:#0F172A;--bg-card:#1E293B;--bg-surface:#1E293B;
---text:#F1F5F9;--text-mid:#CBD5E1;--text-dim:#94A3B8}
+--bg:#0B0C0E;--bg-card:#16181B;--bg-surface:#16181B;
+--text:#F0F1F2;--text-mid:#C4C7CB;--text-dim:#969CA3}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);max-width:480px;margin:0 auto;min-height:100vh}
 .hdr{background:var(--bg-card);padding:12px 14px 0;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
 .hdr-title{font-size:18px;font-weight:800;white-space:nowrap;flex-shrink:0}
@@ -14125,14 +14125,14 @@ function _maybeOfferPartnerWasteFix(randTarget){
   el.id = 'partnerWasteModal';
   el.innerHTML =
     '<div style="position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)_dismissPartnerWasteFix()">'
-    + '<div style="background:var(--card,#1F2937);border:1px solid var(--border,#374151);border-radius:14px;max-width:420px;width:100%;padding:18px;color:var(--text,#F3F4F6)">'
+    + '<div style="background:var(--bg-card,#16181B);border:1px solid var(--border,#26292E);border-radius:14px;max-width:420px;width:100%;padding:18px;color:var(--text,#F3F4F6)">'
     + '<div style="font-weight:700;font-size:15px;margin-bottom:8px">📦 Package waste in '+other+'’s plan</div>'
     + '<div style="font-size:13px;opacity:0.85;margin-bottom:10px">This randomize changed shared shopping. '+other+'’s unchanged amounts now leave partial packages:</div>'
     + rows
     + '<div style="font-size:12px;opacity:0.7;margin:10px 0 14px">Adjusting updates '+other+'’s ingredient <b>amounts only</b> (no meal changes) so trips land on package boundaries. Items that can’t fit within per-serving limits stay flagged in Shopping.</div>'
     + '<div style="display:flex;gap:10px">'
     + '<button class="rand-btn" style="flex:1" onclick="_applyPartnerWasteFix()">Adjust '+other+'’s amounts</button>'
-    + '<button class="rand-btn" style="flex:1;background:var(--border,#374151)" onclick="_dismissPartnerWasteFix()">Leave '+other+'’s alone</button>'
+    + '<button class="rand-btn" style="flex:1;background:var(--border,#26292E)" onclick="_dismissPartnerWasteFix()">Leave '+other+'’s alone</button>'
     + '</div></div></div>';
   document.body.appendChild(el);
 }
@@ -14162,7 +14162,7 @@ function _applyPartnerWasteFix(){
   var seen = {}, rem = remaining.filter(function(f){ var k=f.trip+'|'+f.dbKey; if(seen[k])return false; seen[k]=true; return true; });
   if(rem.length){
     var toast = document.createElement('div');
-    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card,#1F2937);border:1px solid #FBBF24;border-radius:10px;padding:10px 16px;z-index:9999;font-size:13px;color:var(--text,#F3F4F6);max-width:90%';
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-card,#16181B);border:1px solid #FBBF24;border-radius:10px;padding:10px 16px;z-index:9999;font-size:13px;color:var(--text,#F3F4F6);max-width:90%';
     toast.textContent = '⚠️ Could not fully fit: ' + rem.map(function(f){ return f.dbKey+' ('+(Math.round(f.waste*100)/100)+f.unit+' unused)'; }).join(', ') + ' — amounts capped by per-serving limits.';
     document.body.appendChild(toast);
     setTimeout(function(){ toast.remove(); }, 6000);
