@@ -374,12 +374,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .mc.st-lo::before{background:#F59E0B}
 .mc.st-cook::before{background:#F59E0B}
 .mc.st-set::before{background:#A78BFA}
-.mc.st-eo{border-color:rgba(239,68,68,.35);background:linear-gradient(135deg,rgba(239,68,68,.16),rgba(239,68,68,.05) 45%,rgba(239,68,68,0) 72%),var(--bg-card)}
-.mc.st-skip{border-color:rgba(148,163,184,.3);background:linear-gradient(135deg,rgba(148,163,184,.14),rgba(148,163,184,.04) 45%,rgba(148,163,184,0) 72%),var(--bg-card)}
-.mc.st-shared{border-color:rgba(16,185,129,.35);background:linear-gradient(135deg,rgba(16,185,129,.16),rgba(16,185,129,.05) 45%,rgba(16,185,129,0) 72%),var(--bg-card)}
-.mc.st-lo{border-color:rgba(245,158,11,.35);background:linear-gradient(135deg,rgba(245,158,11,.16),rgba(245,158,11,.05) 45%,rgba(245,158,11,0) 72%),var(--bg-card)}
-.mc.st-cook{border-color:rgba(245,158,11,.35);background:linear-gradient(135deg,rgba(245,158,11,.16),rgba(245,158,11,.05) 45%,rgba(245,158,11,0) 72%),var(--bg-card)}
-.mc.st-set{border-color:rgba(167,139,250,.35);background:linear-gradient(135deg,rgba(167,139,250,.14),rgba(167,139,250,.04) 45%,rgba(167,139,250,0) 72%),var(--bg-card)}
+.mc.st-eo{border-color:rgba(239,68,68,.35);background:linear-gradient(135deg,rgba(239,68,68,.22),rgba(239,68,68,.08) 45%,rgba(239,68,68,0) 72%),var(--bg-card)}
+.mc.st-skip{border-color:rgba(148,163,184,.3);background:linear-gradient(135deg,rgba(148,163,184,.20),rgba(148,163,184,.07) 45%,rgba(148,163,184,0) 72%),var(--bg-card)}
+.mc.st-shared{border-color:rgba(16,185,129,.35);background:linear-gradient(135deg,rgba(16,185,129,.22),rgba(16,185,129,.08) 45%,rgba(16,185,129,0) 72%),var(--bg-card)}
+.mc.st-lo{border-color:rgba(245,158,11,.35);background:linear-gradient(135deg,rgba(245,158,11,.22),rgba(245,158,11,.08) 45%,rgba(245,158,11,0) 72%),var(--bg-card)}
+.mc.st-cook{border-color:rgba(245,158,11,.35);background:linear-gradient(135deg,rgba(245,158,11,.22),rgba(245,158,11,.08) 45%,rgba(245,158,11,0) 72%),var(--bg-card)}
+.mc.st-set{border-color:rgba(167,139,250,.35);background:linear-gradient(135deg,rgba(167,139,250,.20),rgba(167,139,250,.07) 45%,rgba(167,139,250,0) 72%),var(--bg-card)}
 /* V249: ALL pills hidden until the card is expanded — the accent edge +
    gradient carry the state on collapsed cards. Exceptions: skipped and
    eat-out cards (can't expand; their Skip/Eat Out pair must stay
@@ -9721,10 +9721,10 @@ function buildMealCardHtml(s, person, day, other){
       accCls=' '+accStates[0];
       if(accStates.length===2){
         const c1=ACC_RGB[accStates[0]], c2=ACC_RGB[accStates[1]];
-        accStyle=' style="background:linear-gradient(90deg,rgba('+c1+',.16) 0%,rgba('+c1+',.05) 45%,rgba('+c2+',.05) 55%,rgba('+c2+',.16) 100%),var(--bg-card)"';
+        accStyle=' style="background:linear-gradient(90deg,rgba('+c1+',.22) 0%,rgba('+c1+',.08) 45%,rgba('+c2+',.08) 55%,rgba('+c2+',.22) 100%),var(--bg-card)"';
       } else if(accStates.length===3){
         const c1=ACC_RGB[accStates[0]], c2=ACC_RGB[accStates[1]], c3=ACC_RGB[accStates[2]];
-        accStyle=' style="background:linear-gradient(90deg,rgba('+c1+',.16) 0%,rgba('+c1+',.06) 26%,rgba('+c2+',.12) 50%,rgba('+c3+',.06) 74%,rgba('+c3+',.16) 100%),var(--bg-card)"';
+        accStyle=' style="background:linear-gradient(90deg,rgba('+c1+',.22) 0%,rgba('+c1+',.09) 26%,rgba('+c2+',.17) 50%,rgba('+c3+',.09) 74%,rgba('+c3+',.22) 100%),var(--bg-card)"';
       }
     }
   }
