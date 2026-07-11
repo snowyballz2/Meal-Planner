@@ -400,7 +400,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sched-legend{display:flex;gap:10px;flex-wrap:wrap;font-size:10px;color:var(--text-dim);padding:8px 2px 0}
 /* V254: visible center segment (Option B look, Option A interaction) —
    shows the cell's shared state; in paint mode it's the tap-both target. */
-.sched-pill-cen{flex:0 0 18px;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;user-select:none;-webkit-user-select:none;position:relative;z-index:2}
+.sched-pill-cen{flex:0 0 18px;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;user-select:none;-webkit-user-select:none;position:relative;z-index:2}
+.sched-cen-glyph{display:inline-block;transform:scaleY(1.3)}
+.sched-leg-sq{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:3px}
 </style>
 </head>
 <body>
@@ -10485,7 +10487,8 @@ function renderMeals(){
           // harness's shared-visual probe keeps matching.
           const cenBg=cenBothQueued?'rgba('+_paintRgb+',.3)':'rgba(0,0,0,.25)';
           const cenCol=cenBothQueued?'#fff':isShared?'rgba(52,211,153,1)':'rgba(156,163,175,.45)';
-          const cenSeg='<div class="sched-pill-cen" style="background:'+cenBg+';color:'+cenCol+(isPaintCol?';cursor:pointer':'')+'"'+(isPaintCol?' '+cClick:'')+'>⚭</div>';
+          // V262: glyph stretched vertically (scaleY) — easier to see.
+          const cenSeg='<div class="sched-pill-cen" style="background:'+cenBg+';color:'+cenCol+(isPaintCol?';cursor:pointer':'')+'"'+(isPaintCol?' '+cClick:'')+'><span class="sched-cen-glyph">⚭</span></div>';
           html+='<div class="sched-pill-wrap" style="'+dimStyle+(!isPaintCol&&_scheduleEditMode?';cursor:pointer':'')+'"'+wrapClick+'>'
             +(_gHimOn?'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>':'')
             +(_gHimOn&&_gHerOn?cenSeg:'')
@@ -10519,11 +10522,15 @@ function renderMeals(){
         // editing. A color legend replaces it (onPaintSlotChange /
         // onPaintMealChange / togglePaintMode's arm branch are now unused
         // by the UI but kept — harness/back-compat surface).
+        // V262: square swatches that MATCH the cell treatments — gradient
+        // squares for wash states, a solid square for the cook day, the
+        // actual ⚭ glyph for shared.
         html+='<div class="sched-legend">'
-          +'<span><span style="color:#34D399">●</span> shared</span>'
-          +'<span><span style="color:#EF4444">●</span> eat out</span>'
-          +'<span><span style="color:#A78BFA">●</span> set</span>'
-          +'<span><span style="color:#F59E0B">●</span> leftover links (solid = cook day)</span>'
+          +'<span><span style="color:rgba(52,211,153,1);font-size:12px">⚭</span> shared</span>'
+          +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(239,68,68,.75),rgba(239,68,68,.2))"></span>eat out</span>'
+          +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(167,139,250,.15),rgba(167,139,250,.8))"></span>set</span>'
+          +'<span><span class="sched-leg-sq" style="background:rgba(245,158,11,.85)"></span>cook day</span>'
+          +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(245,158,11,.7),rgba(245,158,11,.15))"></span>leftovers</span>'
           +(_scheduleEditMode?'<span style="margin-left:auto">tap a cell, day, or column for actions</span>':'')
           +'</div>';
       }
