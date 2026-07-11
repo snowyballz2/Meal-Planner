@@ -387,6 +387,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .mc:not(.open):not(.skipped):not(.st-eo) .mc-pill:not(.mc-pill-move){display:none}
 .mc:not(.open):not(.skipped):not(.st-eo) .set-pill{display:none}
 .mc:not(.open):not(.skipped):not(.st-eo) .day-badge{display:none}
+/* V253: schedule action menu (Option A grid redesign) */
+.smenu-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px}
+.smenu{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:300px;max-height:70vh;overflow-y:auto;padding:10px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.smenu-title{font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;padding:4px 8px 8px}
+.smenu-row{display:flex;align-items:center;gap:10px;padding:11px 10px;border-radius:10px;font-size:14px;font-weight:600;color:var(--text);cursor:pointer;user-select:none;-webkit-user-select:none}
+.smenu-row:active{background:var(--gray-light)}
+.smenu-muted{color:var(--text-dim);font-weight:500}
+.smenu-dot{width:10px;height:10px;border-radius:5px;flex-shrink:0}
+.smenu-check{margin-left:auto;font-weight:700}
+.smenu-sec{font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;padding:10px 10px 4px}
+.sched-legend{display:flex;gap:10px;flex-wrap:wrap;font-size:10px;color:var(--text-dim);padding:8px 2px 0}
 </style>
 </head>
 <body>
@@ -3743,6 +3754,229 @@ function schedTapDay(d){
     _scheduleEditTouchedSides[sk('her',d,s)]=true;
   });
   updateSchedule();
+}
+// ── V253 (2026-07-11): SCHEDULE ACTION MENU ─────────────────────────
+// Option A redesign (user-picked): tapping a grid cell opens an explicit
+// action menu instead of the old invisible 3-zone tap cycle. Day names
+// and column headers open the same menu scoped to the whole row/column.
+// The old tap handlers (schedTapLeft/Right/Center/Day, long-press,
+// setSharedPreset*) REMAIN — the Slot Mod harness exercises them and they
+// define the state semantics these menu ops mirror — but the grid no
+// longer wires normal-mode taps to them. Paint mode keeps its own cell
+// wiring (paintTap/paintTapCenter); the menu's Pick meal… / Link
+// leftovers… arm paint mode directly (the old Category/Meal/Select picker
+// row is gone), which makes painting edit-mode-only like all grid editing.
+var _schedMenu=null;          // {type:'cell'|'day'|'col', d, s} — transient
+var _schedMenuView='actions'; // 'actions' | 'meals'
+function openSchedMenu(type,d,s){
+  if(!_scheduleEditMode) return; // grid editing is edit-mode-only (V25)
+  if(_paintMode) return;         // paint taps own the grid while painting
+  _schedMenu={type:type,d:d||'',s:s||''};
+  _schedMenuView='actions';
+  _renderSchedMenu();
+}
+function closeSchedMenu(){
+  _schedMenu=null;
+  var el=document.getElementById('schedMenuOverlay');
+  if(el) el.remove();
+}
+function _schedMenuCells(){
+  if(!_schedMenu) return [];
+  if(_schedMenu.type==='cell') return [{d:_schedMenu.d,s:_schedMenu.s}];
+  if(_schedMenu.type==='day') return ['breakfast','lunch','dinner'].map(function(ss){return {d:_schedMenu.d,s:ss};});
+  return DAYS.map(function(dd){return {d:dd,s:_schedMenu.s};});
+}
+// Visual-state checks (mirror the grid's own render conditions).
+function _schedCellShared(d,s){
+  var st=SHARED_SCHEDULE[dk(d,s)]||'';
+  return st==='shared'||((!st||st==='normal')&&!!_autoSharedCells[dk(d,s)]);
+}
+function _schedCellEO(d,s,side){
+  var st=SHARED_SCHEDULE[dk(d,s)]||'';
+  return st==='eo-both'||st===('eo-'+side);
+}
+// Explicit state ops. These mirror the tap handlers' writes exactly
+// (schedTapCenter's share/un-share branches, schedTapLeft/Right's eo
+// advance, the V70 eat-out cascade) but are directional toggles instead
+// of position-in-cycle advances.
+function _schedOpShared(d,s,on){
+  var k=dk(d,s);
+  if(on){
+    // eo → shared directly: clear placeholders first (V70), then share.
+    _v70UndoEatOutSide('him',d,s);
+    _v70UndoEatOutSide('her',d,s);
+    SHARED_SCHEDULE[k]='shared';
+  } else {
+    // Un-share: schedTapCenter's V82 branch — clear USER_EDITED/MANUAL_SET
+    // both sides so the cell can cycle back to default, preserve SEL.
+    delete SHARED_SCHEDULE[k];
+    delete USER_EDITED[sk('him',d,s)];
+    delete USER_EDITED[sk('her',d,s)];
+    delete MANUAL_SET[sk('him',d,s)];
+    delete MANUAL_SET[sk('her',d,s)];
+    _scheduleEditPreserveSel[sk('him',d,s)]=true;
+    _scheduleEditPreserveSel[sk('her',d,s)]=true;
+  }
+  _scheduleEditTouchedCells[k]=true;
+  _scheduleEditTouchedSides[sk('him',d,s)]=true;
+  _scheduleEditTouchedSides[sk('her',d,s)]=true;
+}
+function _schedOpEO(d,s,side,on){
+  var k=dk(d,s);
+  var other=side==='him'?'her':'him';
+  if(on){
+    if(_schedCellShared(d,s)) _schedOpShared(d,s,false); // eo overrides shared (INV24)
+    var cur=SHARED_SCHEDULE[k]||'';
+    if(cur===('eo-'+other)||cur==='eo-both') SHARED_SCHEDULE[k]='eo-both';
+    else SHARED_SCHEDULE[k]='eo-'+side;
+  } else {
+    var cur2=SHARED_SCHEDULE[k]||'';
+    _v70UndoEatOutSide(side,d,s);
+    if(cur2==='eo-both') SHARED_SCHEDULE[k]='eo-'+other;
+    else if(cur2===('eo-'+side)) delete SHARED_SCHEDULE[k];
+  }
+  _scheduleEditTouchedCells[k]=true;
+  _scheduleEditTouchedSides[sk(side,d,s)]=true;
+}
+function _schedOpClear(d,s){
+  // Full cell reset: loop the battle-tested V85 one-layer-per-call clear
+  // until each enabled side reports default (shared → eo → skip → link →
+  // manual purple, in V85's own priority).
+  var guard;
+  if(PERSON_ENABLED.him!==false){guard=0;while(_v85ClearSideVisualIfAny('him',d,s)&&++guard<10){}}
+  if(PERSON_ENABLED.her!==false){guard=0;while(_v85ClearSideVisualIfAny('her',d,s)&&++guard<10){}}
+  _scheduleEditTouchedCells[dk(d,s)]=true;
+  _scheduleEditTouchedSides[sk('him',d,s)]=true;
+  _scheduleEditTouchedSides[sk('her',d,s)]=true;
+}
+function schedMenuAction(action,side){
+  if(!_schedMenu) return;
+  var cells=_schedMenuCells();
+  if(action==='shared'){
+    // Bulk toggle semantics (setSharedPreset convention): all-on → off.
+    var allOn=cells.every(function(c){return _schedCellShared(c.d,c.s);});
+    cells.forEach(function(c){_schedOpShared(c.d,c.s,!allOn);});
+  } else if(action==='eo'){
+    var allOn2=cells.every(function(c){return _schedCellEO(c.d,c.s,side);});
+    cells.forEach(function(c){_schedOpEO(c.d,c.s,side,!allOn2);});
+  } else if(action==='clear'){
+    cells.forEach(function(c){_schedOpClear(c.d,c.s);});
+  }
+  closeSchedMenu();
+  updateSchedule();
+}
+function schedMenuPickMeal(){
+  _schedMenuView='meals';
+  _renderSchedMenu();
+}
+function schedMenuLink(){
+  // Arm paint mode with the cell's current meal — extend it into a
+  // leftover chain (pre-loads the meal's existing group when one exists).
+  var m=_schedMenu;
+  if(!m) return;
+  var mealId=getMealId('him',m.d,m.s)||getMealId('her',m.d,m.s);
+  closeSchedMenu();
+  if(mealId) _armPaintWithMeal(mealId,m);
+}
+function schedMenuChooseMeal(mealId){
+  var m=_schedMenu;
+  closeSchedMenu();
+  _armPaintWithMeal(mealId,m);
+}
+function _armPaintWithMeal(mealId,menuCtx){
+  // Same arming as togglePaintMode's Select path (incl. the V75
+  // existing-group pre-load + color capture), minus the DOM picker reads.
+  _paintSlot='menu';
+  _paintMealId=mealId;
+  _paintMode=true;
+  _paintQueued={};
+  _paintExistingColorIdx=-1;
+  var existingGroup=getLinkGroupForMeal(mealId);
+  if(existingGroup){
+    existingGroup.slots.forEach(function(sl){_paintQueued[sk(sl.p,sl.d,sl.s)]=true;});
+    if(typeof existingGroup.colorIdx==='number'&&existingGroup.colorIdx>=0){
+      _paintExistingColorIdx=existingGroup.colorIdx;
+    }
+  } else if(menuCtx&&menuCtx.type==='cell'){
+    // Pre-queue the tapped cell for the enabled person(s).
+    if(PERSON_ENABLED.him!==false) _paintQueued[sk('him',menuCtx.d,menuCtx.s)]=true;
+    if(PERSON_ENABLED.her!==false) _paintQueued[sk('her',menuCtx.d,menuCtx.s)]=true;
+  }
+  renderMeals();
+}
+function _smRow(onclickJs,color,label,checked,muted){
+  return '<div class="smenu-row'+(muted?' smenu-muted':'')+'" onclick="event.stopPropagation();'+onclickJs+'">'
+    +'<span class="smenu-dot" style="background:'+color+'"></span>'+label
+    +(checked?'<span class="smenu-check" style="color:'+color+'">✓</span>':'')
+    +'</div>';
+}
+function _schedMenuMealListHtml(m){
+  var html='<div class="smenu-row smenu-muted" onclick="event.stopPropagation();_schedMenuView=\'actions\';_renderSchedMenu()">‹ Back</div>';
+  // Existing link groups first (manual + auto, deduped — manual wins);
+  // tapping one enters the old edit-existing-group paint flow.
+  var seen={},groups=[];
+  [].concat(LEFTOVER_LINKS||[],_autoLinkGroups||[]).forEach(function(g){
+    if(seen[g.meal])return;seen[g.meal]=true;groups.push(g);
+  });
+  if(groups.length){
+    html+='<div class="smenu-sec">Linked groups — tap to edit</div>';
+    groups.forEach(function(g){
+      var meal=getMeal(g.meal);if(!meal)return;
+      var rgb=(g.colorIdx>=0)?LEFTOVER_LINK_COLORS[g.colorIdx].rgb:'150,150,150';
+      html+=_smRow('schedMenuChooseMeal(\''+g.meal+'\')','rgba('+rgb+',1)',meal.label,false);
+    });
+  }
+  // Meals for the tapped column (breakfast list, or merged lunch+dinner),
+  // grouped by primary protein like every other meal selector.
+  var catMeals;
+  if(m.s==='breakfast'){catMeals=getMealsForSlot('breakfast');}
+  else{
+    var seenM={};catMeals=[];
+    getMealsForSlot('lunch').concat(getMealsForSlot('dinner')).forEach(function(mm){
+      if(!seenM[mm.id]){seenM[mm.id]=true;catMeals.push(mm);}
+    });
+  }
+  var byProt={};
+  catMeals.forEach(function(mm){var p=getPrimaryProtein(mm,true);(byProt[p]=byProt[p]||[]).push(mm);});
+  Object.keys(byProt).sort().forEach(function(pk){
+    html+='<div class="smenu-sec">'+pk+'</div>';
+    byProt[pk].sort(function(a,b){return a.label<b.label?-1:1;}).forEach(function(mm){
+      html+='<div class="smenu-row" style="font-weight:500" onclick="event.stopPropagation();schedMenuChooseMeal(\''+mm.id+'\')">'+mm.label+'</div>';
+    });
+  });
+  return html;
+}
+function _renderSchedMenu(){
+  var old=document.getElementById('schedMenuOverlay');
+  if(old) old.remove();
+  if(!_schedMenu) return;
+  var m=_schedMenu;
+  var himOn=PERSON_ENABLED.him!==false, herOn=PERSON_ENABLED.her!==false;
+  var title=m.type==='cell'?m.d.slice(0,3)+' · '+SLOT_LABEL[m.s]
+    :m.type==='day'?m.d+' — all meals'
+    :SLOT_LABEL[m.s]+' — every day';
+  var html='<div class="smenu-backdrop" id="schedMenuOverlay" onclick="closeSchedMenu()">'
+    +'<div class="smenu" onclick="event.stopPropagation()">'
+    +'<div class="smenu-title">'+title+'</div>';
+  if(_schedMenuView==='meals'){
+    html+=_schedMenuMealListHtml(m);
+  } else {
+    var cells=_schedMenuCells();
+    var allShared=cells.every(function(c){return _schedCellShared(c.d,c.s);});
+    var allEoHim=cells.every(function(c){return _schedCellEO(c.d,c.s,'him');});
+    var allEoHer=cells.every(function(c){return _schedCellEO(c.d,c.s,'her');});
+    if(himOn&&herOn) html+=_smRow('schedMenuAction(\'shared\')','#34D399','Shared meal',allShared);
+    if(himOn) html+=_smRow('schedMenuAction(\'eo\',\'him\')','#EF4444','Him eats out',allEoHim);
+    if(herOn) html+=_smRow('schedMenuAction(\'eo\',\'her\')','#EF4444','Her eats out',allEoHer);
+    if(m.type==='cell'){
+      html+=_smRow('schedMenuPickMeal()','#F59E0B','Pick meal…',false);
+      var linkMeal=getMealId('him',m.d,m.s)||getMealId('her',m.d,m.s);
+      if(linkMeal&&(m.s==='lunch'||m.s==='dinner')) html+=_smRow('schedMenuLink()','#F59E0B','Link leftovers…',false);
+    }
+    html+=_smRow('schedMenuAction(\'clear\')','#969CA3','Clear',false);
+  }
+  html+='</div></div>';
+  document.body.insertAdjacentHTML('beforeend',html);
 }
 function setSharedPreset(preset){
   // V25 (2026-05-07): grid editing (incl. column zones) is edit-mode-only.
@@ -9880,7 +10114,7 @@ function renderMeals(){
       // and explains the Apply/Undo flow.
       if(_scheduleEditMode){
         html+='<div style="margin:6px 0;padding:8px 10px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.5);border-radius:8px;color:#A78BFA;font-size:12px;line-height:1.4">'
-          +'<b>Edit Mode</b> — locked cells can be re-painted. Per-card pills also work. '
+          +'<b>Edit Mode</b> — tap any cell, day name, or column header for actions. '
           +'<b>Reset</b> wipes the grid · <b>Apply</b> commits + re-randomizes only what you changed · <b>Undo</b> reverts.'
           +'</div>';
       } else {
@@ -9899,21 +10133,10 @@ function renderMeals(){
         if(_paintMode){
           html+='<div class="sched-slot-hdr" style="color:var(--gray)">'+SLOT_LABEL[ss]+'</div>';
         } else {
-          // V244: solo mode — only the enabled person's preset zone renders
-          // (full-width); the shared center zone drops with one eater.
-          const _zHim=PERSON_ENABLED.him!==false, _zHer=PERSON_ENABLED.her!==false;
-          let _zones;
-          if(_zHim&&_zHer){
-            _zones='<div class="sched-zone sched-zone-l" onclick="event.stopPropagation();setSharedPresetSide(\''+_prId+'\',\'him\')"></div>'
-              +'<div class="sched-zone sched-zone-c" onclick="event.stopPropagation();setSharedPreset(\''+_prId+'\')"></div>'
-              +'<div class="sched-zone sched-zone-r" onclick="event.stopPropagation();setSharedPresetSide(\''+_prId+'\',\'her\')"></div>';
-          } else {
-            const _zSide=_zHim?'him':'her';
-            _zones='<div class="sched-zone" style="left:0;right:0" onclick="event.stopPropagation();setSharedPresetSide(\''+_prId+'\',\''+_zSide+'\')"></div>';
-          }
-          html+='<div class="sched-slot-hdr" style="color:var(--gray);cursor:pointer">'
-            +_zones
-            +SLOT_LABEL[ss]+'</div>';
+          // V253: header tap opens the column-scoped action menu (replaces
+          // the invisible 3-zone preset areas — setSharedPreset* remain as
+          // the underlying ops / harness surface).
+          html+='<div class="sched-slot-hdr" style="color:var(--gray);cursor:pointer" onclick="event.stopPropagation();openSchedMenu(\'col\',\'\',\''+ss+'\')">'+SLOT_LABEL[ss]+'</div>';
         }
       });
       // Day rows
@@ -9942,7 +10165,9 @@ function renderMeals(){
         if(_paintMode){
           html+='<div class="sched-day dim">'+dd.slice(0,3)+'</div>';
         } else {
-          html+='<div class="sched-day" style="color:'+dayCol+';cursor:pointer" onclick="event.stopPropagation();schedTapDay(\''+dde+'\')">'+dd.slice(0,3)+'</div>';
+          // V253: day tap opens the row-scoped action menu (was schedTapDay's
+          // hidden shared→normal→eo cycle).
+          html+='<div class="sched-day" style="color:'+dayCol+';cursor:pointer" onclick="event.stopPropagation();openSchedMenu(\'day\',\''+dde+'\',\'\')">'+dd.slice(0,3)+'</div>';
         }
         slots3.forEach(function(ss){
           const state=SHARED_SCHEDULE[dk(dd,ss)]||'normal';
@@ -10202,17 +10427,21 @@ function renderMeals(){
             rCol=herQueued?'#fff':rCol;
           }
           const dimStyle='';
+          // V253: normal-mode cells no longer carry the 3-zone press/tap
+          // handlers — the whole wrap opens the action menu (wrapClick
+          // below). Paint mode keeps its per-side + center queue taps.
           const lClick=isPaintCol
             ?'onclick="event.stopPropagation();paintTap(\''+de+'\',\'left\',\''+se+'\')"'
-            :'onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchstart="event.stopPropagation();event.preventDefault();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'left\')" ontouchcancel="clearTimeout(_schedLongPress);_schedLongPress=null"';
+            :'';
           const rClick=isPaintCol
             ?'onclick="event.stopPropagation();paintTap(\''+de+'\',\'right\',\''+se+'\')"'
-            :'onmousedown="event.stopPropagation();schedStartPress(\''+de+'\',\''+se+'\')" onmouseup="event.stopPropagation();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchstart="event.stopPropagation();event.preventDefault();schedStartPress(\''+de+'\',\''+se+'\')" ontouchend="event.stopPropagation();event.preventDefault();schedEndPress(\''+de+'\',\''+se+'\',\'right\')" ontouchcancel="clearTimeout(_schedLongPress);_schedLongPress=null"';
+            :'';
           // 2026-05-03 (revised): center zone is paintable too. In paint mode
           // tapping it toggles BOTH Him and Her queued at once.
           const cClick=isPaintCol
             ?'onclick="event.stopPropagation();paintTapCenter(\''+de+'\',\''+se+'\')"'
-            :'onclick="event.stopPropagation();schedTapCenter(\''+de+'\',\''+se+'\')"';
+            :'';
+          const wrapClick=isPaintCol?'':' onclick="event.stopPropagation();openSchedMenu(\'cell\',\''+de+'\',\''+se+'\')"';
           // 2026-05-03: full 4-side highlight when only ONE side is highlighted
           // (eat-out alone, manual alone, queued alone, link-only-side alone).
           const lSelfHi=isShared||himSkip||(himManual&&lNormal)||!!lGroup||(isPaintCol&&himQueued);
@@ -10286,10 +10515,10 @@ function renderMeals(){
           // rendered (the remaining half flex-fills the wrap) and the shared
           // mid zone is dropped (sharing is meaningless with one eater).
           const _gHimOn=PERSON_ENABLED.him!==false, _gHerOn=PERSON_ENABLED.her!==false;
-          html+='<div class="sched-pill-wrap" style="'+dimStyle+'">'
+          html+='<div class="sched-pill-wrap" style="'+dimStyle+(!isPaintCol&&_scheduleEditMode?';cursor:pointer':'')+'"'+wrapClick+'>'
             +(_gHimOn?'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+(_gHerOn?';border-right:'+lBdrRightFinal:'')+';color:'+lCol+lShadow+'" '+lClick+'>'+lLabel+'</div>':'')
             +(_gHerOn?'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+(_gHimOn?';border-left:'+rBdrLeftFinal:'')+';color:'+rCol+rShadow+'" '+rClick+'>'+rLabel+'</div>':'')
-            +(_gHimOn&&_gHerOn?splitCenter+'<div class="sched-pill-mid" '+cClick+'></div>':'')
+            +(_gHimOn&&_gHerOn&&isPaintCol?splitCenter+'<div class="sched-pill-mid" '+cClick+'></div>':'')
             +'</div>';
         });
       });
@@ -10311,64 +10540,19 @@ function renderMeals(){
         html+='<div class="sched-btn" style="background:var(--shop);color:#000;font-weight:700;border-color:var(--shop)" onclick="event.stopPropagation();paintAccept()">Assign</div>';
         html+='</div>';
       } else {
-        html+='<div style="display:flex;gap:4px;align-items:center">';
-        const ss1=_paintSavedSlot;
-        // 2026-05-03: categories + existing groups for edit. Bkfst/Main for
-        // new (Snack removed when the snack column was reverted — picking
-        // snack here had no column to paint to). Existing groups appended
-        // as "↻ <meal> (<color>)" so user can pick one to edit (pre-loads
-        // the group's cells in paint mode).
-        html+='<select id="paintSlotSel" class="paint-select" style="flex:0 0 110px;max-width:110px" onchange="onPaintSlotChange()">';
-        html+='<option value="">Category</option>';
-        [{v:'breakfast',l:'Bkfst'},{v:'main',l:'Main'}].forEach(function(o){
-          html+='<option value="'+o.v+'"'+(ss1===o.v?' selected':'')+'>'+o.l+'</option>';
-        });
-        // 2026-05-04 Q5: list both manual + auto groups in the picker.
-        // Manual first (sticky); auto next (transient — picking one and
-        // hitting Assign materializes it via paintAccept's normal path).
-        // Dedupe by mealId — manual wins if both exist for same meal.
-        var _pickerSeen={};
-        [].concat(LEFTOVER_LINKS||[], _autoLinkGroups||[]).forEach(function(g){
-          if(_pickerSeen[g.meal]) return;
-          _pickerSeen[g.meal]=true;
-          // V73: groups whose colorIdx<0 had no color allocated (palette
-          // saturated). Show "(no color)" in the picker instead of crashing.
-          const colorName=(g.colorIdx >= 0)?LEFTOVER_LINK_COLORS[g.colorIdx].name:'no color';
-          const meal=getMeal(g.meal);
-          const label=(meal?meal.label:g.meal);
-          const optVal='group:'+g.meal;
-          html+='<option value="'+optVal+'"'+(ss1===optVal?' selected':'')+'>↻ '+label+' ('+colorName+')</option>';
-        });
-        html+='</select>';
-        // Build meal options. For category: filtered meal list. For
-        // group:<meal>: just that meal, locked. Otherwise: empty.
-        let mealOpts='<option value="">— Meal —</option>';
-        if(ss1 && ss1.indexOf('group:')===0){
-          const groupMealId=ss1.substring(6);
-          const meal=getMeal(groupMealId);
-          if(meal){
-            mealOpts='<option value="'+groupMealId+'" selected>'+meal.label+'</option>';
-          }
-        } else if(ss1){
-          let catMeals=[];
-          if(ss1==='main'){
-            const lunchM=getMealsForSlot('lunch');
-            const dinM=getMealsForSlot('dinner');
-            const seen={};
-            lunchM.forEach(function(m){if(!seen[m.id]){seen[m.id]=true;catMeals.push(m);}});
-            dinM.forEach(function(m){if(!seen[m.id]){seen[m.id]=true;catMeals.push(m);}});
-          } else {
-            catMeals=getMealsForSlot(ss1);
-          }
-          // 2026-05-03: group by primary protein (Chicken / Salmon / Turkey /
-          // Vegetarian / etc.), same as the normal slot meal selectors.
-          mealOpts+=buildMealSelectOpts(catMeals, _paintSavedMeal);
-        }
-        html+='<select id="paintMealSel" class="paint-select" style="flex:1;min-width:0;text-overflow:ellipsis" onchange="onPaintMealChange()">';
-        html+=mealOpts+'</select>';
-        const selBtnCol=_paintSavedMeal?'var(--text)':'var(--gray)';
-        html+='<div id="paintSelectBtn" class="sched-btn" style="padding:4px 10px;color:'+selBtnCol+';flex-shrink:0" onclick="event.stopPropagation();togglePaintMode()">Select</div>';
-        html+='</div>';
+        // V253: the Category/Meal/Select picker row is gone — meal picking
+        // and leftover-link painting live in the cell menu now (Pick meal… /
+        // Link leftovers…), making painting edit-mode-only like all grid
+        // editing. A color legend replaces it (onPaintSlotChange /
+        // onPaintMealChange / togglePaintMode's arm branch are now unused
+        // by the UI but kept — harness/back-compat surface).
+        html+='<div class="sched-legend">'
+          +'<span><span style="color:#34D399">●</span> shared</span>'
+          +'<span><span style="color:#EF4444">●</span> eat out</span>'
+          +'<span><span style="color:#A78BFA">●</span> set</span>'
+          +'<span><span style="color:#F59E0B">●</span> leftover links</span>'
+          +(_scheduleEditMode?'<span style="margin-left:auto">tap a cell, day, or column for actions</span>':'')
+          +'</div>';
       }
       html+='</div>';
     }
