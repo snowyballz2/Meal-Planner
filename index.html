@@ -398,6 +398,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .smenu-check{margin-left:auto;font-weight:700}
 .smenu-sec{font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;padding:10px 10px 4px}
 .sched-legend{display:flex;gap:10px;flex-wrap:wrap;font-size:10px;color:var(--text-dim);padding:8px 2px 0}
+/* V254: visible center segment (Option B look, Option A interaction) —
+   shows the cell's shared state; in paint mode it's the tap-both target. */
+.sched-pill-cen{flex:0 0 18px;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;user-select:none;-webkit-user-select:none;position:relative;z-index:2}
 </style>
 </head>
 <body>
@@ -10515,10 +10518,19 @@ function renderMeals(){
           // rendered (the remaining half flex-fills the wrap) and the shared
           // mid zone is dropped (sharing is meaningless with one eater).
           const _gHimOn=PERSON_ENABLED.him!==false, _gHerOn=PERSON_ENABLED.her!==false;
+          // V254 (user: "the look of B with the same use design as A"): a
+          // VISIBLE center segment between the halves shows the shared
+          // state (⚭ lit green when shared). In paint mode it replaces the
+          // old invisible sched-pill-mid overlay as the tap-both target;
+          // in normal mode it has no handler (the wrap opens the menu).
+          const cenBothQueued=isPaintCol&&himQueued&&herQueued;
+          const cenBg=cenBothQueued?'rgba('+_paintRgb+',.3)':isShared?grn+'.3)':'rgba(0,0,0,.25)';
+          const cenCol=cenBothQueued?'#fff':isShared?'#34D399':'rgba(156,163,175,.45)';
+          const cenSeg='<div class="sched-pill-cen" style="background:'+cenBg+';color:'+cenCol+(isPaintCol?';cursor:pointer':'')+'"'+(isPaintCol?' '+cClick:'')+'>⚭</div>';
           html+='<div class="sched-pill-wrap" style="'+dimStyle+(!isPaintCol&&_scheduleEditMode?';cursor:pointer':'')+'"'+wrapClick+'>'
             +(_gHimOn?'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+(_gHerOn?';border-right:'+lBdrRightFinal:'')+';color:'+lCol+lShadow+'" '+lClick+'>'+lLabel+'</div>':'')
+            +(_gHimOn&&_gHerOn?cenSeg:'')
             +(_gHerOn?'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+(_gHimOn?';border-left:'+rBdrLeftFinal:'')+';color:'+rCol+rShadow+'" '+rClick+'>'+rLabel+'</div>':'')
-            +(_gHimOn&&_gHerOn&&isPaintCol?splitCenter+'<div class="sched-pill-mid" '+cClick+'></div>':'')
             +'</div>';
         });
       });
@@ -10531,7 +10543,9 @@ function renderMeals(){
         // 2026-05-03: paint mode now cross-column (any cell paintable). The
         // info line identifies the meal AND whether this is an edit.
         html+='<div class="paint-info">'+(editingExisting?'Editing':'Assigning')+': '+((paintMeal||{}).label||'?')+'</div>';
-        html+='<div class="paint-hint">Tap any cell to queue (any column / either side / center for shared). Hit Assign to '+(editingExisting?'update':'form')+' the leftover-link group.</div>';
+        // V254: the hint now explains the cook/leftover rule the detector
+        // applies — the #1 "how does this decide" confusion.
+        html+='<div class="paint-hint"><b>Earliest selected day cooks it; every later selected cell eats that cook\'s leftovers.</b> Tap cells to add/remove — left = Him, right = Her, ⚭ = both. Assign '+(editingExisting?'updates':'saves')+' the batch.</div>';
         html+='<div style="display:flex;gap:6px">';
         html+='<div class="sched-btn" onclick="event.stopPropagation();togglePaintMode()">Cancel</div>';
         if(editingExisting){
