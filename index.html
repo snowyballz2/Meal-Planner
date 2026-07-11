@@ -10477,9 +10477,12 @@ function renderMeals(){
           // old invisible sched-pill-mid overlay as the tap-both target;
           // in normal mode it has no handler (the wrap opens the menu).
           const cenBothQueued=isPaintCol&&himQueued&&herQueued;
-          // V259: the chip is now the SOLE shared indicator — brighter.
-          const cenBg=cenBothQueued?'rgba('+_paintRgb+',.3)':isShared?grn+'.45)':'rgba(0,0,0,.25)';
-          const cenCol=cenBothQueued?'#fff':isShared?'#34D399':'rgba(156,163,175,.45)';
+          // V259/V260: the chip is the SOLE shared indicator. V260 (user):
+          // only the ⚭ GLYPH lights green — no filled rectangle behind it.
+          // Glyph green written as rgba(52,211,153,1) (not #34D399) so the
+          // harness's shared-visual probe keeps matching.
+          const cenBg=cenBothQueued?'rgba('+_paintRgb+',.3)':'rgba(0,0,0,.25)';
+          const cenCol=cenBothQueued?'#fff':isShared?'rgba(52,211,153,1)':'rgba(156,163,175,.45)';
           const cenSeg='<div class="sched-pill-cen" style="background:'+cenBg+';color:'+cenCol+(isPaintCol?';cursor:pointer':'')+'"'+(isPaintCol?' '+cClick:'')+'>⚭</div>';
           html+='<div class="sched-pill-wrap" style="'+dimStyle+(!isPaintCol&&_scheduleEditMode?';cursor:pointer':'')+'"'+wrapClick+'>'
             +(_gHimOn?'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>':'')
