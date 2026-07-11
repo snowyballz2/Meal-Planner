@@ -3780,7 +3780,7 @@ function _schedGradBg(bg, dir){
   var m = bg.match(/^rgba\(([\d ,]+),(\.?[\d.]+)\)$/);
   if(!m) return bg;
   var rgb=m[1], a=parseFloat(m[2]);
-  var hi='rgba('+rgb+','+Math.min(1,a*1.5).toFixed(2)+')';
+  var hi='rgba('+rgb+','+Math.min(1,a*1.6).toFixed(2)+')';
   var lo='rgba('+rgb+','+(a*0.35).toFixed(2)+')';
   return dir==='l' ? 'linear-gradient(90deg,'+hi+','+lo+')' : 'linear-gradient(90deg,'+lo+','+hi+')';
 }
@@ -10311,17 +10311,22 @@ function renderMeals(){
           // V256: the flat manual-purple bg branch is gone — Set now renders
           // as an inside-out purple glow LAYER (applied after the V255
           // gradient conversion below), so it can coexist with a state wash.
+          // V257 (borderless): the link-group ANCHOR (formerly outline-only)
+          // gets a lighter wash of its group color so it stays visible with
+          // no ring; leftovers keep the stronger fill ("filled = leftover,
+          // soft = anchor"). State alphas raised — the washes carry the
+          // whole signal now.
           let lBg = lGroup
-                  ? (lIsLeftover ? 'rgba('+lGroupRgb+',.45)' : 'transparent')
-                  : isShared ? grn+'.25)'
+                  ? (lGroupRgb ? 'rgba('+lGroupRgb+(lIsLeftover?',.5)':',.26)') : 'transparent')
+                  : isShared ? grn+'.32)'
                   : himSkippedSlot ? SKIP_BG
-                  : himEatOut ? red+'.2)'
+                  : himEatOut ? red+'.3)'
                   : 'transparent';
           let rBg = rGroup
-                  ? (rIsLeftover ? 'rgba('+rGroupRgb+',.45)' : 'transparent')
-                  : isShared ? grn+'.25)'
+                  ? (rGroupRgb ? 'rgba('+rGroupRgb+(rIsLeftover?',.5)':',.26)') : 'transparent')
+                  : isShared ? grn+'.32)'
                   : herSkippedSlot ? SKIP_BG
-                  : herEatOut ? red+'.2)'
+                  : herEatOut ? red+'.3)'
                   : 'transparent';
           // V56/V57/V59: USER_EDITED indicator on Him/Her side.
           // V59 (2026-05-07): propagate USER_EDITED THROUGH link
@@ -10376,29 +10381,10 @@ function renderMeals(){
           // V73: himSkippedSlot/herSkippedSlot use SKIP_BDR (default border)
           // so cells visually "fade" via SKIP_BG instead of the old grey
           // border outline.
-          // V256 (user: "the purple border on the outside is just too much"):
-          // the USER_EDITED purple border branches are GONE — Set renders as
-          // the inside-out glow instead. Borders now cascade group → shared
-          // → skip → eat-out → default.
-          let lBdr=lGroup?'2px solid rgba('+lGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':himSkippedSlot?SKIP_BDR:himEatOut?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
-          let rBdr=rGroup?'2px solid rgba('+rGroupRgb+',.85)':isShared?'1.5px solid '+grn+'.5)':herSkippedSlot?SKIP_BDR:herEatOut?'1.5px solid '+red+'.4)':'1.5px solid var(--border)';
-          // V68 (2026-05-07): when USER_EDITED + link-group on the same
-          // side, layer the group color INSIDE the purple outer border
-          // via inset box-shadow. Preserves group identity ("we still
-          // want the big cook meals to have the interior border color
-          // if purple border on the outside"). 2px inset matches the
-          // 2px outer border so the inner band reads as a clean second
-          // layer rather than an outline. Skip/eat-out keep the inset
-          // off — their state already signals user-edited (per V56).
-          // V79 (2026-05-08): drop V78's inner-purple-in-edit-mode
-          // fallback. Inset shadow now exclusively shows the V68a inner
-          // group color when USER_EDITED + lGroup overlap (consistent
-          // in/out of edit mode).
-          // V256: the V68 inner-group-color inset is retired — with the
-          // purple border gone, the group color owns the border again and
-          // the Set glow provides the "double" layer.
-          const lInsetShadow = '';
-          const rInsetShadow = '';
+          // V257 (user: "get rid of all of the borders in schedule meals and
+          // just have the strong gradients"): the ENTIRE border machinery is
+          // gone — no state borders, no centerline colors, no group
+          // outlines, no insets. States are gradient washes only.
           // Skip text gets a muted #ccc instead of full white, reinforcing
           // the "this slot is silenced" feel.
           // V73: skip text color = SKIP_TEXT (faded) instead of light grey.
@@ -10406,23 +10392,6 @@ function renderMeals(){
           let rCol=rIsLeftover?'#fff':(herManual&&rNormal)?'#fff':isShared?'#fff':herSkippedSlot?SKIP_TEXT:herEatOut?'#fff':'var(--gray)';
           const lLabel='Him';
           const rLabel='Her';
-          // midCol = group color if either side linked, else existing logic
-          const midColLink=lGroupRgb||rGroupRgb;
-          // V28: midCol cascade extended for grey full-skip path. When
-          // either side is full-skipped (and not also shared/manual), the
-          // centerline picks up the grey skip color.
-          // V63: bumped the manual+normal midCol purple from .4 → .85 to
-          // match the unified purple opacity across the cascade.
-          // V73: skipped centerline = SKIP_BG dark overlay (no grey outline).
-          // V256: purple dropped from the centerline cascade too — Set no
-          // longer paints borders anywhere.
-          const midCol=midColLink ? 'rgba('+midColLink+',.85)'
-            : (isShared||himSkip||herSkip) ? (
-                isShared ? grn+'.5)'
-                : (himSkippedSlot||herSkippedSlot) ? SKIP_BG
-                : red+'.4)'
-              )
-            : 'transparent';
           const de=dd.replace(/'/g,"\\'");const se=ss.replace(/'/g,"\\'");
           // 2026-05-03: cross-column paint mode — every cell paintable, queued
           // tracked by full slot key (sk) instead of just (p,d).
@@ -10445,10 +10414,10 @@ function renderMeals(){
             var _paintRgb = (_paintNextIdx >= 0)
               ? LEFTOVER_LINK_COLORS[_paintNextIdx].rgb
               : '245,158,11';
-            lBg=himQueued?'rgba('+_paintRgb+',.3)':lBg;
-            rBg=herQueued?'rgba('+_paintRgb+',.3)':rBg;
-            lBdr=himQueued?'2px solid rgba('+_paintRgb+',.6)':lBdr;
-            rBdr=herQueued?'2px solid rgba('+_paintRgb+',.6)':rBdr;
+            // V257: queued = strong fill only (the selection borders are gone
+            // with the rest of the border machinery).
+            lBg=himQueued?'rgba('+_paintRgb+',.45)':lBg;
+            rBg=herQueued?'rgba('+_paintRgb+',.45)':rBg;
             lCol=himQueued?'#fff':lCol;
             rCol=herQueued?'#fff':rCol;
           }
@@ -10466,6 +10435,10 @@ function renderMeals(){
           const herSetGlow=(herShowSetDot||_herNormalPurple)&&!herSkippedSlot&&!herEatOut;
           if(himSetGlow) lBg='linear-gradient(90deg,rgba(167,139,250,0) 20%,rgba(167,139,250,.45))'+(lBg&&lBg!=='transparent'?','+lBg:'');
           if(herSetGlow) rBg='linear-gradient(90deg,rgba(167,139,250,.45),rgba(167,139,250,0) 80%)'+(rBg&&rBg!=='transparent'?','+rBg:'');
+          // V257: with borders gone, default cells need SOME containment —
+          // a faint neutral tile (RunBook-style soft cell).
+          if(lBg==='transparent') lBg='rgba(255,255,255,.05)';
+          if(rBg==='transparent') rBg='rgba(255,255,255,.05)';
           const dimStyle='';
           // V253: normal-mode cells no longer carry the 3-zone press/tap
           // handlers — the whole wrap opens the action menu (wrapClick
@@ -10482,71 +10455,9 @@ function renderMeals(){
             ?'onclick="event.stopPropagation();paintTapCenter(\''+de+'\',\''+se+'\')"'
             :'';
           const wrapClick=isPaintCol?'':' onclick="event.stopPropagation();openSchedMenu(\'cell\',\''+de+'\',\''+se+'\')"';
-          // 2026-05-03: full 4-side highlight when only ONE side is highlighted
-          // (eat-out alone, manual alone, queued alone, link-only-side alone).
-          const lSelfHi=isShared||himSkip||(himManual&&lNormal)||!!lGroup||(isPaintCol&&himQueued);
-          const rSelfHi=isShared||herSkip||(herManual&&rNormal)||!!rGroup||(isPaintCol&&herQueued);
-          const lOnlyHi=lSelfHi&&!rSelfHi;
-          const rOnlyHi=rSelfHi&&!lSelfHi;
-          // 2026-05-05: when BOTH halves are highlighted with different
-          // colors, draw the centerline as a vertical gradient (top half
-          // Him's color, bottom half Her's color) so each side "owns" half
-          // of the shared divider. Per-half center borders are suppressed
-          // and the gradient overlay handles the divider visually.
-          const bothHi = lSelfHi && rSelfHi;
-          // Pick each half's "primary" color for the gradient. Order mirrors
-          // the lBdr/rBdr cascade (group → manual → shared → skip → border).
-          // V62: centerline picks up purple when USER_EDITED on
-          // shared/link cells, mirroring the border cascade. Without
-          // this, a shared+USER_EDITED cell would have a purple outer
-          // border but a green centerline — inconsistent.
-          // V63: legacy normal+manual purple bumped from .6 → .85 to
-          // match the V62 USER_EDITED outer purple opacity.
-          // V68 (2026-05-07): when in a link group, centerline picks the
-          // GROUP color, not USER_EDITED purple — matches the new outer
-          // purple + inner group color border. The cell's group identity
-          // stays visible at the join even when user-edited. The outer
-          // purple border on the half communicates USER_EDITED; the
-          // centerline + inner band communicate group membership.
-          // V73: skipped center color = SKIP_BG.
-          let lCenterCol = lGroup ? (lGroupRgb?'rgba('+lGroupRgb+',.85)':'')
-                         : isShared ? grn+'.5)'
-                         : himSkippedSlot ? SKIP_BG
-                         : himEatOut ? red+'.4)'
-                         : '';
-          let rCenterCol = rGroup ? (rGroupRgb?'rgba('+rGroupRgb+',.85)':'')
-                         : isShared ? grn+'.5)'
-                         : herSkippedSlot ? SKIP_BG
-                         : herEatOut ? red+'.4)'
-                         : '';
-          // V80 (2026-05-08): drop the split-center gradient overlay.
-          // Per user feedback: "these borders are a mess." The 2026-05-05
-          // 3px gradient stacked on top of half-borders + V68a inset
-          // shadows produced a visually noisy centerline. New approach:
-          // when both halves are highlighted with different colors, each
-          // half keeps its OWN full border (including the inner edge at
-          // center). Two adjacent borders meet cleanly at the centerline,
-          // each in its own color — no gradient overlay needed.
-          const bothHiDiff = bothHi && lCenterCol && rCenterCol && lCenterCol!==rCenterCol;
-          const lBdrRightFinal = bothHiDiff ? lBdr
-                               : (lOnlyHi?lBdr
-                               : (rOnlyHi?'none'
-                               : (lBg!==rBg?'1.5px solid '+midCol:'none')));
-          const rBdrLeftFinal = bothHiDiff ? rBdr
-                              : (rOnlyHi?rBdr:'none');
-          const splitCenter = ''; // V80: no overlay; half-borders handle it
-          // Center is INVISIBLE absolute-positioned click overlay (above the
-          // split-center bar, z-index:5). Halves abut directly (50/50 flex)
-          // — their borders + the gradient overlay handle visuals.
-          // V62 (2026-05-07): inner box-shadow approach (V61) reverted —
-          // user wanted purple as the OUTER border. The lBdr/rBdr cascade
-          // above puts USER_EDITED purple at the top.
-          // V68 (2026-05-07): re-introduce the inset box-shadow but now
-          // for the GROUP COLOR (not purple) when USER_EDITED + lGroup
-          // overlap. Outer purple + inner group color signals "user-
-          // edited big cook" without losing the group's identity color.
-          const lShadow = lInsetShadow ? ';box-shadow:'+lInsetShadow : '';
-          const rShadow = rInsetShadow ? ';box-shadow:'+rInsetShadow : '';
+          // V257: the centerline/self-highlight machinery (lSelfHi, bothHiDiff,
+          // lBdrRightFinal, split-center, insets — V62/V63/V68/V80 arc) is
+          // deleted with the borders; the ⚭ center chip is the only divider.
           // V244 (2026-07-10): solo mode — a disabled person's half is not
           // rendered (the remaining half flex-fills the wrap) and the shared
           // mid zone is dropped (sharing is meaningless with one eater).
@@ -10561,9 +10472,9 @@ function renderMeals(){
           const cenCol=cenBothQueued?'#fff':isShared?'#34D399':'rgba(156,163,175,.45)';
           const cenSeg='<div class="sched-pill-cen" style="background:'+cenBg+';color:'+cenCol+(isPaintCol?';cursor:pointer':'')+'"'+(isPaintCol?' '+cClick:'')+'>⚭</div>';
           html+='<div class="sched-pill-wrap" style="'+dimStyle+(!isPaintCol&&_scheduleEditMode?';cursor:pointer':'')+'"'+wrapClick+'>'
-            +(_gHimOn?'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';border:'+lBdr+(_gHerOn?';border-right:'+lBdrRightFinal:'')+';color:'+lCol+lShadow+'" '+lClick+'>'+lLabel+'</div>':'')
+            +(_gHimOn?'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>':'')
             +(_gHimOn&&_gHerOn?cenSeg:'')
-            +(_gHerOn?'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';border:'+rBdr+(_gHimOn?';border-left:'+rBdrLeftFinal:'')+';color:'+rCol+rShadow+'" '+rClick+'>'+rLabel+'</div>':'')
+            +(_gHerOn?'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';color:'+rCol+'" '+rClick+'>'+rLabel+'</div>':'')
             +'</div>';
         });
       });
