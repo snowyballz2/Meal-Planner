@@ -10,7 +10,7 @@
 <link rel="icon" type="image/jpeg" href="icon.jpeg">
 <link rel="apple-touch-icon" href="icon.jpeg">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1A1B1E">
+<meta name="theme-color" content="#161719">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
@@ -21,7 +21,7 @@
 --shop:#F59E0B;--gray:#9CA3AF;--gray-light:#26282D;
 --border:#2E3138;--radius:14px;--radius-sm:10px;
 --shadow:0 1px 4px rgba(0,0,0,.3);
---bg:#1A1B1E;--bg-card:#222428;--bg-surface:#222428;
+--bg:#161719;--bg-card:#222428;--bg-surface:#222428;
 --text:#F0F1F2;--text-mid:#C4C7CB;--text-dim:#969CA3}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);max-width:480px;margin:0 auto;min-height:100vh}
 .hdr{background:var(--bg-card);padding:12px 14px 0;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
@@ -380,7 +380,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .mc.st-lo{border-color:rgba(245,158,11,.35);background:linear-gradient(135deg,rgba(245,158,11,.16),rgba(245,158,11,.05) 45%,rgba(245,158,11,0) 72%),var(--bg-card)}
 .mc.st-cook{border-color:rgba(245,158,11,.35);background:linear-gradient(135deg,rgba(245,158,11,.16),rgba(245,158,11,.05) 45%,rgba(245,158,11,0) 72%),var(--bg-card)}
 .mc.st-set{border-color:rgba(167,139,250,.35);background:linear-gradient(135deg,rgba(167,139,250,.14),rgba(167,139,250,.04) 45%,rgba(167,139,250,0) 72%),var(--bg-card)}
-.mc:not(.open):not(.skipped):not(.st-eo) .mc-pill:not(.on){display:none}
+/* V249: ALL pills hidden until the card is expanded — the accent edge +
+   gradient carry the state on collapsed cards. Exceptions: skipped and
+   eat-out cards (can't expand; their Skip/Eat Out pair must stay
+   reachable) and move-mode pills (destinations are collapsed cards). */
+.mc:not(.open):not(.skipped):not(.st-eo) .mc-pill:not(.mc-pill-move){display:none}
+.mc:not(.open):not(.skipped):not(.st-eo) .set-pill{display:none}
+.mc:not(.open):not(.skipped):not(.st-eo) .day-badge{display:none}
 </style>
 </head>
 <body>
@@ -9675,12 +9681,12 @@ function buildMealCardHtml(s, person, day, other){
   if(!isSkipped && !isEatOut && ['breakfast','lunch','snack','dinner'].indexOf(s)>=0){
     if(_movePending && !(_movePending.p===person&&_movePending.d===day&&_movePending.s===s)){
       if(_moveEligible(person,day,s)){
-        herePill='<div class="mc-pill mc-pill-cook on" style="background:rgba(52,211,153,.2);color:#34D399;border-color:rgba(52,211,153,.45)" onclick="event.stopPropagation();completeMoveMeal(\''+person+'\',\''+day+'\',\''+s+'\')">⤓ Here</div>';
+        herePill='<div class="mc-pill mc-pill-move on" style="background:rgba(52,211,153,.2);color:#34D399;border-color:rgba(52,211,153,.45)" onclick="event.stopPropagation();completeMoveMeal(\''+person+'\',\''+day+'\',\''+s+'\')">⤓ Here</div>';
       }
     } else if(!_movePending){
       movePill='<div class="mc-pill no-click" style="cursor:pointer;opacity:.75" onclick="event.stopPropagation();startMoveMeal(\''+person+'\',\''+day+'\',\''+s+'\')">⇄</div>';
     } else if(_movePending.p===person&&_movePending.d===day&&_movePending.s===s){
-      movePill='<div class="mc-pill on" style="background:rgba(251,191,36,.2);color:#FBBF24;border-color:rgba(251,191,36,.45)" onclick="event.stopPropagation();cancelMoveMeal()">Moving… ✕</div>';
+      movePill='<div class="mc-pill mc-pill-move on" style="background:rgba(251,191,36,.2);color:#FBBF24;border-color:rgba(251,191,36,.45)" onclick="event.stopPropagation();cancelMoveMeal()">Moving… ✕</div>';
     }
   }
   const topRowPills='<div class="mc-pills">'+(isSkipped||isEatOut?'':leftoverPill+cookPill)
