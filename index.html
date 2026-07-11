@@ -3786,14 +3786,14 @@ function _schedGradBg(bg, dir, halfOnly){
   // longer overpower the set glow, which now peaks at the same intensity.
   var hi='rgba('+rgb+','+Math.min(1,a*1.3).toFixed(2)+')';
   var lo='rgba('+rgb+','+(a*0.35).toFixed(2)+')';
-  // V263: halfOnly — the set glow owns the INNER half, so this state wash
-  // occupies only the OUTER half and fades out at the midpoint.
-  if(halfOnly){
-    return dir==='l'
-      ? 'linear-gradient(90deg,'+hi+','+lo+' 40%,rgba('+rgb+',0) 55%)'
-      : 'linear-gradient(90deg,rgba('+rgb+',0) 45%,'+lo+' 60%,'+hi+')';
-  }
-  return dir==='l' ? 'linear-gradient(90deg,'+hi+','+lo+')' : 'linear-gradient(90deg,'+lo+','+hi+')';
+  // V264 (user: leftover vs cook "still a little too similar at a
+  // glance"): EVERY wash is half-width now — outer half only, fading out
+  // at the midpoint (the shape purple used to have). The solid cook
+  // anchor keeps the full block, so solid-full vs half-wash is a SHAPE
+  // difference, not just intensity. (halfOnly param retained but inert.)
+  return dir==='l'
+    ? 'linear-gradient(90deg,'+hi+','+lo+' 40%,rgba('+rgb+',0) 55%)'
+    : 'linear-gradient(90deg,rgba('+rgb+',0) 45%,'+lo+' 60%,'+hi+')';
 }
 function openSchedMenu(type,d,s){
   if(!_scheduleEditMode) return; // grid editing is edit-mode-only (V25)
@@ -10453,16 +10453,15 @@ function renderMeals(){
           else if(himSetGlow) lBg='linear-gradient(90deg,rgba('+lGroupRgb+',.68),rgba('+lGroupRgb+',.68) 40%,rgba('+lGroupRgb+',0) 55%)';
           if(!(rIsAnchorFill&&!herQueued)) rBg=_schedGradBg(rBg,'r',herSetGlow&&rHasColor);
           else if(herSetGlow) rBg='linear-gradient(90deg,rgba('+rGroupRgb+',0) 45%,rgba('+rGroupRgb+',.68) 60%,rgba('+rGroupRgb+',.68))';
+          // V264: purple is ALWAYS the inner half now (same shape alone or
+          // in a combo) — consistent with every other wash being the outer
+          // half, and the solid cook block being the only full-width fill.
           if(himSetGlow){
-            lBg=(lHasColor
-              ? 'linear-gradient(90deg,rgba(167,139,250,0) 45%,rgba(167,139,250,.65))'
-              : 'linear-gradient(90deg,rgba(167,139,250,.18),rgba(167,139,250,.65))')
+            lBg='linear-gradient(90deg,rgba(167,139,250,0) 45%,rgba(167,139,250,.65))'
               +(lBg&&lBg!=='transparent'?','+lBg:'');
           }
           if(herSetGlow){
-            rBg=(rHasColor
-              ? 'linear-gradient(90deg,rgba(167,139,250,.65),rgba(167,139,250,0) 55%)'
-              : 'linear-gradient(90deg,rgba(167,139,250,.65),rgba(167,139,250,.18))')
+            rBg='linear-gradient(90deg,rgba(167,139,250,.65),rgba(167,139,250,0) 55%)'
               +(rBg&&rBg!=='transparent'?','+rBg:'');
           }
           // V257: with borders gone, default cells need SOME containment —
@@ -10544,10 +10543,10 @@ function renderMeals(){
         // actual ⚭ glyph for shared.
         html+='<div class="sched-legend">'
           +'<span><span style="color:rgba(52,211,153,1);font-size:12px">⚭</span> shared</span>'
-          +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(239,68,68,.75),rgba(239,68,68,.2))"></span>eat out</span>'
-          +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(167,139,250,.15),rgba(167,139,250,.8))"></span>set</span>'
+          +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(239,68,68,.8),rgba(239,68,68,.25) 50%,rgba(239,68,68,0) 75%)"></span>eat out</span>'
+          +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(167,139,250,0) 25%,rgba(167,139,250,.8))"></span>set</span>'
           +'<span><span class="sched-leg-sq" style="background:rgba(245,158,11,.85)"></span>cook day</span>'
-          +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(245,158,11,.7),rgba(245,158,11,.15))"></span>leftovers</span>'
+          +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(245,158,11,.8),rgba(245,158,11,.25) 50%,rgba(245,158,11,0) 75%)"></span>leftovers</span>'
           +(_scheduleEditMode?'<span style="margin-left:auto">tap a cell, day, or column for actions</span>':'')
           +'</div>';
       }
