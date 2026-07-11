@@ -4,8 +4,8 @@
   "start_url": "/Meal-Planner/",
   "scope": "/Meal-Planner/",
   "display": "standalone",
-  "background_color": "#0B0C0E",
-  "theme_color": "#0B0C0E",
+  "background_color": "#131417",
+  "theme_color": "#131417",
   "icons": [
     {
       "src": "icon.jpeg",
