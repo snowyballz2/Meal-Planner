@@ -3780,7 +3780,9 @@ function _schedGradBg(bg, dir){
   var m = bg.match(/^rgba\(([\d ,]+),(\.?[\d.]+)\)$/);
   if(!m) return bg;
   var rgb=m[1], a=parseFloat(m[2]);
-  var hi='rgba('+rgb+','+Math.min(1,a*1.6).toFixed(2)+')';
+  // V261 (user): non-purple washes toned down (1.6→1.3 peak) so they no
+  // longer overpower the set glow, which now peaks at the same intensity.
+  var hi='rgba('+rgb+','+Math.min(1,a*1.3).toFixed(2)+')';
   var lo='rgba('+rgb+','+(a*0.35).toFixed(2)+')';
   return dir==='l' ? 'linear-gradient(90deg,'+hi+','+lo+')' : 'linear-gradient(90deg,'+lo+','+hi+')';
 }
@@ -10321,12 +10323,12 @@ function renderMeals(){
           // V259 (user): shared no longer paints the halves green — the lit
           // ⚭ center chip is the sole shared signal.
           let lBg = lGroup
-                  ? (lGroupRgb ? 'rgba('+lGroupRgb+(lIsLeftover?',.5)':',.7)') : 'transparent')
+                  ? (lGroupRgb ? 'rgba('+lGroupRgb+(lIsLeftover?',.5)':',.68)') : 'transparent')
                   : himSkippedSlot ? SKIP_BG
                   : himEatOut ? red+'.3)'
                   : 'transparent';
           let rBg = rGroup
-                  ? (rGroupRgb ? 'rgba('+rGroupRgb+(rIsLeftover?',.5)':',.7)') : 'transparent')
+                  ? (rGroupRgb ? 'rgba('+rGroupRgb+(rIsLeftover?',.5)':',.68)') : 'transparent')
                   : herSkippedSlot ? SKIP_BG
                   : herEatOut ? red+'.3)'
                   : 'transparent';
@@ -10442,8 +10444,8 @@ function renderMeals(){
           // V258 (user: "the set gradient is hard to see when in the combo"):
           // glow strengthened — .45→.62 at the inner edge, fade starts later —
           // so purple clearly reads over any state wash underneath.
-          if(himSetGlow) lBg='linear-gradient(90deg,rgba(167,139,250,0) 35%,rgba(167,139,250,.62))'+(lBg&&lBg!=='transparent'?','+lBg:'');
-          if(herSetGlow) rBg='linear-gradient(90deg,rgba(167,139,250,.62),rgba(167,139,250,0) 65%)'+(rBg&&rBg!=='transparent'?','+rBg:'');
+          if(himSetGlow) lBg='linear-gradient(90deg,rgba(167,139,250,0) 35%,rgba(167,139,250,.65))'+(lBg&&lBg!=='transparent'?','+lBg:'');
+          if(herSetGlow) rBg='linear-gradient(90deg,rgba(167,139,250,.65),rgba(167,139,250,0) 65%)'+(rBg&&rBg!=='transparent'?','+rBg:'');
           // V257: with borders gone, default cells need SOME containment —
           // a faint neutral tile (RunBook-style soft cell).
           if(lBg==='transparent') lBg='rgba(255,255,255,.05)';
