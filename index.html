@@ -10311,19 +10311,21 @@ function renderMeals(){
           // V256: the flat manual-purple bg branch is gone — Set now renders
           // as an inside-out purple glow LAYER (applied after the V255
           // gradient conversion below), so it can coexist with a state wash.
-          // V257 (borderless): the link-group ANCHOR (formerly outline-only)
-          // gets a lighter wash of its group color so it stays visible with
-          // no ring; leftovers keep the stronger fill ("filled = leftover,
-          // soft = anchor"). State alphas raised — the washes carry the
-          // whole signal now.
+          // V257/V258 (borderless): link-group cells are washes/fills only.
+          // V258 (user: "make the big cook solid"): the cook ANCHOR is a
+          // SOLID block of the group color — the action day pops; leftovers
+          // keep the gradient wash. Anchors skip the gradient conversion
+          // below (flagged here).
+          const lIsAnchorFill = !!(lGroup && !lIsLeftover && lGroupRgb);
+          const rIsAnchorFill = !!(rGroup && !rIsLeftover && rGroupRgb);
           let lBg = lGroup
-                  ? (lGroupRgb ? 'rgba('+lGroupRgb+(lIsLeftover?',.5)':',.26)') : 'transparent')
+                  ? (lGroupRgb ? 'rgba('+lGroupRgb+(lIsLeftover?',.5)':',.7)') : 'transparent')
                   : isShared ? grn+'.32)'
                   : himSkippedSlot ? SKIP_BG
                   : himEatOut ? red+'.3)'
                   : 'transparent';
           let rBg = rGroup
-                  ? (rGroupRgb ? 'rgba('+rGroupRgb+(rIsLeftover?',.5)':',.26)') : 'transparent')
+                  ? (rGroupRgb ? 'rgba('+rGroupRgb+(rIsLeftover?',.5)':',.7)') : 'transparent')
                   : isShared ? grn+'.32)'
                   : herSkippedSlot ? SKIP_BG
                   : herEatOut ? red+'.3)'
@@ -10388,8 +10390,10 @@ function renderMeals(){
           // Skip text gets a muted #ccc instead of full white, reinforcing
           // the "this slot is silenced" feel.
           // V73: skip text color = SKIP_TEXT (faded) instead of light grey.
-          let lCol=lIsLeftover?'#fff':(himManual&&lNormal)?'#fff':isShared?'#fff':himSkippedSlot?SKIP_TEXT:himEatOut?'#fff':'var(--gray)';
-          let rCol=rIsLeftover?'#fff':(herManual&&rNormal)?'#fff':isShared?'#fff':herSkippedSlot?SKIP_TEXT:herEatOut?'#fff':'var(--gray)';
+          // V258: any group member (solid anchor OR leftover wash) gets
+          // white text.
+          let lCol=lGroup?'#fff':(himManual&&lNormal)?'#fff':isShared?'#fff':himSkippedSlot?SKIP_TEXT:himEatOut?'#fff':'var(--gray)';
+          let rCol=rGroup?'#fff':(herManual&&rNormal)?'#fff':isShared?'#fff':herSkippedSlot?SKIP_TEXT:herEatOut?'#fff':'var(--gray)';
           const lLabel='Him';
           const rLabel='Her';
           const de=dd.replace(/'/g,"\\'");const se=ss.replace(/'/g,"\\'");
@@ -10423,9 +10427,11 @@ function renderMeals(){
           }
           // V255: state tints → directional gradient washes (outer edge
           // strong, fading inward). Applied AFTER the paint-queue override
-          // so queued highlights get the same treatment.
-          lBg=_schedGradBg(lBg,'l');
-          rBg=_schedGradBg(rBg,'r');
+          // so queued highlights get the same treatment. V258: solid cook
+          // anchors bypass the conversion (unless paint-queued, which
+          // overwrote lBg above).
+          if(!(lIsAnchorFill&&!himQueued)) lBg=_schedGradBg(lBg,'l');
+          if(!(rIsAnchorFill&&!herQueued)) rBg=_schedGradBg(rBg,'r');
           // V256 (user): Set = inside-out purple glow — strongest at the
           // center chip, fading toward the outer edge — LAYERED over the
           // state wash ("the double": state color outside, purple inside).
@@ -10433,8 +10439,11 @@ function renderMeals(){
           // suppress it (V56 rule).
           const himSetGlow=(himShowSetDot||_himNormalPurple)&&!himSkippedSlot&&!himEatOut;
           const herSetGlow=(herShowSetDot||_herNormalPurple)&&!herSkippedSlot&&!herEatOut;
-          if(himSetGlow) lBg='linear-gradient(90deg,rgba(167,139,250,0) 20%,rgba(167,139,250,.45))'+(lBg&&lBg!=='transparent'?','+lBg:'');
-          if(herSetGlow) rBg='linear-gradient(90deg,rgba(167,139,250,.45),rgba(167,139,250,0) 80%)'+(rBg&&rBg!=='transparent'?','+rBg:'');
+          // V258 (user: "the set gradient is hard to see when in the combo"):
+          // glow strengthened — .45→.62 at the inner edge, fade starts later —
+          // so purple clearly reads over any state wash underneath.
+          if(himSetGlow) lBg='linear-gradient(90deg,rgba(167,139,250,0) 35%,rgba(167,139,250,.62))'+(lBg&&lBg!=='transparent'?','+lBg:'');
+          if(herSetGlow) rBg='linear-gradient(90deg,rgba(167,139,250,.62),rgba(167,139,250,0) 65%)'+(rBg&&rBg!=='transparent'?','+rBg:'');
           // V257: with borders gone, default cells need SOME containment —
           // a faint neutral tile (RunBook-style soft cell).
           if(lBg==='transparent') lBg='rgba(255,255,255,.05)';
@@ -10508,7 +10517,7 @@ function renderMeals(){
           +'<span><span style="color:#34D399">●</span> shared</span>'
           +'<span><span style="color:#EF4444">●</span> eat out</span>'
           +'<span><span style="color:#A78BFA">●</span> set</span>'
-          +'<span><span style="color:#F59E0B">●</span> leftover links</span>'
+          +'<span><span style="color:#F59E0B">●</span> leftover links (solid = cook day)</span>'
           +(_scheduleEditMode?'<span style="margin-left:auto">tap a cell, day, or column for actions</span>':'')
           +'</div>';
       }
