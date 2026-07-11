@@ -402,12 +402,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
    shows the cell's shared state; in paint mode it's the tap-both target. */
 .sched-pill-cen{flex:0 0 18px;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;user-select:none;-webkit-user-select:none;position:relative;z-index:2}
 .sched-cen-glyph{display:inline-block;transform:translateY(-2.4px) scaleY(1.3)}
-/* V269/V270: Set indicator — a thin (2px) purple arc "(" wrapped around
-   the pill's outer end, outside the edge. V270: SHORTER (inset 3px top/
-   bottom, no top/bottom arms — pure side arc) so adjacent-row brackets
-   can never read as touching. Left arc = him set, right = her set. */
-.sched-set-l{position:absolute;left:-4px;top:3px;bottom:3px;width:6px;border-left:2px solid rgba(167,139,250,.95);border-radius:8px 0 0 8px;z-index:3;pointer-events:none}
-.sched-set-r{position:absolute;right:-4px;top:3px;bottom:3px;width:6px;border-right:2px solid rgba(167,139,250,.95);border-radius:0 8px 8px 0;z-index:3;pointer-events:none}
+/* V269-V271: Set indicator — a thin (2px) purple arc "(" hugging the
+   pill's outer end. V271: FORM-FITTING — exact pill height, radius
+   concentric with the pill's 6px corners at a 1px gap, so the arc traces
+   the contour (vertical edge + both corner curves) without extending
+   past the pill (adjacent rows can't touch). Left = him, right = her. */
+.sched-set-l{position:absolute;left:-3px;top:0;bottom:0;width:7px;border-left:2px solid rgba(167,139,250,.95);border-radius:7px 0 0 7px;z-index:3;pointer-events:none}
+.sched-set-r{position:absolute;right:-3px;top:0;bottom:0;width:7px;border-right:2px solid rgba(167,139,250,.95);border-radius:0 7px 7px 0;z-index:3;pointer-events:none}
+/* V271: themed hover tooltip (replaces the native title box) — the app's
+   card language: dark card, hairline border, off-white text. Hover-capable
+   devices only. */
+@media (hover:hover){
+.sched-pill-wrap[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:600;color:var(--text);white-space:pre-line;text-align:left;width:max-content;max-width:230px;line-height:1.5;z-index:60;box-shadow:0 4px 16px rgba(0,0,0,.45);pointer-events:none}
+}
 .sched-leg-sq{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:3px}
 </style>
 </head>
@@ -10503,15 +10510,17 @@ function renderMeals(){
           // too — the V265/V266 chip-based indicator was absent there).
           const setBumps=(himSetChip&&_gHimOn?'<span class="sched-set-l"></span>':'')
             +(herSetChip&&_gHerOn?'<span class="sched-set-r"></span>':'');
-          // V270 (user): hover shows what the meal is (native title tooltip;
-          // works outside edit mode too — the grid is read-only there but
-          // now at least inspectable).
+          // V270/V271: hover shows what the meal is. V271: themed CSS
+          // tooltip via data-tip + ::after (styled like the app's cards)
+          // instead of the basic native title box. &#10; = line break
+          // (white-space:pre-line in the tooltip CSS).
+          const _escTip=function(t){return String(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;');};
           const _htM=_gHimOn?((getActiveMeal('him',dd,ss)||{}).label||'—'):null;
           const _hrM=_gHerOn?((getActiveMeal('her',dd,ss)||{}).label||'—'):null;
-          const wrapTitle=isPaintCol?'':' title="'+[
-              _htM!==null?('Him: '+_htM):null,
-              _hrM!==null?('Her: '+_hrM):null
-            ].filter(Boolean).join('  ·  ').replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"';
+          const _tipLines=[];
+          if(_htM!==null)_tipLines.push('Him: '+_escTip(_htM));
+          if(_hrM!==null)_tipLines.push('Her: '+_escTip(_hrM));
+          const wrapTitle=isPaintCol?'':' data-tip="'+_tipLines.join('&#10;')+'"';
           html+='<div class="sched-pill-wrap" style="'+dimStyle+(!isPaintCol&&_scheduleEditMode?';cursor:pointer':'')+'"'+wrapClick+wrapTitle+'>'
             +(_gHimOn?'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>':'')
             +(_gHimOn&&_gHerOn?cenSeg:'')
