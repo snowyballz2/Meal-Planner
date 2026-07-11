@@ -359,6 +359,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sync-btn-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 /* Day badge (shared view) */
 .day-badge{display:inline-block;margin-left:3px;padding:1px 6px;font-size:9px;font-weight:700;border-radius:12px;vertical-align:middle}
+/* V245 (2026-07-10): RunBook-style state cards. A card's dominant state
+   (eat-out > skip > shared > leftover > big cook > set) paints the WHOLE
+   card — 3px left accent edge + a gradient wash from the state color —
+   instead of only lighting a pill. Collapsed cards show only active (.on)
+   pills; expanding reveals the full toggle row. Skipped and eat-out cards
+   keep their pill pair visible (they can't expand — mc-meta is inert /
+   absent — and the skip→eat-out flow needs both reachable). */
+.mc{position:relative}
+.mc.st-eo::before,.mc.st-skip::before,.mc.st-shared::before,.mc.st-lo::before,.mc.st-cook::before,.mc.st-set::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;z-index:1;pointer-events:none}
+.mc.st-eo::before{background:#EF4444}
+.mc.st-skip::before{background:#94A3B8}
+.mc.st-shared::before{background:#34D399}
+.mc.st-lo::before{background:#F59E0B}
+.mc.st-cook::before{background:#F59E0B}
+.mc.st-set::before{background:#A78BFA}
+.mc.st-eo{border-color:rgba(239,68,68,.35);background:linear-gradient(135deg,rgba(239,68,68,.16),rgba(239,68,68,.05) 45%,rgba(239,68,68,0) 72%),var(--bg-card)}
+.mc.st-skip{border-color:rgba(148,163,184,.3);background:linear-gradient(135deg,rgba(148,163,184,.14),rgba(148,163,184,.04) 45%,rgba(148,163,184,0) 72%),var(--bg-card)}
+.mc.st-shared{border-color:rgba(16,185,129,.35);background:linear-gradient(135deg,rgba(16,185,129,.16),rgba(16,185,129,.05) 45%,rgba(16,185,129,0) 72%),var(--bg-card)}
+.mc.st-lo{border-color:rgba(245,158,11,.35);background:linear-gradient(135deg,rgba(245,158,11,.16),rgba(245,158,11,.05) 45%,rgba(245,158,11,0) 72%),var(--bg-card)}
+.mc.st-cook{border-color:rgba(245,158,11,.35);background:linear-gradient(135deg,rgba(245,158,11,.16),rgba(245,158,11,.05) 45%,rgba(245,158,11,0) 72%),var(--bg-card)}
+.mc.st-set{border-color:rgba(167,139,250,.35);background:linear-gradient(135deg,rgba(167,139,250,.14),rgba(167,139,250,.04) 45%,rgba(167,139,250,0) 72%),var(--bg-card)}
+.mc:not(.open):not(.skipped):not(.st-eo) .mc-pill:not(.on){display:none}
 </style>
 </head>
 <body>
@@ -8700,7 +8722,7 @@ function renderStatsBar(person, day){
 }
 
 // 2a. Shared card renderer (used inside renderSharedView)
-function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day){
+function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day, accCls){
   // Build combined view from the batch's actual portions (lo.portions).
   // Each portion contributes its balanced per-serving amount directly —
   // sums to the real batch total. Him / Her single per-serving amounts
@@ -8779,7 +8801,7 @@ function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day){
   const servesLabel='🥗 Ingredients (serves '+totalServings+')';
   const k='shared_'+day+'_'+s+(extraLabel||'');
   const isOpen=openCards[k]||false;
-  return '<div class="mc slot-'+s+(isOpen?' open':'')+'" id="mc_'+k+'">'
+  return '<div class="mc slot-'+s+(isOpen?' open':'')+(accCls||'')+'" id="mc_'+k+'">'
     +'<div class="mc-top"><div class="slot-label">'+SLOT_LABEL[s]+'</div>'
     +'<div class="sv-meal-title">'+meal.label+' '+badges+'</div></div>'
     +'<div class="mc-meta" onclick="toggleCard(\''+k.replace(/'/g,"\\'")+'\')"><div><div class="mc-macros">'+macroLine+'</div>'
@@ -8843,7 +8865,11 @@ function renderSharedView(day, scrollY, mealEl, prefixHtml){
       badges='<span class="mc-pill mc-pill-cook on no-click" style="vertical-align:middle">Big Cook</span>'
         +feedsDays;
     }
-    html+=renderSharedCard(meal,s,badges,1,1,'',day);
+    // V245: Shared-tab accent — every card here is shared, so green would
+    // be uniform noise; only the informational states (leftover / big cook)
+    // get the edge + wash.
+    const svAcc=(himLo&&himLo.isLeftover&&!himLo.sameDayShared)?' st-lo':(batchSize>2)?' st-cook':'';
+    html+=renderSharedCard(meal,s,badges,1,1,'',day,svAcc);
   });
 
   if(!hasShared)html+='<div class="empty-shop" style="padding:40px 20px;text-align:center;color:var(--gray)">No shared meals on '+day+'.</div>';
@@ -9045,7 +9071,7 @@ function buildEatOutFormHtml(person, day, s, k, eo, topRowPills, setPill){
       +'</div>';
   }
 
-  return '<div class="mc slot-'+s+'" id="mc_'+k+'">'
+  return '<div class="mc slot-'+s+' st-eo" id="mc_'+k+'">'
     +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+setPill+'</div>'+topRowPills+'</div></div>'
     +'<div class="eo-form">'
     +savedDropdown
@@ -9665,6 +9691,14 @@ function buildMealCardHtml(s, person, day, other){
     +movePill
     +'</div>';
 
+  // V245: whole-card state accent — mirrors the pill conditions exactly
+  // (precedence: eat-out > skip > shared > leftover > big cook > set).
+  // Shake is excluded from the shared accent: both people share the same
+  // shake by default, so it's the norm there, not a user-set state.
+  const accCls=isEatOut?' st-eo':isSkipped?' st-skip'
+    :(isSharedSlot&&s!=='shake')?' st-shared'
+    :leftoverPill?' st-lo':cookPill?' st-cook':isManual?' st-set':'';
+
   // Build skip summary when skipped
   let skipSummary='';
   if(isSkipped){
@@ -9683,7 +9717,7 @@ function buildMealCardHtml(s, person, day, other){
     return buildEatOutFormHtml(person, day, s, k, eo, topRowPills, setPill);
   }
 
-  return '<div class="mc slot-'+s+(isOpen?' open':'')+(isSkipped?' skipped':'')+'" id="mc_'+k+'">'
+  return '<div class="mc slot-'+s+(isOpen?' open':'')+(isSkipped?' skipped':'')+accCls+'" id="mc_'+k+'">'
     +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+setPill+'</div>'+topRowPills+'</div>'
     +'<select class="meal-select" onchange="changeMeal(\''+s+'\',this.value)">'+opts+'</select></div>'
     +skipSummary
