@@ -401,7 +401,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 /* V254: visible center segment (Option B look, Option A interaction) —
    shows the cell's shared state; in paint mode it's the tap-both target. */
 .sched-pill-cen{flex:0 0 18px;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;user-select:none;-webkit-user-select:none;position:relative;z-index:2}
-.sched-cen-glyph{display:inline-block;transform:scaleY(1.3)}
+.sched-cen-glyph{display:inline-block;transform:translateY(-2.4px) scaleY(1.3)}
 .sched-leg-sq{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:3px}
 </style>
 </head>
@@ -10482,19 +10482,21 @@ function renderMeals(){
           // in normal mode it has no handler (the wrap opens the menu).
           const cenBothQueued=isPaintCol&&himQueued&&herQueued;
           // V259/V260: the ⚭ GLYPH is the shared indicator (green when
-          // shared; rgba form so the harness probe matches). V265: the chip
-          // BACKGROUND is the Set indicator — purple left half (him set),
-          // right half (her set), or whole chip (both); hard 50/50 stops,
-          // no fade.
-          const PRP_CHIP='rgba(167,139,250,.75)', CHIP_DK='rgba(0,0,0,.25)';
-          const cenBg=cenBothQueued?'rgba('+_paintRgb+',.3)'
-            :(himSetChip&&herSetChip)?PRP_CHIP
-            :himSetChip?'linear-gradient(90deg,'+PRP_CHIP+' 50%,'+CHIP_DK+' 50%)'
-            :herSetChip?'linear-gradient(90deg,'+CHIP_DK+' 50%,'+PRP_CHIP+' 50%)'
-            :CHIP_DK;
-          const cenCol=cenBothQueued?'#fff':isShared?'rgba(52,211,153,1)':(himSetChip||herSetChip)?'rgba(255,255,255,.65)':'rgba(156,163,175,.45)';
+          // shared; rgba form so the harness probe matches). V266 (user:
+          // "dont like purple set in the middle either.. maybe purple
+          // border around the middle instead"): Set = purple RING around
+          // the chip via inset box-shadow — him set = inner left edge,
+          // her set = inner right edge, both = full inner ring. Chip bg
+          // stays the neutral dark inset.
+          const PRP_EDGE='rgba(167,139,250,.9)';
+          const cenBg=cenBothQueued?'rgba('+_paintRgb+',.3)':'rgba(0,0,0,.25)';
+          const cenShadow=(himSetChip&&herSetChip)?';box-shadow:inset 0 0 0 2px '+PRP_EDGE
+            :himSetChip?';box-shadow:inset 2px 0 0 '+PRP_EDGE
+            :herSetChip?';box-shadow:inset -2px 0 0 '+PRP_EDGE
+            :'';
+          const cenCol=cenBothQueued?'#fff':isShared?'rgba(52,211,153,1)':'rgba(156,163,175,.45)';
           // V262: glyph stretched vertically (scaleY) — easier to see.
-          const cenSeg='<div class="sched-pill-cen" style="background:'+cenBg+';color:'+cenCol+(isPaintCol?';cursor:pointer':'')+'"'+(isPaintCol?' '+cClick:'')+'><span class="sched-cen-glyph">⚭</span></div>';
+          const cenSeg='<div class="sched-pill-cen" style="background:'+cenBg+';color:'+cenCol+cenShadow+(isPaintCol?';cursor:pointer':'')+'"'+(isPaintCol?' '+cClick:'')+'><span class="sched-cen-glyph">⚭</span></div>';
           html+='<div class="sched-pill-wrap" style="'+dimStyle+(!isPaintCol&&_scheduleEditMode?';cursor:pointer':'')+'"'+wrapClick+'>'
             +(_gHimOn?'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>':'')
             +(_gHimOn&&_gHerOn?cenSeg:'')
@@ -10534,7 +10536,7 @@ function renderMeals(){
         html+='<div class="sched-legend">'
           +'<span><span style="color:rgba(52,211,153,1);font-size:12px">⚭</span> shared</span>'
           +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(239,68,68,.8),rgba(239,68,68,.25) 50%,rgba(239,68,68,0) 75%)"></span>eat out</span>'
-          +'<span><span class="sched-leg-sq" style="background:rgba(167,139,250,.75)"></span>set (middle block)</span>'
+          +'<span><span class="sched-leg-sq" style="background:rgba(0,0,0,.25);box-shadow:inset 0 0 0 2px rgba(167,139,250,.9)"></span>set</span>'
           +'<span><span class="sched-leg-sq" style="background:rgba(245,158,11,.85)"></span>cook day</span>'
           +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(245,158,11,.8),rgba(245,158,11,.25) 50%,rgba(245,158,11,0) 75%)"></span>leftovers</span>'
           +(_scheduleEditMode?'<span style="margin-left:auto">tap a cell, day, or column for actions</span>':'')
@@ -14327,7 +14329,7 @@ function _maybeOfferPartnerWasteFix(randTarget){
     '<div style="position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)_dismissPartnerWasteFix()">'
     + '<div style="background:var(--bg-card,#222428);border:1px solid var(--border,#2E3138);border-radius:14px;max-width:420px;width:100%;padding:18px;color:var(--text,#F3F4F6)">'
     + '<div style="font-weight:700;font-size:15px;margin-bottom:8px">📦 Package waste in '+other+'’s plan</div>'
-    + '<div style="font-size:13px;opacity:0.85;margin-bottom:10px">This randomize changed shared shopping. '+other+'’s unchanged amounts now leave partial packages:</div>'
+    + '<div style="font-size:13px;opacity:0.85;margin-bottom:10px">This meal schedule change affected shared shopping. '+other+'’s unchanged amounts now leave partial packages:</div>'
     + rows
     + '<div style="font-size:12px;opacity:0.7;margin:10px 0 14px">Adjusting updates '+other+'’s ingredient <b>amounts only</b> (no meal changes) so trips land on package boundaries. Items that can’t fit within per-serving limits stay flagged in Shopping.</div>'
     + '<div style="display:flex;gap:10px">'
