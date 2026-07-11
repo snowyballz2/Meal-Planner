@@ -3771,6 +3771,19 @@ function schedTapDay(d){
 // row is gone), which makes painting edit-mode-only like all grid editing.
 var _schedMenu=null;          // {type:'cell'|'day'|'col', d, s} — transient
 var _schedMenuView='actions'; // 'actions' | 'meals'
+// V255: RunBook gradient language in the grid — a half's flat state tint
+// becomes a directional wash, strong at the cell's OUTER edge fading
+// toward the center chip (mirrors the meal cards' multi-state blends).
+// Skip's darkened-tab overlay stays flat by design.
+function _schedGradBg(bg, dir){
+  if(!bg || bg==='transparent' || bg.indexOf('rgba(0,0,0')===0) return bg;
+  var m = bg.match(/^rgba\(([\d ,]+),(\.?[\d.]+)\)$/);
+  if(!m) return bg;
+  var rgb=m[1], a=parseFloat(m[2]);
+  var hi='rgba('+rgb+','+Math.min(1,a*1.5).toFixed(2)+')';
+  var lo='rgba('+rgb+','+(a*0.35).toFixed(2)+')';
+  return dir==='l' ? 'linear-gradient(90deg,'+hi+','+lo+')' : 'linear-gradient(90deg,'+lo+','+hi+')';
+}
 function openSchedMenu(type,d,s){
   if(!_scheduleEditMode) return; // grid editing is edit-mode-only (V25)
   if(_paintMode) return;         // paint taps own the grid while painting
@@ -10429,6 +10442,11 @@ function renderMeals(){
             lCol=himQueued?'#fff':lCol;
             rCol=herQueued?'#fff':rCol;
           }
+          // V255: state tints → directional gradient washes (outer edge
+          // strong, fading inward). Applied AFTER the paint-queue override
+          // so queued highlights get the same treatment.
+          lBg=_schedGradBg(lBg,'l');
+          rBg=_schedGradBg(rBg,'r');
           const dimStyle='';
           // V253: normal-mode cells no longer carry the 3-zone press/tap
           // handlers — the whole wrap opens the action menu (wrapClick
