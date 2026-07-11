@@ -10436,34 +10436,18 @@ function renderMeals(){
             lCol=himQueued?'#fff':lCol;
             rCol=herQueued?'#fff':rCol;
           }
-          // V256/V263: Set purple. V263 (user): purple ALONE spans the full
-          // half like every other color; only when purple shares the half
-          // with another color do BOTH split — the state color owns the
-          // outer half, purple owns the inner half, blending at the middle.
-          const himSetGlow=(himShowSetDot||_himNormalPurple)&&!himSkippedSlot&&!himEatOut;
-          const herSetGlow=(herShowSetDot||_herNormalPurple)&&!herSkippedSlot&&!herEatOut;
-          const lHasColor = lBg!=='transparent';
-          const rHasColor = rBg!=='transparent';
-          // V255/V258: state tints → directional washes; solid cook anchors
-          // bypass the conversion (unless paint-queued, which overwrote lBg).
-          // V263: a glow-sharing half converts to an OUTER-half-only wash; a
-          // solid anchor sharing with the glow keeps its solid on the outer
-          // half and fades out at the midpoint.
-          if(!(lIsAnchorFill&&!himQueued)) lBg=_schedGradBg(lBg,'l',himSetGlow&&lHasColor);
-          else if(himSetGlow) lBg='linear-gradient(90deg,rgba('+lGroupRgb+',.68),rgba('+lGroupRgb+',.68) 40%,rgba('+lGroupRgb+',0) 55%)';
-          if(!(rIsAnchorFill&&!herQueued)) rBg=_schedGradBg(rBg,'r',herSetGlow&&rHasColor);
-          else if(herSetGlow) rBg='linear-gradient(90deg,rgba('+rGroupRgb+',0) 45%,rgba('+rGroupRgb+',.68) 60%,rgba('+rGroupRgb+',.68))';
-          // V264: purple is ALWAYS the inner half now (same shape alone or
-          // in a combo) — consistent with every other wash being the outer
-          // half, and the solid cook block being the only full-width fill.
-          if(himSetGlow){
-            lBg='linear-gradient(90deg,rgba(167,139,250,0) 45%,rgba(167,139,250,.65))'
-              +(lBg&&lBg!=='transparent'?','+lBg:'');
-          }
-          if(herSetGlow){
-            rBg='linear-gradient(90deg,rgba(167,139,250,.65),rgba(167,139,250,0) 55%)'
-              +(rBg&&rBg!=='transparent'?','+rBg:'');
-          }
+          // V265 (user: "struggling with the two color gradient.. how about
+          // the sets color the shared block instead"): Set purple is OFF
+          // the halves entirely — it now colors the CENTER CHIP (him set =
+          // left half of the chip, her set = right half, both = whole
+          // chip; solid fill, no fade — it's a small block). Halves show
+          // only their own state washes/fills again.
+          const himSetChip=(himShowSetDot||_himNormalPurple)&&!himSkippedSlot&&!himEatOut;
+          const herSetChip=(herShowSetDot||_herNormalPurple)&&!herSkippedSlot&&!herEatOut;
+          // V255/V258/V264: state tints → half-width washes; solid cook
+          // anchors bypass the conversion (unless paint-queued).
+          if(!(lIsAnchorFill&&!himQueued)) lBg=_schedGradBg(lBg,'l');
+          if(!(rIsAnchorFill&&!herQueued)) rBg=_schedGradBg(rBg,'r');
           // V257: with borders gone, default cells need SOME containment —
           // a faint neutral tile (RunBook-style soft cell).
           if(lBg==='transparent') lBg='rgba(255,255,255,.05)';
@@ -10497,12 +10481,18 @@ function renderMeals(){
           // old invisible sched-pill-mid overlay as the tap-both target;
           // in normal mode it has no handler (the wrap opens the menu).
           const cenBothQueued=isPaintCol&&himQueued&&herQueued;
-          // V259/V260: the chip is the SOLE shared indicator. V260 (user):
-          // only the ⚭ GLYPH lights green — no filled rectangle behind it.
-          // Glyph green written as rgba(52,211,153,1) (not #34D399) so the
-          // harness's shared-visual probe keeps matching.
-          const cenBg=cenBothQueued?'rgba('+_paintRgb+',.3)':'rgba(0,0,0,.25)';
-          const cenCol=cenBothQueued?'#fff':isShared?'rgba(52,211,153,1)':'rgba(156,163,175,.45)';
+          // V259/V260: the ⚭ GLYPH is the shared indicator (green when
+          // shared; rgba form so the harness probe matches). V265: the chip
+          // BACKGROUND is the Set indicator — purple left half (him set),
+          // right half (her set), or whole chip (both); hard 50/50 stops,
+          // no fade.
+          const PRP_CHIP='rgba(167,139,250,.75)', CHIP_DK='rgba(0,0,0,.25)';
+          const cenBg=cenBothQueued?'rgba('+_paintRgb+',.3)'
+            :(himSetChip&&herSetChip)?PRP_CHIP
+            :himSetChip?'linear-gradient(90deg,'+PRP_CHIP+' 50%,'+CHIP_DK+' 50%)'
+            :herSetChip?'linear-gradient(90deg,'+CHIP_DK+' 50%,'+PRP_CHIP+' 50%)'
+            :CHIP_DK;
+          const cenCol=cenBothQueued?'#fff':isShared?'rgba(52,211,153,1)':(himSetChip||herSetChip)?'rgba(255,255,255,.65)':'rgba(156,163,175,.45)';
           // V262: glyph stretched vertically (scaleY) — easier to see.
           const cenSeg='<div class="sched-pill-cen" style="background:'+cenBg+';color:'+cenCol+(isPaintCol?';cursor:pointer':'')+'"'+(isPaintCol?' '+cClick:'')+'><span class="sched-cen-glyph">⚭</span></div>';
           html+='<div class="sched-pill-wrap" style="'+dimStyle+(!isPaintCol&&_scheduleEditMode?';cursor:pointer':'')+'"'+wrapClick+'>'
@@ -10544,7 +10534,7 @@ function renderMeals(){
         html+='<div class="sched-legend">'
           +'<span><span style="color:rgba(52,211,153,1);font-size:12px">⚭</span> shared</span>'
           +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(239,68,68,.8),rgba(239,68,68,.25) 50%,rgba(239,68,68,0) 75%)"></span>eat out</span>'
-          +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(167,139,250,0) 25%,rgba(167,139,250,.8))"></span>set</span>'
+          +'<span><span class="sched-leg-sq" style="background:rgba(167,139,250,.75)"></span>set (middle block)</span>'
           +'<span><span class="sched-leg-sq" style="background:rgba(245,158,11,.85)"></span>cook day</span>'
           +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(245,158,11,.8),rgba(245,158,11,.25) 50%,rgba(245,158,11,0) 75%)"></span>leftovers</span>'
           +(_scheduleEditMode?'<span style="margin-left:auto">tap a cell, day, or column for actions</span>':'')
