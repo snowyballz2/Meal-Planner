@@ -3799,14 +3799,13 @@ function _schedGradBg(bg, dir, halfOnly){
   // longer overpower the set glow, which now peaks at the same intensity.
   var hi='rgba('+rgb+','+Math.min(1,a*1.3).toFixed(2)+')';
   var lo='rgba('+rgb+','+(a*0.35).toFixed(2)+')';
-  // V264 (user: leftover vs cook "still a little too similar at a
-  // glance"): EVERY wash is half-width now — outer half only, fading out
-  // at the midpoint (the shape purple used to have). The solid cook
-  // anchor keeps the full block, so solid-full vs half-wash is a SHAPE
-  // difference, not just intensity. (halfOnly param retained but inert.)
+  // V272 (user): back to FULL-width washes — the V264 half-width shape
+  // existed to share the half with the set gradient, which now lives
+  // outside the pill (V271 arcs). Strong at the outer edge fading to the
+  // inner edge; the solid cook block stays the only flat fill.
   return dir==='l'
-    ? 'linear-gradient(90deg,'+hi+','+lo+' 40%,rgba('+rgb+',0) 55%)'
-    : 'linear-gradient(90deg,rgba('+rgb+',0) 45%,'+lo+' 60%,'+hi+')';
+    ? 'linear-gradient(90deg,'+hi+','+lo+')'
+    : 'linear-gradient(90deg,'+lo+','+hi+')';
 }
 function openSchedMenu(type,d,s){
   if(!_scheduleEditMode) return; // grid editing is edit-mode-only (V25)
@@ -10414,10 +10413,13 @@ function renderMeals(){
           // Skip text gets a muted #ccc instead of full white, reinforcing
           // the "this slot is silenced" feel.
           // V73: skip text color = SKIP_TEXT (faded) instead of light grey.
-          // V258: any group member (solid anchor OR leftover wash) gets
-          // white text.
-          let lCol=lGroup?'#fff':(himManual&&lNormal)?'#fff':himSkippedSlot?SKIP_TEXT:himEatOut?'#fff':'var(--gray)';
-          let rCol=rGroup?'#fff':(herManual&&rNormal)?'#fff':herSkippedSlot?SKIP_TEXT:herEatOut?'#fff':'var(--gray)';
+          // V272 (user: "why are some him and hers white and some grey"):
+          // text color tracks the half's ACTUAL background — white only
+          // when the half carries a color (group fill/wash, eat-out); the
+          // old manual-white branch dated from when Set painted the half
+          // purple, which it no longer does (V271 arcs are outside).
+          let lCol=lGroup?'#fff':himSkippedSlot?SKIP_TEXT:himEatOut?'#fff':'var(--gray)';
+          let rCol=rGroup?'#fff':herSkippedSlot?SKIP_TEXT:herEatOut?'#fff':'var(--gray)';
           const lLabel='Him';
           const rLabel='Her';
           const de=dd.replace(/'/g,"\\'");const se=ss.replace(/'/g,"\\'");
