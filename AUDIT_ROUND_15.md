@@ -1,5 +1,8 @@
 # Audit Round 15 — 2026-07-13 (V274 @ `main` 9a56588)
 
+> **Fix status (updated as waves land):**
+> - **2026-07-18 V275**: all 3 CRITICALs FIXED (SOLO-1, SOLO-2, c1) — see the ✅ notes on each entry.
+
 **Scope**: everything shipped since Round 14 closed at V239 — V240–V274: INV27 + selfTestInvariants,
 Shelf/settings/solo mode (V242/V244), pantry subtraction (V244), meal move/swap (V243), the card/theme
 redesign (V245–V252), and the schedule-grid tap-for-menu redesign + visual iterations (V253–V274) —
@@ -34,7 +37,7 @@ harness cannot see — solo mode × edit-mode Reset, solo × link-group paint, m
 handlers' accumulated guards, pantry units × display units. The randomizer/invariant machine is clean;
 the new UI state machinery around it is where the debt landed.
 
-## The three CRITICALs (all primary-agent CONFIRMED)
+## The three CRITICALs (all primary-agent CONFIRMED — all FIXED in V275, 2026-07-18)
 
 1. **SOLO-1 — edit-mode Reset permanently destroys the disabled person's plan.**
    `clearScheduleEdit` wipes both persons' SEL/LATE_SNACK/flags unscoped; Apply's randomize is
@@ -66,16 +69,19 @@ the new UI state machinery around it is where the debt landed.
 # Full findings (severity-sorted, finder evidence preserved)
 
 ### [CRITICAL] SOLO-1 — clearScheduleEdit (edit-mode Reset) permanently destroys the disabled person's plan — Apply's solo-coerced randomize never repopulates it
+- ✅ **FIXED V275 (2026-07-18)**: the wipe is person-scoped to ENABLED persons only (`_clrKey` prefix check on all person-keyed maps); solo SHARED_SCHEDULE transform ('shared'/'eo-<enabled>' delete, 'eo-both'→'eo-<disabled>', 'eo-<disabled>' kept); solo leftoverLinks keep the disabled person's slots (empty groups dropped). Both-enabled behavior verified identical to the pre-fix full wipe.
 - **Where**: /Users/chris/Developer/Meal Planner/index.html:14737-14743 (also 10137, 14716-14717, 4467, 5917)
 - **Claim**: In solo mode, the edit-mode Reset button wipes the DISABLED person's SEL, LATE_SNACK, MANUAL_SET, SKIPPED, EAT_OUT, and USER_EDITED with no PERSON_ENABLED scoping, and the subsequent Apply randomize (coerced to the enabled person) never re-populates the disabled person's SEL. This violates the explicit V242 contract shown in the disable confirm(): 'Their meal data is PRESERVED — turning them back on restores everything' (line 5917).
 - **Failure scenario**: Both enabled; Her has a full week planned (meals, a Wednesday late snack, two Set slots). User disables Her (solo-him). Later, user enters Schedule edit mode, taps Reset (confirm), makes a tweak, taps Apply. Apply randomizes Him only; Her SEL/LATE_SNACK/flags stay wiped and autoSaveWeek persists+syncs the wiped state. Weeks later the user re-enables Her expecting 'everything restored' per the disable dialog — her whole week has silently reverted to DEFAULTS and her late snack is gone, with no undo available.
 
 ### [CRITICAL] SOLO-2 — _armPaintWithMeal pre-queues a stale manual link group's DISABLED-person slots invisibly; paintAccept then overwrites their overrides/flags and can set 'shared' with one eater
+- ✅ **FIXED V275 (2026-07-18)**: arm side skips `PERSON_ENABLED[sl.p]===false` slots in the group pre-load (never queued → Assign can't touch their SEL/flags/pins); accept side captures the disabled persons' slots from the meal's old group before the splice and re-attaches them to the rebuilt group (also counted toward the ≥2-cell threshold) — membership survives, data untouched. Verified: her slots un-queued, rebuilt group retains them, her SEL/MANUAL_SET byte-identical through Assign; both-enabled rebuild unchanged.
 - **Where**: /Users/chris/Developer/Meal Planner/index.html:3932-3937 (also 14045-14063, 14075-14084, 4139, 10526-10528, 3183-3191)
 - **Claim**: The V253 'Link leftovers…'/'Pick meal…' flow gates only the menu-cell pre-queue on PERSON_ENABLED (3940-3941) but NOT the existing-group pre-load (3932-3937). Manual link groups created before a disable retain the disabled person's slots (the validator checks raw SEL, 3190, and SEL is preserved), so arming paint queues her slots. In solo the disabled person's grid half is not rendered (10526-10528), so these queued slots are invisible and cannot be un-queued. Tapping Assign then mutates the disabled person's data: SEL ts bump, MANUAL_SET, USER_EDITED, `clearOverrides` (which deletes her `_userSet` ingredient pins — 4139: `function clearOverrides(p,d,s){delete OVERRIDES[sk(p,d,s)];}`), deletes her SKIPPED/EAT_OUT, and — when both halves of a cell are queued — writes `SHARED_SCHEDULE[ck]='shared'` (14075-14084) in a mode where sharing is supposed to be meaningless.
 - **Failure scenario**: Both enabled: a manual link group exists for chicken_stir_fry — Him Mon dinner (cook) + Her Tue lunch + Her Wed lunch (leftovers), with a user ingredient pin on Her Tue lunch. Her is disabled. In solo-him edit mode the user taps Mon dinner → 'Link leftovers…' → the group pre-loads, invisibly queuing Her Tue/Wed cells (her row isn't rendered, no way to see or remove them) → user taps Assign. Her Tue lunch `_userSet` pin is deleted (clearOverrides), her MANUAL_SET/USER_EDITED/ts are stamped and synced, and Mon dinner gets SHARED_SCHEDULE='shared' while only one person is enabled. On re-enable, her pinned amounts are gone and her slots carry Set flags she never created.
 
 ### [CRITICAL] c1-pick-meal-existing-group-drops-tapped-cell — Pick meal…/Link leftovers… on a cell silently ignores the tapped cell whenever the chosen meal already has a link group (auto or manual)
+- ✅ **FIXED V275 (2026-07-18)**: the `else if` became a separate `if` — the tapped cell ALWAYS pre-queues (enabled persons) alongside any existing-group pre-load. Verified: group slots + both halves of the tapped cell queued together; Assign extends the group to the tapped cell.
 - **Where**: index.html:3932-3942, index.html:14045-14051, index.html:4139, index.html:3062-3066
 - **Claim**: _armPaintWithMeal only pre-queues the tapped cell when getLinkGroupForMeal(mealId) returns null. Auto groups exist for EVERY multi-portion lunch/dinner batch in a randomized week (getLinkGroupForMeal checks _autoLinkGroups too, L3062-3066), so picking any currently-batched meal for a specific cell arms an edit of that meal's group elsewhere and never queues the cell the user tapped. If the user hits Assign, the tapped cell is unchanged while every OTHER group slot gets re-stamped MANUAL_SET + USER_EDITED and clearOverrides(q.p,q.d,q.s) — which wholesale-deletes OVERRIDES[sk] (L4139) including _userSet user pins and _fatBoost/freeze pins on slots the user never touched.
 - **Failure scenario**: Randomized week has chicken_stir_fry cooked Wed dinner with Thu-lunch leftovers (auto group), and the user earlier pinned an ingredient amount on the Wed dinner card (_userSet override). User taps Mon dinner cell → Pick meal… → taps 'Chicken stir fry' in the protein-grouped list (it looks like a normal meal row) → paint arms with Wed+Thu highlighted, Mon NOT highlighted → user hits Assign. Result: Mon dinner still shows its old meal (the user's entire action was a no-op on the cell they acted on), while Wed/Thu get MANUAL_SET+USER_EDITED stamped and the user's Wed ingredient pin is silently deleted.

@@ -3931,12 +3931,21 @@ function _armPaintWithMeal(mealId,menuCtx){
   _paintExistingColorIdx=-1;
   var existingGroup=getLinkGroupForMeal(mealId);
   if(existingGroup){
-    existingGroup.slots.forEach(function(sl){_paintQueued[sk(sl.p,sl.d,sl.s)]=true;});
+    existingGroup.slots.forEach(function(sl){
+      // R15 SOLO-2 fix: never queue a disabled person's slots — queueing
+      // them lets Assign rewrite their SEL/flags and clear their pins.
+      // paintAccept preserves their group membership separately.
+      if(PERSON_ENABLED[sl.p]===false) return;
+      _paintQueued[sk(sl.p,sl.d,sl.s)]=true;
+    });
     if(typeof existingGroup.colorIdx==='number'&&existingGroup.colorIdx>=0){
       _paintExistingColorIdx=existingGroup.colorIdx;
     }
-  } else if(menuCtx&&menuCtx.type==='cell'){
-    // Pre-queue the tapped cell for the enabled person(s).
+  }
+  // R15 c1 fix: ALWAYS pre-queue the tapped cell (was `else if` — picking
+  // a meal that already had a link group silently dropped the cell the
+  // user actually tapped, so Assign no-oped on it).
+  if(menuCtx&&menuCtx.type==='cell'){
     if(PERSON_ENABLED.him!==false) _paintQueued[sk('him',menuCtx.d,menuCtx.s)]=true;
     if(PERSON_ENABLED.her!==false) _paintQueued[sk('her',menuCtx.d,menuCtx.s)]=true;
   }
@@ -14106,9 +14115,19 @@ function paintAccept(){
       }
     }
   }
-  // Now remove any existing group FOR THIS MEAL (rebuilt from queued below)
+  // Now remove any existing group FOR THIS MEAL (rebuilt from queued below).
+  // R15 SOLO-2 fix: capture DISABLED persons' slots first — their group
+  // membership is preserved data (the arm side never queues them and
+  // their SEL/flags/overrides are untouched), so it must survive the
+  // rebuild instead of silently dropping. Empty with both enabled.
+  var preservedGroupSlots=[];
   for(var gi=LEFTOVER_LINKS.length-1; gi>=0; gi--){
-    if(LEFTOVER_LINKS[gi].meal===_paintMealId) LEFTOVER_LINKS.splice(gi,1);
+    if(LEFTOVER_LINKS[gi].meal===_paintMealId){
+      LEFTOVER_LINKS[gi].slots.forEach(function(sl){
+        if(PERSON_ENABLED[sl.p]===false) preservedGroupSlots.push({p:sl.p,d:sl.d,s:sl.s});
+      });
+      LEFTOVER_LINKS.splice(gi,1);
+    }
   }
   // 2026-05-03 (revised): only form a link group when queued cells span 2+
   // unique (day, slot) pairs. A single cell — whether solo (just Him) or
@@ -14118,6 +14137,9 @@ function paintAccept(){
   // single shared assignments with the link-group cyan/orange visual.
   var uniqueCells={};
   queuedSlots.forEach(function(q){uniqueCells[q.d+'_'+q.s]=true;});
+  // R15 SOLO-2: preserved (disabled-person) cells count toward the
+  // 2-cell group threshold and rejoin the rebuilt group below.
+  preservedGroupSlots.forEach(function(sl){uniqueCells[sl.d+'_'+sl.s]=true;});
   if(Object.keys(uniqueCells).length>=2){
     // V75 (2026-05-07): reuse existing group's colorIdx if we're editing
     // an existing group. Pre-V75 paintAccept always called
@@ -14134,7 +14156,7 @@ function paintAccept(){
     LEFTOVER_LINKS.push({
       id:'lg_'+Date.now()+'_'+Math.floor(Math.random()*1000),
       meal:_paintMealId,
-      slots:queuedSlots.map(function(q){return {p:q.p, d:q.d, s:q.s};}),
+      slots:queuedSlots.map(function(q){return {p:q.p, d:q.d, s:q.s};}).concat(preservedGroupSlots),
       colorIdx: newColorIdx
     });
   }
@@ -14734,15 +14756,46 @@ function clearScheduleEdit(){
   // to match on — otherwise grouped/shared cells visually persist after
   // Clear. OVERRIDES preserved (ingredient pins are user data, not
   // schedule painting). Apply will re-populate SEL via randomize.
-  Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
-  Object.keys(EAT_OUT).forEach(function(k){delete EAT_OUT[k];});
-  Object.keys(SKIPPED).forEach(function(k){delete SKIPPED[k];});
-  Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
-  Object.keys(USER_EDITED).forEach(function(k){delete USER_EDITED[k];}); // V53
-  Object.keys(LATE_SNACK).forEach(function(k){delete LATE_SNACK[k];});
-  Object.keys(SEL).forEach(function(k){delete SEL[k];});
+  // R15 SOLO-1 fix (2026-07-13): scope the wipe to ENABLED persons only.
+  // A disabled person's plan is preserved data (the disable dialog
+  // promises "their meal data is PRESERVED") and Apply's solo-coerced
+  // randomize never repopulates their SEL — the old unscoped wipe
+  // destroyed it permanently. With both enabled, behavior is identical
+  // to the pre-fix wipe.
+  var _clrHim=PERSON_ENABLED.him!==false, _clrHer=PERSON_ENABLED.her!==false;
+  var _clrKey=function(k){var p=k.split('_')[0];return p==='him'?_clrHim:p==='her'?_clrHer:true;};
+  if(_clrHim&&_clrHer){
+    Object.keys(SHARED_SCHEDULE).forEach(function(k){delete SHARED_SCHEDULE[k];});
+  } else {
+    // Solo: strip only the enabled person's participation. The disabled
+    // person's own eo state is preserved; stale 'shared' drops (meaning-
+    // less with one eater).
+    var _clrEn=_clrHim?'him':'her', _clrDis=_clrHim?'her':'him';
+    Object.keys(SHARED_SCHEDULE).forEach(function(k){
+      var st=SHARED_SCHEDULE[k];
+      if(st==='shared'||st===('eo-'+_clrEn)) delete SHARED_SCHEDULE[k];
+      else if(st==='eo-both') SHARED_SCHEDULE[k]='eo-'+_clrDis;
+    });
+  }
+  Object.keys(EAT_OUT).forEach(function(k){if(_clrKey(k))delete EAT_OUT[k];});
+  Object.keys(SKIPPED).forEach(function(k){if(_clrKey(k))delete SKIPPED[k];});
+  Object.keys(MANUAL_SET).forEach(function(k){if(_clrKey(k))delete MANUAL_SET[k];});
+  Object.keys(USER_EDITED).forEach(function(k){if(_clrKey(k))delete USER_EDITED[k];}); // V53
+  Object.keys(LATE_SNACK).forEach(function(k){if(_clrKey(k))delete LATE_SNACK[k];});
+  Object.keys(SEL).forEach(function(k){if(_clrKey(k))delete SEL[k];});
   if(weekData[activeWeek] && weekData[activeWeek].leftoverLinks){
-    weekData[activeWeek].leftoverLinks.length = 0;
+    if(_clrHim&&_clrHer){
+      weekData[activeWeek].leftoverLinks.length = 0;
+    } else {
+      // Solo: drop only the enabled person's slots from groups; keep the
+      // disabled person's preserved membership (groups that still have
+      // their slots survive).
+      var _clrLls=weekData[activeWeek].leftoverLinks;
+      for(var _cli=_clrLls.length-1;_cli>=0;_cli--){
+        _clrLls[_cli].slots=_clrLls[_cli].slots.filter(function(sl){return !_clrKey(sk(sl.p,sl.d,sl.s));});
+        if(_clrLls[_cli].slots.length===0)_clrLls.splice(_cli,1);
+      }
+    }
     if(typeof rebindLeftoverLinks === 'function') rebindLeftoverLinks();
   }
   // Mark this edit session as "cleared" so _buildAutoLinkGroups stays
