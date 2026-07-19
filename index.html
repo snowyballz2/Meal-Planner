@@ -96,7 +96,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .bsec-title.ingr{color:#94A3B8;text-decoration:underline;text-underline-offset:3px}.bsec-title.cook{color:#94A3B8;text-decoration:underline;text-underline-offset:3px}.bsec-title.shop{color:#67E8F9}
 .ingr-list,.step-list{font-size:13px;line-height:1.5;padding-left:18px;color:var(--text-mid)}
 .ingr-list li,.step-list li{margin-bottom:3px}
-.leftover-badge{font-size:10px;background:rgba(245,158,11,.15);color:#F59E0B;border-radius:4px;padding:1px 5px;font-weight:700;margin-left:4px;vertical-align:middle}
 .shared-intro{font-size:13px;color:var(--gray);text-align:center;padding:10px;margin-bottom:6px;background:var(--bg-card);border-radius:var(--radius-sm);border:1px solid var(--border)}
 .note-pill{font-size:11px;color:#FBBF24;background:rgba(251,191,36,.12);border-radius:8px;padding:3px 10px;margin:0 12px 6px;display:inline-block;font-weight:600}
 .week-bar{display:flex;gap:0;align-items:center}
@@ -314,8 +313,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sched-slot-hdr{display:flex;align-items:center;justify-content:center;position:relative;font-size:11px;font-weight:700;text-transform:uppercase;padding:6px 0}
 .sched-slot-hdr.active{color:var(--shop);cursor:pointer}
 .sched-slot-hdr.inactive{color:var(--gray);opacity:0.3}
-.sched-zone{position:absolute;top:0;bottom:0}
-.sched-zone-l{left:0;width:33%}.sched-zone-c{left:33%;width:34%}.sched-zone-r{right:0;width:33%}
 .sched-pill-wrap{display:flex;border-radius:6px;overflow:visible;cursor:pointer;height:22px;width:92px;margin:0 auto;-webkit-touch-callout:none;position:relative}
 .sched-pill-half{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;position:relative}
 .sched-pill-l{border-radius:6px 0 0 6px}.sched-pill-r{border-radius:0 6px 6px 0}
@@ -334,7 +331,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
    bg, no borders — it's just a 14px tap area for "toggle shared" / "queue
    both for paint", matching the invisible click-zone pattern used by the
    B/L/D slot header. */
-.sched-pill-mid{position:absolute;left:calc(50% - 7px);top:0;bottom:0;width:14px;cursor:pointer;z-index:5;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
 /* Paint mode */
 .paint-bar{margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
 .paint-info{font-size:11px;color:var(--shop);font-weight:600;margin-bottom:6px}
@@ -3917,10 +3913,25 @@ function _schedOpEO(d,s,side,on){
     // cascade and deleted the OTHER person's MANUAL_SET/USER_EDITED for a
     // one-sided action.
     if((SHARED_SCHEDULE[k]||'')==='shared') _schedOpShared(d,s,false); // eo overrides shared (INV24)
+    // R15 v253-eo-on-skipped-side (V280): mirror V85's skip branch — a
+    // pill-skipped side turning eat-out clears the skip (INV24's eo∧skip
+    // pair; the grid renders skip-grey OVER red, so leaving it made the
+    // action look like it failed) and preserves SEL like the old two-tap
+    // path did.
+    var skK=sk(side,d,s);
+    if(SKIPPED[skK]){
+      delete SKIPPED[skK];
+      _scheduleEditPreserveSel[skK]=true;
+    }
     var cur=SHARED_SCHEDULE[k]||'';
     if(cur===('eo-'+other)||cur==='eo-both') SHARED_SCHEDULE[k]='eo-both';
     else SHARED_SCHEDULE[k]='eo-'+side;
   } else {
+    // R15 v253-eo-off-keeps-link-visual (V280): BLESSED divergence from
+    // V85's eo branch — the old gesture also stamped the side's
+    // cleared-link visual; the menu's directional "eats out → off" clears
+    // ONLY the eo layer (un-eating-out shouldn't also un-link). Documented
+    // in AUDIT_ROUND_15.md; the old handlers keep their own semantics.
     var cur2=SHARED_SCHEDULE[k]||'';
     _v70UndoEatOutSide(side,d,s);
     if(cur2==='eo-both') SHARED_SCHEDULE[k]='eo-'+other;
@@ -3957,6 +3968,10 @@ function _schedOpClear(d,s){
   }
 }
 function schedMenuAction(action,side){
+  // R15 v253-menu-lifecycle (V280): re-check edit mode — if something
+  // exited it while the overlay was up (harness/future paths), taps must
+  // not write grid state outside the edit-mode sandbox.
+  if(!_scheduleEditMode){ closeSchedMenu(); return; }
   if(!_schedMenu) return;
   var cells=_schedMenuCells();
   if(action==='shared'){
@@ -3973,6 +3988,7 @@ function schedMenuAction(action,side){
   updateSchedule();
 }
 function schedMenuPickMeal(){
+  if(!_scheduleEditMode){ closeSchedMenu(); return; } // R15 v253-menu-lifecycle (V280)
   _schedMenuView='meals';
   _renderSchedMenu();
 }
@@ -3981,6 +3997,7 @@ function schedMenuLink(){
   // leftover chain (pre-loads the meal's existing group when one exists).
   var m=_schedMenu;
   if(!m) return;
+  if(!_scheduleEditMode){ closeSchedMenu(); return; } // R15 v253-menu-lifecycle (V280)
   var hm=getMealId('him',m.d,m.s), hr=getMealId('her',m.d,m.s);
   // R15 c3 fix (2026-07-18): on a mixed cell (him ≠ her) the old
   // `hm||hr` silently linked him's meal and made her's chain unreachable.
@@ -3998,12 +4015,17 @@ function schedMenuLinkPick(p){
   // R15 c3: mixed-cell chooser — link the picked person's meal.
   var m=_schedMenu;
   if(!m) return;
+  if(!_scheduleEditMode){ closeSchedMenu(); return; } // R15 v253-menu-lifecycle (V280)
   var mealId=getMealId(p,m.d,m.s);
   closeSchedMenu();
   if(mealId) _armPaintWithMeal(mealId,{type:'cell',d:m.d,s:m.s,linkOnly:true});
 }
 function schedMenuChooseMeal(mealId){
   var m=_schedMenu;
+  // R15 v253-menu-lifecycle (V280): null-menu guard (schedMenuLink had
+  // one, this didn't — arming paint with nothing queued) + edit-mode gate.
+  if(!m){ closeSchedMenu(); return; }
+  if(!_scheduleEditMode){ closeSchedMenu(); return; }
   closeSchedMenu();
   _armPaintWithMeal(mealId,m);
 }
@@ -4053,9 +4075,16 @@ function _armPaintWithMeal(mealId,menuCtx){
   }
   renderMeals();
 }
+// R15 v253-menu-html-injection-labels (V280): HTML-escape free text
+// (meal labels, protein-group names — both can carry user-entered custom
+// names) before innerHTML injection. Meal IDs in onclick strings stay
+// safe by slug construction; labels were the hole.
+function _menuEsc(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 function _smRow(onclickJs,color,label,checked,muted){
   return '<div class="smenu-row'+(muted?' smenu-muted':'')+'" onclick="event.stopPropagation();'+onclickJs+'">'
-    +'<span class="smenu-dot" style="background:'+color+'"></span>'+label
+    +'<span class="smenu-dot" style="background:'+color+'"></span>'+_menuEsc(label)
     +(checked?'<span class="smenu-check" style="color:'+color+'">✓</span>':'')
     +'</div>';
 }
@@ -4094,9 +4123,9 @@ function _schedMenuMealListHtml(m){
   var byProt={};
   catMeals.forEach(function(mm){var p=getPrimaryProtein(mm,true);(byProt[p]=byProt[p]||[]).push(mm);});
   Object.keys(byProt).sort().forEach(function(pk){
-    html+='<div class="smenu-sec">'+pk+'</div>';
+    html+='<div class="smenu-sec">'+_menuEsc(pk)+'</div>';
     byProt[pk].sort(function(a,b){return a.label<b.label?-1:1;}).forEach(function(mm){
-      html+='<div class="smenu-row" style="font-weight:500" onclick="event.stopPropagation();schedMenuChooseMeal(\''+mm.id+'\')">'+mm.label+'</div>';
+      html+='<div class="smenu-row" style="font-weight:500" onclick="event.stopPropagation();schedMenuChooseMeal(\''+mm.id+'\')">'+_menuEsc(mm.label)+'</div>';
     });
   });
   return html;
@@ -4221,6 +4250,7 @@ function loadEatOutDB(){
   EAT_OUT_DB = lsGet('eatOutDB', []);
   _ensureEatOutIds(EAT_OUT_DB);
   _gcEatOutTombstones();
+  _gcPantryTombstones(); // R15-PANTRY-4 (V280): same load-time GC for pantry
 }
 function saveEatOutDB(){lsSet('eatOutDB',EAT_OUT_DB);}
 function addToEatOutDB(entry){
@@ -4824,6 +4854,19 @@ function countInv14(){
 // prevAnchor.lastDayIdx - 1 < 2`. Lunch/dinner only, noLeftover meals
 // excluded. Reads current SEL + leftover map; caller must invalidate
 // cache after SEL mutation.
+// R15 l7 (V280, user-approved): a batch is "all-manual" when EVERY portion
+// slot carries MANUAL_SET — geometry the USER arranged (swaps/paints/picks),
+// which Phase 1 preserves on every randomize. Two adjacent all-manual
+// batches are the user's call, not a randomizer defect: the hard INV11
+// fire is exempted (verifyInvariants emits tracking-only 'INV11Manual'
+// instead) and the retry counter skips the pair so the retry loop's
+// early-exit/selection isn't poisoned by an unavoidable constant.
+// A pair with ANY randomizer-placed slot still fires hard exactly as before.
+function _inv11BatchAllManual(p,d,s,lo){
+  var keys=[sk(p,d,s)];
+  if(lo&&lo.portions&&lo.portions.length) keys=lo.portions.map(function(pt){return sk(pt.p,pt.d,pt.s);});
+  return keys.every(function(k){return !!MANUAL_SET[k];});
+}
 function countInv11(){
   var leftovers = computeLeftovers();
   var mealAnchors = {};
@@ -4845,7 +4888,7 @@ function countInv11(){
           });
         }
         if (!mealAnchors[mealId]) mealAnchors[mealId] = [];
-        mealAnchors[mealId].push({dayIdx:di, lastDayIdx:lastDayIdx});
+        mealAnchors[mealId].push({dayIdx:di, lastDayIdx:lastDayIdx, manual:_inv11BatchAllManual(p,d,s,lo)});
       });
     });
   });
@@ -4857,7 +4900,7 @@ function countInv11(){
       var prev = anchors[j-1], curr = anchors[j];
       if (curr.dayIdx === prev.dayIdx) continue;
       var gapDays = curr.dayIdx - prev.lastDayIdx - 1;
-      if (gapDays < 2) total++;
+      if (gapDays < 2 && !(prev.manual && curr.manual)) total++; // R15 l7
     }
   });
   return total;
@@ -6150,6 +6193,17 @@ function applyPersonPrefs(){
 }
 function setPersonEnabled(p, v){
   v=!!v;
+  // R15-SETTINGS-2 (V280): V145-class guard — flipping a person while a
+  // schedule-edit snapshot is armed makes Apply/Undo operate on state the
+  // user can no longer see (the diff spans the flip). Same refusal the
+  // sync ops use.
+  if(_scheduleEditMode){
+    alert('Apply or Cancel your schedule edits first — changing people mid-edit would corrupt the pending changes.');
+    renderSyncView(); return;
+  }
+  // R15 l2 (V280): an armed move whose source belongs to the disabled
+  // person would strand move mode with no reachable cancel (hidden tab).
+  if(typeof _movePending!=='undefined') _movePending=null;
   if(!v && PERSON_ENABLED[p==='him'?'her':'him']===false){
     alert('At least one person must stay enabled.'); renderSyncView(); return;
   }
@@ -8150,7 +8204,7 @@ function verifyInvariants(){
           });
         }
         if(!mealAnchors[mealId])mealAnchors[mealId]=[];
-        mealAnchors[mealId].push({dayIdx:di, lastDayIdx:lastDayIdx});
+        mealAnchors[mealId].push({dayIdx:di, lastDayIdx:lastDayIdx, manual:_inv11BatchAllManual(p,d,s,lo)});
       });
     });
   });
@@ -8165,6 +8219,16 @@ function verifyInvariants(){
       if(curr.dayIdx===prev.dayIdx)continue;
       var gapDays=curr.dayIdx-prev.lastDayIdx-1;
       if(gapDays<2){
+        // R15 l7 (V280, user-approved): two adjacent ALL-MANUAL batches are
+        // user-arranged geometry the randomizer must preserve — emit the
+        // tracking-only INV11Manual line instead of the hard fire (which
+        // would demand a futile investigation on every future randomize).
+        if(prev.manual && curr.manual){
+          violations.push('INV11Manual user-made-adjacency: '+mealId
+            +' prev_last='+DAYS[prev.lastDayIdx]+' curr_first='+DAYS[curr.dayIdx]
+            +' gap_days='+gapDays);
+          continue;
+        }
         violations.push('INV11 gap-too-small: '+mealId
           +' prev_last='+DAYS[prev.lastDayIdx]+' curr_first='+DAYS[curr.dayIdx]
           +' gap_days='+gapDays);
@@ -9622,14 +9686,17 @@ function buildMealSelectOpts(slotMeals, activeId){
   });
   const protKeys=Object.keys(byProt).sort();
   protKeys.forEach(function(pk){byProt[pk].sort(function(a,b){return a.label<b.label?-1:1;});});
+  // R15 v253-menu-html-injection-labels (V280): same escaping for the
+  // card meal-select — the pre-existing instance of the class (custom
+  // recipe labels are free text; a '<' broke the option list).
   if(protKeys.length<=1){
-    return slotMeals.map(function(m){return'<option value="'+m.id+'"'+(m.id===activeId?' selected':'')+'>'+m.label+'</option>';}).join('');
+    return slotMeals.map(function(m){return'<option value="'+m.id+'"'+(m.id===activeId?' selected':'')+'>'+_menuEsc(m.label)+'</option>';}).join('');
   }
   return protKeys.map(function(pk){
     const optHtml=byProt[pk].map(function(m){
-      return'<option value="'+m.id+'"'+(m.id===activeId?' selected':'')+'>'+m.label+'</option>';
+      return'<option value="'+m.id+'"'+(m.id===activeId?' selected':'')+'>'+_menuEsc(m.label)+'</option>';
     }).join('');
-    return'<optgroup label="'+pk+'">'+optHtml+'</optgroup>';
+    return'<optgroup label="'+_menuEsc(pk)+'">'+optHtml+'</optgroup>';
   }).join('');
 }
 
@@ -10574,7 +10641,6 @@ function renderMeals(){
           // Per user feedback: "Change the skip to just be a darkened
           // tab and not grey anymore".
           var SKIP_BG = 'rgba(0,0,0,.4)';
-          var SKIP_BDR = '1.5px solid var(--border)';
           var SKIP_TEXT = 'rgba(255,255,255,.35)';
           // V256: the flat manual-purple bg branch is gone — Set now renders
           // as an inside-out purple glow LAYER (applied after the V255
@@ -10648,9 +10714,8 @@ function renderMeals(){
           // AND out of edit mode (un-do V71's `!_scheduleEditMode` gate).
           const _himNormalPurple = himManual && lNormal;
           const _herNormalPurple = herManual && rNormal;
-          // V73: himSkippedSlot/herSkippedSlot use SKIP_BDR (default border)
-          // so cells visually "fade" via SKIP_BG instead of the old grey
-          // border outline.
+          // V73 note: skipped cells "fade" via SKIP_BG (the old SKIP_BDR
+          // border died with V257 borderless — removed in the R15 LOW sweep).
           // V257 (user: "get rid of all of the borders in schedule meals and
           // just have the strong gradients"): the ENTIRE border machinery is
           // gone — no state borders, no centerline colors, no group
@@ -11193,6 +11258,17 @@ function _gcEatOutTombstones(){
     }
   }
 }
+// R15-PANTRY-4 (V280): same age-based GC for pantry qty:0 tombstones —
+// soft deletes must outlive the sync horizon (so removals propagate to
+// the partner) but not forever (unbounded payload growth). 30 days
+// mirrors the eatOutDB pattern. Called at load + after the pantry merge.
+function _gcPantryTombstones(){
+  var cutoff = Date.now() - 30*24*60*60*1000;
+  Object.keys(PANTRY).forEach(function(k){
+    var e = PANTRY[k];
+    if(e && !(e.qty>0) && (e._ts||0) < cutoff) delete PANTRY[k];
+  });
+}
 // ── V243 (2026-07-10): manual meal move/swap (pinned proposal 2026-05-06) ──
 // Swap two slots' meals WITHOUT any pipeline re-run — SEL, overrides, and
 // the balanced-cache rows travel VERBATIM (surgical-edit philosophy: "I
@@ -11200,8 +11276,14 @@ function _gcEatOutTombstones(){
 // resolves to SOME meal via DEFAULTS, so "move" is implemented as SWAP —
 // a one-way move would just surface the DEFAULTS meal at the source,
 // which reads as data loss. Both slots get MANUAL_SET (locked from the
-// next randomize) + USER_EDITED + ts bumps for sync. Like changeMeal,
-// this is a MANUAL action: invariants judge randomizer output, not user
+// next randomize) + USER_EDITED + ts bumps for sync.
+// R15 l9 (V280) — scope of the verbatim promise, stated honestly: the
+// verbatim rows live only in the in-memory balanced cache. The NEXT full
+// cache rebuild (reload, sync pull, any skip/eat-out toggle, changeMeal
+// anywhere) re-adjusts the moved meals to the DESTINATION slot's budget —
+// amounts can shift later with no user action. Only _userSet ingredient
+// pins survive rebuilds; "no pipeline run" is promised at MOVE TIME only.
+// Like changeMeal, this is a MANUAL action: invariants judge randomizer output, not user
 // rearrangement — a user-made same-meal adjacency is their call.
 var _movePending=null; // {p,d,s} while move mode is armed
 function _slotTypeGroup(s){ return (s==='lunch'||s==='dinner')?'main':s; }
@@ -11228,6 +11310,12 @@ function _moveEligible(p,d,s){
   var dstMeal=getMeal(dstId);
   if(!srcMeal||!srcMeal[p]) return false;
   if(!dstMeal||!dstMeal[src.p]) return false;
+  // R15 l5 (V280): slot COMPATIBILITY, not just slot group — a custom
+  // lunch-only meal landing in a dinner slot falls out of that card's
+  // meal <select> (built from getMealsForSlot), which then displays the
+  // first option as if selected and one change-event replaces the meal.
+  if(srcMeal.slots&&srcMeal.slots.indexOf(s)<0) return false;
+  if(dstMeal.slots&&dstMeal.slots.indexOf(src.s)<0) return false;
   return true;
 }
 function startMoveMeal(p,d,s){ _movePending={p:p,d:d,s:s}; renderMeals(); }
@@ -11261,8 +11349,23 @@ function swapMeals(aP,aD,aS, bP,bD,bS){
   var da=pk(aP,aD), db2=pk(bP,bD);
   if(!_dayBalancedCache[da]||!_dayBalancedCache[da][aS]||!_dayBalancedCache[db2]||!_dayBalancedCache[db2][bS]) return false;
   SEL[ka]=idB; SEL[kb]=idA;
-  // Overrides travel with their meal (user pins, freeze pins, temp adds).
-  var ovA=OVERRIDES[ka], ovB=OVERRIDES[kb];
+  // Overrides travel with their meal (user pins, temp adds).
+  // R15 l3 (V280): freeze/fat-boost pins do NOT travel — they were sized
+  // so the OLD slot's trip totals landed on container boundaries; carried
+  // into another trip they'd be re-applied on every cache rebuild at
+  // geometry-stale amounts until the next full randomize. User pins
+  // (_userSet) stay, mirroring _clearFreezeOverrides' precedence.
+  function _swapStripPins(list){
+    if(!list||!list.length) return undefined;
+    var f=list.filter(function(o){
+      if(o._userSet===true) return true;
+      if(o._freezePin===true) return false;
+      if(o._fatBoost===true) return false;
+      return true;
+    });
+    return f.length?f:undefined;
+  }
+  var ovA=_swapStripPins(OVERRIDES[ka]), ovB=_swapStripPins(OVERRIDES[kb]);
   if(ovB!==undefined) OVERRIDES[ka]=ovB; else delete OVERRIDES[ka];
   if(ovA!==undefined) OVERRIDES[kb]=ovA; else delete OVERRIDES[kb];
   // Cache rows travel verbatim.
@@ -11271,11 +11374,28 @@ function swapMeals(aP,aD,aS, bP,bD,bS){
   _dayBalancedCache[db2][bS]=ca;
   // A swap that changes one side of a 'shared' cell breaks the pairing —
   // mirror changeMeal's rule (manual pick dissolves 'shared').
-  [dk(aD,aS), dk(bD,bS)].forEach(function(c){
-    if(SHARED_SCHEDULE[c]==='shared'){
-      delete SHARED_SCHEDULE[c];
-      if(weekData[activeWeek]&&weekData[activeWeek].sharedScheduleTs) weekData[activeWeek].sharedScheduleTs[c]=Date.now();
-    }
+  // R15 l6 (V280): ALSO mirror changeMeal's eo-* clearing — placing a meal
+  // in a slot commits that person to EATING it; a stale eo-* state (the
+  // sync-strandable class INV24 exists for) would keep the grid claiming
+  // eat-out over a Set meal.
+  [{c:dk(aD,aS),p:aP},{c:dk(bD,bS),p:bP}].forEach(function(x){
+    var st=SHARED_SCHEDULE[x.c];
+    if(!st) return;
+    var changed=false;
+    if(st==='shared'){ delete SHARED_SCHEDULE[x.c]; changed=true; }
+    else if(st===('eo-'+x.p)){ delete SHARED_SCHEDULE[x.c]; changed=true; }
+    else if(st==='eo-both'){ SHARED_SCHEDULE[x.c]=(x.p==='him'?'eo-her':'eo-him'); changed=true; }
+    if(changed && weekData[activeWeek]&&weekData[activeWeek].sharedScheduleTs) weekData[activeWeek].sharedScheduleTs[x.c]=Date.now();
+  });
+  // R15 l4 (V280): manual link groups FOLLOW their meal — retarget the
+  // swapped-out slot to the meal's new home instead of letting the
+  // validator silently shrink the painted chain (orphan 1-slot groups
+  // also hoarded the strict-no-reuse palette).
+  (LEFTOVER_LINKS||[]).forEach(function(g){
+    (g.slots||[]).forEach(function(sl){
+      if(g.meal===idA && sl.p===aP&&sl.d===aD&&sl.s===aS){ sl.p=bP; sl.d=bD; sl.s=bS; }
+      else if(g.meal===idB && sl.p===bP&&sl.d===bD&&sl.s===bS){ sl.p=aP; sl.d=aD; sl.s=aS; }
+    });
   });
   MANUAL_SET[ka]=true; MANUAL_SET[kb]=true;
   _markUserEdited(ka); _markUserEdited(kb);
@@ -14505,6 +14625,19 @@ function deleteCurrentGroup(){
     renderMeals();
     return;
   }
+  // R15 c6 (V280): AUTO groups aren't stored — "deleting" one wiped the
+  // slots' MANUAL_SET/USER_EDITED/SEL/OVERRIDES, then the DEFAULTS
+  // fallback re-derived the identical batch on the next render: the
+  // Delete visibly did nothing while silently destroying ingredient pins.
+  // The honest action is to explain and leave state alone.
+  var _isManualGroup=(LEFTOVER_LINKS||[]).indexOf(group)>=0;
+  if(!_isManualGroup){
+    alert('This chain is auto-detected from the meals themselves — there\'s nothing stored to delete. Change one of its meals to break the batch.');
+    _paintMode=false;_paintSlot='';_paintMealId='';_paintQueued={};
+    _paintExistingColorIdx = -1;
+    renderMeals();
+    return;
+  }
   group.slots.forEach(function(sl){
     const k=sk(sl.p, sl.d, sl.s);
     delete MANUAL_SET[k];
@@ -14911,6 +15044,7 @@ function _restoreScheduleState(s){
   }
 }
 function enterScheduleEditMode(){
+  closeSchedMenu(); // R15 v253-menu-lifecycle (V280): no orphan overlays across sessions
   _scheduleEditMode = true;
   _scheduleEditCleared = false;
   _scheduleEditTouchedCells = {};
@@ -14921,7 +15055,9 @@ function enterScheduleEditMode(){
   renderMeals();
 }
 function applyScheduleEdit(){
+  closeSchedMenu(); // R15 v253-menu-lifecycle (V280)
   _disarmPaint(); // R15 c5: uncommitted paint dies with the edit session
+  if(typeof _movePending!=='undefined') _movePending=null; // R15 l1 (V280)
   // V64 (2026-05-07): reordered — diff loop runs FIRST (against the pure
   // user-edit state captured in snap vs current), THEN _sync + setSchedule
   // run AFTER the temp locks are placed. Pre-V64 the order was sync →
@@ -15040,6 +15176,7 @@ function applyScheduleEdit(){
   _maybeOfferPartnerWasteFix(rTarget); // V233
 }
 function clearScheduleEdit(){
+  closeSchedMenu(); // R15 v253-menu-lifecycle (V280)
   _disarmPaint(); // R15 c5: Reset also disarms any menu-armed paint
   // Clear all painting / highlights / per-cell state inside edit mode.
   // Wipes SHARED_SCHEDULE, EAT_OUT, SKIPPED, MANUAL_SET, LATE_SNACK, link
@@ -15107,6 +15244,7 @@ function clearScheduleEdit(){
   renderMeals();
 }
 function undoScheduleEdit(){
+  closeSchedMenu(); // R15 v253-menu-lifecycle (V280)
   _disarmPaint(); // R15 c5: uncommitted paint dies with the edit session
   if(_scheduleEditSnapshot){
     _restoreScheduleState(_scheduleEditSnapshot);
@@ -15131,21 +15269,35 @@ function setSchedule(){
   // Pre-V53 the broad MANUAL_SET stamping made every shared/skip cell display
   // the Set pill, including page-default Mon-Sun shared dinners and cells from
   // previous Apply sessions. USER_EDITED keeps "user-touched" semantic precise.
+  // R15 SOLO-8 (V280): never write onto a DISABLED person's keys — their
+  // state (incl. a preserved 'eo-<disabled>') is data-at-rest for
+  // re-enable, and Apply used to churn MANUAL_SET/EAT_OUT placeholders
+  // onto it every session (persisting on touched-side-stamped cells).
+  var _ssHimOn=PERSON_ENABLED.him!==false, _ssHerOn=PERSON_ENABLED.her!==false;
   DAYS.forEach(function(d){
     ['breakfast','lunch','dinner'].forEach(function(s){
       const state=SHARED_SCHEDULE[dk(d,s)];
       if(!state) return;
       const dKey=dk(d,s);
       const wasTouched = !!_scheduleEditTouchedCells[dKey];
-      if(state==='eo-him'||state==='eo-both'){
+      if((state==='eo-him'||state==='eo-both')&&_ssHimOn){
         MANUAL_SET[sk('him',d,s)]=true;
         if(wasTouched) _markUserEdited(sk('him',d,s));
       }
-      if(state==='eo-her'||state==='eo-both'){
+      if((state==='eo-her'||state==='eo-both')&&_ssHerOn){
         MANUAL_SET[sk('her',d,s)]=true;
         if(wasTouched) _markUserEdited(sk('her',d,s));
       }
       if(state==='shared'){
+        // R15 SOLO-8 (V280): in solo mode 'shared' is meaningless (one
+        // eater) and the V82 divergence repair below is DEAD (the disabled
+        // person's getMealId is always null, so the both-ids condition
+        // never fires) — stale 'shared' cells could never self-clean.
+        // Untouched 'shared' cells clear themselves in solo.
+        if(!wasTouched && _soloPerson()){
+          delete SHARED_SCHEDULE[dk(d,s)];
+          return;
+        }
         // V82 (2026-05-08): auto-repair stale 'shared' state. If the
         // user did NOT actively touch this cell this edit session AND
         // the actual SEL meals diverge between Him and Her, drop the
@@ -15169,11 +15321,11 @@ function setSchedule(){
             return; // skip remaining shared-branch cleanup
           }
         }
-        MANUAL_SET[sk('him',d,s)]=true;
-        MANUAL_SET[sk('her',d,s)]=true;
+        if(_ssHimOn) MANUAL_SET[sk('him',d,s)]=true;
+        if(_ssHerOn) MANUAL_SET[sk('her',d,s)]=true;
         if(wasTouched){
-          _markUserEdited(sk('him',d,s));
-          _markUserEdited(sk('her',d,s));
+          if(_ssHimOn) _markUserEdited(sk('him',d,s));
+          if(_ssHerOn) _markUserEdited(sk('her',d,s));
         }
         // V66 (2026-05-07): gate the her=him stamp on `wasTouched`. The
         // broad iteration over SHARED_SCHEDULE includes default Mon-Sun
@@ -15193,14 +15345,15 @@ function setSchedule(){
         }
         // V36 (A2): shared and skip are mutually exclusive. If either
         // side had per-slot Skip set, clear it — the cell is now a
-        // shared meal, neither side is skipping.
-        delete SKIPPED[sk('him',d,s)];
-        delete SKIPPED[sk('her',d,s)];
+        // shared meal, neither side is skipping. (R15 SOLO-8: enabled
+        // sides only — a disabled person's skip is preserved data.)
+        if(_ssHimOn) delete SKIPPED[sk('him',d,s)];
+        if(_ssHerOn) delete SKIPPED[sk('her',d,s)];
         // V41 (X3, 2026-05-07): shared and eat-out also mutually
         // exclusive. Apply path now drops EAT_OUT on both sides when
         // the cell becomes shared, matching toggleShared's V41 update.
-        delete EAT_OUT[sk('him',d,s)];
-        delete EAT_OUT[sk('her',d,s)];
+        if(_ssHimOn) delete EAT_OUT[sk('him',d,s)];
+        if(_ssHerOn) delete EAT_OUT[sk('her',d,s)];
       }
       // Apply eat-outs.
       // V31 (2026-05-07): also clear SKIPPED on the affected side. Skip and
@@ -15210,11 +15363,11 @@ function setSchedule(){
       // Skip already set could end up with both SKIPPED=true AND EAT_OUT={}
       // after Apply. Treating grid 'skip-*' as eat-out (its actual semantic
       // meaning) means it should supersede any prior Skip on that side.
-      if(state==='eo-him'||state==='eo-both'){
+      if((state==='eo-him'||state==='eo-both')&&_ssHimOn){
         if(!EAT_OUT[sk('him',d,s)]) EAT_OUT[sk('him',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
         delete SKIPPED[sk('him',d,s)];
       }
-      if(state==='eo-her'||state==='eo-both'){
+      if((state==='eo-her'||state==='eo-both')&&_ssHerOn){
         if(!EAT_OUT[sk('her',d,s)]) EAT_OUT[sk('her',d,s)]={name:'',restaurant:'',kcal:null,pro:null,fat:null,carb:null};
         delete SKIPPED[sk('her',d,s)];
       }
@@ -16049,9 +16202,21 @@ function randomizeWeek(target, seed){
   // R14-C1: capture the non-target person's durable pins ONCE (run-start
   // geometry), then restore them after every clear this run — mid-run
   // freeze transients die each retry, her pre-run frozen state survives.
-  var _preservedPins = _captureNonTargetFreezePins(target||person);
+  // R15 SOLO-7 (V280): capture with the SOLO-COERCED target — capturing
+  // with an uncoerced 'shared' (or disabled-person) arg returned null
+  // while the run still executed single-person after coercion, so the
+  // unscoped clears stripped the disabled person's durable pins with
+  // nothing restoring them. The coercion below now happens up here.
+  let _rt0=target||person;
+  const _solo=_soloPerson();
+  if(_solo && _rt0!==_solo) _rt0=_solo;
+  var _preservedPins = _captureNonTargetFreezePins(_rt0);
   _clearFreezeOverrides();
-  _restorePreservedPins(_preservedPins, target||person);
+  _restorePreservedPins(_preservedPins, _rt0);
+  // R15 l1 (V280): an armed move must not survive a full re-roll — the
+  // armed {p,d,s} would point at freshly-rolled meals the user never
+  // inspected, and completing it would MANUAL_SET-lock both.
+  if(typeof _movePending!=='undefined') _movePending=null;
   // V214 (2026-05-29): clear transient auto-skips from the previous run.
   // skipKcalOverSnacks may have set SKIPPED on extreme over-budget days last
   // run; those are re-decided each randomize, NOT persisted. Manual skips
@@ -16096,12 +16261,9 @@ function randomizeWeek(target, seed){
   }
   window._absorbDiag = null;
   // V242 (2026-07-10): solo mode — a disabled person can never be a
-  // randomize target. Coerce here (single choke point for the whole
-  // pipeline: bothPersons/mirror/persons derivations all flow from
-  // randTarget, and the post-R14 single-person machinery handles the rest).
-  let _rt0=target||person;
-  const _solo=_soloPerson();
-  if(_solo && _rt0!==_solo) _rt0=_solo;
+  // randomize target. Coercion computed ABOVE (R15 SOLO-7 — it must
+  // precede the pin capture); randTarget stays the single choke point
+  // for the pipeline (bothPersons/mirror/persons derivations flow from it).
   const randTarget=_rt0; // use passed target or current person tab (solo-coerced)
   // Optional seed: replaces Math.random with a deterministic PRNG for the
   // duration of this call. Used by the stress harness so failing cases are
@@ -18072,7 +18234,14 @@ function _randomizeWeekCore(randTarget){
 }
 
 // ── Shopping render ─────────────────────────────────────────
-function getShopPersons(){return shopPerson==='both'?['him','her']:shopPerson==='him'?['him']:['her'];}
+// R15 SOLO-9 (V280): filter by PERSON_ENABLED — a disabled person's view
+// contributes nothing (and the custom day-grid must not offer their
+// late-snack rows). The picker buttons below are also solo-gated and
+// shopPerson is coerced off a dead view at render.
+function getShopPersons(){
+  var base=shopPerson==='both'?['him','her']:shopPerson==='him'?['him']:['her'];
+  return base.filter(function(p){return PERSON_ENABLED[p]!==false;});
+}
 function setShopTrip(t){shopTrip=t;renderShop();}
 function setShopPerson(p){shopPerson=p;renderShop();}
 function toggleCustomMeal(d,s){
@@ -18256,10 +18425,20 @@ function checkCategory(cat){
 // nets pantry stock out of the shopping list's Both-view LABEL only —
 // hisSum/herSum and everything INV3 verifies stay gross.
 function _shelfEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
+// R15-SHELF-2 (V280): JS-string escaping for pantry names in onclick
+// handlers — backslashes must be escaped BEFORE quotes (the shop-item
+// code at buildShopItemHtml learned this first); without it a name
+// containing '\' silently changes the lookup key (or SyntaxErrors on a
+// trailing '\') and the row becomes un-editable/un-deletable.
+function _shelfJsEsc(k){ return _shelfEsc(k).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 function shelfAddPantry(){
   var n=document.getElementById('shelfName'), q=document.getElementById('shelfQty'), u=document.getElementById('shelfUnit');
   var name=(n&&n.value||'').trim(); var qty=parseFloat(q&&q.value); var unit=(u&&u.value||'').trim();
   if(!name){alert('Name required.');return;}
+  // R15-SHELF-2 (V280): prototype-pollution names never store a real entry
+  // (`PANTRY['__proto__']=…` hits the setter and silently swaps the
+  // prototype instead) — reject with a clear message.
+  if(name==='__proto__'||name==='constructor'||name==='prototype'){alert('That name is reserved — pick another.');return;}
   if(isNaN(qty)||qty<0){alert('Qty must be a number ≥ 0.');return;}
   PANTRY[name]={qty:qty, unit:unit, _ts:Date.now()};
   savePantry(); renderShelf();
@@ -18284,10 +18463,17 @@ function renderShelf(){
   var html='<div style="padding:0 0 80px"><div class="sync-panel">';
   html+='<div class="sync-title">🧺 Shelf &amp; Fridge</div>';
   // 1. Open jars/cartons carried from last week (usable by this week's cook 1)
-  var carry=(typeof _computePriorCarryover==='function')?_computePriorCarryover(_prevWeekKey()):{};
+  // R15-SHELF-4 (V280): _prevWeekKey() returns 'last' when VIEWING 'last'
+  // (no week-before-last exists in the 3-week model) — computing carryover
+  // from the viewed week itself presented its own end-of-week partial as
+  // prior inventory. Show an honest note instead.
+  var _shelfNoPrior = activeWeek==='last';
+  var carry=(!_shelfNoPrior&&typeof _computePriorCarryover==='function')?_computePriorCarryover(_prevWeekKey()):{};
   var carryKeys=Object.keys(carry).filter(function(k){return carry[k]>0.01;});
   html+='<div class="sync-desc" style="font-weight:700;margin-top:6px">🫙 Open from last week</div>';
-  if(carryKeys.length){
+  if(_shelfNoPrior){
+    html+='<div style="padding:4px 0;font-size:12px;opacity:.6">Not available for the Last week view — the planner only keeps 3 weeks, so there\'s no week before this one to carry from.</div>';
+  } else if(carryKeys.length){
     carryKeys.forEach(function(k){
       var db=NUTRI_DB[k]||{};
       html+='<div style="padding:4px 0;font-size:13px">• <b>'+_shelfEsc(k)+'</b> — '+fmtFrac(carry[k])+' '+(db.unit||'')+' open (use in Mon–Wed cooking)</div>';
@@ -18328,15 +18514,15 @@ function renderShelf(){
     var e=PANTRY[k];
     html+='<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px">'
       +'<span style="flex:1">'+_shelfEsc(k)+'</span>'
-      +'<input type="number" step="0.25" min="0" value="'+e.qty+'" style="width:64px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 6px" onchange="shelfSetQty(\''+_shelfEsc(k).replace(/'/g,"\\'")+'\',this.value)">'
+      +'<input type="number" step="0.25" min="0" value="'+e.qty+'" style="width:64px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 6px" onchange="shelfSetQty(\''+_shelfJsEsc(k)+'\',this.value)">'
       +'<span style="width:44px;opacity:.7">'+_shelfEsc(e.unit||'')+'</span>'
-      +'<span style="cursor:pointer;opacity:.6" onclick="shelfDeletePantry(\''+_shelfEsc(k).replace(/'/g,"\\'")+'\')">✕</span></div>';
+      +'<span style="cursor:pointer;opacity:.6" onclick="shelfDeletePantry(\''+_shelfJsEsc(k)+'\')">✕</span></div>';
   });
   if(!pKeys.length) html+='<div style="padding:4px 0;font-size:12px;opacity:.6">Nothing tracked yet.</div>';
   html+='<div style="display:flex;gap:6px;margin-top:8px">'
-    +'<input id="shelfName" placeholder="item (e.g. brown rice dry)" style="flex:1;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px">'
-    +'<input id="shelfQty" type="number" step="0.25" min="0" placeholder="qty" style="width:64px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px">'
-    +'<input id="shelfUnit" placeholder="unit" style="width:56px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px">'
+    +'<input id="shelfName" placeholder="item (e.g. brown rice dry)" style="flex:1;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px">'
+    +'<input id="shelfQty" type="number" step="0.25" min="0" placeholder="qty" style="width:64px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px">'
+    +'<input id="shelfUnit" placeholder="unit" style="width:56px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px">'
     +'<button class="rand-btn" style="padding:6px 12px" onclick="shelfAddPantry()">Add</button></div>';
   html+='</div></div>';
   el.innerHTML=html;
@@ -18350,6 +18536,10 @@ function renderShop(){
   // Save recipe list scroll position
   const recipeListEl=shopEl.querySelector('.cs-recipe-list');
   const recipeScrollTop=recipeListEl?recipeListEl.scrollTop:0;
+  // R15 SOLO-9 (V280): coerce a dead view — if shopPerson points at a
+  // disabled person (e.g. the disable synced in while 'her' was selected),
+  // fall back to Both before building.
+  if((shopPerson==='him'&&PERSON_ENABLED.him===false)||(shopPerson==='her'&&PERSON_ENABLED.her===false)) shopPerson='both';
   const grouped=buildShoppingList(shopTrip,shopPerson);
   const totalItems=Object.keys(grouped).reduce(function(a,c){return a+grouped[c].length},0);
   const checkedCount=Object.keys(CHECKS).filter(function(k){return k.indexOf(activeWeek+'_'+shopTrip+'_')===0&&CHECKS[k]}).length;
@@ -18367,8 +18557,9 @@ function renderShop(){
     +'<div class="shop-trip-tab'+(shopTrip==='cook2'?' on':'')+'" onclick="setShopTrip(\'cook2\')">📋 Thu–Sun<br><span style="font-size:11px;font-weight:400">'+weekLabel+'</span></div>'
     +'<div class="shop-trip-tab'+(shopTrip==='custom'?' on':'')+'" onclick="setShopTrip(\'custom\')">🛒 Shop Now<br><span style="font-size:11px;font-weight:400">Pick meals</span></div></div>'
     +'<div class="shop-person-row">'
-    +'<div class="shop-person-btn him'+(shopPerson==='him'?' on':'')+'" onclick="setShopPerson(\'him\')">Him only</div>'
-    +'<div class="shop-person-btn her'+(shopPerson==='her'?' on':'')+'" onclick="setShopPerson(\'her\')">Her only</div>'
+    // R15 SOLO-9 (V280): a disabled person's dead view isn't offered.
+    +(PERSON_ENABLED.him===false?'':'<div class="shop-person-btn him'+(shopPerson==='him'?' on':'')+'" onclick="setShopPerson(\'him\')">Him only</div>')
+    +(PERSON_ENABLED.her===false?'':'<div class="shop-person-btn her'+(shopPerson==='her'?' on':'')+'" onclick="setShopPerson(\'her\')">Her only</div>')
     +'<div class="shop-person-btn both'+(shopPerson==='both'?' on':'')+'" onclick="setShopPerson(\'both\')">Both</div></div>';
   // Per-portion notice for him/her views: shared/batch meals split kcal-
   // proportionally per person, so a single-person view shows fractional
@@ -19031,6 +19222,7 @@ function mergeSyncData(remote){
   // legacy receivers ignore it. LOCK_MANUAL_SLOTS still wins (explicit
   // local protection beats remote authority).
   var _mergeForceTs = (!remoteIsLegacy && remote.forcePushTs) || 0;
+  var _pePendingApply = false; // R15-SYNC-2 (V280): deferred applyPersonPrefs
   // V159 (2026-05-19): force-flush pending autoSaveWeek before merge. Pre-
   // V159 the LOCK_MANUAL_SLOTS check below read weekData[w].manualSet,
   // which is debounced 500ms behind the runtime MANUAL_SET global via
@@ -19318,6 +19510,7 @@ function mergeSyncData(remote){
       }
       if(!lE || rt>lt) PANTRY[k]=rE;
     });
+    _gcPantryTombstones(); // R15-PANTRY-4 (V280)
     savePantry();
   }
   // V244: pantry-subtract toggle — LWW, M23 tie rule (default false).
@@ -19338,7 +19531,11 @@ function mergeSyncData(remote){
     if(_peForce > PERSON_ENABLED_TS || (_peForce === PERSON_ENABLED_TS && _peIsDefault)){
       PERSON_ENABLED=remote.personEnabled; PERSON_ENABLED_TS=_peForce;
       lsSet('mealPlannerPersonEnabled',PERSON_ENABLED); lsSet('mealPlannerPersonEnabledTs',PERSON_ENABLED_TS);
-      if(typeof applyPersonPrefs==='function') applyPersonPrefs();
+      // R15-SYNC-2 (V280): applyPersonPrefs → setPerson → renderMeals would
+      // render HERE, mid-merge — before loadWeekState rebinds SEL/OVERRIDES
+      // and before the R14-C5 cache invalidation ("mutation paths must
+      // invalidate before renderMeals"). Defer it to the merge tail.
+      _pePendingApply=true;
     }
   }
 
@@ -19443,6 +19640,14 @@ function mergeSyncData(remote){
   // buildShoppingList summed the stale amounts. Mutation paths must invalidate
   // before renderMeals; sync merge is a mutation path.
   invalidateLeftoverCache();
+
+  // R15 l1 (V280): a pull can replace the armed slot's meal — disarm.
+  if(typeof _movePending!=='undefined') _movePending=null;
+
+  // R15-SYNC-2 (V280): NOW the state is fully merged, rebound, and
+  // invalidated — safe to apply a person-enabled flip (its setPerson/
+  // renderMeals side effects render from consistent state).
+  if(_pePendingApply && typeof applyPersonPrefs==='function') applyPersonPrefs();
 
   saveWeeks();saveCustomMeals();saveCustomIngredients();saveEatOutDB();
   injectCustomMeals();renderWeekBar();
@@ -20581,7 +20786,7 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV20Leftover:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV11Manual:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV20Leftover:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
     violations.forEach(function(v){
       // Match longer suffixes first; fall back to INV<digits>.
       // V181 (2026-05-21): INV20Leftover tracks forward inventory (this
@@ -20592,6 +20797,10 @@ window.MPStress=(function(){
       if(msL){counts[msL[1]]++;return;}
       var ms=v.match(/^(INV20Soft)\b/);
       if(ms){counts[ms[1]]++;return;}
+      // R15 l7 (V280): tracking-only user-made INV11 adjacency — must match
+      // BEFORE the generic INV\d+ regex or it would count as hard INV11.
+      var m11=v.match(/^(INV11Manual)\b/);
+      if(m11){counts[m11[1]]++;return;}
       var m=v.match(/^INV(\d+)/);if(!m)return;
       var key='INV'+m[1];if(counts[key]!==undefined)counts[key]++;
     });
@@ -20692,7 +20901,7 @@ window.MPStress=(function(){
     if(!opts.persistState) restore(snap);
     // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16, INV18, INV20Soft, INV20Leftover, INV21, INV22) from the "real fail" list
     var nonInv6=violations.filter(function(v){
-      return !v.startsWith('INV6 ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ') && !v.startsWith('INV18 ') && !v.startsWith('INV20Soft ') && !v.startsWith('INV20Leftover ') && !v.startsWith('INV21 ') && !v.startsWith('INV22 ');
+      return !v.startsWith('INV6 ') && !v.startsWith('INV11Manual ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ') && !v.startsWith('INV18 ') && !v.startsWith('INV20Soft ') && !v.startsWith('INV20Leftover ') && !v.startsWith('INV21 ') && !v.startsWith('INV22 ');
     }).slice(0,30);
     // Extract INV15/16 leftover-eaten counts per person
     var leftoversEaten={him:0,her:0};
@@ -20801,7 +21010,7 @@ window.MPStress=(function(){
     var fatLowBins={'14.5-15.0':0,'14.0-14.5':0,'13.0-14.0':0,'<13.0':0};
     var proPctBins={'40.0-42.0':0,'42.0-45.0':0,'45.0-50.0':0,'>50.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV20Leftover:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV11Manual:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV20Leftover:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
@@ -20970,7 +21179,7 @@ window.MPStress=(function(){
       missCounts:missCounts,
       kcalBins:kcalBins,fatBins:fatBins,fatLowBins:fatLowBins,proPctBins:proPctBins,vegBins:vegBins,
       invTotals:invTotals,
-      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV20Leftover'&&k!=='INV21'&&k!=='INV22'&&invTotals[k]>0;}), // INV19/INV20 hard — count toward "any fail". INV20Soft/INV20Leftover/INV21/22 tracking-only.
+      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV11Manual'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV20Leftover'&&k!=='INV21'&&k!=='INV22'&&invTotals[k]>0;}), // INV19/INV20 hard — count toward "any fail". INV20Soft/INV20Leftover/INV21/22 tracking-only.
       // INV13 fires per-ingredient that has db.minAmt/maxAmt defined; ingredients without those are exempt by construction.
       invSamples:invSamples,
       topMeals:topMeals,
@@ -21781,7 +21990,7 @@ window.MPStress=(function(){
         // when only an INV20Leftover tracking entry was present, while the
         // Hard Invariants section correctly read "all 0 ✓"). INV20Leftover
         // is V181's forward-inventory tracker; never a hard fire.
-        return k!=='INV6'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV20Leftover'&&k!=='INV21'&&k!=='INV22'&&a.invTotals[k]>0;
+        return k!=='INV6'&&k!=='INV11Manual'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV20Leftover'&&k!=='INV21'&&k!=='INV22'&&a.invTotals[k]>0;
       }).length,
       closedPct: (function(){
         var ta=0,tc=0;
