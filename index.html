@@ -3824,14 +3824,34 @@ function _schedMenuCells(){
   if(_schedMenu.type==='day') return ['breakfast','lunch','dinner'].map(function(ss){return {d:_schedMenu.d,s:ss};});
   return DAYS.map(function(dd){return {d:dd,s:_schedMenu.s};});
 }
-// Visual-state checks (mirror the grid's own render conditions).
-function _schedCellShared(d,s){
+// Visual-state checks. R15 fix (v253-state-checks-dont-mirror-grid,
+// 2026-07-18): these now REALLY mirror the grid's render conditions —
+// the old versions used SHARED_SCHEDULE + _autoSharedCells only, so a
+// shared cook WITH leftovers (green via the grid's V76 mealsMatch, but
+// excluded from _autoSharedCells) showed an unchecked 'Shared meal' row
+// whose tap INVERTED the user's intent, and a card-pill eat-out (red via
+// the per-slot EAT_OUT flag) showed an unchecked 'eats out' row.
+function _schedCellSideRed(d,s,side){
+  // Grid per-side red: eo-* state OR per-slot EAT_OUT flag, unless SKIPPED
+  // (skip renders grey and takes priority — see the grid's V28 split).
+  var k=sk(side,d,s);
+  if(SKIPPED[k]) return false;
   var st=SHARED_SCHEDULE[dk(d,s)]||'';
-  return st==='shared'||((!st||st==='normal')&&!!_autoSharedCells[dk(d,s)]);
+  return st==='eo-both'||st===('eo-'+side)||!!EAT_OUT[k];
+}
+function _schedCellShared(d,s){
+  if(_scheduleEditMode&&_scheduleEditCleared) return false; // V87 mirror
+  var k=dk(d,s), st=SHARED_SCHEDULE[k]||'';
+  // V81 mirror: touched cell in edit mode → stored intent decides.
+  if(_scheduleEditMode&&_scheduleEditTouchedCells[k]) return st==='shared';
+  // V76 mirror: actual meal match, neither side skipped/red.
+  var hm=getMealId('him',d,s), hr=getMealId('her',d,s);
+  var himOff=!!SKIPPED[sk('him',d,s)]||_schedCellSideRed(d,s,'him');
+  var herOff=!!SKIPPED[sk('her',d,s)]||_schedCellSideRed(d,s,'her');
+  return !!hm&&hm===hr&&!himOff&&!herOff;
 }
 function _schedCellEO(d,s,side){
-  var st=SHARED_SCHEDULE[dk(d,s)]||'';
-  return st==='eo-both'||st===('eo-'+side);
+  return _schedCellSideRed(d,s,side);
 }
 // Explicit state ops. These mirror the tap handlers' writes exactly
 // (schedTapCenter's share/un-share branches, schedTapLeft/Right's eo
@@ -3840,9 +3860,18 @@ function _schedCellEO(d,s,side){
 function _schedOpShared(d,s,on){
   var k=dk(d,s);
   if(on){
-    // eo → shared directly: clear placeholders first (V70), then share.
-    _v70UndoEatOutSide('him',d,s);
-    _v70UndoEatOutSide('her',d,s);
+    // R15 fix (v253-shared-on-unconditional-v70, 2026-07-18): the V70
+    // cascade is ONLY for sides actually in an eat-out state (stored eo-*
+    // or per-slot EAT_OUT flag — the latter would contradict 'shared' per
+    // INV24). schedTapCenter's normal→shared branch writes SHARED_SCHEDULE
+    // alone; running V70 unconditionally stripped MANUAL_SET/USER_EDITED/
+    // SKIPPED from clean pinned cells, so Apply's temp-lock cleanup left
+    // pinned slots unlocked and the next randomize rerolled them.
+    var cur=SHARED_SCHEDULE[k]||'';
+    ['him','her'].forEach(function(p){
+      var sideEo=(cur==='eo-both'||cur===('eo-'+p))||!!EAT_OUT[sk(p,d,s)];
+      if(sideEo) _v70UndoEatOutSide(p,d,s);
+    });
     SHARED_SCHEDULE[k]='shared';
   } else {
     // Un-share: schedTapCenter's V82 branch — clear USER_EDITED/MANUAL_SET
@@ -3863,7 +3892,14 @@ function _schedOpEO(d,s,side,on){
   var k=dk(d,s);
   var other=side==='him'?'her':'him';
   if(on){
-    if(_schedCellShared(d,s)) _schedOpShared(d,s,false); // eo overrides shared (INV24)
+    // R15 fix (v253-eo-on-autoshared-clears-other-side, 2026-07-18): the
+    // INV24 pre-clear applies only to EXPLICIT stored 'shared' (mirrors
+    // _v85ClearSideVisualIfAny's `cur==='shared'` check). Auto-shared cells
+    // (same meal, no stored state) have nothing contradicting eat-out —
+    // the old _schedCellShared check routed them through the un-share
+    // cascade and deleted the OTHER person's MANUAL_SET/USER_EDITED for a
+    // one-sided action.
+    if((SHARED_SCHEDULE[k]||'')==='shared') _schedOpShared(d,s,false); // eo overrides shared (INV24)
     var cur=SHARED_SCHEDULE[k]||'';
     if(cur===('eo-'+other)||cur==='eo-both') SHARED_SCHEDULE[k]='eo-both';
     else SHARED_SCHEDULE[k]='eo-'+side;
@@ -3880,12 +3916,28 @@ function _schedOpClear(d,s){
   // Full cell reset: loop the battle-tested V85 one-layer-per-call clear
   // until each enabled side reports default (shared → eo → skip → link →
   // manual purple, in V85's own priority).
-  var guard;
-  if(PERSON_ENABLED.him!==false){guard=0;while(_v85ClearSideVisualIfAny('him',d,s)&&++guard<10){}}
-  if(PERSON_ENABLED.her!==false){guard=0;while(_v85ClearSideVisualIfAny('her',d,s)&&++guard<10){}}
-  _scheduleEditTouchedCells[dk(d,s)]=true;
-  _scheduleEditTouchedSides[sk('him',d,s)]=true;
-  _scheduleEditTouchedSides[sk('her',d,s)]=true;
+  // R15 fix (v253-clear-rerolls-default-and-autoshared-cells, 2026-07-18):
+  // (1) touched/preserveSel stamps only when something was actually
+  // cleared — the old unconditional stamps marked already-default cells
+  // touched with no preserveSel, so Apply rerolled their meals while
+  // stateful cells in the same bulk Clear kept theirs (V85 branches stamp
+  // preserveSel). (2) A pure AUTO-shared cell (same meal, no stored state)
+  // hits no V85 branch; mirror the old center-tap un-share instead —
+  // stamp touched + preserveSel on both sides so the green visual drops
+  // (V81 touched → intent-only render) and the meals are kept.
+  var guard, clrHim=false, clrHer=false;
+  if(PERSON_ENABLED.him!==false){guard=0;while(_v85ClearSideVisualIfAny('him',d,s)&&++guard<10){clrHim=true;}}
+  if(PERSON_ENABLED.her!==false){guard=0;while(_v85ClearSideVisualIfAny('her',d,s)&&++guard<10){clrHer=true;}}
+  var autoShared=!clrHim&&!clrHer&&!!_autoSharedCells[dk(d,s)];
+  if(autoShared){
+    _scheduleEditPreserveSel[sk('him',d,s)]=true;
+    _scheduleEditPreserveSel[sk('her',d,s)]=true;
+  }
+  if(clrHim||clrHer||autoShared){
+    _scheduleEditTouchedCells[dk(d,s)]=true;
+    if(clrHim||autoShared) _scheduleEditTouchedSides[sk('him',d,s)]=true;
+    if(clrHer||autoShared) _scheduleEditTouchedSides[sk('her',d,s)]=true;
+  }
 }
 function schedMenuAction(action,side){
   if(!_schedMenu) return;
@@ -3912,9 +3964,26 @@ function schedMenuLink(){
   // leftover chain (pre-loads the meal's existing group when one exists).
   var m=_schedMenu;
   if(!m) return;
-  var mealId=getMealId('him',m.d,m.s)||getMealId('her',m.d,m.s);
+  var hm=getMealId('him',m.d,m.s), hr=getMealId('her',m.d,m.s);
+  // R15 c3 fix (2026-07-18): on a mixed cell (him ≠ her) the old
+  // `hm||hr` silently linked him's meal and made her's chain unreachable.
+  // Ask which meal to link instead.
+  if(hm&&hr&&hm!==hr&&PERSON_ENABLED.him!==false&&PERSON_ENABLED.her!==false){
+    _schedMenuView='linkpick';
+    _renderSchedMenu();
+    return;
+  }
+  var mealId=hm||hr;
   closeSchedMenu();
-  if(mealId) _armPaintWithMeal(mealId,m);
+  if(mealId) _armPaintWithMeal(mealId,{type:m.type,d:m.d,s:m.s,linkOnly:true});
+}
+function schedMenuLinkPick(p){
+  // R15 c3: mixed-cell chooser — link the picked person's meal.
+  var m=_schedMenu;
+  if(!m) return;
+  var mealId=getMealId(p,m.d,m.s);
+  closeSchedMenu();
+  if(mealId) _armPaintWithMeal(mealId,{type:'cell',d:m.d,s:m.s,linkOnly:true});
 }
 function schedMenuChooseMeal(mealId){
   var m=_schedMenu;
@@ -3945,9 +4014,25 @@ function _armPaintWithMeal(mealId,menuCtx){
   // R15 c1 fix: ALWAYS pre-queue the tapped cell (was `else if` — picking
   // a meal that already had a link group silently dropped the cell the
   // user actually tapped, so Assign no-oped on it).
+  // R15 c2 fix (2026-07-18): the IMPLICIT pre-queue skips a person who has
+  // explicitly opted out of this slot (card-pill Skip/Eat Out or eo-*
+  // state) — Assign's V45 semantics delete SKIPPED/EAT_OUT on queued
+  // slots, which is right for cells the user deliberately painted but
+  // wrong as a zero-tap side effect (her skip silently cancelled + the
+  // cell force-shared). The user can still tap that half in paint mode —
+  // an explicit tap keeps the old behavior.
+  // R15 c3 fix (2026-07-18): menuCtx.linkOnly (Link leftovers…) scopes the
+  // pre-queue to sides currently EATING this meal — linking her chain must
+  // not queue him's half and overwrite his different meal on Assign.
   if(menuCtx&&menuCtx.type==='cell'){
-    if(PERSON_ENABLED.him!==false) _paintQueued[sk('him',menuCtx.d,menuCtx.s)]=true;
-    if(PERSON_ENABLED.her!==false) _paintQueued[sk('her',menuCtx.d,menuCtx.s)]=true;
+    ['him','her'].forEach(function(p){
+      if(PERSON_ENABLED[p]===false) return;
+      var qk=sk(p,menuCtx.d,menuCtx.s);
+      var st=SHARED_SCHEDULE[dk(menuCtx.d,menuCtx.s)]||'';
+      if(SKIPPED[qk]||EAT_OUT[qk]||st==='eo-both'||st===('eo-'+p)) return;
+      if(menuCtx.linkOnly&&getMealId(p,menuCtx.d,menuCtx.s)!==mealId) return;
+      _paintQueued[qk]=true;
+    });
   }
   renderMeals();
 }
@@ -3961,10 +4046,16 @@ function _schedMenuMealListHtml(m){
   var html='<div class="smenu-row smenu-muted" onclick="event.stopPropagation();_schedMenuView=\'actions\';_renderSchedMenu()">‹ Back</div>';
   // Existing link groups first (manual + auto, deduped — manual wins);
   // tapping one enters the old edit-existing-group paint flow.
+  // R15 c4 fix (2026-07-18): groups are lunch/dinner-only (the detector's
+  // cookSlots), so a breakfast cell lists NO group rows — the old
+  // unfiltered list let a breakfast cell join a dinner group, cooking a
+  // full extra solo portion the group visual then lied about.
   var seen={},groups=[];
-  [].concat(LEFTOVER_LINKS||[],_autoLinkGroups||[]).forEach(function(g){
-    if(seen[g.meal])return;seen[g.meal]=true;groups.push(g);
-  });
+  if(m.s==='lunch'||m.s==='dinner'){
+    [].concat(LEFTOVER_LINKS||[],_autoLinkGroups||[]).forEach(function(g){
+      if(seen[g.meal])return;seen[g.meal]=true;groups.push(g);
+    });
+  }
   if(groups.length){
     html+='<div class="smenu-sec">Linked groups — tap to edit</div>';
     groups.forEach(function(g){
@@ -4007,6 +4098,13 @@ function _renderSchedMenu(){
     +'<div class="smenu-title">'+title+'</div>';
   if(_schedMenuView==='meals'){
     html+=_schedMenuMealListHtml(m);
+  } else if(_schedMenuView==='linkpick'){
+    // R15 c3: mixed-cell Link leftovers… — pick whose meal to link.
+    html+='<div class="smenu-row smenu-muted" onclick="event.stopPropagation();_schedMenuView=\'actions\';_renderSchedMenu()">‹ Back</div>'
+      +'<div class="smenu-sec">Link whose meal?</div>';
+    var lkHm=getMeal(getMealId('him',m.d,m.s)), lkHr=getMeal(getMealId('her',m.d,m.s));
+    if(lkHm) html+=_smRow('schedMenuLinkPick(\'him\')','#60A5FA','Him — '+lkHm.label,false);
+    if(lkHr) html+=_smRow('schedMenuLinkPick(\'her\')','#F472B6','Her — '+lkHr.label,false);
   } else {
     var cells=_schedMenuCells();
     var allShared=cells.every(function(c){return _schedCellShared(c.d,c.s);});
@@ -14000,6 +14098,17 @@ function togglePaintMode(){
   }
   renderMeals();
 }
+// R15 c5 fix (2026-07-18): armed-paint teardown for the edit-mode
+// lifecycle buttons. Apply/Undo exit edit mode and Reset re-baselines it;
+// leaving paint armed across any of them contradicted "painting is
+// edit-mode-only" and let a stray Assign commit SEL/MANUAL_SET/
+// SHARED_SCHEDULE straight into live state with no snapshot to undo.
+// No render here — every caller re-renders itself.
+function _disarmPaint(){
+  if(!_paintMode) return;
+  _paintMode=false;_paintSlot='';_paintMealId='';_paintQueued={};
+  _paintExistingColorIdx=-1;
+}
 // 2026-05-03: paintTap now takes (d, side, slot) — slot = which column was tapped.
 function paintTap(d,side,slot){
   if(!_paintMode) return;
@@ -14631,6 +14740,7 @@ function enterScheduleEditMode(){
   renderMeals();
 }
 function applyScheduleEdit(){
+  _disarmPaint(); // R15 c5: uncommitted paint dies with the edit session
   // V64 (2026-05-07): reordered — diff loop runs FIRST (against the pure
   // user-edit state captured in snap vs current), THEN _sync + setSchedule
   // run AFTER the temp locks are placed. Pre-V64 the order was sync →
@@ -14749,6 +14859,7 @@ function applyScheduleEdit(){
   _maybeOfferPartnerWasteFix(rTarget); // V233
 }
 function clearScheduleEdit(){
+  _disarmPaint(); // R15 c5: Reset also disarms any menu-armed paint
   // Clear all painting / highlights / per-cell state inside edit mode.
   // Wipes SHARED_SCHEDULE, EAT_OUT, SKIPPED, MANUAL_SET, LATE_SNACK, link
   // groups, AND SEL. SEL is cleared so V13 auto-link-groups + auto-shared
@@ -14815,6 +14926,7 @@ function clearScheduleEdit(){
   renderMeals();
 }
 function undoScheduleEdit(){
+  _disarmPaint(); // R15 c5: uncommitted paint dies with the edit session
   if(_scheduleEditSnapshot){
     _restoreScheduleState(_scheduleEditSnapshot);
   }
