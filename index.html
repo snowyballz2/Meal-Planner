@@ -20279,6 +20279,45 @@ window.MPStress=(function(){
     return counts;
   }
 
+  // V276 run-liveness state (2026-07-18). The stress runners are SYNCHRONOUS —
+  // while one runs, the renderer is blocked and cannot answer an external
+  // eval. That gives observers one crisp rule:
+  //   page answers an eval AND _mpRunState.done !== true  ⇒  the run is DEAD
+  //   (killed externally — e.g. a tool eval timeout terminated the script).
+  //   eval times out ⇒ the run is alive and working.
+  // done/error/result are written in the runner's OWN finally, so they are
+  // immune to the wrapper-promise/interval plumbing dying with a killed eval
+  // (the failure mode this replaces: a killed kickoff eval left its .then
+  // orphaned and the observer polled a flag nothing would ever set).
+  // Kick runs with MPStress.kickoff('runStandard', 100) — the run executes in
+  // a setTimeout callback, OUTSIDE any eval's lifetime, so no tool timeout
+  // can terminate it. Optional window._mpPingUrl fires from the runner's
+  // finally on completion (success OR throw).
+  var _runState=null;
+  function _runStateBegin(mode,total){
+    _runState={mode:mode,total:total,progress:0,done:false,error:null,result:null,startedAt:Date.now()};
+    window._mpRunState=_runState;
+    return _runState;
+  }
+  function _runStateSeed(){ if(_runState&&!_runState.done){_runState.progress++;_runState.lastProgressAt=Date.now();} }
+  function _runStateEnd(result,err){
+    if(!_runState||_runState.done)return;
+    _runState.done=true;
+    _runState.result=result||null;
+    _runState.error=err?String(err&&err.stack||err):null;
+    _runState.endedAt=Date.now();
+    var u=window._mpPingUrl;
+    if(u){try{new Image().src=u+(u.indexOf('?')>=0?'&':'?')+'t='+Date.now();}catch(e){}}
+  }
+  function kickoff(fnName){
+    var args=Array.prototype.slice.call(arguments,1);
+    setTimeout(function(){
+      try{ window.MPStress[fnName].apply(window.MPStress,args); }
+      catch(e){ _runStateEnd(null,e); }
+    },100);
+    return 'kicked:'+fnName+' — poll window._mpRunState (eval timeout = running; responsive+!done = killed)';
+  }
+
   function runOne(mode,seed,cfgFn,opts){
     opts = opts || {};
     var snap=snapshot();
@@ -20360,6 +20399,7 @@ window.MPStress=(function(){
       if(window._stressRuns[k].seed===seed){dupIdx=k;break;}
     }
     if(dupIdx>=0){window._stressRuns[dupIdx]=result;} else {window._stressRuns.push(result);}
+    _runStateSeed(); // V276 liveness heartbeat (no-op when no run is open)
     return result;
   }
 
@@ -20806,6 +20846,7 @@ window.MPStress=(function(){
   }
   function runStandard(runs){
     runs=runs||100;
+    _runStateBegin('standard',runs); // V276 liveness
     // 2026-05-03: auto-clear state for Test 1. Prevents the state-corruption
     // class of bugs where prior experiments leak meals/overrides/etc. into
     // the snapshot that every seed restores to. Snapshot+restore wraps the
@@ -20869,6 +20910,7 @@ window.MPStress=(function(){
       // matches pre-V187 behavior, no regression.
       console.warn('runStandard prime failed:', e && e.message);
     }
+    var _rsAgg=null,_rsErr=null; // V276
     try{
       var results=[];
       var baseSeed=12345;
@@ -20877,10 +20919,13 @@ window.MPStress=(function(){
       var agg=aggregate(results);
       agg.startedDirty=false; // auto-cleared, always clean
       console.log(formatReport(agg));
+      _rsAgg=agg;
       return agg;
-    }finally{
+    }catch(e){_rsErr=e;throw e;}
+    finally{
       restore(userSnap);
       cleanSave(); // persist user's restored state to localStorage
+      _runStateEnd(_rsAgg,_rsErr); // V276: done flag + optional _mpPingUrl ping
     }
   }
   // Test 2: true-randomized counterpart to runStandard. Rewritten 2026-05-25
@@ -20921,6 +20966,7 @@ window.MPStress=(function(){
   }
   function runStandard2(runs){
     runs=runs||100;
+    _runStateBegin('standard2',runs); // V276 liveness
     // V197 (2026-05-25): Test 2 = 100 independent randomize clicks on the
     // same standard schedule as Test 1, but with real Math.random AND a
     // fresh randomized prior week each click. Each click runs randomizeWeek
@@ -20955,6 +21001,7 @@ window.MPStress=(function(){
       }
       invalidateLeftoverCache();
     }
+    var _rs2Agg=null,_rs2Err=null; // V276
     try{
       var results=[];
       for(var i=0;i<runs;i++){
@@ -20986,10 +21033,13 @@ window.MPStress=(function(){
       var agg=aggregate(results);
       agg.startedDirty=false; // _clearAllState ran above, always clean
       console.log(formatReport(agg));
+      _rs2Agg=agg;
       return agg;
-    }finally{
+    }catch(e){_rs2Err=e;throw e;}
+    finally{
       restore(userSnap);
       cleanSave(); // persist user's restored state to localStorage
+      _runStateEnd(_rs2Agg,_rs2Err); // V276
     }
   }
   // Test 3: maximally-random variant. Combines true-random Math.random with
@@ -25528,7 +25578,11 @@ window.MPStress=(function(){
     // V233: harness ops call applyScheduleEdit, which may pop the partner-
     // waste dialog on single-person targets — suppress for the whole run.
     _suppressPartnerWasteDialog = true;
-    try{ return _runSlotModBody(); }finally{ _suppressPartnerWasteDialog = false; _dismissPartnerWasteFix(); }
+    _runStateBegin('slotMod',nSeeds); // V276 liveness (progress = seeds scanned)
+    var _rsmRes=null,_rsmErr=null;
+    try{ _rsmRes=_runSlotModBody(); return _rsmRes; }
+    catch(e){ _rsmErr=e; throw e; }
+    finally{ _suppressPartnerWasteDialog = false; _dismissPartnerWasteFix(); _runStateEnd(_rsmRes,_rsmErr); }
     function _runSlotModBody(){
     // V195 INV26 (2026-05-22): the snapshot taken here is restored per scenario,
     // so a polluted initial snapshot taints every scenario. Audit R12 (2026-05-30):
@@ -25792,6 +25846,7 @@ window.MPStress=(function(){
       var seed=baseSeed+seedIdx;
       seedIdx++;
       agg.coverage.seedsScanned++;
+      _runStateSeed(); // V276 liveness heartbeat
       // Restore initial baseline before each seed's randomize. Without this,
       // prior seed's SEL contaminates the variety filter and each seed
       // produces non-deterministic meals (mirrors runStandard/runOne pattern).
@@ -26610,7 +26665,7 @@ window.MPStress=(function(){
     }
   }
 
-  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runStandard3:runStandard3,runStandard4:runStandard4,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline,runSlotMod:runSlotMod,formatSlotModReport:formatSlotModReport,runSlotModSequential:runSlotModSequential,formatSlotModSequentialReport:formatSlotModSequentialReport,runIntegrationTests:runIntegrationTests,selfTestInvariants:selfTestInvariants};
+  return{runOne:runOne,runBaseline:runBaseline,runVaried:runVaried,runSharing:runSharing,runStandard:runStandard,runStandard2:runStandard2,runStandard3:runStandard3,runStandard4:runStandard4,runAll:runAll,enumerateFailures:enumerateFailures,aggregate:aggregate,formatReport:formatReport,saveBaseline:saveBaseline,clearBaseline:clearBaseline,snapshot:snapshot,restore:restore,inspectRun:inspectRun,inspectDay:inspectDay,exitInspect:exitInspect,collectVegBaseline:collectVegBaseline,formatVegBaseline:formatVegBaseline,runSlotMod:runSlotMod,formatSlotModReport:formatSlotModReport,runSlotModSequential:runSlotModSequential,formatSlotModSequentialReport:formatSlotModSequentialReport,runIntegrationTests:runIntegrationTests,selfTestInvariants:selfTestInvariants,kickoff:kickoff,runStatus:function(){return _runState;}};
 })();
 
 </script>
