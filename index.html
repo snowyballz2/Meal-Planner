@@ -3497,6 +3497,11 @@ function schedEndPress(d,s,side){
 // original meal so auto-link-groups don't break. Per user feedback:
 // "instead of toggling eat out to normal it toggles set to not set."
 function _v70UndoEatOutSide(p, d, s){
+  // R15 SOLO-3 fix (V279): never mutate a DISABLED person's flags — their
+  // Set/skip/eat-out state is preserved data (the disable dialog's
+  // promise). Callers' SHARED_SCHEDULE adjustments are cell-level and
+  // unaffected. No-op with both enabled.
+  if(PERSON_ENABLED[p]===false) return;
   const k = sk(p, d, s);
   if(EAT_OUT[k] && !_isEatOutCustomized(k)){
     delete EAT_OUT[k];
@@ -3538,12 +3543,17 @@ function _v85ClearSideVisualIfAny(side, d, s){
   if(!hasLink && !hasShared && !hasMyEatOut && !hasManualPurple && !hasSkip) return false;
 
   // Shared is cell-level — clearing affects both halves.
+  // R15 SOLO-3 fix (V279): the OTHER side's flag/EAT_OUT deletes and
+  // edit-mode stamps are gated on that person being ENABLED — a stale
+  // 'shared' cell surviving a disable must not strip the disabled
+  // person's preserved state (reached via _schedOpClear's V85 loop).
+  var _otherOn = PERSON_ENABLED[otherSide]!==false;
   if(hasShared){
     delete SHARED_SCHEDULE[k];
     delete USER_EDITED[sk_this];
-    delete USER_EDITED[sk_other];
+    if(_otherOn) delete USER_EDITED[sk_other];
     delete MANUAL_SET[sk_this];
-    delete MANUAL_SET[sk_other];
+    if(_otherOn) delete MANUAL_SET[sk_other];
     // V146 (2026-05-14): also clear any EAT_OUT on either side. Defensive:
     // the legitimate `SHARED_SCHEDULE='shared'` state should have NO EAT_OUT
     // on either side (mutual exclusion enforced by INV24 + setSchedule).
@@ -3554,19 +3564,23 @@ function _v85ClearSideVisualIfAny(side, d, s){
     // the per-slot pill. Now: clear both atomically as part of "first tap
     // clears all visuals" V85 contract.
     if(EAT_OUT[sk_this]) delete EAT_OUT[sk_this];
-    if(EAT_OUT[sk_other]) delete EAT_OUT[sk_other];
+    if(_otherOn && EAT_OUT[sk_other]) delete EAT_OUT[sk_other];
     _scheduleEditPreserveSel[sk_this] = true;
-    _scheduleEditPreserveSel[sk_other] = true;
-    _scheduleEditTouchedSides[sk_other] = true; // shared-break touches both
+    if(_otherOn){
+      _scheduleEditPreserveSel[sk_other] = true;
+      _scheduleEditTouchedSides[sk_other] = true; // shared-break touches both
+    }
     // V159 (2026-05-19): also clear link layer if the cell has one. Pre-
     // V159 the shared-branch returned without stamping
     // _scheduleEditClearedLinkSides, so a cell with BOTH shared AND a link
     // group survived the first tap with the link visual still showing —
     // violating the V85 "every-first-tap-clears" contract. Stamp both
-    // halves (shared affects both).
+    // halves (shared affects both). R15 SOLO-3: other side only when
+    // enabled — the cleared-link stamp feeds Apply's group-membership
+    // removal, which is persistent data for the disabled person.
     if(hasLink){
       _scheduleEditClearedLinkSides[sk_this] = true;
-      _scheduleEditClearedLinkSides[sk_other] = true;
+      if(_otherOn) _scheduleEditClearedLinkSides[sk_other] = true;
     }
     return true;
   }
@@ -3876,13 +3890,16 @@ function _schedOpShared(d,s,on){
   } else {
     // Un-share: schedTapCenter's V82 branch — clear USER_EDITED/MANUAL_SET
     // both sides so the cell can cycle back to default, preserve SEL.
+    // R15 SOLO-3 fix (V279): only for ENABLED sides — a stale 'shared'
+    // entry surviving a person-disable must not cost the disabled person
+    // their pins.
     delete SHARED_SCHEDULE[k];
-    delete USER_EDITED[sk('him',d,s)];
-    delete USER_EDITED[sk('her',d,s)];
-    delete MANUAL_SET[sk('him',d,s)];
-    delete MANUAL_SET[sk('her',d,s)];
-    _scheduleEditPreserveSel[sk('him',d,s)]=true;
-    _scheduleEditPreserveSel[sk('her',d,s)]=true;
+    ['him','her'].forEach(function(p){
+      if(PERSON_ENABLED[p]===false) return;
+      delete USER_EDITED[sk(p,d,s)];
+      delete MANUAL_SET[sk(p,d,s)];
+      _scheduleEditPreserveSel[sk(p,d,s)]=true;
+    });
   }
   _scheduleEditTouchedCells[k]=true;
   _scheduleEditTouchedSides[sk('him',d,s)]=true;
@@ -5329,6 +5346,17 @@ function addShopIngredient(items,dbKey,amt,p){
   else{items[key].herSum=addQty(items[key].herSum,amt,unit);}
 }
 
+// R15 SOLO-4 fix (V279): LATE_SNACK is pk(p,d)-keyed, so the V242
+// getMealId gate never sees it — a DISABLED person's late snack kept
+// being shopped, INV3-expected, INV20-scored, and kcal-counted (and could
+// pop an unresolvable partner-waste dialog). This accessor is the gate;
+// EVERY consumption-side read (shopping + its INV3/INV20 mirrors, and
+// calcTotals + its INV2/INV17/balancer mirrors) goes through it so the
+// paired checkers stay consistent. The entry itself is preserved data —
+// re-enabling restores it. Both-enabled behavior unchanged.
+function _lateSnackFor(p,d){
+  return PERSON_ENABLED[p]===false ? null : LATE_SNACK[pk(p,d)];
+}
 function buildShoppingList(trip,who){
   const days=trip==='custom'?DAYS:(TRIP_DAYS_STATIC[trip]||[]);
   const persons=who==='both'?['him','her']:who==='him'?['him']:['her'];
@@ -5350,7 +5378,7 @@ function buildShoppingList(trip,who){
           // those ingredients.
           if(s==='late_snack'){
             if(!CUSTOM_SHOP_SEL[sk(p,d,s)])return;
-            const ls=LATE_SNACK[pk(p,d)];
+            const ls=_lateSnackFor(p,d); // R15 SOLO-4 gate
             if(!ls||!ls.ingredients||!ls.ingredients.length)return;
             ls.ingredients.forEach(function(ing){
               if(!ing.dbKey)return;
@@ -5461,7 +5489,7 @@ function buildShoppingList(trip,who){
         // ingredients have been added via the + button. Manual-macro late
         // snacks aren't shopped (user buys those ad-hoc).
         if(tripDaySet[d]){
-          const ls = LATE_SNACK[pk(p,d)];
+          const ls = _lateSnackFor(p,d); // R15 SOLO-4 gate
           if(ls && ls.ingredients && ls.ingredients.length){
             ls.ingredients.forEach(function(ing){
               // V155 (2026-05-19): defensive guard against missing dbKey.
@@ -5544,7 +5572,7 @@ function buildShoppingList(trip,who){
         // V172 (2026-05-19): include late_snack carry ingredients in the
         // carry-attribution pool. Pre-V172 late_snack flowed through
         // addShopIngredient directly per-trip, bypassing the carry math.
-        const _lsCarry = LATE_SNACK[pk(p,d)];
+        const _lsCarry = _lateSnackFor(p,d); // R15 SOLO-4 gate
         if(_lsCarry && _lsCarry.ingredients && _lsCarry.ingredients.length){
           const _lsCookTrip = c1DaySet[d] ? 'cook1' : (c2DaySet[d] ? 'cook2' : null);
           if(_lsCookTrip){
@@ -6093,7 +6121,20 @@ function applyTabPrefs(){
   });
   if((topTab==='shop'&&TAB_PREFS.shop===false)
    ||(topTab==='shelf'&&TAB_PREFS.shelf===false)
-   ||(topTab==='recipes'&&TAB_PREFS.recipes===false)) setTopTab('meals');
+   ||(topTab==='recipes'&&TAB_PREFS.recipes===false)){
+    var _svP=document.getElementById('syncView');
+    if(_svP&&_svP.style.display!=='none'){
+      // R15-SETTINGS-1 (V279): the pref was toggled from INSIDE the open
+      // settings panel — setTopTab would hide syncView out from under the
+      // user mid-interaction. Retarget the panel's close-fallback silently
+      // instead; toggleSyncPanel's close branch (setTopTab(topTab)) then
+      // lands on Meals when the user closes the panel themselves.
+      if(topTab==='recipes')saveRecipeFormState();
+      topTab='meals';
+    } else {
+      setTopTab('meals');
+    }
+  }
 }
 function setTabPref(t,v){ TAB_PREFS[t]=!!v; saveTabPrefs(); applyTabPrefs(); renderSyncView(); }
 function applyPersonPrefs(){
@@ -6620,7 +6661,7 @@ function balanceDayMacros(p,d,slots,frozenSlots,sameDayCookServings){
       const eo=EAT_OUT[sk(p,d,s)];
       if(eo){kcal+=eo.kcal||0;pro+=eo.pro||0;fat+=eo.fat||0;carb+=eo.carb||0;}
     });
-    const ls=LATE_SNACK[pk(p,d)];
+    const ls=_lateSnackFor(p,d); // R15 SOLO-4 gate (mirror of calcTotals)
     if(ls){kcal+=ls.kcal||0;pro+=ls.pro||0;fat+=ls.fat||0;carb+=ls.carb||0;}
     return {kcal:kcal,pro:pro,fat:fat,carb:carb};
   }
@@ -7203,7 +7244,7 @@ function verifyInvariants(){
       let bKcal=0;
       SLOTS.forEach(function(s2){
         if(s2==='late_snack'){
-          const ls=LATE_SNACK[pk(p,d)];
+          const ls=_lateSnackFor(p,d); // R15 SOLO-4 gate (mirror of calcTotals)
           if(ls)bKcal+=(ls.kcal||0);
           return;
         }
@@ -7295,7 +7336,7 @@ function verifyInvariants(){
         });
         // Late-snack ingredients (per-day, only on trip days).
         if(tripDaySet[d]){
-          const ls2=LATE_SNACK[pk(p,d)];
+          const ls2=_lateSnackFor(p,d); // R15 SOLO-4 gate (mirrors shopping)
           if(ls2&&ls2.ingredients&&ls2.ingredients.length){
             ls2.ingredients.forEach(function(i){
               // V155 (2026-05-19): symmetric defensive guard to the one in
@@ -7361,7 +7402,7 @@ function verifyInvariants(){
         // mirroring buildShoppingList. Without this INV3 expected map
         // would undercount, false-firing 'expected-not-in-shop' for the
         // late_snack carry contribution that buildShoppingList includes.
-        const _ls3 = LATE_SNACK[pk(p,d)];
+        const _ls3 = _lateSnackFor(p,d); // R15 SOLO-4 gate (mirrors shopping)
         if(_ls3 && _ls3.ingredients && _ls3.ingredients.length){
           const _ls3Trip = c1DaySetI3[d] ? 'cook1' : (c2DaySetI3[d] ? 'cook2' : null);
           if(_ls3Trip){
@@ -8346,7 +8387,7 @@ function verifyInvariants(){
         var eo=EAT_OUT[sk(p,d,s)];
         if(eo)balancerKcal+=(eo.kcal||0);
       });
-      var ls=LATE_SNACK[pk(p,d)];
+      var ls=_lateSnackFor(p,d); // R15 SOLO-4 gate (mirror of calcTotals)
       if(ls)balancerKcal+=(ls.kcal||0);
       var truthKcal=calcTotals(p,d).kcal;
       if(Math.abs(balancerKcal-truthKcal)>2){
@@ -8612,7 +8653,7 @@ function verifyInvariants(){
         });
         // V172 (2026-05-19): include late_snack carry ingredients in the
         // weekly waste check.
-        var _lsW = LATE_SNACK[pk(p,d)];
+        var _lsW = _lateSnackFor(p,d); // R15 SOLO-4 gate (mirrors shopping)
         if(_lsW && _lsW.ingredients && _lsW.ingredients.length){
           _lsW.ingredients.forEach(function(ing){
             if(!ing.dbKey) return;
@@ -8913,7 +8954,7 @@ function calcTotals(p,d){
 
   SLOTS.forEach(function(s){
     if(s==='late_snack'){
-      const ls=LATE_SNACK[pk(p,d)];
+      const ls=_lateSnackFor(p,d); // R15 SOLO-4 gate
       if(ls){kcal+=(ls.kcal||0);pro+=(ls.pro||0);fat+=(ls.fat||0);carb+=(ls.carb||0);}
       return;
     }
@@ -9029,7 +9070,7 @@ function computeDailyFV(p,d){
   // late-snack card didn't count toward the daily fruit/veg totals.
   // Stats bar undercounted; "fruit ≥ 1c" primary goal could falsely fail
   // when late_snack contained an apple.
-  const ls = LATE_SNACK[pk(p,d)];
+  const ls = _lateSnackFor(p,d); // R15 SOLO-4 gate
   if(ls && ls.ingredients && ls.ingredients.length){
     const lsFv = computeSlotFV(ls.ingredients);
     veg += lsFv.veg; fruit += lsFv.fruit;
@@ -10834,6 +10875,10 @@ function toggleSkip(p,d,s){
   const dKey=dk(d,s);
   const ourSkip=(p==='him')?'eo-him':'eo-her';
   const otherSkip=(p==='him')?'eo-her':'eo-him';
+  // R15 m2 fix (V279): toggling the armed move SOURCE disarms the move —
+  // the "Moving… ✕" pill is gated on !skipped/!eatOut, so leaving the arm
+  // live would strand ⤓ Here pills with no cancel affordance.
+  if(_movePending&&_movePending.p===p&&_movePending.d===d&&_movePending.s===s) _movePending=null;
   SKIPPED[k]=!SKIPPED[k];
   if(!SKIPPED[k]){
     delete SKIPPED[k];
@@ -11011,6 +11056,9 @@ function toggleEatOut(p,d,s){
   const dKey=dk(d,s);
   const ourSkip=(p==='him')?'eo-him':'eo-her';
   const otherSkip=(p==='him')?'eo-her':'eo-him';
+  // R15 m2 fix (V279): mirror toggleSkip — toggling the armed move SOURCE
+  // disarms the move (see toggleSkip's comment).
+  if(_movePending&&_movePending.p===p&&_movePending.d===d&&_movePending.s===s) _movePending=null;
   if(EAT_OUT[k]){
     delete EAT_OUT[k];
     delete MANUAL_SET[k];
@@ -11160,13 +11208,24 @@ function _slotTypeGroup(s){ return (s==='lunch'||s==='dinner')?'main':s; }
 function _moveEligible(p,d,s){
   if(!_movePending) return false;
   var src=_movePending;
+  // R15 m2 fix (V279): validate the SOURCE too — if it became skipped/
+  // eat-out mid-arm (card pills stay tappable while armed), every ⤓ Here
+  // pill drops instead of lingering as a dead control.
+  var srcK=sk(src.p,src.d,src.s);
+  if(SKIPPED[srcK]||EAT_OUT[srcK]) return false;
   if(src.p===p&&src.d===d&&src.s===s) return false;
   if(_slotTypeGroup(src.s)!==_slotTypeGroup(s)) return false;
   var k=sk(p,d,s);
   if(SKIPPED[k]||EAT_OUT[k]) return false;
   // Person availability BOTH directions (meals are person-conditional).
-  var srcMeal=getMeal(getMealId(src.p,src.d,src.s));
-  var dstMeal=getMeal(getMealId(p,d,s));
+  var srcId=getMealId(src.p,src.d,src.s), dstId=getMealId(p,d,s);
+  // R15 m3 fix (V279): same-meal 'swap' is a destructive no-op — meal
+  // names change nowhere but portion amounts/pins exchange, the shared
+  // cell dissolves, and both slots get locked (worst case: the two sides
+  // of one shared cook trading kcal-prop portion sizes). Don't offer it.
+  if(srcId&&srcId===dstId) return false;
+  var srcMeal=getMeal(srcId);
+  var dstMeal=getMeal(dstId);
   if(!srcMeal||!srcMeal[p]) return false;
   if(!dstMeal||!dstMeal[src.p]) return false;
   return true;
@@ -11176,14 +11235,24 @@ function cancelMoveMeal(){ _movePending=null; renderMeals(); }
 function completeMoveMeal(p,d,s){
   if(!_movePending) return;
   var src=_movePending;
-  if(!_moveEligible(p,d,s)) return;
+  if(!_moveEligible(p,d,s)){
+    // R15 m2 fix (V279): the tap landed on a pill that's stale (state
+    // changed since it rendered). Disarm + re-render so the dead ⤓ pills
+    // drop instead of silently no-oping on screen forever.
+    _movePending=null; renderMeals();
+    return;
+  }
   _movePending=null;
-  swapMeals(src.p,src.d,src.s, p,d,s);
+  if(!swapMeals(src.p,src.d,src.s, p,d,s)){
+    renderMeals(); // R15 m2: failed swap must still clear the armed pills
+  }
 }
 function swapMeals(aP,aD,aS, bP,bD,bS){
   var ka=sk(aP,aD,aS), kb=sk(bP,bD,bS);
   var idA=getMealId(aP,aD,aS), idB=getMealId(bP,bD,bS);
-  if(!idA||!idB||ka===kb) return false;
+  // R15 m3 (V279): idA===idB is a destructive no-op (see _moveEligible) —
+  // backstop here too so no caller can reach the exchange.
+  if(!idA||!idB||ka===kb||idA===idB) return false;
   // Force-materialize both cache slots BEFORE swapping — a missing side
   // would otherwise leave a partial day object (getDayBalancedIngredients
   // returns days as-is, so a hole never lazily rebuilds).
@@ -13944,6 +14013,13 @@ function _computePriorCarryover(priorWeekKey){
     DAYS.forEach(function(d){
       const isCook1 = c1Days.indexOf(d) >= 0;
       ['him','her'].forEach(function(p){
+        // R15 CARRY-1 fix (V279): a DISABLED person's preserved prior-week
+        // SEL was never cooked (the getMealId gate killed it all week) —
+        // counting it produced a phantom "open jar" that corrupted Shelf,
+        // freeze targets, Stage-2 absorb, and the shopping carry depletion
+        // (silent under-buy; INV3 uses this same function so no fire).
+        // Mirrors the skipped/eatOut gates below.
+        if(PERSON_ENABLED[p]===false) return;
         ['breakfast','lunch','snack','dinner'].forEach(function(s){
           const slotKey = p+'_'+d+'_'+s;
           if(priorSkipped[slotKey]) return;
@@ -14023,6 +14099,13 @@ function _computePriorCarryover(priorWeekKey){
 function getRecentMealIds(dayIndex, days, lookback) {
   const recent = [];
   const leftovers = computeLeftovers();
+  // R15 SOLO-5 fix (V279): a DISABLED person's preserved SEL must not
+  // phantom-block the enabled person's variety — nothing will be cooked
+  // for them (the getMealId gate guarantees it), and their former
+  // leftovers misclassify as fresh cooks here (computeLeftovers excludes
+  // them entirely, so the isLeftover exclusion below is dead for them).
+  // Both-enabled behavior is unchanged.
+  const _rmPersons = ['him','her'].filter(function(pp){ return PERSON_ENABLED[pp] !== false; });
   function pushFromDay(pp, d) {
     SLOTS.forEach(function(s) {
       if (s === 'late_snack' || s === 'shake') return;
@@ -14037,14 +14120,14 @@ function getRecentMealIds(dayIndex, days, lookback) {
   // otherwise create when iterating breakfast → lunch → snack → dinner.
   const todayDay = days[dayIndex];
   if (todayDay) {
-    ['him','her'].forEach(function(pp){ pushFromDay(pp, todayDay); });
+    _rmPersons.forEach(function(pp){ pushFromDay(pp, todayDay); });
   }
   // Backward window (this week + cross into prev week)
   for (let b = 1; b <= lookback; b++) {
     const prevIdx = dayIndex - b;
     if (prevIdx >= 0) {
       const prevDay = days[prevIdx];
-      ['him','her'].forEach(function(pp){ pushFromDay(pp, prevDay); });
+      _rmPersons.forEach(function(pp){ pushFromDay(pp, prevDay); });
     } else {
       const lastWeekDayIdx = 7 + prevIdx;
       if (lastWeekDayIdx >= 0 && lastWeekDayIdx < 7) {
@@ -14055,7 +14138,7 @@ function getRecentMealIds(dayIndex, days, lookback) {
         const lastEo = prevWk.eatOut || {};
         SLOTS.forEach(function(s) {
           if (s === 'late_snack' || s === 'shake') return;
-          ['him','her'].forEach(function(pp){
+          _rmPersons.forEach(function(pp){
             const key = pp + '_' + lastDay + '_' + s;
             const id = lastSel[key];
             if (!id || recent.indexOf(id) >= 0) return;
@@ -14093,7 +14176,7 @@ function getRecentMealIds(dayIndex, days, lookback) {
     const fwdIdx = dayIndex + f;
     if (fwdIdx < days.length) {
       const fwdDay = days[fwdIdx];
-      ['him','her'].forEach(function(pp){ pushFromDay(pp, fwdDay); });
+      _rmPersons.forEach(function(pp){ pushFromDay(pp, fwdDay); });
     }
   }
   return recent;
@@ -18811,6 +18894,12 @@ function switchWeek(w){
     if(typeof _paintSlot !== 'undefined') _paintSlot = '';
     if(typeof _paintExistingColorIdx !== 'undefined') _paintExistingColorIdx = -1;
   }
+  // R15 m1 fix (V279): an armed move is week-less ({p,d,s}, same shape as
+  // the paint keys above) — surviving the switch would complete against a
+  // DIFFERENT week's slots, including the View-Only last week. Silent
+  // cancel (no confirm — unlike paint, an arm carries no accumulated work;
+  // matches the transient-clearing pattern below).
+  if(typeof _movePending !== 'undefined') _movePending = null;
   saveWeeks();
   activeWeek=w;
   loadWeekState(w);
@@ -18858,6 +18947,11 @@ function switchWeek(w){
   }
   renderWeekBar();renderDayTabs();renderMeals();
   if(topTab==='shop')renderShop();
+  // R15-SHELF-1 (V279): the Shelf is week-dependent (carryover reads
+  // _prevWeekKey(activeWeek), staples/freezer read the active week's
+  // shopping) — without this branch a week-pill tap on the Shelf tab left
+  // the previous week's data on screen under the new pill highlight.
+  if(topTab==='shelf')renderShelf();
 }
 function renderWeekBar(){
   const bar=document.getElementById('weekBar');if(!bar)return;
@@ -19205,11 +19299,23 @@ function mergeSyncData(remote){
 
   // V242 (2026-07-10): pantry — per-entry LWW (customIngredients pattern).
   // Deletion is soft (qty:0 entry with fresh _ts) so removals propagate.
+  // R15-SYNC-1 (V279): union-key walk (adjTargets pattern) — a RECEIVER-ONLY
+  // entry must also resolve against the Force Push floor and be deleted
+  // ("replace its state with yours"); the old remote-keys-only loop let it
+  // survive a Force Push and re-propagate outward on the next regular sync.
+  // Normal pulls (_mergeForceTs 0) never delete receiver-only entries.
   if(remote.pantry){
-    Object.keys(remote.pantry).forEach(function(k){
+    var _pKeys={};
+    Object.keys(remote.pantry).forEach(function(k){_pKeys[k]=true;});
+    Object.keys(PANTRY).forEach(function(k){_pKeys[k]=true;});
+    Object.keys(_pKeys).forEach(function(k){
       var rE=remote.pantry[k], lE=PANTRY[k];
       var rt=Math.max(remoteIsLegacy?0:(rE&&rE._ts||0), _mergeForceTs);
       var lt=lE&&lE._ts||0;
+      if(rE===undefined){
+        if(rt>lt) delete PANTRY[k];
+        return;
+      }
       if(!lE || rt>lt) PANTRY[k]=rE;
     });
     savePantry();
@@ -19510,8 +19616,11 @@ function toggleSyncPanel(){
     // The old close branch only hid syncView — every other view was
     // already display:none from the open branch, leaving a blank page
     // until the user tapped a tab. setTopTab(topTab) rebuilds visibility,
-    // tab highlights, and re-renders (topTab was never changed while the
-    // panel was open, so it IS the previous tab).
+    // tab highlights, and re-renders. topTab normally doesn't change while
+    // the panel is open — the ONE exception (R15-SETTINGS-1, V279) is
+    // applyTabPrefs retargeting it to 'meals' when the user hides the
+    // previously-active tab from inside the panel; this close still lands
+    // correctly because it just follows topTab.
     sv.style.display='none';
     setTopTab(topTab);
   } else {
@@ -21358,7 +21467,7 @@ window.MPStress=(function(){
           }
         });
         if(tripDaySet[d]){
-          var ls=LATE_SNACK[pk(p,d)];
+          var ls=_lateSnackFor(p,d); // R15 SOLO-4 gate (mirrors shopping)
           if(ls&&ls.ingredients&&ls.ingredients.length){
             ls.ingredients.forEach(function(i){
               if(!m[i.dbKey])m[i.dbKey]={him:0,her:0};
