@@ -114,6 +114,9 @@ body.mfocus-lock{overflow:hidden}
 .ingr-ro-name{flex:1}
 .ingr-ro-cal{color:var(--text-dim);font-size:11px;white-space:nowrap}
 .ingr-lock{font-size:11px;color:var(--text-dim);font-weight:600;white-space:nowrap}
+.eb-chip{display:inline-block;padding:3px 0;width:52px;border:1px solid var(--border);border-radius:8px;color:var(--text);font-weight:700;font-size:11px;text-align:center;background:var(--bg-card)}
+.eb-chip-apply{border-color:rgba(167,139,250,.6);color:#A78BFA}
+.eb-desc{color:var(--text-mid)}
 .ingr-ro-grid{display:block;padding:2px 0}
 .ingr-ro-row,.sig-row[onclick]{cursor:pointer}
 .rowarn-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:450;display:flex;align-items:center;justify-content:center;padding:24px}
@@ -10928,12 +10931,17 @@ function renderMeals(){
       // 2026-05-06+: Edit mode banner. Surfaces that taps are sandboxed
       // and explains the Apply/Undo flow.
       if(_scheduleEditMode){
-        schedHtml+='<div style="margin:6px 0;padding:8px 10px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.5);border-radius:8px;color:#A78BFA;font-size:12px;line-height:1.4">'
-          +'<b>Edit Mode</b> — tap any cell, day name, or column header for actions. '
-          +'<b>Reset</b> wipes the grid<br>'
-          +'<b>Apply</b> saves changes and may attempt to re-roll adjacent meals to reduce waste<br>'
-          +'<b>Undo</b> reverts'
-          +'</div>';
+        // V298 (user: the banner "just looks like a blob of text"): title
+        // line + a chip/description grid — the chips mirror the real
+        // Reset/Undo/Apply buttons (Apply purple like sched-btn-set) so
+        // the mapping reads at a glance.
+        schedHtml+='<div style="margin:6px 0;padding:10px 12px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.5);border-radius:8px;font-size:12px;line-height:1.45">'
+          +'<div style="color:#A78BFA;margin-bottom:9px"><b>Edit Mode</b> — tap any cell, day name, or column header for actions.</div>'
+          +'<div style="display:grid;grid-template-columns:auto 1fr;gap:7px 12px;align-items:center">'
+          +'<span class="eb-chip">Reset</span><span class="eb-desc">wipes the grid</span>'
+          +'<span class="eb-chip eb-chip-apply">Apply</span><span class="eb-desc">saves changes and may attempt to re-roll adjacent meals to reduce waste</span>'
+          +'<span class="eb-chip">Undo</span><span class="eb-desc">reverts</span>'
+          +'</div></div>';
       } else {
         // Spacer between header buttons and grid
         schedHtml+='<div style="height:5px"></div>';
