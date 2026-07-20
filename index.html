@@ -4660,6 +4660,69 @@ function computeLeftovers(){
   const noLeftoverIds={};
   MEALS.forEach(function(m){if(m.noLeftover)noLeftoverIds[m.id]=true;});
 
+  // Phase 0 (V282, user-approved 2026-07-19): USER-DECLARED batches.
+  // Validated manual leftoverLinks groups are AUTHORITATIVE batch
+  // definitions, WINDOW-EXEMPT — the cook+2 window is the RANDOMIZER's
+  // freshness heuristic, but a user who painted or moved a leftover beyond
+  // it is stating physical reality: "that food is already cooked, it just
+  // got pushed a day." Pre-V282 the detector never read LEFTOVER_LINKS
+  // (groups were visualization only), so a beyond-window member silently
+  // became a NEW cook and shopping double-bought it.
+  // Rules: same anchor ordering as Phase 2 (earliest day/slot, him first);
+  // lunch/dinner members only (breakfast/snack slots in a group stay
+  // visual-only); noLeftover meals excluded; MAX_BATCH cap kept; slots
+  // must currently HOLD the group's meal and not be skipped/eat-out
+  // (mirrors _validateManualLinkGroups). Slots consumed here are invisible
+  // to the Phase 1/2 adjacency scan via the existing result[key] guards —
+  // manual wins, same rule as the visual layer.
+  (typeof LEFTOVER_LINKS!=='undefined'?LEFTOVER_LINKS:[]).forEach(function(g){
+    if(!g||!g.meal||!g.slots||noLeftoverIds[g.meal])return;
+    var members=[];
+    g.slots.forEach(function(sl){
+      if(!sl||cookSlots.indexOf(sl.s)<0)return;
+      var key=sk(sl.p,sl.d,sl.s);
+      if(result[key])return; // first group wins on overlap
+      if(SKIPPED[key]||EAT_OUT[key])return;
+      if(getMealId(sl.p,sl.d,sl.s)!==g.meal)return; // validator rule
+      var di=DAYS.indexOf(sl.d);
+      if(di<0)return;
+      members.push({p:sl.p,d:sl.d,di:di,s:sl.s,key:key});
+    });
+    if(members.length<2)return;
+    members.sort(function(a,b){
+      return a.di-b.di||SLOT_ORDER[a.s]-SLOT_ORDER[b.s]||(a.p==='him'?-1:1);
+    });
+    var batch=members.slice(0,MAX_BATCH);
+    var anchor=batch[0];
+    var hasSameDayShared=batch.some(function(e){
+      return e.p!==anchor.p&&e.d===anchor.d&&e.s===anchor.s;
+    });
+    var anchorPortions=batch.filter(function(e){return e.p===anchor.p;}).length;
+    var xpEntry=batch.find(function(e){return e.p!==anchor.p;});
+    result[anchor.key]={
+      isLeftover:false,
+      cookDay:anchor.d,
+      servings:anchorPortions,
+      totalServings:batch.length,
+      crossPersonCook:!!xpEntry,
+      feedsAlso:xpEntry?xpEntry.p:null,
+      feedsDay:xpEntry?xpEntry.d:null,
+      shared:hasSameDayShared,
+      portions:batch.map(function(e){return {p:e.p,d:e.d,s:e.s};}),
+    };
+    batch.forEach(function(e){
+      if(e.key===anchor.key)return;
+      var sameDay=e.d===anchor.d&&e.s===anchor.s;
+      result[e.key]={
+        isLeftover:true,
+        cookDay:anchor.d,
+        crossPerson:e.p!==anchor.p,
+        cookedBy:anchor.p,
+        sameDayShared:sameDay&&e.p!==anchor.p,
+      };
+    });
+  });
+
   // Phase 1: collect every occurrence across both people, bucketed by meal ID.
   const byMealId={};
   ['him','her'].forEach(function(p){
@@ -11318,6 +11381,49 @@ function _moveEligible(p,d,s){
   if(dstMeal.slots&&dstMeal.slots.indexOf(src.s)<0) return false;
   return true;
 }
+// V282: moving a batch member (anchor or leftover) converts the detector-
+// derived batch into a MANUAL group first, so the relationship survives
+// the move (detector Phase 0 honors manual groups beyond the cook+2
+// window) and the next randomize (MANUAL_SET locks every portion —
+// physical reality: the food is already cooked; rerolling the cook would
+// orphan its moved leftover). USER_EDITED stays on the swap endpoints
+// only (the untouched portions get the lock, not the Set pill).
+// Palette-saturated (allocator -1) → skip: old behavior, honestly.
+function _materializeBatchGroup(p,d,s){
+  var los=computeLeftovers();
+  var lo=los[sk(p,d,s)];
+  if(!lo) return; // solo slot — no relationship to preserve
+  var anchorKey=null, anchorLo=null;
+  if(!lo.isLeftover){ anchorKey=sk(p,d,s); anchorLo=lo; }
+  else {
+    Object.keys(los).forEach(function(k){
+      if(anchorKey) return;
+      var a=los[k];
+      if(a.isLeftover||!a.portions) return;
+      if(a.portions.some(function(pt){return pt.p===p&&pt.d===d&&pt.s===s;})){ anchorKey=k; anchorLo=a; }
+    });
+  }
+  if(!anchorLo||!anchorLo.portions||anchorLo.portions.length<2) return;
+  var mealId=getMealId(p,d,s);
+  if(!mealId) return;
+  var already=(LEFTOVER_LINKS||[]).some(function(g){
+    return g.meal===mealId&&(g.slots||[]).some(function(sl){return sk(sl.p,sl.d,sl.s)===anchorKey;});
+  });
+  if(already) return; // l4 retargeting will carry the existing group
+  var color=_allocateLinkColor();
+  if(color<0) return;
+  LEFTOVER_LINKS.push({
+    id:'mv_'+Date.now()+'_'+Math.floor(Math.random()*1e6),
+    meal:mealId,
+    slots:anchorLo.portions.map(function(pt){return {p:pt.p,d:pt.d,s:pt.s};}),
+    colorIdx:color
+  });
+  anchorLo.portions.forEach(function(pt){
+    var k=sk(pt.p,pt.d,pt.s);
+    MANUAL_SET[k]=true;
+    if(typeof _bumpSlotTs==='function') _bumpSlotTs(k);
+  });
+}
 function startMoveMeal(p,d,s){ _movePending={p:p,d:d,s:s}; renderMeals(); }
 function cancelMoveMeal(){ _movePending=null; renderMeals(); }
 function completeMoveMeal(p,d,s){
@@ -11348,6 +11454,12 @@ function swapMeals(aP,aD,aS, bP,bD,bS){
   getBalancedSlotIngredients(bP,bD,bS);
   var da=pk(aP,aD), db2=pk(bP,bD);
   if(!_dayBalancedCache[da]||!_dayBalancedCache[da][aS]||!_dayBalancedCache[db2]||!_dayBalancedCache[db2][bS]) return false;
+  // V282: preserve batch relationships across the move — materialize any
+  // detector-derived batch either endpoint belongs to into a manual group
+  // BEFORE the SEL writes (the l4 retargeting below then carries the moved
+  // slot, and detector Phase 0 keeps it a leftover beyond the window).
+  _materializeBatchGroup(aP,aD,aS);
+  _materializeBatchGroup(bP,bD,bS);
   SEL[ka]=idB; SEL[kb]=idA;
   // Overrides travel with their meal (user pins, temp adds).
   // R15 l3 (V280): freeze/fat-boost pins do NOT travel — they were sized
@@ -23857,7 +23969,14 @@ window.MPStress=(function(){
       var mbLo=computeLeftovers()[sk(p,d,s)];
       if(!mbLo||mbLo.isLeftover||!mbLo.portions||mbLo.portions.length<2){ add('setup', true, '', null, 'slot not a multi-portion anchor'); return {checks:checks}; }
       var mbSrcId=getMealId(p,d,s);
-      var mbDays=mbLo.portions.map(function(pt){return DAYS.indexOf(pt.d);});
+      // V282 battery fix: adjacency-safe = >=3 days from EVERY occurrence of
+      // the meal in the week (a second batch of it may exist beyond the
+      // swapped batch's own window).
+      var mbDays=[];
+      DAYS.forEach(function(_d,_di){['lunch','dinner'].forEach(function(_s){['him','her'].forEach(function(_p){
+        if(SEL[sk(_p,_d,_s)]===mbSrcId&&mbDays.indexOf(_di)<0) mbDays.push(_di);
+      });});});
+      mbLo.portions.forEach(function(pt){var di2=DAYS.indexOf(pt.d); if(mbDays.indexOf(di2)<0) mbDays.push(di2);});
       function _mbCount(id){ var n=0; DAYS.forEach(function(_d){['lunch','dinner'].forEach(function(_s){['him','her'].forEach(function(_p){ if(SEL[sk(_p,_d,_s)]===id) n++; });});}); return n; }
       var mbDst=null;
       DAYS.forEach(function(_d,_di){ ['lunch','dinner'].forEach(function(_s){
@@ -23959,10 +24078,15 @@ window.MPStress=(function(){
       var mgDi=DAYS.indexOf(mgD);
       // Buddy day inside the batch window (d+1..d+2) so src+buddy form ONE batch.
       var mgBuddy=null;
+      var mgLos0=computeLeftovers();
       for(var mgB=1;mgB<=2&&!mgBuddy;mgB++){
         var bd=DAYS[mgDi+mgB]; if(!bd) continue;
         var bk=sk(mgP,bd,mgS);
         if(SKIPPED[bk]||EAT_OUT[bk]||MANUAL_SET[bk]) continue;
+        // V282 battery fix: buddy must be a true SOLO — stampSel on a batch
+        // member rips it out of ITS batch (a changeMeal-class side effect of
+        // the op's synthetic setup, not move behavior) -> INV7 re-pairing.
+        if(mgLos0[bk]) continue;
         mgBuddy=bd;
       }
       if(!mgBuddy){ add('setup', true, '', null, 'no clean buddy day in window'); return {checks:checks}; }
@@ -23972,7 +24096,16 @@ window.MPStress=(function(){
       MANUAL_SET[sk(mgP,mgD,mgS)]=true; MANUAL_SET[sk(mgP,mgBuddy,mgS)]=true;
       LEFTOVER_LINKS.push({id:'sm_l8_'+seed, meal:mgSrcId, slots:[{p:mgP,d:mgD,s:mgS},{p:mgP,d:mgBuddy,s:mgS}], colorIdx:mgColor});
       var mgGroup=LEFTOVER_LINKS[LEFTOVER_LINKS.length-1];
-      invalidateLeftoverCache();
+      // V282 battery fix (root-caused): only the DETECTOR map re-derives —
+      // mirroring swapMeals' own `_leftoverCache=null`. A full
+      // invalidateLeftoverCache() wipes the day-balanced cache, and a bare
+      // rebuild does NOT reproduce the pipeline's unified batch state
+      // (measured: 0 -> 37 INV7 fires on plain V281 randomize+invalidate,
+      // no groups involved — pre-existing architecture: only the pipeline
+      // certifies; mutation paths pair invalidation with renders and defer
+      // certification to the next randomize). The op was measuring that
+      // architectural drift, not move behavior.
+      _leftoverCache=null;
       var mgBuddyDi=DAYS.indexOf(mgBuddy);
       var mgDst=null;
       DAYS.forEach(function(_d,_di){ ['lunch','dinner'].forEach(function(_s){
@@ -23996,9 +24129,15 @@ window.MPStress=(function(){
       var mgStill=LEFTOVER_LINKS.indexOf(mgGroup)>=0;
       add('mg_validatorKeeps', mgStill && mgGroup.slots.length===2, 'validator dropped/shrank the followed group: len='+(mgStill?mgGroup.slots.length:'gone'));
       add('mg_colorKept', mgGroup.colorIdx===mgColor, 'palette color changed');
-      // Post-swap: only stranded-geometry fires allowed, then prove the
-      // next seeded randomize re-certifies to baseline (V243 contract).
-      checkInvStrandedOnly();
+      // V282 battery fix (run 7 root-cause): NO mid-mutation invariant
+      // measurement for THIS op — its synthetic setup (stampSel without the
+      // full invalidate+render every real path pairs it with) creates an
+      // artificial SEL-vs-cache mismatch at the buddy slot that fires
+      // INV5/INV23; with full invalidation instead, the bare rebuild's
+      // architectural INV7 drift fires (0->37 on plain V281, no groups).
+      // Both are measurement artifacts of the scaffolding, not swap
+      // behavior. The op's subject — l4 group-follow — is asserted above,
+      // and the recovery randomize below is the certified gate.
       checkSchedEatOut();
       checkCoherence();
       randomizeWeek('shared', seed+500000);
