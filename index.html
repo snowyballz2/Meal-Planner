@@ -6448,15 +6448,18 @@ function setTopTab(t){
 // V291: card-state legend shown at the bottom of every meals page —
 // mini swatches of the V245 card washes (accent edge + faded gradient).
 function _mealLegendHtml(){
+  // V292 (user: the edge+faint-wash swatch read as "a mostly empty battery
+  // symbol"): full smooth gradient across the swatch instead — the
+  // schedule legend's accepted gradient-square language.
   function sq(rgb){
-    return '<span class="ml-sq" style="border-left:3px solid rgba('+rgb+',.9);background:linear-gradient(135deg,rgba('+rgb+',.30),rgba('+rgb+',.10) 55%,rgba('+rgb+',.03)),var(--bg-card)"></span>';
+    return '<span class="ml-sq" style="background:linear-gradient(90deg,rgba('+rgb+',.85),rgba('+rgb+',.38) 60%,rgba('+rgb+',.10))"></span>';
   }
   return '<div class="meal-legend">'
-    +'<span>'+sq('245,158,11')+'leftovers / big cook</span>'
-    +'<span>'+sq('16,185,129')+'shared</span>'
-    +'<span>'+sq('167,139,250')+'set (edited)</span>'
-    +'<span>'+sq('148,163,184')+'skipped</span>'
-    +'<span>'+sq('239,68,68')+'eat out</span>'
+    +'<span>'+sq('245,158,11')+'Batch / Leftovers</span>'
+    +'<span>'+sq('16,185,129')+'Shared</span>'
+    +'<span>'+sq('167,139,250')+'Set (Edited)</span>'
+    +'<span>'+sq('148,163,184')+'Skipped</span>'
+    +'<span>'+sq('239,68,68')+'Eat Out</span>'
     +'</div>';
 }
 // V290: the home screen — big section tiles (V245 accent language) +
