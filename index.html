@@ -90,12 +90,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .mfrow:active{background:var(--gray-light)}
 .mfsec{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 2px}
 body.mfocus-lock{overflow:hidden}
-.sfocus-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:260;display:flex;align-items:center;justify-content:center}
-.sfocus{background:var(--bg);width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden}
-@media(min-width:640px){.sfocus{max-width:640px;height:auto;max-height:92vh;border:1px solid var(--border);border-radius:14px}}
-.sfocus-body{overflow-y:auto;padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 20px);-webkit-overflow-scrolling:touch}
-body.sfocus-lock{overflow:hidden}
-.sched-open-aff{font-size:18px;color:var(--text-dim);font-weight:700;line-height:1}
+.sched-screen-hdr{display:flex;align-items:center;justify-content:space-between;margin:2px 0 10px}
+.sched-screen-title{font-size:13px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.5px;text-align:center}
+.sched-back{font-size:13px;font-weight:700;color:var(--his);cursor:pointer;padding:4px 6px;white-space:nowrap}
+.sched-detail{margin-top:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:12px}
+.sched-detail-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.sched-detail-batch{font-size:12px;color:var(--text-dim);margin-bottom:8px}
 .skip-summary{padding:6px 12px;font-size:11px;color:var(--text-mid);background:rgba(148,163,184,.08);border-top:1px solid var(--border)}
 .adj-target-cb{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--text);font-weight:600;cursor:pointer;margin-right:10px;vertical-align:middle}
 .adj-target-cb input{accent-color:var(--shop);margin:0;width:13px;height:13px;vertical-align:middle;position:relative;top:0}
@@ -3869,14 +3869,22 @@ function closeSchedMenu(){
   var el=document.getElementById('schedMenuOverlay');
   if(el) el.remove();
 }
-// V287: grid view row → navigate to that person/day and open the focus
-// overlay (navigation keeps changeMeal's module-global context correct).
+// V289: grid view row → detail card LISTED BELOW the grid on the schedule
+// screen (user feedback on V287's navigate-away behavior). Defensive
+// fallback keeps the V287 overlay flow if the grid ever renders off-screen.
 function schedMenuViewMeal(vp){
   var m=_schedMenu; if(!m) return;
   var vd=m.d, vs=m.s;
   closeSchedMenu();
-  setPerson(vp); setDay(vd);
-  openMealFocus(vp,vd,vs);
+  if(sharedSchedOpen){
+    _schedDetail={p:vp,d:vd,s:vs};
+    renderMeals();
+    var el=document.getElementById('schedDetail');
+    if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+  } else {
+    setPerson(vp); setDay(vd);
+    openMealFocus(vp,vd,vs);
+  }
 }
 function _schedMenuCells(){
   if(!_schedMenu) return [];
@@ -10667,22 +10675,28 @@ function renderMeals(){
     html+='<div class="week-banner next">Next Week — Planning Ahead</div>';
   }
   if(activeWeek!=='last'){
-    // V288 (user: "schedule meals should no longer have a dropdown either"):
-    // the panel no longer expands inline (the old drop-down disclosure) —
-    // this row is just the opener tile; the whole Schedule Meals UI
-    // (buttons, grid, legend, edit/paint mode) lives in a full-screen
-    // popup (_renderSchedFocus), the V287 focus-overlay language.
-    html+='<div class="sched-panel"><div class="sched-hdr" onclick="sharedSchedOpen=true;renderMeals();">'
-      +'<div class="sched-title">Schedule Meals</div>'
-      +'<div class="sched-open-aff">›</div>'
+    // V289 (user feedback on V288): centered opener, NO glyph of any kind,
+    // renamed. Opens the schedule as its OWN SCREEN (content takeover),
+    // not a floating popup.
+    html+='<div class="sched-panel"><div class="sched-hdr" style="justify-content:center" onclick="closeMealFocus();sharedSchedOpen=true;renderMeals();">'
+      +'<div class="sched-title">Schedule &amp; Randomize Meals</div>'
       +'</div></div>';
   }
-  // Popup content — built only when open; _renderSchedFocus at the exit
-  // paths mounts/unmounts it on <body>. The V29 rule carries over: the
-  // popup's ✕ is hidden in edit mode (Apply/Undo/Reset are the exits).
+  // V289: the schedule screen — built only when open; it REPLACES the tab
+  // content (own screen, in normal document flow — no backdrop, no sheet).
+  // The V29 rule carries over: the back link is hidden in edit mode
+  // (Apply/Undo/Reset are the exits).
   let schedHtml='';
   if(activeWeek!=='last' && sharedSchedOpen){
-    schedHtml+='<div class="sched-panel" style="border:none;background:transparent;padding:0;margin:0">';
+    if(activeWeek==='next') schedHtml+='<div class="week-banner next">Next Week — Planning Ahead</div>';
+    schedHtml+='<div class="sched-screen-hdr">'
+      +(_scheduleEditMode
+        ?'<div class="sched-back" style="visibility:hidden">‹ Meals</div>'
+        :'<div class="sched-back" onclick="sharedSchedOpen=false;_schedDetail=null;renderMeals()">‹ Meals</div>')
+      +'<div class="sched-screen-title">Schedule &amp; Randomize Meals</div>'
+      +'<div class="sched-back" style="visibility:hidden">‹ Meals</div>'
+      +'</div>';
+    schedHtml+='<div class="sched-panel">';
     schedHtml+='<div class="sched-hdr">';
     schedHtml+='<div></div>';
     if(sharedSchedOpen){
@@ -10700,7 +10714,7 @@ function renderMeals(){
         schedHtml+='<div style="display:flex;gap:6px">'
           +'<div class="sched-btn" onclick="event.stopPropagation();if(confirm(\'Clear all manually set meals?\')){clearWeek();}">Clear</div>'
           +'<div class="sched-btn sched-btn-set" onclick="event.stopPropagation();enterScheduleEditMode()">Edit</div>'
-          +'<div class="sched-btn" style="border-color:'+(person==='her'?'rgba(244,114,182,.5)':person==='shared'?'rgba(52,211,153,.5)':'rgba(96,165,250,.5)')+';color:'+(person==='her'?'var(--her)':person==='shared'?'#34D399':'var(--his)')+'" onclick="event.stopPropagation();showRandomizePopup()">Create Plan</div>'
+          +'<div class="sched-btn" style="border-color:'+(person==='her'?'rgba(244,114,182,.5)':person==='shared'?'rgba(52,211,153,.5)':'rgba(96,165,250,.5)')+';color:'+(person==='her'?'var(--her)':person==='shared'?'#34D399':'var(--his)')+'" onclick="event.stopPropagation();showRandomizePopup()">Randomize</div>'
           +'</div>';
       }
     }
@@ -11127,6 +11141,51 @@ function renderMeals(){
       schedHtml+='</div>';
     }
     schedHtml+='</div>';
+    // V289: selected meal/group detail, LISTED BELOW the grid (user:
+    // "when you click on groups or meals its listed below"). Shows the
+    // full cook view (ingredients + steps) plus the batch timeline when
+    // the meal belongs to a cook+leftover group.
+    if(_schedDetail){
+      var _sd=_schedDetail, _sdK=sk(_sd.p,_sd.d,_sd.s);
+      if(SKIPPED[_sdK]||EAT_OUT[_sdK]||!getMealId(_sd.p,_sd.d,_sd.s)) _schedDetail=null;
+      else {
+        var sdInner=buildMealCardHtml(_sd.s,_sd.p,_sd.d,_sd.p==='him'?'her':'him','focus');
+        if(!sdInner) _schedDetail=null;
+        else {
+          var sdBatch='';
+          var sdLos=computeLeftovers(), sdLo=sdLos[_sdK];
+          if(sdLo){
+            var sdAnchor=null, sdAK=null;
+            if(!sdLo.isLeftover){ sdAnchor=sdLo; sdAK=_sdK; }
+            else Object.keys(sdLos).forEach(function(ak){
+              if(sdAnchor) return;
+              var a=sdLos[ak];
+              if(a.isLeftover||!a.portions) return;
+              if(a.portions.some(function(pt){return sk(pt.p,pt.d,pt.s)===_sdK;})){ sdAnchor=a; sdAK=ak; }
+            });
+            if(sdAnchor&&sdAnchor.portions&&sdAnchor.portions.length>1){
+              var akp=sdAK.split('_');
+              sdBatch='Batch: cooks '+akp[1].slice(0,3)+' '+SLOT_LABEL[akp[2]].toLowerCase()+' ('+akp[0]+') → leftovers '
+                +sdAnchor.portions.filter(function(pt){return sk(pt.p,pt.d,pt.s)!==sdAK;})
+                  .map(function(pt){return pt.d.slice(0,3)+' '+SLOT_LABEL[pt.s].toLowerCase()+' ('+pt.p+')';}).join(', ');
+            }
+          }
+          schedHtml+='<div class="sched-detail" id="schedDetail">'
+            +'<div class="sched-detail-hdr"><div class="mfocus-ctx">'+_sd.d+' · '+SLOT_LABEL[_sd.s]+' · '+(_sd.p==='him'?'Him':'Her')+'</div>'
+            +'<button class="mfocus-close" onclick="_schedDetail=null;renderMeals()">✕</button></div>'
+            +(sdBatch?'<div class="sched-detail-batch">'+sdBatch+'</div>':'')
+            +sdInner+'</div>';
+        }
+      }
+    }
+  }
+  // V289: schedule screen takeover — replaces the tab content entirely.
+  if(schedHtml){
+    mealEl.innerHTML=schedHtml;
+    mealEl.style.minHeight='';
+    window.scrollTo(0,scrollY);
+    if(_mealFocus) _renderMealFocus();
+    return;
   }
 
   // Shared view — render shared cards and return
@@ -11134,7 +11193,6 @@ function renderMeals(){
     const sharedScroll=window._scrollTopOnShared?0:scrollY;
     window._scrollTopOnShared=false;
     renderSharedView(day, sharedScroll, mealEl, html);
-    _renderSchedFocus(schedHtml); // V288: schedule popup
     if(_mealFocus) _renderMealFocus(); // V287: keep the focus overlay live
     return;
   }
@@ -11150,30 +11208,9 @@ function renderMeals(){
   mealEl.innerHTML=html;
   window.scrollTo(0,scrollY);
   requestAnimationFrame(function(){window.scrollTo(0,scrollY);mealEl.style.minHeight='';});
-  _renderSchedFocus(schedHtml); // V288: schedule popup
   if(_mealFocus) _renderMealFocus(); // V287: refresh (or auto-close) the focus overlay
 }
 
-// V288: Schedule Meals popup. Mounted on <body> so the grid, V253 cell
-// menus (z400), paint mode, Create Plan popup (z999), and the fact prompt
-// (z500) all stack above it (sfocus z260); the V287 meal-focus overlay
-// (z300) opened from grid view rows also sits above.
-function _renderSchedFocus(html){
-  var old=document.getElementById('schedFocusOverlay');
-  if(old) old.remove();
-  if(!html || !sharedSchedOpen){ document.body.classList.remove('sfocus-lock'); return; }
-  // V29 carried over: no close affordance while edit mode is pending —
-  // Apply/Undo/Reset are the exit paths (they collapse via their own flow).
-  var closeBtn=_scheduleEditMode?'':'<button class="mfocus-close" onclick="sharedSchedOpen=false;renderMeals()">✕</button>';
-  var wk=activeWeek==='next'?'Next Week':activeWeek==='last'?'Last Week':'This Week';
-  var out='<div class="sfocus-backdrop" id="schedFocusOverlay">'
-    +'<div class="sfocus" onclick="event.stopPropagation()">'
-    +'<div class="mfocus-hdr"><div class="mfocus-ctx">Schedule Meals · '+wk+'</div>'+closeBtn+'</div>'
-    +'<div class="sfocus-body">'+html+'</div>'
-    +'</div></div>';
-  document.body.insertAdjacentHTML('beforeend',out);
-  document.body.classList.add('sfocus-lock');
-}
 function togglePerServing(p,d,s){
   // 2026-05-06: flip Big Cook anchor card between combined batch view and
   // per-serving view. Pure render decision — no data mutation, no pipeline.
@@ -11206,6 +11243,7 @@ function toggleCard(k){
 // surgical-edit dropdowns and INV25's rendered labels are unchanged),
 // colorized steps, and a Change-meal tap list replacing the old select.
 var _mealFocus=null; // {p,d,s} — transient, dies on reload
+var _schedDetail=null; // V289: {p,d,s} selected on the schedule screen — detail card below the grid
 function openMealFocus(p,d,s){
   var k=sk(p,d,s);
   if(SKIPPED[k]||EAT_OUT[k]) return;
@@ -15275,7 +15313,7 @@ function _openTodayFactPrompt(randTarget, todayIdx){
     +rows
     +'<div style="font-size:12px;opacity:.7;margin:10px 0 12px">Checked meals are kept as-is; leftovers from anything already cooked stay in the plan. Everything else re-rolls.</div>'
     +'<div style="display:flex;gap:10px">'
-    +'<button class="rand-btn" style="flex:1" onclick="_confirmTodayFactPrompt(\''+randTarget+'\','+todayIdx+')">Create Plan</button>'
+    +'<button class="rand-btn" style="flex:1" onclick="_confirmTodayFactPrompt(\''+randTarget+'\','+todayIdx+')">Randomize</button>'
     +'<button class="rand-btn" style="flex:1;background:var(--border,#2E3138)" onclick="_cancelTodayFactPrompt()">Cancel</button>'
     +'</div></div></div>';
   document.body.appendChild(el);
