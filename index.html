@@ -4366,21 +4366,32 @@ function _clearFreezeOverrides(){
 // plan, whose pins must survive every per-retry _clearFreezeOverrides so
 // her amounts stay at their previously-frozen (boundary-clean) values.
 function _captureNonTargetFreezePins(randTarget){
-  if(!randTarget || randTarget === 'shared') return null;
-  var scopeP = randTarget;
+  // V283: fact slots (already cooked/eaten) keep their durable pins on
+  // EVERY run — including 'shared' runs, which previously captured nothing
+  // (the unscoped clears then deleted the fact slots' boundary pins and
+  // their as-eaten amounts reverted on rebuild).
+  var factActive = _factKeys && Object.keys(_factKeys).length>0;
+  var scopeP = (randTarget && randTarget !== 'shared') ? randTarget : null;
+  if(!scopeP && !factActive) return null;
   var los = computeLeftovers();
   var writableK = {};
-  Object.keys(los).forEach(function(ak){
-    var alo = los[ak];
-    if(alo.isLeftover || !alo.portions) return;
-    var participates = alo.portions.some(function(pt){return pt.p===scopeP;});
-    if(participates) alo.portions.forEach(function(pt){ writableK[sk(pt.p,pt.d,pt.s)] = true; });
-  });
+  if(scopeP){
+    Object.keys(los).forEach(function(ak){
+      var alo = los[ak];
+      if(alo.isLeftover || !alo.portions) return;
+      var participates = alo.portions.some(function(pt){return pt.p===scopeP;});
+      if(participates) alo.portions.forEach(function(pt){ writableK[sk(pt.p,pt.d,pt.s)] = true; });
+    });
+  }
   var preserved = {};
   Object.keys(OVERRIDES).forEach(function(k){
-    var lo = los[k];
-    var writable = lo ? !!writableK[k] : (k.split('_')[0] === scopeP);
-    if(writable) return;
+    var isFact = factActive && !!_factKeys[k];
+    if(!isFact){
+      if(!scopeP) return; // shared run: only fact pins need preserving
+      var lo = los[k];
+      var writable = lo ? !!writableK[k] : (k.split('_')[0] === scopeP);
+      if(writable) return;
+    }
     var keep = OVERRIDES[k].filter(function(o){
       return o._userSet !== true && (o._freezePin === true || o._fatBoost === true);
     });
@@ -4412,7 +4423,9 @@ function _restorePreservedPins(preserved, randTarget){
     });
   }
   Object.keys(preserved).forEach(function(k){
-    if(joinedK[k]) return; // target now participates in this pot — stay raw
+    // V283: fact pins restore unconditionally — the pot is locked whole
+    // (conservation), so "target joined this pot" can't apply to it.
+    if(joinedK[k] && !(_factKeys && _factKeys[k])) return; // target now participates in this pot — stay raw
     var ov = OVERRIDES[k] || (OVERRIDES[k] = []);
     preserved[k].forEach(function(entry){
       for(var i=0;i<ov.length;i++){ if(ov[i].idx === entry.idx) return; }
@@ -4871,6 +4884,9 @@ function _buildPostPipelineFrozenSlots(p, d, slots, leftovers){
   Object.keys(slots).forEach(function(s2){
     var lo2 = leftovers[sk(p, d, s2)];
     if(s2 === 'shake'){frozenSlots[s2] = true; return;}
+    // V283: fact slots (already cooked/eaten) — the balancer must fit the
+    // rest of the day AROUND them, never adjust them.
+    if(_factKeys && _factKeys[sk(p, d, s2)]){frozenSlots[s2] = true; return;}
     if(lo2 && lo2.isLeftover){frozenSlots[s2] = true; return;}
     if(lo2 && !lo2.isLeftover && (lo2.crossPersonCook || lo2.shared || (lo2.servings && lo2.servings > 1))){
       frozenSlots[s2] = true;
@@ -5462,6 +5478,46 @@ function addShopIngredient(items,dbKey,amt,p){
 // re-enabling restores it. Both-enabled behavior unchanged.
 function _lateSnackFor(p,d){
   return PERSON_ENABLED[p]===false ? null : LATE_SNACK[pk(p,d)];
+}
+// V283 (user-approved fact-stranded downgrade): true iff EVERY contribution
+// of `dbKey` to `trip` comes from FACT-locked geometry — fact solos, fact
+// late snacks, or batches containing a fact slot (locked whole by
+// conservation). Freeze had no writable pool for the item, so a stranded
+// boundary there is unfixable HISTORY (you already shopped and cooked it),
+// not an actionable defect: INV3-strict/INV20 emit tracking-only
+// 'FactStranded' lines for it. Any non-fact contributor present → the
+// fire stays HARD (freeze had a pool and still failed = real bug).
+function _factStrandedItemFor(trip, dbKey){
+  if(!_factKeys) return false;
+  var days=TRIP_DAYS_STATIC[trip]||[];
+  var los=computeLeftovers();
+  var sawFact=false, sawNonFact=false;
+  ['him','her'].forEach(function(p){
+    days.forEach(function(d){
+      SLOTS.forEach(function(s){
+        if(sawNonFact) return;
+        var k=sk(p,d,s);
+        if(s==='late_snack'){
+          var ls=_lateSnackFor(p,d);
+          if(ls&&ls.ingredients&&ls.ingredients.some(function(i){return i.dbKey===dbKey;})){
+            if(_factKeys[k]) sawFact=true; else sawNonFact=true;
+          }
+          return;
+        }
+        if(s==='shake'||SKIPPED[k]||EAT_OUT[k]) return;
+        var lo=los[k];
+        if(lo&&lo.isLeftover) return; // anchor-attributed
+        var pts=(lo&&lo.portions&&lo.portions.length>1)?lo.portions:[{p:p,d:d,s:s}];
+        var isFact=(lo&&lo.portions)?lo.portions.some(function(pt){return _factKeys[sk(pt.p,pt.d,pt.s)];}):!!_factKeys[k];
+        var has=pts.some(function(pt){
+          var b=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
+          return b&&b.some(function(i){return i.dbKey===dbKey&&i.amt>0.0001;});
+        });
+        if(has){ if(isFact) sawFact=true; else sawNonFact=true; }
+      });
+    });
+  });
+  return sawFact && !sawNonFact;
 }
 function buildShoppingList(trip,who){
   const days=trip==='custom'?DAYS:(TRIP_DAYS_STATIC[trip]||[]);
@@ -6467,6 +6523,11 @@ function getDayBalancedIngredients(p,d){
   if(_dayBalancedCache[key])return _dayBalancedCache[key];
   const slots={};
   const frozenSlots={};
+  // V283: fact slots are frozen for the canonical balancer too — the day
+  // fits its free slots AROUND what was already eaten.
+  if(_factKeys){
+    SLOTS.forEach(function(_fs){ if(_factKeys[sk(p,d,_fs)]) frozenSlots[_fs]=true; });
+  }
   const leftovers=computeLeftovers();
 
   // Classify leftover slots: same-day vs different-day.
@@ -6724,6 +6785,15 @@ function getDayBalancedIngredients(p,d){
   // per-serving grid alignment and distorted unified batch ratios on days
   // it fired. Confirmed dead by A/B on 2×100-run stress.)
 
+  // V283: impose AS-EATEN rows on fact slots — every rebuild lands on the
+  // captured historical amounts, so freeze/shopping/invariants always see
+  // what was actually cooked regardless of adjuster path-dependence.
+  if(_factRows){
+    SLOTS.forEach(function(_fs){
+      var fk=sk(p,d,_fs);
+      if(_factRows[fk] && slots[_fs]) slots[_fs]=JSON.parse(JSON.stringify(_factRows[fk]));
+    });
+  }
   _dayBalancedCache[key]=slots;
   return slots;
 }
@@ -7730,7 +7800,7 @@ function verifyInvariants(){
         }
         // Default strict: bought = sum
         if(Math.abs(bought-sum) > 0.001){
-          violations.push('INV3 display-vs-sum: '+trip+' '+item.dbKey
+          violations.push((_factStrandedItemFor(trip,item.dbKey)?'INV3FactStranded display-vs-sum: ':'INV3 display-vs-sum: ')+trip+' '+item.dbKey
             +' bought='+bought.toFixed(3)+unit
             +' sum='+sum.toFixed(3)+unit
             +' diff='+(bought-sum).toFixed(3));
@@ -8679,7 +8749,11 @@ function verifyInvariants(){
                   +' bought='+bought.toFixed(3)+unit
                   +' waste='+waste.toFixed(3)+unit
                   +' pct='+(wastePct*100).toFixed(1)+'%';
-                violations.push('INV20 waste-over-threshold (pkg): '+detail);
+                if(_factStrandedItemFor(trip,item.dbKey)){
+                  violations.push('INV20FactStranded waste-over-threshold (pkg): '+detail);
+                } else {
+                  violations.push('INV20 waste-over-threshold (pkg): '+detail);
+                }
                 violations.push('INV21 pkg-waste-over-1pct: '+detail);
                 if(db.pkg.softWaste){
                   violations.push('INV20Soft soft-waste (pkg): '+detail);
@@ -8717,7 +8791,11 @@ function verifyInvariants(){
                 +' used='+totalNum.toFixed(3)+unit
                 +' bought='+pBought.toFixed(3)+unit
                 +' waste='+pWaste.toFixed(3)+unit+' ('+(pWaste/perWhole*100).toFixed(0)+'% of one whole)';
-              violations.push('INV20 waste-over-threshold (produce): '+pDetail);
+              if(_factStrandedItemFor(trip,item.dbKey)){
+                violations.push('INV20FactStranded waste-over-threshold (produce): '+pDetail);
+              } else {
+                violations.push('INV20 waste-over-threshold (produce): '+pDetail);
+              }
               violations.push('INV22 produce-waste-over-50pct-of-whole: '+pDetail);
               if(db.produce.softWaste){
                 violations.push('INV20Soft soft-waste (produce): '+pDetail);
@@ -12972,6 +13050,10 @@ function _freezeOneItem(dbKey, days, persons, leftovers){
   var batches = []; // [{portions:[{p,d,s,idx,amt,kcal}], batchTotal, batchKcal}]
   var fixedSum = 0;
   function _pinnedAt(pp, dd, ss, ii){
+    // V283: fact slots (already cooked/eaten) are fixed contributors —
+    // counted toward household boundary targets, never written. Same
+    // R14-C9 semantics as user pins, slot-wide.
+    if(_factKeys && _factKeys[sk(pp, dd, ss)]) return true;
     var ov = OVERRIDES[sk(pp, dd, ss)];
     if(!ov) return false;
     for(var vi=0; vi<ov.length; vi++){
@@ -14953,6 +15035,72 @@ function _applyPartnerWasteFix(){
     setTimeout(function(){ toast.remove(); }, 6000);
   }
 }
+// V283 (2026-07-20): fact model UI. Days before today are automatically
+// FACT for the current week; today's meals are confirmed via a prompt on
+// EVERY randomize (user decision — no memory for today's answers).
+// Date-awareness lives ONLY here: the pipeline receives explicit factOpts,
+// so harness/console randomizes stay date-independent.
+function _todayIdxForActiveWeek(){
+  if(activeWeek!=='this') return -1;
+  // Monday=0 … Sunday=6.
+  return (new Date().getDay()+6)%7;
+}
+function _buildPastFactOpts(todayIdx, todayEatenKeys){
+  var factKeys={}, factDays={};
+  for(var di=0; di<todayIdx; di++){
+    factDays[di]=true;
+    ['him','her'].forEach(function(p){
+      if(PERSON_ENABLED[p]===false) return;
+      SLOTS.forEach(function(s){ factKeys[sk(p,DAYS[di],s)]=true; });
+    });
+  }
+  (todayEatenKeys||[]).forEach(function(k){ factKeys[k]=true; });
+  return {factKeys:factKeys, factDays:factDays};
+}
+function _openTodayFactPrompt(randTarget, todayIdx){
+  var today=DAYS[todayIdx];
+  var rows='';
+  ['him','her'].forEach(function(p){
+    if(PERSON_ENABLED[p]===false) return;
+    ['breakfast','lunch','snack','dinner'].forEach(function(s){
+      var k=sk(p,today,s);
+      if(SKIPPED[k]||EAT_OUT[k]) return; // skipped/eat-out slots aren't reroll targets anyway
+      var m=getActiveMeal(p,today,s);
+      var label=(p==='him'?'Him':'Her')+' · '+SLOT_LABEL[s]+(m?' — '+_menuEsc(m.label):'');
+      rows+='<label style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;cursor:pointer">'
+        +'<input type="checkbox" class="tf-eaten" data-k="'+k+'" style="accent-color:#60A5FA">'
+        +'<span>'+label+'</span></label>';
+    });
+  });
+  var el=document.createElement('div');
+  el.id='todayFactModal';
+  el.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;display:flex;align-items:center;justify-content:center;padding:18px" onclick="_cancelTodayFactPrompt()">'
+    +'<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;max-width:380px;width:100%;padding:16px;max-height:80vh;overflow-y:auto" onclick="event.stopPropagation()">'
+    +'<div style="font-weight:700;font-size:15px;margin-bottom:6px">🍽️ Before we plan the rest of the week…</div>'
+    +'<div style="font-size:13px;opacity:.85;margin-bottom:10px">Earlier days stay exactly as they are — they’re already cooked and eaten. Which of <b>today’s ('+today+')</b> meals have you already had?</div>'
+    +rows
+    +'<div style="font-size:12px;opacity:.7;margin:10px 0 12px">Checked meals are kept as-is; leftovers from anything already cooked stay in the plan. Everything else re-rolls.</div>'
+    +'<div style="display:flex;gap:10px">'
+    +'<button class="rand-btn" style="flex:1" onclick="_confirmTodayFactPrompt(\''+randTarget+'\','+todayIdx+')">Create Plan</button>'
+    +'<button class="rand-btn" style="flex:1;background:var(--border,#2E3138)" onclick="_cancelTodayFactPrompt()">Cancel</button>'
+    +'</div></div></div>';
+  document.body.appendChild(el);
+}
+function _cancelTodayFactPrompt(){
+  var el=document.getElementById('todayFactModal');
+  if(el) el.remove();
+}
+function _confirmTodayFactPrompt(randTarget, todayIdx){
+  var eaten=[];
+  document.querySelectorAll('#todayFactModal .tf-eaten:checked').forEach(function(cb){ eaten.push(cb.getAttribute('data-k')); });
+  _cancelTodayFactPrompt();
+  var factOpts=_buildPastFactOpts(todayIdx, eaten);
+  randomizeWeek(randTarget, undefined, factOpts);
+  setDay(DAYS[todayIdx]); // land on today — the past is settled
+  renderMeals();
+  requestAnimationFrame(function(){window.scrollTo(0,0);});
+  _maybeOfferPartnerWasteFix(randTarget); // V233
+}
 function runRandomizeFromPopup(){
   closeRandomizePopup();
   let randTarget;
@@ -14960,6 +15108,13 @@ function runRandomizeFromPopup(){
   else if(_randHim) randTarget='him';
   else if(_randHer) randTarget='her';
   else return;
+  // V283: current week → confirm today's eaten meals every time (past days
+  // lock automatically). Next week has no past — full randomize as before.
+  var todayIdx=_todayIdxForActiveWeek();
+  if(todayIdx>=0){
+    _openTodayFactPrompt(randTarget, todayIdx);
+    return;
+  }
   randomizeWeek(randTarget);
   setDay('Monday');
   renderMeals();
@@ -15275,7 +15430,11 @@ function applyScheduleEdit(){
   // only him's unlocked slots re-roll; her's stays. Variety filter is
   // household-level so target='him' still considers her's existing meals.
   var rTarget = (person === 'him' || person === 'her' || person === 'shared') ? person : 'shared';
-  randomizeWeek(rTarget);
+  // V283: Apply's randomize also treats strictly-past days of the current
+  // week as fact (no today-prompt here — Apply is a surgical re-roll of
+  // touched cells; today's slots stay rollable unless the user Set them).
+  var _applyTodayIdx=_todayIdxForActiveWeek();
+  randomizeWeek(rTarget, undefined, _applyTodayIdx>0?_buildPastFactOpts(_applyTodayIdx,[]):undefined);
   // Restore the temp locks — these slots weren't truly user-locked; we only
   // locked them to keep randomize from re-rolling unchanged content.
   tempLocked.forEach(function(k){ delete MANUAL_SET[k]; });
@@ -15558,6 +15717,8 @@ function snapSoloSlotAmountsToGrid(){
       ['breakfast','lunch','snack','dinner'].forEach(function(s){
         var key = sk(p,d,s);
         if (SKIPPED[key] || EAT_OUT[key]) return;
+        // V283: fact slots hold their as-eaten rows — no re-snapping.
+        if (_factKeys && _factKeys[key]) return;
         var lo = leftovers[key];
         if (lo && !lo.isLeftover && lo.portions && lo.portions.length >= 2) return;
         if (lo && lo.isLeftover) return;
@@ -15640,6 +15801,8 @@ function snapBatchTotalsToGrid(){
         if(!lo||lo.isLeftover)return;
         var portionList=lo.portions||[];
         if(portionList.length<2)return;
+        // V283: fact batches hold their as-eaten rows — no snapping.
+        if(_factKeys && portionList.some(function(pt){return _factKeys[sk(pt.p,pt.d,pt.s)];})) return;
         var bal=getBalancedSlotIngredients(p,d,s);
         if(!bal)return;
         bal.forEach(function(bi,idx){
@@ -15795,6 +15958,8 @@ function unifyCrossPersonRatios(){
         var lo=leftovers[sk(p,d,s)];
         if(!lo||lo.isLeftover)return;
         if(!lo.portions)return;             // solo slot, no batch
+        // V283: fact batches hold their as-eaten rows — no re-unification.
+        if(_factKeys && lo.portions.some(function(pt){return _factKeys[sk(pt.p,pt.d,pt.s)];})) return;
         // Need ≥2 distinct people in the batch for unification to matter.
         var peopleSet={};
         lo.portions.forEach(function(pt){peopleSet[pt.p]=true;});
@@ -16060,6 +16225,8 @@ function snapBatchTotals(){
         var lo=leftovers[sk(p,d,s)];
         if(!lo||lo.isLeftover)return; // only process cook entries
         if(lo.servings<=1&&!lo.crossPersonCook&&!lo.shared)return; // solo, no batch
+        // V283: fact batches hold their as-eaten rows — no snapping.
+        if(_factKeys && lo.portions && lo.portions.some(function(pt){return _factKeys[sk(pt.p,pt.d,pt.s)];})) return;
 
         var mealId=getMealId(p,d,s);
         // Lazy-build day cache: getDayBalancedIngredients returns cached
@@ -16304,8 +16471,61 @@ function runBalanceAdjusters(){
   if(changed) _rbaCapHits++;
 }
 
-function randomizeWeek(target, seed){
+// V283 (2026-07-20, user-approved fact model): "the past is fact, not
+// plan." During a UI-triggered randomize of the CURRENT week, days before
+// today are FACT (assumed cooked/eaten) and today's already-eaten meals
+// are confirmed via a prompt every time. Fact slots are read-only to the
+// AUTOMATION only — manual edits always work. Mechanism: the UI entry
+// points compute factOpts {factKeys, factDays} and pass them here; the
+// pipeline itself stays date-blind (harness/console calls pass nothing →
+// whole week rollable → Test 1 stays deterministic and date-independent).
+// Fact slots get TEMPORARY MANUAL_SET locks for the run (the V64 temp-lock
+// pattern — every pipeline stage already respects MANUAL_SET), freeze
+// counts them as fixed contributors (the R14-C9 counted-not-written path
+// via _pinnedAt), and the balancer freezes them (_buildPostPipelineFrozenSlots).
+// CONSERVATION (rule 2): any batch containing a fact slot locks WHOLE —
+// a cooked meal's future leftovers physically exist and must stay placed
+// unless the user manually removes them.
+var _factKeys=null, _factDays=null, _factRows=null;
+function randomizeWeek(target, seed, factOpts){
   sharedSchedOpen=false;
+  // V283: install fact locks for this run.
+  _factKeys=null; _factDays=null;
+  var _factTempLocked=[];
+  if(factOpts && factOpts.factKeys && Object.keys(factOpts.factKeys).length){
+    _factKeys=Object.assign({}, factOpts.factKeys);
+    _factDays=factOpts.factDays||{};
+    // Conservation: expand to every portion of any batch containing a
+    // fact slot (a cooked anchor's future leftovers are real food).
+    // NOTE: no invalidation here — the LIVE cache holds the certified
+    // as-eaten rows the capture below must see; wiping it first captured
+    // a path-dependent rebuild instead (found the hard way).
+    var _fLos=computeLeftovers();
+    Object.keys(_fLos).forEach(function(k){
+      var lo=_fLos[k];
+      if(lo.isLeftover||!lo.portions) return;
+      var hasFact=_factKeys[k]||lo.portions.some(function(pt){return _factKeys[sk(pt.p,pt.d,pt.s)];});
+      if(hasFact) lo.portions.forEach(function(pt){ _factKeys[sk(pt.p,pt.d,pt.s)]=true; });
+    });
+    Object.keys(_factKeys).forEach(function(k){
+      if(!MANUAL_SET[k]){ MANUAL_SET[k]=true; _factTempLocked.push(k); }
+    });
+    // V283: capture the AS-EATEN rows now, impose them on every cache
+    // rebuild (getDayBalancedIngredients tail). Recomputation is NOT a
+    // substitute: unify/snap floor-scaling is path-dependent, so a fresh
+    // rebuild can converge to a different (equally valid) fixed point —
+    // but the eaten amounts are historical fact, not a fixed point to find.
+    _factRows={};
+    Object.keys(_factKeys).forEach(function(k){
+      var kp=k.split('_');
+      var b=getBalancedSlotIngredients(kp[0],kp[1],kp[2]);
+      if(b) _factRows[k]=JSON.parse(JSON.stringify(b));
+    });
+  }
+  function _factCleanup(){
+    _factTempLocked.forEach(function(k){ delete MANUAL_SET[k]; });
+    _factTempLocked=[];
+  }
   // Clear freeze-written overrides from any previous run. Phase 1 skips
   // clearOverrides on locked slots (MANUAL_SET / EAT_OUT), so without
   // this, scalable:false overrides on shared-schedule slots accumulate
@@ -16445,7 +16665,12 @@ function randomizeWeek(target, seed){
       persons.forEach(function(p){
         if(p!=='him'&&p!=='her')return;
         const calT=CAL_BASE[p], proT=PRO_TARGET[p];
-        DAYS.forEach(function(d){
+        DAYS.forEach(function(d,di){
+          // V283: fully-fact days are history — their misses are facts no
+          // retry can fix; scoring them would be a constant drag on every
+          // retry. Today (partially fact) still scores: the balancer fits
+          // the rest of the day around what was already eaten.
+          if(_factDays && _factDays[di]) return;
           const t=calcTotals(p,d);
           const fv=computeDailyFV(p,d);
           const mk=t.pro*4+t.fat*9+t.carb*4;
@@ -16652,12 +16877,23 @@ function randomizeWeek(target, seed){
     DAYS.forEach(function(_d){ getDayBalancedIngredients(_p, _d); });
   });
   _capturePostRandomizeSnapshot();
+  // V283: drop the temporary fact locks BEFORE verify/render/save — they
+  // are run-scoped automation guards, not user state (Set pills, sync,
+  // and INV11Manual must see the REAL MANUAL_SET flags).
+  _factCleanup();
   // Runtime invariant check — alert on any data inconsistency
   var inv=verifyInvariants();
   if(inv.length)console.warn('INVARIANT VIOLATIONS ('+inv.length+'):\n'+inv.join('\n'));
   renderMeals(); if(topTab==='shop') renderShop();autoSaveWeek();
   } finally {
     if (_origMathRandom) Math.random = _origMathRandom;
+    _factCleanup(); // V283: idempotent — covers the exception path
+    // V283: _factKeys/_factRows deliberately SURVIVE the run — they
+    // describe the current plan's fact state until the next randomize
+    // resets them at entry. Post-run rebuilds, balancer re-runs, the
+    // partner-waste freeze tail, and invariant classification (the
+    // user-approved fact-stranded tracking downgrade) all keep honoring
+    // the as-eaten rows. Only the temp MANUAL_SET locks die with the run.
   }
 }
 
@@ -20898,7 +21134,7 @@ window.MPStress=(function(){
   }
 
   function parseInvariants(violations){
-    var counts={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV11Manual:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV20Leftover:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
+    var counts={INV1:0,INV2:0,INV3:0,INV3FactStranded:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV11Manual:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20FactStranded:0,INV20Soft:0,INV20Leftover:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
     violations.forEach(function(v){
       // Match longer suffixes first; fall back to INV<digits>.
       // V181 (2026-05-21): INV20Leftover tracks forward inventory (this
@@ -20913,6 +21149,9 @@ window.MPStress=(function(){
       // BEFORE the generic INV\d+ regex or it would count as hard INV11.
       var m11=v.match(/^(INV11Manual)\b/);
       if(m11){counts[m11[1]]++;return;}
+      // V283: fact-stranded (mid-week history) — tracking-only.
+      var mfs=v.match(/^(INV3FactStranded|INV20FactStranded)\b/);
+      if(mfs){counts[mfs[1]]++;return;}
       var m=v.match(/^INV(\d+)/);if(!m)return;
       var key='INV'+m[1];if(counts[key]!==undefined)counts[key]++;
     });
@@ -21013,7 +21252,7 @@ window.MPStress=(function(){
     if(!opts.persistState) restore(snap);
     // Filter out tracking-only INVARs (INV6, INV14, INV15, INV16, INV18, INV20Soft, INV20Leftover, INV21, INV22) from the "real fail" list
     var nonInv6=violations.filter(function(v){
-      return !v.startsWith('INV6 ') && !v.startsWith('INV11Manual ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ') && !v.startsWith('INV18 ') && !v.startsWith('INV20Soft ') && !v.startsWith('INV20Leftover ') && !v.startsWith('INV21 ') && !v.startsWith('INV22 ');
+      return !v.startsWith('INV6 ') && !v.startsWith('INV11Manual ') && !v.startsWith('INV3FactStranded ') && !v.startsWith('INV20FactStranded ') && !v.startsWith('INV14 ') && !v.startsWith('INV15 ') && !v.startsWith('INV16 ') && !v.startsWith('INV18 ') && !v.startsWith('INV20Soft ') && !v.startsWith('INV20Leftover ') && !v.startsWith('INV21 ') && !v.startsWith('INV22 ');
     }).slice(0,30);
     // Extract INV15/16 leftover-eaten counts per person
     var leftoversEaten={him:0,her:0};
@@ -21122,7 +21361,7 @@ window.MPStress=(function(){
     var fatLowBins={'14.5-15.0':0,'14.0-14.5':0,'13.0-14.0':0,'<13.0':0};
     var proPctBins={'40.0-42.0':0,'42.0-45.0':0,'45.0-50.0':0,'>50.0':0};
     var vegBins={'2.75-3.0':0,'2.5-2.75':0,'<2.5':0};
-    var invTotals={INV1:0,INV2:0,INV3:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV11Manual:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20Soft:0,INV20Leftover:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
+    var invTotals={INV1:0,INV2:0,INV3:0,INV3FactStranded:0,INV4:0,INV5:0,INV6:0,INV7:0,INV8:0,INV9:0,INV10:0,INV11:0,INV11Manual:0,INV12:0,INV13:0,INV14:0,INV15:0,INV16:0,INV17:0,INV18:0,INV19:0,INV20:0,INV20FactStranded:0,INV20Soft:0,INV20Leftover:0,INV21:0,INV22:0,INV23:0,INV24:0,INV25:0};
     var mealMisses={};
     var vegCeilingAll={};
     var timings=[];
@@ -21291,7 +21530,7 @@ window.MPStress=(function(){
       missCounts:missCounts,
       kcalBins:kcalBins,fatBins:fatBins,fatLowBins:fatLowBins,proPctBins:proPctBins,vegBins:vegBins,
       invTotals:invTotals,
-      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV11Manual'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV20Leftover'&&k!=='INV21'&&k!=='INV22'&&invTotals[k]>0;}), // INV19/INV20 hard — count toward "any fail". INV20Soft/INV20Leftover/INV21/22 tracking-only.
+      invAnyFailExceptINV6:Object.keys(invTotals).filter(function(k){return k!=='INV6'&&k!=='INV11Manual'&&k!=='INV3FactStranded'&&k!=='INV20FactStranded'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV20Leftover'&&k!=='INV21'&&k!=='INV22'&&invTotals[k]>0;}), // INV19/INV20 hard — count toward "any fail". INV20Soft/INV20Leftover/INV21/22 tracking-only.
       // INV13 fires per-ingredient that has db.minAmt/maxAmt defined; ingredients without those are exempt by construction.
       invSamples:invSamples,
       topMeals:topMeals,
@@ -21404,6 +21643,9 @@ window.MPStress=(function(){
   // starts from a clean prev-week pool. Restored via snapshot()/restore()
   // pair around the call site.
   function _clearAllState(){
+    // V283: fact state persists past runs by design — a harness clear must
+    // drop it too or a prior UI mid-week randomize would pollute baselines.
+    _factKeys=null; _factDays=null; _factRows=null;
     Object.keys(SEL).forEach(function(k){delete SEL[k];});
     Object.keys(OVERRIDES).forEach(function(k){delete OVERRIDES[k];});
     Object.keys(MANUAL_SET).forEach(function(k){delete MANUAL_SET[k];});
@@ -22102,7 +22344,7 @@ window.MPStress=(function(){
         // when only an INV20Leftover tracking entry was present, while the
         // Hard Invariants section correctly read "all 0 ✓"). INV20Leftover
         // is V181's forward-inventory tracker; never a hard fire.
-        return k!=='INV6'&&k!=='INV11Manual'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV20Leftover'&&k!=='INV21'&&k!=='INV22'&&a.invTotals[k]>0;
+        return k!=='INV6'&&k!=='INV11Manual'&&k!=='INV3FactStranded'&&k!=='INV20FactStranded'&&k!=='INV14'&&k!=='INV15'&&k!=='INV16'&&k!=='INV18'&&k!=='INV20Soft'&&k!=='INV20Leftover'&&k!=='INV21'&&k!=='INV22'&&a.invTotals[k]>0;
       }).length,
       closedPct: (function(){
         var ta=0,tc=0;
