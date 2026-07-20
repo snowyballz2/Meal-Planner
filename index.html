@@ -23119,7 +23119,9 @@ window.MPStress=(function(){
   // ALL checks always run (no early-return) so byAssertion counts both pass
   // and fail per assertion type. Caller marks scenario as failed iff any
   // check failed.
-  function _smRunOp(op, slot, baseline){
+  function _smRunOp(op, slot, baseline, seed){
+    // R15 l8 (V281): `seed` threaded from runScenario — the move ops use it
+    // for deterministic recovery randomizes (seed+500000) and synthetic ids.
     var p=slot.p, d=slot.d, s=slot.s;
     var checks=[];
     function add(assertion, ok, issue, expected, actual){
@@ -23216,6 +23218,38 @@ window.MPStress=(function(){
     function checkSchedEatOut(){
       var r=_smCheckSchedEatOutConsistency();
       add('schedEatOutConsistency', r.ok, r.msg);
+    }
+    // R15 l8 (V281): contract for MANUAL batch/cross-trip rearrangement ops.
+    // A user swap that reshapes batch/trip geometry legitimately strands the
+    // frozen boundary totals — INV3-strict/INV20 then report it HONESTLY
+    // (V243 design stance; V279's person-toggle observation is the same
+    // class; the app never runs verifyInvariants between a manual mutation
+    // and the next randomize, which re-certifies). So: introduced hard
+    // fires may ONLY be INV3/INV20-class; any other prefix = real
+    // corruption. Callers follow with a seeded randomize + checkInv() to
+    // prove the state re-certifies to the scenario baseline.
+    function checkInvStrandedOnly(){
+      var lines=verifyInvariants().filter(function(v){
+        return _SM_HARD_KEYS.some(function(k){return v.indexOf(k+' ')===0||v.indexOf(k+':')===0;})
+          && v.indexOf('INV20Soft')!==0;
+      });
+      // Stranded set for batch-reshaping swaps = {INV1, INV3, INV8, INV20}:
+      // verbatim rows are fractional kcal-prop splits, so a moved anchor row
+      // in a now-solo slot is off-grid (INV8), a re-derived batch can pair
+      // rows that were cross-person-different pre-swap (INV1), and trip
+      // totals leave their frozen boundaries (INV3-strict/INV20). All four
+      // observed empirically (battery run 3, seeds 12349/12357) and all
+      // re-certify on the recovery randomize. Everything ELSE — unify
+      // ratios (INV7), detector integrity (INV12), bounds (INV13), the
+      // display-sum family (INV2/5/17/23/25), state machine (INV24) — stays
+      // STRICT: those firing mid-mutation would mean real corruption.
+      var nonStranded=lines.filter(function(v){
+        return v.indexOf('INV3')!==0 && v.indexOf('INV20')!==0
+          && v.indexOf('INV1 ')!==0 && v.indexOf('INV1:')!==0
+          && v.indexOf('INV8 ')!==0 && v.indexOf('INV8:')!==0;
+      });
+      add('hardInvNonStranded', nonStranded.length<=baseline.hardCount,
+        'non-stranded hard fires introduced :: '+nonStranded.join(' | ').slice(0,400));
     }
     // 2026-05-06+: 4 cross-cutting coherence INVs run alongside schedEatOut.
     // V76 (2026-05-08): added schedSharedConsistency.
@@ -23785,13 +23819,262 @@ window.MPStress=(function(){
       });});
       if(!mmDst){ add('setup', true, '', null, 'no eligible singleton destination'); return {checks:checks}; }
       var mmKSrc=sk(p,d,s), mmKDst=sk(p,mmDst.d,mmDst.s);
+      // R15 l8/V280: expected travel = old list MINUS _freezePin/_fatBoost
+      // entries (swapMeals strips geometry-stale pins per l3; _userSet
+      // survives). Mirrors _swapStripPins.
+      function _mmStrip(json){
+        var list=JSON.parse(json);
+        if(!list||!list.length) return null;
+        var f=list.filter(function(o){
+          if(o._userSet===true) return true;
+          if(o._freezePin===true) return false;
+          if(o._fatBoost===true) return false;
+          return true;
+        });
+        return f.length?f:null;
+      }
       var mmOvSrc=JSON.stringify(OVERRIDES[mmKSrc]||null), mmOvDst=JSON.stringify(OVERRIDES[mmKDst]||null);
       var mmOk=swapMeals(p,d,s, p,mmDst.d,mmDst.s);
       add('mm_returned', mmOk===true, 'swapMeals returned '+mmOk);
       add('mm_selSwapped', SEL[mmKSrc]===mmDst.id && SEL[mmKDst]===mmSrcId, 'SEL not exchanged');
-      add('mm_ovSwapped', JSON.stringify(OVERRIDES[mmKSrc]||null)===mmOvDst && JSON.stringify(OVERRIDES[mmKDst]||null)===mmOvSrc, 'overrides not exchanged');
+      add('mm_ovSwapped', JSON.stringify(OVERRIDES[mmKSrc]||null)===JSON.stringify(_mmStrip(mmOvDst)) && JSON.stringify(OVERRIDES[mmKDst]||null)===JSON.stringify(_mmStrip(mmOvSrc)), 'overrides not exchanged (pin-strip expected)');
       add('mm_manualSet', !!MANUAL_SET[mmKSrc] && !!MANUAL_SET[mmKDst], 'MANUAL_SET missing on an endpoint');
       add('mm_userEdited', !!USER_EDITED[mmKSrc] && !!USER_EDITED[mmKDst], 'USER_EDITED missing');
+      checkInv();
+      checkSchedEatOut();
+      checkCoherence();
+    }
+
+    // ── R15 l8 (V281): the swap interaction classes moveMealOp's singleton
+    // restriction deliberately dodged. Shared helpers for the five ops: a
+    // household occurrence counter and an adjacency-safe destination finder
+    // (countInv11-guarded via day distance so the hard-INV baseline check
+    // stays deterministic across seeds — mirrors the randomizer's own
+    // swap-stage INV11-delta rejection pattern).
+    else if(op==='moveBatchSwapOp'){
+      // (a) Swap a batch cook ANCHOR away — detector must re-derive cleanly.
+      if(slot.geometry!=='anchorBatch'){ add('setup', true, '', null, 'anchorBatch geometry only'); return {checks:checks}; }
+      var mbLo=computeLeftovers()[sk(p,d,s)];
+      if(!mbLo||mbLo.isLeftover||!mbLo.portions||mbLo.portions.length<2){ add('setup', true, '', null, 'slot not a multi-portion anchor'); return {checks:checks}; }
+      var mbSrcId=getMealId(p,d,s);
+      var mbDays=mbLo.portions.map(function(pt){return DAYS.indexOf(pt.d);});
+      function _mbCount(id){ var n=0; DAYS.forEach(function(_d){['lunch','dinner'].forEach(function(_s){['him','her'].forEach(function(_p){ if(SEL[sk(_p,_d,_s)]===id) n++; });});}); return n; }
+      var mbDst=null;
+      DAYS.forEach(function(_d,_di){ ['lunch','dinner'].forEach(function(_s){
+        if(mbDst) return;
+        // adjacency safety: dst day ≥3 from EVERY batch portion day
+        if(mbDays.some(function(x){return Math.abs(_di-x)<3;})) return;
+        var k2=sk(p,_d,_s);
+        if(SKIPPED[k2]||EAT_OUT[k2]||MANUAL_SET[k2]) return;
+        var id2=getMealId(p,_d,_s);
+        if(!id2||id2===mbSrcId||_mbCount(id2)!==1) return;
+        _movePending={p:p,d:d,s:s};
+        var ok=_moveEligible(p,_d,_s);
+        _movePending=null;
+        if(ok) mbDst={d:_d,s:_s,id:id2};
+      });});
+      if(!mbDst){ add('setup', true, '', null, 'no adjacency-safe destination'); return {checks:checks}; }
+      var mbInv11Before=countInv11();
+      _movePending={p:p,d:d,s:s};
+      completeMoveMeal(p,mbDst.d,mbDst.s);
+      add('mb_disarmed', _movePending===null, 'move still armed after complete');
+      add('mb_selSwapped', SEL[sk(p,d,s)]===mbDst.id && SEL[sk(p,mbDst.d,mbDst.s)]===mbSrcId, 'SEL not exchanged');
+      var mbLo2=computeLeftovers();
+      add('mb_detectorRederived', !!mbLo2, 'detector failed post-swap');
+      add('mb_inv11Delta', countInv11()<=mbInv11Before, 'swap raised countInv11: '+mbInv11Before+'->'+countInv11());
+      // Post-swap: only stranded-geometry fires allowed, then prove the
+      // next seeded randomize re-certifies to baseline (V243 contract).
+      checkInvStrandedOnly();
+      checkSchedEatOut();
+      checkCoherence();
+      randomizeWeek('shared', seed+500000);
+      clearTimeout(_selSaveTimer);
+      checkInv();
+    }
+
+    else if(op==='moveCrossPersonOp'){
+      // (b) Cross-person swap — meals must cross SEL person boundaries.
+      // R15 l8 (battery run 3): source found by WEEK-SCAN, not the harvested
+      // geometry slot — at several seeds no harvested solo slot held a
+      // household-singleton meal, so the body never executed.
+      if(slot.geometry!=='solo'){ add('setup', true, '', null, 'solo geometry only'); return {checks:checks}; }
+      function _mxCount(id){ var n=0; DAYS.forEach(function(_d){['lunch','dinner'].forEach(function(_s){['him','her'].forEach(function(_p){ if(SEL[sk(_p,_d,_s)]===id) n++; });});}); return n; }
+      var mxSrc=null;
+      ['him','her'].forEach(function(_p){ DAYS.forEach(function(_d){ ['lunch','dinner'].forEach(function(_s){
+        if(mxSrc) return;
+        var k1=sk(_p,_d,_s);
+        if(SKIPPED[k1]||EAT_OUT[k1]||MANUAL_SET[k1]) return;
+        var id1=getMealId(_p,_d,_s);
+        if(!id1||_mxCount(id1)!==1) return;
+        mxSrc={p:_p,d:_d,s:_s,id:id1};
+      });});});
+      if(!mxSrc){ add('setup', true, '', null, 'no household-singleton source in week'); return {checks:checks}; }
+      var mxOther=(mxSrc.p==='him')?'her':'him', mxDi=DAYS.indexOf(mxSrc.d);
+      var mxDst=null;
+      DAYS.forEach(function(_d,_di){ ['lunch','dinner'].forEach(function(_s){
+        if(mxDst) return;
+        if(Math.abs(_di-mxDi)<3) return; // adjacency safety both directions
+        var k2=sk(mxOther,_d,_s);
+        if(SKIPPED[k2]||EAT_OUT[k2]||MANUAL_SET[k2]) return;
+        var id2=getMealId(mxOther,_d,_s);
+        if(!id2||id2===mxSrc.id||_mxCount(id2)!==1) return;
+        _movePending={p:mxSrc.p,d:mxSrc.d,s:mxSrc.s};
+        var ok=_moveEligible(mxOther,_d,_s);
+        _movePending=null;
+        if(ok) mxDst={d:_d,s:_s,id:id2};
+      });});
+      if(!mxDst){ add('setup', true, '', null, 'no eligible cross-person destination'); return {checks:checks}; }
+      var mxInv11Before=countInv11();
+      var mxOk=swapMeals(mxSrc.p,mxSrc.d,mxSrc.s, mxOther,mxDst.d,mxDst.s);
+      add('mx_returned', mxOk===true, 'swapMeals returned '+mxOk);
+      add('mx_selCrossed', SEL[sk(mxSrc.p,mxSrc.d,mxSrc.s)]===mxDst.id && SEL[sk(mxOther,mxDst.d,mxDst.s)]===mxSrc.id, 'SEL not crossed');
+      add('mx_manualSet', !!MANUAL_SET[sk(mxSrc.p,mxSrc.d,mxSrc.s)] && !!MANUAL_SET[sk(mxOther,mxDst.d,mxDst.s)], 'MANUAL_SET missing');
+      add('mx_inv11Delta', countInv11()<=mxInv11Before, 'swap raised countInv11');
+      // Post-swap: only stranded-geometry fires allowed, then prove the
+      // next seeded randomize re-certifies to baseline (V243 contract).
+      checkInvStrandedOnly();
+      checkSchedEatOut();
+      checkCoherence();
+      randomizeWeek('shared', seed+500000);
+      clearTimeout(_selSaveTimer);
+      checkInv();
+    }
+
+    else if(op==='moveLinkGroupFollowOp'){
+      // (c) V280 l4: a manual link group must FOLLOW its moved meal.
+      // R15 l8 (battery run 3): week-scan source (see moveCrossPersonOp).
+      if(slot.geometry!=='solo'){ add('setup', true, '', null, 'solo geometry only'); return {checks:checks}; }
+      function _mgCount(id){ var n=0; DAYS.forEach(function(_d){['lunch','dinner'].forEach(function(_s){['him','her'].forEach(function(_p){ if(SEL[sk(_p,_d,_s)]===id) n++; });});}); return n; }
+      var mgSrc=null;
+      ['him','her'].forEach(function(_p){ DAYS.forEach(function(_d){ ['lunch','dinner'].forEach(function(_s){
+        if(mgSrc) return;
+        var k1=sk(_p,_d,_s);
+        if(SKIPPED[k1]||EAT_OUT[k1]||MANUAL_SET[k1]) return;
+        var id1=getMealId(_p,_d,_s);
+        if(!id1||_mgCount(id1)!==1) return;
+        mgSrc={p:_p,d:_d,s:_s,id:id1};
+      });});});
+      if(!mgSrc){ add('setup', true, '', null, 'no household-singleton source in week'); return {checks:checks}; }
+      var mgP=mgSrc.p, mgD=mgSrc.d, mgS=mgSrc.s, mgSrcId=mgSrc.id;
+      var mgDi=DAYS.indexOf(mgD);
+      // Buddy day inside the batch window (d+1..d+2) so src+buddy form ONE batch.
+      var mgBuddy=null;
+      for(var mgB=1;mgB<=2&&!mgBuddy;mgB++){
+        var bd=DAYS[mgDi+mgB]; if(!bd) continue;
+        var bk=sk(mgP,bd,mgS);
+        if(SKIPPED[bk]||EAT_OUT[bk]||MANUAL_SET[bk]) continue;
+        mgBuddy=bd;
+      }
+      if(!mgBuddy){ add('setup', true, '', null, 'no clean buddy day in window'); return {checks:checks}; }
+      var mgColor=_allocateLinkColor();
+      if(mgColor<0){ add('setup', true, '', null, 'palette saturated'); return {checks:checks}; }
+      stampSel(sk(mgP,mgBuddy,mgS), mgSrcId);
+      MANUAL_SET[sk(mgP,mgD,mgS)]=true; MANUAL_SET[sk(mgP,mgBuddy,mgS)]=true;
+      LEFTOVER_LINKS.push({id:'sm_l8_'+seed, meal:mgSrcId, slots:[{p:mgP,d:mgD,s:mgS},{p:mgP,d:mgBuddy,s:mgS}], colorIdx:mgColor});
+      var mgGroup=LEFTOVER_LINKS[LEFTOVER_LINKS.length-1];
+      invalidateLeftoverCache();
+      var mgBuddyDi=DAYS.indexOf(mgBuddy);
+      var mgDst=null;
+      DAYS.forEach(function(_d,_di){ ['lunch','dinner'].forEach(function(_s){
+        if(mgDst) return;
+        if(Math.abs(_di-mgDi)<3||Math.abs(_di-mgBuddyDi)<3) return;
+        var k2=sk(mgP,_d,_s);
+        if(SKIPPED[k2]||EAT_OUT[k2]||MANUAL_SET[k2]) return;
+        var id2=getMealId(mgP,_d,_s);
+        if(!id2||id2===mgSrcId||_mgCount(id2)!==1) return;
+        _movePending={p:mgP,d:mgD,s:mgS};
+        var ok=_moveEligible(mgP,_d,_s);
+        _movePending=null;
+        if(ok) mgDst={d:_d,s:_s,id:id2};
+      });});
+      if(!mgDst){ add('setup', true, '', null, 'no adjacency-safe destination'); return {checks:checks}; }
+      var mgOk=swapMeals(mgP,mgD,mgS, mgP,mgDst.d,mgDst.s);
+      add('mg_returned', mgOk===true, 'swapMeals returned '+mgOk);
+      add('mg_groupFollowed', mgGroup.slots.some(function(sl){return sl.p===mgP&&sl.d===mgDst.d&&sl.s===mgDst.s;}), 'group slot not retargeted to destination');
+      add('mg_srcLeftGroup', !mgGroup.slots.some(function(sl){return sl.p===mgP&&sl.d===mgD&&sl.s===mgS;}), 'source slot still in group');
+      _validateManualLinkGroups();
+      var mgStill=LEFTOVER_LINKS.indexOf(mgGroup)>=0;
+      add('mg_validatorKeeps', mgStill && mgGroup.slots.length===2, 'validator dropped/shrank the followed group: len='+(mgStill?mgGroup.slots.length:'gone'));
+      add('mg_colorKept', mgGroup.colorIdx===mgColor, 'palette color changed');
+      // Post-swap: only stranded-geometry fires allowed, then prove the
+      // next seeded randomize re-certifies to baseline (V243 contract).
+      checkInvStrandedOnly();
+      checkSchedEatOut();
+      checkCoherence();
+      randomizeWeek('shared', seed+500000);
+      clearTimeout(_selSaveTimer);
+      checkInv();
+    }
+
+    else if(op==='moveFreezePinStripOp'){
+      // (d) V280 l3: _freezePin/_fatBoost entries must NOT travel; _userSet must.
+      // R15 l8 (battery run 3): week-scan source (see moveCrossPersonOp).
+      if(slot.geometry!=='solo'){ add('setup', true, '', null, 'solo geometry only'); return {checks:checks}; }
+      function _mpCount(id){ var n=0; DAYS.forEach(function(_d){['lunch','dinner'].forEach(function(_s){['him','her'].forEach(function(_p){ if(SEL[sk(_p,_d,_s)]===id) n++; });});}); return n; }
+      var mpSrc=null;
+      ['him','her'].forEach(function(_p){ DAYS.forEach(function(_d){ ['lunch','dinner'].forEach(function(_s){
+        if(mpSrc) return;
+        var k1=sk(_p,_d,_s);
+        if(SKIPPED[k1]||EAT_OUT[k1]||MANUAL_SET[k1]) return;
+        var id1=getMealId(_p,_d,_s);
+        if(!id1||_mpCount(id1)!==1) return;
+        var b=getBalancedSlotIngredients(_p,_d,_s);
+        if(!b||b.length<2) return;
+        mpSrc={p:_p,d:_d,s:_s,id:id1};
+      });});});
+      if(!mpSrc){ add('setup', true, '', null, 'no household-singleton source with 2+ rows'); return {checks:checks}; }
+      var mpP=mpSrc.p, mpD=mpSrc.d, mpS=mpSrc.s, mpSrcId=mpSrc.id;
+      var mpBal=getBalancedSlotIngredients(mpP,mpD,mpS);
+      var mpDi=DAYS.indexOf(mpD), mpDst=null;
+      DAYS.forEach(function(_d,_di){ ['lunch','dinner'].forEach(function(_s){
+        if(mpDst) return;
+        if(Math.abs(_di-mpDi)<3) return;
+        var k2=sk(mpP,_d,_s);
+        if(SKIPPED[k2]||EAT_OUT[k2]||MANUAL_SET[k2]) return;
+        var id2=getMealId(mpP,_d,_s);
+        if(!id2||id2===mpSrcId||_mpCount(id2)!==1) return;
+        _movePending={p:mpP,d:mpD,s:mpS};
+        var ok=_moveEligible(mpP,_d,_s);
+        _movePending=null;
+        if(ok) mpDst={d:_d,s:_s,id:id2};
+      });});
+      if(!mpDst){ add('setup', true, '', null, 'no adjacency-safe destination'); return {checks:checks}; }
+      var mpKSrc=sk(mpP,mpD,mpS), mpKDst=sk(mpP,mpDst.d,mpDst.s);
+      // Plant: one freeze pin (must die) + one user pin at the CURRENT cache
+      // amount (must travel; equals-current so a later rebuild is a no-op).
+      OVERRIDES[mpKSrc]=[
+        {idx:0, amt:mpBal[0].amt, _freezePin:true, scalable:false},
+        {idx:1, amt:mpBal[1].amt, _userSet:true, scalable:false}
+      ];
+      var mpOk=swapMeals(mpP,mpD,mpS, mpP,mpDst.d,mpDst.s);
+      add('mp_returned', mpOk===true, 'swapMeals returned '+mpOk);
+      var mpAtDst=OVERRIDES[mpKDst]||[];
+      add('mp_userTraveled', mpAtDst.some(function(o){return o._userSet===true&&o.idx===1;}), 'user pin did not travel');
+      add('mp_freezeStripped', !mpAtDst.some(function(o){return o._freezePin===true;}) && !(OVERRIDES[mpKSrc]||[]).some(function(o){return o._freezePin===true&&o.idx===0;}), 'planted freeze pin survived the swap');
+      // Post-swap: only stranded-geometry fires allowed, then prove the
+      // next seeded randomize re-certifies to baseline (V243 contract).
+      checkInvStrandedOnly();
+      checkSchedEatOut();
+      checkCoherence();
+      randomizeWeek('shared', seed+500000);
+      clearTimeout(_selSaveTimer);
+      checkInv();
+    }
+
+    else if(op==='moveSameMealRejectOp'){
+      // (e) V279 m3: the two sides of one shared cook (same meal id) must be
+      // mutually ineligible AND swapMeals must refuse — the destructive
+      // portion-exchange no-op class.
+      if(slot.geometry!=='sharedSameDay'){ add('setup', true, '', null, 'sharedSameDay geometry only'); return {checks:checks}; }
+      var msOther=(p==='him')?'her':'him';
+      if(getMealId(p,d,s)!==getMealId(msOther,d,s)||!getMealId(p,d,s)){ add('setup', true, '', null, 'slot pair not same-meal'); return {checks:checks}; }
+      var msK1=sk(p,d,s), msK2=sk(msOther,d,s);
+      var msSnap=JSON.stringify([SEL[msK1],SEL[msK2],OVERRIDES[msK1]||null,OVERRIDES[msK2]||null,SHARED_SCHEDULE[dk(d,s)]||null,MANUAL_SET[msK1]||false,MANUAL_SET[msK2]||false]);
+      _movePending={p:p,d:d,s:s};
+      add('ms_ineligible', _moveEligible(msOther,d,s)===false, 'same-meal twin reported eligible');
+      _movePending=null;
+      add('ms_swapRefused', swapMeals(p,d,s, msOther,d,s)===false, 'swapMeals accepted a same-meal pair');
+      add('ms_stateUntouched', JSON.stringify([SEL[msK1],SEL[msK2],OVERRIDES[msK1]||null,OVERRIDES[msK2]||null,SHARED_SCHEDULE[dk(d,s)]||null,MANUAL_SET[msK1]||false,MANUAL_SET[msK2]||false])===msSnap, 'refused swap still mutated state');
       checkInv();
       checkSchedEatOut();
       checkCoherence();
@@ -26130,7 +26413,12 @@ window.MPStress=(function(){
     // meal swaps, and randomize-persist behavior. All ops also run the
     // cross-cutting schedEatOutConsistency invariant.
     var OPS=['edit','swap','addIngr','reset','rebalance',
-             'skipPill','eatOutPill','scheduleTapCycle','changeMealOp','moveMealOp','randomizePersist',
+             'skipPill','eatOutPill','scheduleTapCycle','changeMealOp','moveMealOp',
+             // R15 l8 (V281): the swap interaction classes the singleton
+             // restriction dodged — batch anchors, cross-person, link-group
+             // follow (l4), freeze-pin strip (l3), same-meal reject (m3).
+             'moveBatchSwapOp','moveCrossPersonOp','moveLinkGroupFollowOp','moveFreezePinStripOp','moveSameMealRejectOp',
+             'randomizePersist',
              'schedTapCenter','clearWeekOp','paintAcceptOp','lateSnackOp',
              'editLinkGroupSlot','editSkippedSlot','tapAlreadyShared','pinAndRandomize','gridSkipPlusPillSkip',
              'editToChangeMeal','skipToEatOut',
@@ -26180,7 +26468,9 @@ window.MPStress=(function(){
     var agg={
       scenarios:0,passed:0,failed:0,
       byOp:{edit:{p:0,f:0},swap:{p:0,f:0},addIngr:{p:0,f:0},reset:{p:0,f:0},rebalance:{p:0,f:0},
-            skipPill:{p:0,f:0},eatOutPill:{p:0,f:0},scheduleTapCycle:{p:0,f:0},changeMealOp:{p:0,f:0},moveMealOp:{p:0,f:0},randomizePersist:{p:0,f:0},
+            skipPill:{p:0,f:0},eatOutPill:{p:0,f:0},scheduleTapCycle:{p:0,f:0},changeMealOp:{p:0,f:0},moveMealOp:{p:0,f:0},
+            moveBatchSwapOp:{p:0,f:0},moveCrossPersonOp:{p:0,f:0},moveLinkGroupFollowOp:{p:0,f:0},moveFreezePinStripOp:{p:0,f:0},moveSameMealRejectOp:{p:0,f:0}, // R15 l8 (V281)
+            randomizePersist:{p:0,f:0},
             schedTapCenter:{p:0,f:0},clearWeekOp:{p:0,f:0},paintAcceptOp:{p:0,f:0},lateSnackOp:{p:0,f:0},
             editLinkGroupSlot:{p:0,f:0},editSkippedSlot:{p:0,f:0},tapAlreadyShared:{p:0,f:0},pinAndRandomize:{p:0,f:0},gridSkipPlusPillSkip:{p:0,f:0},
             editToChangeMeal:{p:0,f:0},skipToEatOut:{p:0,f:0},
@@ -26322,7 +26612,7 @@ window.MPStress=(function(){
       }
       var baseline={hardCount:hardBaseline,cookServings:cookServings,showCombined:showCombined,preBatchAmts:preBatchAmts};
       var result=null;
-      try { result=_smRunOp(op, slot, baseline); }
+      try { result=_smRunOp(op, slot, baseline, seed); }
       catch(e){
         result={checks:[{assertion:'exception', ok:false, issue:e.message+' | '+(e.stack||'').split('\n').slice(0,2).join(' | '), expected:null, actual:null}]};
       }
