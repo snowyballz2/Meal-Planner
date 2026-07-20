@@ -10585,7 +10585,8 @@ function buildMealCardHtml(s, person, day, other, mode){
 
   if(isEatOut){
     const eo=EAT_OUT[eoKey];
-    return buildEatOutFormHtml(person, day, s, k, eo, topRowPills, setPill);
+    // V293: no Set chip on the meals screen (state gradients carry it).
+    return buildEatOutFormHtml(person, day, s, k, eo, topRowPills, '');
   }
 
   // V287: shared body sections (ingredients + steps). Rendered ONLY in the
@@ -10634,7 +10635,7 @@ function buildMealCardHtml(s, person, day, other, mode){
   // the DOM (the V249 collapsed-card CSS hides all but move-mode pills).
   return '<div class="mc slot-'+s+(isSkipped?' skipped':'')+accCls+'" id="mc_'+k+'"'+accStyle
     +(isSkipped?'':' onclick="openMealFocus(\''+person+'\',\''+day+'\',\''+s+'\')"')+'>'
-    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+setPill+'</div>'+topRowPills+'</div>'
+    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+'</div>'+topRowPills+'</div>'
     +'<div class="meal-title">'+_menuEsc(activeMeal.label)+'</div></div>'
     +skipSummary
     +'<div class="mc-meta"><div><div class="mc-macros">'+macroLine+'</div>'
