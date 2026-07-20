@@ -106,6 +106,9 @@ body.mfocus-lock{overflow:hidden}
 .ht-lbl{font-size:14px;font-weight:700;color:var(--text)}
 .home-settings{margin-top:12px;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;background:linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.015) 45%,rgba(255,255,255,0) 72%),var(--bg-card);border:1px solid var(--border);border-radius:14px;font-weight:700;font-size:13px;color:var(--text-mid);cursor:pointer;user-select:none;-webkit-user-select:none}
 .home-settings:active{filter:brightness(1.15)}
+.meal-legend{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:center;margin:14px 4px 20px;font-size:11px;font-weight:600;color:var(--text-dim)}
+.meal-legend>span{display:flex;align-items:center;gap:5px}
+.ml-sq{display:inline-block;width:20px;height:13px;border-radius:3px;border:1px solid var(--border)}
 .skip-summary{padding:6px 12px;font-size:11px;color:var(--text-mid);background:rgba(148,163,184,.08);border-top:1px solid var(--border)}
 .adj-target-cb{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--text);font-weight:600;cursor:pointer;margin-right:10px;vertical-align:middle}
 .adj-target-cb input{accent-color:var(--shop);margin:0;width:13px;height:13px;vertical-align:middle;position:relative;top:0}
@@ -6442,6 +6445,20 @@ function setTopTab(t){
   if(t==='shelf')renderShelf();
   if(t==='recipes'){renderRecipesView();restoreRecipeFormState();}
 }
+// V291: card-state legend shown at the bottom of every meals page —
+// mini swatches of the V245 card washes (accent edge + faded gradient).
+function _mealLegendHtml(){
+  function sq(rgb){
+    return '<span class="ml-sq" style="border-left:3px solid rgba('+rgb+',.9);background:linear-gradient(135deg,rgba('+rgb+',.30),rgba('+rgb+',.10) 55%,rgba('+rgb+',.03)),var(--bg-card)"></span>';
+  }
+  return '<div class="meal-legend">'
+    +'<span>'+sq('245,158,11')+'leftovers / big cook</span>'
+    +'<span>'+sq('16,185,129')+'shared</span>'
+    +'<span>'+sq('167,139,250')+'set (edited)</span>'
+    +'<span>'+sq('148,163,184')+'skipped</span>'
+    +'<span>'+sq('239,68,68')+'eat out</span>'
+    +'</div>';
+}
 // V290: the home screen — big section tiles (V245 accent language) +
 // settings row. TAB_PREFS hides tiles like it used to hide tabs.
 function renderHome(){
@@ -9701,6 +9718,7 @@ function renderSharedView(day, scrollY, mealEl, prefixHtml){
   if(!hasShared)html+='<div class="empty-shop" style="padding:40px 20px;text-align:center;color:var(--gray)">No shared meals on '+day+'.</div>';
   // Prep for tomorrow banner
   html+=buildPrepBanner(day);
+  html+=_mealLegendHtml(); // V291
   mealEl.innerHTML=html;
   window.scrollTo(0,scrollY);
   requestAnimationFrame(function(){window.scrollTo(0,scrollY);mealEl.style.minHeight='';});
@@ -11228,6 +11246,7 @@ function renderMeals(){
   });
 
   html+=buildLateSnackHtml(person, day);
+  html+=_mealLegendHtml(); // V291
 
   mealEl.innerHTML=html;
   window.scrollTo(0,scrollY);
