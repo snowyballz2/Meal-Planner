@@ -2988,9 +2988,11 @@ function initSharedSchedule(){
 //
 // Leftover (visual: yellow bg + outline): all slots after the anchor.
 //
-// Each group gets a colorIdx (0..5) for its outline. Colors cycled from a
-// fixed palette; lowest unused index assigned on creation. When all 6 in
-// use, indices reuse from 0.
+// Each group gets a colorIdx for its band. Lowest unused index assigned on
+// creation; STRICT no-reuse (V73 user rule — duplicate colors in one week
+// would read as one group). When the whole palette is exhausted the group
+// carries colorIdx:-1 — still fully authoritative (detector Phase 0 never
+// reads color), it just renders bandless until a color frees (V286).
 //
 // Lives on weekData[w].leftoverLinks (array). Migrated to empty array on
 // load if missing.
@@ -3016,7 +3018,19 @@ var LEFTOVER_LINK_COLORS = [
   { name:'fuchsia',  rgb:'217,70,239' },
   { name:'violet',   rgb:'139,92,246' },
   { name:'grey',     rgb:'156,163,175' }, // V73
-  { name:'darkblue', rgb:'30,58,138' }    // V73
+  { name:'darkblue', rgb:'30,58,138' },   // V73
+  // V286 overflow colors 8-13 (user: "don't want any group in a queue
+  // because we are out of designated colors"). Palette 8→14 = the
+  // theoretical max of authority-carrying groups (28 lunch/dinner slots ÷
+  // 2-slot minimum). Each follows the V73 dark-vs-light same-hue rule that
+  // already separates darkblue/Him-blue and violet/Set-purple: deep tones
+  // vs the bright originals and semantic accents.
+  { name:'teal',     rgb:'13,148,136' },  // darker+bluer than shared green, greener than cyan
+  { name:'indigo',   rgb:'67,56,202' },   // deeper than violet, lighter+purpler than darkblue
+  { name:'forest',   rgb:'22,101,52' },   // deep forest vs bright shared green
+  { name:'berry',    rgb:'190,24,93' },   // deep magenta vs light Her pink; far darker than eat-out red
+  { name:'espresso', rgb:'120,53,15' },   // near-black brown vs bright orange (V59 amber was bright)
+  { name:'steel',    rgb:'71,85,105' }    // darker+bluer than grey
 ];
 // Slot-ordering for anchor identification. Matches the existing leftover
 // detector's cookSlots ordering (breakfast=0, lunch=1, snack=2, dinner=3).
@@ -11466,7 +11480,8 @@ function _moveEligible(p,d,s){
 // physical reality: the food is already cooked; rerolling the cook would
 // orphan its moved leftover). USER_EDITED stays on the swap endpoints
 // only (the untouched portions get the lock, not the Set pill).
-// Palette-saturated (allocator -1) → skip: old behavior, honestly.
+// Palette-saturated (allocator -1) → materialize UNCOLORED (V286; the old
+// silent skip lost the relationship — the exact thing V282 exists to keep).
 function _materializeBatchGroup(p,d,s){
   var los=computeLeftovers();
   var lo=los[sk(p,d,s)];
@@ -11488,8 +11503,11 @@ function _materializeBatchGroup(p,d,s){
     return g.meal===mealId&&(g.slots||[]).some(function(sl){return sk(sl.p,sl.d,sl.s)===anchorKey;});
   });
   if(already) return; // l4 retargeting will carry the existing group
+  // V286 (user: no group stranded for lack of colors): palette exhausted →
+  // materialize UNCOLORED (colorIdx:-1, the paintAccept convention — Phase 0
+  // never reads color, all renderers guard colorIdx>=0). The relationship
+  // and the MANUAL_SET locks survive; the band appears when a color frees.
   var color=_allocateLinkColor();
-  if(color<0) return;
   LEFTOVER_LINKS.push({
     id:'mv_'+Date.now()+'_'+Math.floor(Math.random()*1e6),
     meal:mealId,
