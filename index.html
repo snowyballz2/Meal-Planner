@@ -109,6 +109,18 @@ body.mfocus-lock{overflow:hidden}
 .meal-legend{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:center;margin:14px 4px 20px;font-size:11px;font-weight:600;color:var(--text-dim)}
 .meal-legend>span{display:flex;align-items:center;gap:5px}
 .ml-sq{display:inline-block;width:20px;height:13px;border-radius:3px;border:1px solid var(--border)}
+.ingr-ro-row{display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:12px;color:var(--text)}
+.ingr-ro-amt{font-weight:700;min-width:64px;white-space:nowrap}
+.ingr-ro-name{flex:1}
+.ingr-ro-cal{color:var(--text-dim);font-size:11px;white-space:nowrap}
+.ingr-lock{font-size:11px;color:var(--text-dim);font-weight:600;white-space:nowrap}
+.ingr-ro-grid{display:block;padding:2px 0}
+.ingr-ro-row,.sig-row[onclick]{cursor:pointer}
+.rowarn-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:450;display:flex;align-items:center;justify-content:center;padding:24px}
+.rowarn{background:var(--bg-card);border:1px solid rgba(245,158,11,.5);border-radius:14px;padding:18px 16px;max-width:340px;text-align:center}
+.rowarn-title{font-size:14px;font-weight:800;color:#F59E0B;margin-bottom:8px}
+.rowarn-msg{font-size:13px;color:var(--text);line-height:1.5;margin-bottom:14px}
+.rowarn-ok{border:1px solid var(--border);background:var(--bg-surface);color:var(--text);font-size:13px;font-weight:700;padding:8px 22px;border-radius:10px;cursor:pointer}
 .skip-summary{padding:6px 12px;font-size:11px;color:var(--text-mid);background:rgba(148,163,184,.08);border-top:1px solid var(--border)}
 .adj-target-cb{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--text);font-weight:600;cursor:pointer;margin-right:10px;vertical-align:middle}
 .adj-target-cb input{accent-color:var(--shop);margin:0;width:13px;height:13px;vertical-align:middle;position:relative;top:0}
@@ -6445,6 +6457,20 @@ function setTopTab(t){
   if(t==='shelf')renderShelf();
   if(t==='recipes'){renderRecipesView();restoreRecipeFormState();}
 }
+// V295: tapping a READ-ONLY ingredient row pops a warning directing the
+// user to the surface that owns the meal's ingredients (Shared tab, or
+// the cook's combined view).
+function _roEditWarn(msg){
+  var old=document.getElementById('roWarnOverlay');
+  if(old) old.remove();
+  document.body.insertAdjacentHTML('beforeend',
+    '<div class="rowarn-backdrop" id="roWarnOverlay" onclick="this.remove()">'
+    +'<div class="rowarn" onclick="event.stopPropagation()">'
+    +'<div class="rowarn-title">⚠️ Ingredients locked here</div>'
+    +'<div class="rowarn-msg">'+msg+'</div>'
+    +'<button class="rowarn-ok" onclick="document.getElementById(\'roWarnOverlay\').remove()">OK</button>'
+    +'</div></div>');
+}
 // V291: card-state legend shown at the bottom of every meals page —
 // mini swatches of the V245 card washes (accent edge + faded gradient).
 function _mealLegendHtml(){
@@ -9480,7 +9506,7 @@ function getSharedSlotAdjustment(d,s){
 }
 
 // ── Shared render helpers ───────────────────────────────────
-function buildIngrEditRow(ing, amt, person, day, s, idx, cookServings){
+function buildIngrEditRow(ing, amt, person, day, s, idx, cookServings, basis){
   const db = NUTRI_DB[ing.dbKey];
   const unitLabel = db ? db.unit : '';
   const allKeys = Object.keys(NUTRI_DB).sort();
@@ -9507,7 +9533,7 @@ function buildIngrEditRow(ing, amt, person, day, s, idx, cookServings){
   const displayPro=db?Math.round(db.pro*amt):0;
   return '<div class="ingr-edit-row">'
     +'<select class="ingr-amt-select" id="'+amtId+'"'
-    +' onchange="onIngrAmt(\''+person+'\',\''+day+'\',\''+slotEsc+'\','+idx+',this.value)">'
+    +' onchange="onIngrAmt(\''+person+'\',\''+day+'\',\''+slotEsc+'\','+idx+',this.value'+(basis?',\''+basis+'\'':'')+')">'
     +qtyHtml+'</select>'
     +'<span class="ingr-unit-label">'+unitLabel+'</span>'
     +'<select class="ingr-swap-select role-'+ing.role+'" onchange="onIngrSwap(\''+person+'\',\''+day+'\',\''+slotEsc+'\','+idx+',this.value)">'
@@ -9630,17 +9656,54 @@ function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day, ac
   const pm={kcal:0,pro:0,fat:0,carb:0};
   combinedIngr.forEach(function(i){const db=NUTRI_DB[i.dbKey];if(db){pm.kcal+=Math.round(db.kcal*i.amt);pm.pro+=Math.round(db.pro*i.amt);pm.fat+=Math.round(db.fat*i.amt);pm.carb+=Math.round(db.carb*i.amt);}});
   const macroLine=pm.kcal+' kcal · P '+pm.pro+'g · C '+pm.carb+'g · F '+pm.fat+'g';
-  let ingrHtml='<div class="shared-ingr-grid">';
-  ingrHtml+=combinedIngr.map(function(i){
-    const db=NUTRI_DB[i.dbKey];const kcal=db?Math.round(db.kcal*i.amt):0;
-    const hFmt=i.hAmt?(Math.round(i.hAmt*10)/10):'—';
-    const rFmt=i.rAmt?(Math.round(i.rAmt*10)/10):'—';
-    const rc=ROLE_COLORS[i.role]||'var(--border)';
-    return '<div class="sig-row">'
-      +'<span class="sig-name" style="border-left:3px solid '+rc+';padding-left:6px">'+i.displayText+'</span>'
-      +'<span class="sig-him">'+hFmt+'</span><span class="sig-sep">/</span><span class="sig-her">'+rFmt+'</span>'
-      +'<span class="sig-cal">'+kcal+'cal</span></div>';
-  }).join('')+'</div>';
+  // V295 ownership: the Shared tab OWNS same-day shared cooks — its rows
+  // become idx-aligned EDITABLE combined rows (explicit 'combined' basis;
+  // onIngrAmt scales every portion kcal-prop, same machinery as Big Cook
+  // combined edits). Non-shared batch views on this tab stay read-only —
+  // their owner is the cook anchor's own card.
+  const editableShared=!!(anchorLo && !anchorLo.isLeftover && anchorLo.shared);
+  let ingrHtml;
+  if(editableShared){
+    const aP=(himLo && !himLo.isLeftover)?'him':'her';
+    const aBal=getBalancedSlotIngredients(aP, day, s)||[];
+    const aPort=meal[aP]?applyOverrides(meal[aP], aP, day, s):[];
+    const N=portionList.length;
+    ingrHtml='<div class="ingr-edit-grid">'+aBal.map(function(ci, idx){
+      let sum=0;
+      portionList.forEach(function(pt){
+        const pb=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
+        if(!pb) return;
+        if(pb[idx] && pb[idx].dbKey===ci.dbKey){ sum+=pb[idx].amt; return; }
+        for(let k2=0;k2<pb.length;k2++){ if(pb[k2].dbKey===ci.dbKey){ sum+=pb[k2].amt; break; } }
+      });
+      const origIng=aPort[idx]||{dbKey:ci.dbKey,amt:ci.origAmt||ci.amt,role:ci.role,scalable:ci.scalable};
+      return buildIngrEditRow(origIng, Math.round(sum*1000)/1000, aP, day, s, idx, N, 'combined');
+    }).join('')+'</div>';
+  } else {
+    // V295: read-only shared-tab rows warn on tap and direct to the owner
+    // (the cook anchor's combined view, or the individual cards when the
+    // pair isn't a detector batch).
+    let sMsg;
+    if(anchorLo){
+      const saP=(himLo && !himLo.isLeftover)?'him':'her';
+      sMsg='Edit this batch in <b>'+(saP==='him'?'Him':'Her')+"'s Combined Ingredients view</b> — "
+        +(saP==='him'?'his':'her')+' '+day.slice(0,3)+' '+SLOT_LABEL[s].toLowerCase()+' card.';
+    } else {
+      sMsg="These are individual portions — edit them on <b>Him's and Her's own cards</b>.";
+    }
+    const sClick=' onclick="event.stopPropagation();_roEditWarn(\''+sMsg.replace(/'/g,"\\'")+'\')"';
+    ingrHtml='<div class="shared-ingr-grid">';
+    ingrHtml+=combinedIngr.map(function(i){
+      const db=NUTRI_DB[i.dbKey];const kcal=db?Math.round(db.kcal*i.amt):0;
+      const hFmt=i.hAmt?(Math.round(i.hAmt*10)/10):'—';
+      const rFmt=i.rAmt?(Math.round(i.rAmt*10)/10):'—';
+      const rc=ROLE_COLORS[i.role]||'var(--border)';
+      return '<div class="sig-row"'+sClick+'>'
+        +'<span class="sig-name" style="border-left:3px solid '+rc+';padding-left:6px">'+i.displayText+'</span>'
+        +'<span class="sig-him">'+hFmt+'</span><span class="sig-sep">/</span><span class="sig-her">'+rFmt+'</span>'
+        +'<span class="sig-cal">'+kcal+'cal</span></div>';
+    }).join('')+'</div>';
+  }
   const stepsHtml=(meal._colorSteps||meal.steps||[]).map(function(st){return'<li>'+st+'</li>'}).join('');
   const totalServings = portionList.length;
   // V26 (2026-05-07): simplified label.
@@ -9883,7 +9946,7 @@ function buildPrepBanner(day){
 }
 
 // 3a. Eat-out form HTML
-function buildEatOutFormHtml(person, day, s, k, eo, topRowPills, setPill){
+function buildEatOutFormHtml(person, day, s, k, eo, topRowPills, setPill, mode){
   // V159 (2026-05-19): filter out tombstoned entries; use stable e.id as
   // the option value (was array index). Index-based identity broke when
   // tombstones changed the array's effective shape, and entry edits via
@@ -9918,9 +9981,9 @@ function buildEatOutFormHtml(person, day, s, k, eo, topRowPills, setPill){
       +'</div>';
   }
 
-  return '<div class="mc slot-'+s+' st-eo" id="mc_'+k+'">'
-    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+setPill+'</div>'+topRowPills+'</div></div>'
-    +'<div class="eo-form">'
+  // V295: 'form' returns the interactive form for the focus overlay;
+  // 'tile' (default) is a summary face that opens the overlay on tap.
+  const _eoFormHtml='<div class="eo-form">'
     +savedDropdown
     +'<div class="eo-row"><div style="flex:1"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:2px">Meal Name</div><input id="eo_'+k+'_name" class="eo-input" placeholder="e.g. Chicken Burrito" value="'+(eo.name||'')+'" onchange="setEatOutField(\''+person+'\',\''+day+'\',\''+s+'\',\'name\',this.value)"></div>'
     +'<div style="flex:1"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:2px">Restaurant</div><input id="eo_'+k+'_rest" class="eo-input" placeholder="e.g. Chipotle" value="'+(eo.restaurant||'')+'" onchange="setEatOutField(\''+person+'\',\''+day+'\',\''+s+'\',\'restaurant\',this.value)"></div></div>'
@@ -9931,7 +9994,14 @@ function buildEatOutFormHtml(person, day, s, k, eo, topRowPills, setPill){
     +'<div class="eo-field"><label>Carbs</label><input id="eo_'+k+'_carb" type="number" min="0" value="'+(eo.carb!=null?eo.carb:'')+'" oninput="eoFieldChanged(\''+person+'\',\''+day+'\',\''+s+'\',\'carb\',this.value)" onblur="eoFieldBlur(\''+person+'\',\''+day+'\',\''+s+'\')"></div></div>'
     +'<button class="eo-save-btn" onclick="saveEatOut(\''+person+'\',\''+day+'\',\''+s+'\')">Save to Eat Out History</button>'
     +eoSummary
-    +'</div></div>';
+    +'</div>';
+  if(mode==='form') return _eoFormHtml;
+  const eoLabel=eo.name?_menuEsc(eo.name)+(eo.restaurant?' · '+_menuEsc(eo.restaurant):''):'Tap to enter meal';
+  return '<div class="mc slot-'+s+' st-eo" id="mc_'+k+'" onclick="openMealFocus(\''+person+'\',\''+day+'\',\''+s+'\')">'
+    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+'</div></div>'
+    +'<div class="meal-title">🍽️ Eat Out — '+eoLabel+'</div></div>'
+    +(eo.kcal>0?'<div class="mc-meta"><div><div class="mc-macros">'+eo.kcal+' kcal'+(eo.pro!=null?' · P '+eo.pro+'g':'')+'</div></div></div>':'')
+    +'</div>';
 }
 
 // 3b. Build a single meal card HTML (normal him/her view)
@@ -10595,43 +10665,102 @@ function buildMealCardHtml(s, person, day, other, mode){
     }
   }
 
-  // Build skip summary when skipped
-  let skipSummary='';
+  // Build skip summary when skipped. V295: the tile face shows the text
+  // line only; the redistribute checkboxes live in the focus overlay
+  // (interactive controls moved off tile faces like every pill).
+  let skipSummary='', skipSummaryFocus='';
   if(isSkipped){
     const origMacros=getPortMacrosOvr(port,person,day,s);
     const slotIdx=ADJ_SLOTS.indexOf(s);
     // Shake is before all ADJ_SLOTS, so all are "later"
     const startIdx=(s==='shake')?0:slotIdx+1;
     const adjResult=buildAdjCheckboxes(person,day,startIdx,'');
-
-    skipSummary='<div class="skip-summary">Skipped: '+origMacros.kcal+' kcal · P '+origMacros.pro+'g · C '+origMacros.carb+'g · F '+origMacros.fat+'g'
-      +(adjResult.hasAny?adjResult.html:'')+'</div>';
+    const skipLine='Skipped: '+origMacros.kcal+' kcal · P '+origMacros.pro+'g · C '+origMacros.carb+'g · F '+origMacros.fat+'g';
+    skipSummary='<div class="skip-summary">'+skipLine+'</div>';
+    skipSummaryFocus='<div class="skip-summary">'+skipLine+(adjResult.hasAny?adjResult.html:'')+'</div>';
   }
 
   if(isEatOut){
     const eo=EAT_OUT[eoKey];
-    // V293: no Set chip on the meals screen (state gradients carry it).
-    return buildEatOutFormHtml(person, day, s, k, eo, topRowPills, '');
+    // V295: the eat-out FORM lives in the focus overlay; the tile face is
+    // a summary card (pills moved to the overlay like everywhere else).
+    if(mode==='focus'){
+      return '<div class="mfocus-name">'+(eo.name?_menuEsc(eo.name):'Eat Out')+'</div>'
+        +'<div class="mfocus-pills">'+topRowPills+'</div>'
+        +buildEatOutFormHtml(person, day, s, k, eo, null, null, 'form');
+    }
+    return buildEatOutFormHtml(person, day, s, k, eo, null, null, 'tile');
+  }
+
+  // V295 ownership: only the meal's OWNER edits ingredients — the Shared
+  // tab for same-day shared cooks, the cook-anchor's card for batches.
+  // Leftover portions and the Him/Her sides of a shared cook are read-only
+  // (enforced at RENDER level only; handlers stay callable — harness ops
+  // drive them directly).
+  const canEditIngr = !loInfo ? true : (isSameDayShared ? false : !loInfo.isLeftover);
+  let lockHint='';
+  if(!canEditIngr){
+    if(isSameDayShared) lockHint='the Shared tab';
+    else {
+      let aK=null;
+      Object.keys(leftovers).forEach(function(ak){
+        if(aK) return;
+        var a=leftovers[ak];
+        if(a.isLeftover||!a.portions) return;
+        if(a.portions.some(function(pt){return pt.p===person&&pt.d===day&&pt.s===s;})) aK=ak;
+      });
+      if(aK){ var akp=aK.split('_'); lockHint=(akp[0]==='him'?'his':'her')+' '+akp[1].slice(0,3)+' '+SLOT_LABEL[akp[2]].toLowerCase()+' card'; }
+      else lockHint="the cook's card";
+    }
+    // V295: rows are tappable — tapping warns and directs to the owner
+    // ("Shared Tab" / "Him Combined Ingredients View" / "Her ...").
+    const roMsg = isSameDayShared
+      ? 'This is a shared cook. Edit its ingredients on the <b>Shared tab</b>.'
+      : 'This is a batch portion. Edit its ingredients in <b>'
+        +(lockHint.indexOf('his ')===0?'Him':'Her')+"'s Combined Ingredients view</b> — "+lockHint+'.';
+    const roClick=' onclick="event.stopPropagation();_roEditWarn(\''+roMsg.replace(/'/g,"\\'")+'\')"';
+    const roBal=getBalancedSlotIngredients(person,day,s)||[];
+    ingrHtml='<div class="ingr-ro-grid">'+roBal.map(function(ri){
+      const rdb=NUTRI_DB[ri.dbKey]||{};
+      return '<div class="ingr-ro-row"'+roClick+'><span class="ingr-ro-amt">'+fmtFrac(ri.amt)+' '+(rdb.unit||'')+'</span>'
+        +'<span class="ingr-ro-name" style="border-left:3px solid '+(ROLE_COLORS[ri.role]||'var(--border)')+';padding-left:6px">'+ri.dbKey+'</span>'
+        +'<span class="ingr-ro-cal">'+Math.round((rdb.kcal||0)*ri.amt)+'cal '+Math.round((rdb.pro||0)*ri.amt)+'p</span></div>';
+    }).join('')+'</div>';
   }
 
   // V287: shared body sections (ingredients + steps). Rendered ONLY in the
   // focus overlay now — the tile face carries name + macros + state accents.
+  // V295: Per serving | Combined as a SEGMENTED control next to the title
+  // — both options visible, the displayed one highlighted (user: a lone
+  // toggle button didn't advertise the other view).
+  const _segBase='font-size:11px;font-weight:600;line-height:1;padding:3px 8px;cursor:pointer;white-space:nowrap;border:1px solid var(--border)';
+  const _segCtl = showCombinedHeader
+    ? '<span style="display:inline-flex">'
+      +'<button style="'+_segBase+';border-right:none;border-radius:10px 0 0 10px;background:'+(wantsPerServing?'var(--shop)':'transparent')+';color:'+(wantsPerServing?'#000':'var(--text-dim)')+'"'+(wantsPerServing?'':' onclick="event.stopPropagation();togglePerServing(\''+person+'\',\''+day+'\',\''+s+'\')"')+'>Per serving</button>'
+      +'<button style="'+_segBase+';border-radius:0 10px 10px 0;background:'+(!wantsPerServing?'var(--shop)':'transparent')+';color:'+(!wantsPerServing?'#000':'var(--text-dim)')+'"'+(!wantsPerServing?'':' onclick="event.stopPropagation();togglePerServing(\''+person+'\',\''+day+'\',\''+s+'\')"')+'>Combined</button>'
+      +'</span>'
+    : '';
   const bodyHtml=adjBanner
-    +'<div class="bsec"><div class="bsec-title ingr" style="display:flex;align-items:center;justify-content:space-between;text-decoration:none">'
-      +'<span style="text-decoration:underline;text-underline-offset:3px">'+ingrSectionTitle+'</span>'
+    +'<div class="bsec"><div class="bsec-title ingr" style="display:flex;align-items:center;justify-content:space-between;text-decoration:none;flex-wrap:wrap;gap:6px">'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="text-decoration:underline;text-underline-offset:3px">'+ingrSectionTitle+'</span>'+_segCtl+'</div>'
       +'<div style="display:flex;gap:6px;align-items:center">'
-        +(showCombinedHeader ? '<button title="'+(wantsPerServing?'Show combined batch':'Show per serving')+'" style="border:1px solid var(--border);background:'+(wantsPerServing?'var(--shop)':'transparent')+';color:'+(wantsPerServing?'#000':'var(--text)')+';font-size:11px;font-weight:600;line-height:1;padding:3px 8px;border-radius:10px;cursor:pointer;white-space:nowrap" onclick="event.stopPropagation();togglePerServing(\''+person+'\',\''+day+'\',\''+s+'\')">'+(wantsPerServing?'Combined':'Per serving')+'</button>' : '')
-        +(hasOverrides ? '<button title="Reset to post-randomize amounts" style="border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;font-weight:400;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();onIngrReset(\''+person+'\',\''+day+'\',\''+s+'\')">↺</button>' : '')
-        +(hasOverrides ? '<button title="Re-balance slot keeping your edits frozen" style="border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:400;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();onIngrRebalance(\''+person+'\',\''+day+'\',\''+s+'\')">⚖</button>' : '')
-        +'<button title="Add ingredient" style="border:none;background:var(--shop);color:#000;font-size:13px;font-weight:700;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button>'
+        +(canEditIngr
+          ? ((hasOverrides ? '<button title="Reset to post-randomize amounts" style="border:1px solid var(--border);background:transparent;color:var(--text);font-size:14px;font-weight:400;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();onIngrReset(\''+person+'\',\''+day+'\',\''+s+'\')">↺</button>' : '')
+            +(hasOverrides ? '<button title="Re-balance slot keeping your edits frozen" style="border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:400;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();onIngrRebalance(\''+person+'\',\''+day+'\',\''+s+'\')">⚖</button>' : '')
+            +'<button title="Add ingredient" style="border:none;background:var(--shop);color:#000;font-size:13px;font-weight:700;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button>')
+          : '<span class="ingr-lock">🔒 Edit on '+lockHint+'</span>')
       +'</div>'
     +'</div>'+ingrHtml+'</div>'
     +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>';
 
   if(mode==='focus'){
-    // Full-screen cook view (V287). openMealFocus guards skipped/eat-out;
-    // defensive early-outs keep a stale overlay from rendering nonsense.
-    if(isSkipped) return '';
+    // V295: skipped slots open the overlay too — pills + the redistribute
+    // checkboxes live here now (nothing interactive on tile faces).
+    if(isSkipped){
+      return '<div class="mfocus-name">'+_menuEsc(activeMeal.label)+'</div>'
+        +'<div class="mfocus-pills">'+topRowPills+'</div>'
+        +skipSummaryFocus;
+    }
     // Change-meal tap list — protein-grouped exactly like the old select's
     // optgroups (buildMealSelectOpts), rendered as rows instead of options.
     const byProt={};
@@ -10659,8 +10788,8 @@ function buildMealCardHtml(s, person, day, other, mode){
   // no expand chevron; tap anywhere opens the focus overlay. Pills stay in
   // the DOM (the V249 collapsed-card CSS hides all but move-mode pills).
   return '<div class="mc slot-'+s+(isSkipped?' skipped':'')+accCls+'" id="mc_'+k+'"'+accStyle
-    +(isSkipped?'':' onclick="openMealFocus(\''+person+'\',\''+day+'\',\''+s+'\')"')+'>'
-    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+'</div>'+topRowPills+'</div>'
+    +' onclick="openMealFocus(\''+person+'\',\''+day+'\',\''+s+'\')">'
+    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+'</div>'+(isSkipped?'':topRowPills)+'</div>'
     +'<div class="meal-title">'+_menuEsc(activeMeal.label)+'</div></div>'
     +skipSummary
     +'<div class="mc-meta"><div><div class="mc-macros">'+macroLine+'</div>'
@@ -10734,10 +10863,6 @@ function renderMeals(){
 
   let html='';
 
-  if(person!=='shared'){
-    html+=renderStatsBar(person, day);
-  }
-
   // Week banners (all views)
   if(activeWeek==='last'){
     html+='<div class="week-banner last">Last Week — View Only</div>';
@@ -10745,13 +10870,15 @@ function renderMeals(){
   if(activeWeek==='next'){
     html+='<div class="week-banner next">Next Week — Planning Ahead</div>';
   }
+  // V295 (user): the Schedule & Randomize opener sits at the TOP, above
+  // the nutrition target numbers. (V289: centered, no glyph, own screen.)
   if(activeWeek!=='last'){
-    // V289 (user feedback on V288): centered opener, NO glyph of any kind,
-    // renamed. Opens the schedule as its OWN SCREEN (content takeover),
-    // not a floating popup.
     html+='<div class="sched-panel"><div class="sched-hdr" style="justify-content:center" onclick="closeMealFocus();sharedSchedOpen=true;renderMeals();">'
       +'<div class="sched-title">Schedule &amp; Randomize Meals</div>'
       +'</div></div>';
+  }
+  if(person!=='shared'){
+    html+=renderStatsBar(person, day);
   }
   // V289: the schedule screen — built only when open; it REPLACES the tab
   // content (own screen, in normal document flow — no backdrop, no sheet).
@@ -11317,8 +11444,8 @@ function toggleCard(k){
 var _mealFocus=null; // {p,d,s} — transient, dies on reload
 var _schedDetail=null; // V289: {p,d,s} selected on the schedule screen — detail card below the grid
 function openMealFocus(p,d,s){
-  var k=sk(p,d,s);
-  if(SKIPPED[k]||EAT_OUT[k]) return;
+  // V295: skipped and eat-out slots open the overlay too (their pills and
+  // forms live here now).
   if(!getMealId(p,d,s)) return;
   _mealFocus={p:p,d:d,s:s};
   _renderMealFocus();
@@ -11334,9 +11461,10 @@ function _renderMealFocus(){
   if(old) old.remove();
   if(!_mealFocus) return;
   var p=_mealFocus.p, d=_mealFocus.d, s=_mealFocus.s;
-  // Slot state changed underneath (skip/eat-out toggled from the overlay's
-  // own pills, meal gone, person disabled) → close instead of going stale.
-  if(SKIPPED[sk(p,d,s)]||EAT_OUT[sk(p,d,s)]||!getMealId(p,d,s)){ closeMealFocus(); return; }
+  // Meal gone / person disabled → close instead of going stale. (V295:
+  // skip/eat-out no longer close — the overlay renders those states, so
+  // toggling a pill flows straight into the skip summary or eat-out form.)
+  if(!getMealId(p,d,s)){ closeMealFocus(); return; }
   // An armed move needs the tile list visible (destination "⤓ Here" taps
   // happen there) — close the overlay whenever move mode is live.
   if(_movePending){ closeMealFocus(); return; }
@@ -12384,7 +12512,7 @@ function _getBatchPortions(p,d,s){
   return [{p:p,d:d,s:s}];
 }
 
-function onIngrAmt(p,d,s,idx,val){
+function onIngrAmt(p,d,s,idx,val,basis){
   const amt=parseFloat(val);
   if(isNaN(amt)||amt<0)return;
   // 2026-05-05+: BATCH-AWARE surgical edit. For multi-portion batches, the
@@ -12404,8 +12532,13 @@ function onIngrAmt(p,d,s,idx,val){
   // dropdown with cookServings=1 (per-portion values) — interpreting the
   // pick as a batch total here scaled every portion by ~1/N (e.g. picking
   // "9 oz" per-serving on a 24 oz 3-portion batch pinned 3 oz/serving).
-  const showCombined = !!(lo && !lo.isLeftover && (lo.servings > 1 || lo.crossPersonCook) && !(lo.shared || lo.sameDayShared))
-    && !perServingMode[sk(p,d,s)];
+  // V295: the Shared tab's combined edit rows pass basis==='combined'
+  // explicitly — shared batches are excluded from the implicit rule below
+  // (their Him/Her cards render per-serving by INV9), so without the flag
+  // a batch-total pick would be misread as a per-portion value.
+  const showCombined = basis==='combined' ? true
+    : (!!(lo && !lo.isLeftover && (lo.servings > 1 || lo.crossPersonCook) && !(lo.shared || lo.sameDayShared))
+    && !perServingMode[sk(p,d,s)]);
 
   if(isBatch){
     let currentCombined = 0, currentThisSlot = 0;
