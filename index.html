@@ -9960,7 +9960,7 @@ function buildMealSelectOpts(slotMeals, activeId){
 }
 
 // Compute adjusted macros and ingredient HTML for a meal card
-function computeCardMacros(port, person, day, s, cookServings, showBanner, mealTotalServings, bannerDay){
+function computeCardMacros(port, person, day, s, cookServings, showBanner, mealTotalServings, bannerDay, bannerMults){
   // 2026-05-06+: bannerDay (optional) — for leftover slots, the renderer
   // passes cookDay as `day` so macro lookups use the cook anchor's adjusted
   // amounts. But the user's edit pin lives at the LEFTOVER's actual day's
@@ -10153,7 +10153,14 @@ function computeCardMacros(port, person, day, s, cookServings, showBanner, mealT
       // view, "4 oz → 5 oz" on a 3-portion leftover/solo view. cookServings
       // is the function arg — 1 for solo + per-portion leftover; N for the
       // anchor combined view.
-      const _viewMult = cookServings || 1;
+      // V294 (user report: "changed 23 to 25 and the banner said 30 → 32⅝"):
+      // for a CROSS-PERSON combined view, anchor-per-serving × N is NOT the
+      // displayed row basis — kcal-prop portions are unequal, and the rows
+      // show Σ of the true portion amounts (R14-M5). bannerMults carries the
+      // per-idx displayed-sum ÷ anchor-per-serving ratio so the banner's
+      // from/to match what the user actually saw and edited.
+      const _viewMult = (bannerMults && bannerMults[ix] !== undefined)
+        ? bannerMults[ix] : (cookServings || 1);
       const fromAmtPer = (flags.priorAmt !== undefined) ? flags.priorAmt : recipeAmt;
       // Use bannerDay's balanced amount when it differs from the macro day —
       // matches the source of priorAmt.
@@ -10426,7 +10433,33 @@ function buildMealCardHtml(s, person, day, other, mode){
   } else if(loInfo && !loInfo.isLeftover){
     mealTotalServings = loInfo.totalServings || loInfo.servings || 1;
   }
-  const macroResult = computeCardMacros(port, person, day, s, cookServings, showBanner, mealTotalServings);
+  // V294: pre-compute the cross-person combined-view portion sums so the
+  // banner can report in the SAME basis as the rendered rows (the row
+  // rebuild below reuses these — one computation, no divergence).
+  let _xpCookBal=null, _xpPortions=null, _xpMults=null;
+  if(loInfo&&loInfo.crossPersonCook&&cardShowsCombinedHeader(loInfo)&&!wantsPerServing){
+    _xpCookBal=getBalancedSlotIngredients(person,day,s);
+    _xpPortions=[];
+    if(loInfo.portions){
+      loInfo.portions.forEach(function(pt){
+        var bal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
+        if(bal)_xpPortions.push({bal:bal});
+      });
+    }
+    if(_xpCookBal&&_xpPortions.length>=2){
+      _xpMults=_xpCookBal.map(function(ci,idx){
+        var sum=0;
+        _xpPortions.forEach(function(bp){
+          if(bp.bal[idx] && bp.bal[idx].dbKey===ci.dbKey){sum+=bp.bal[idx].amt;return;}
+          for(var k2=0;k2<bp.bal.length;k2++){
+            if(bp.bal[k2].dbKey===ci.dbKey){sum+=bp.bal[k2].amt;break;}
+          }
+        });
+        return (ci.amt>0.0001) ? sum/ci.amt : (cookServings||1);
+      });
+    }
+  }
+  const macroResult = computeCardMacros(port, person, day, s, cookServings, showBanner, mealTotalServings, undefined, _xpMults);
   const pm = macroResult.pm;
   const adjBanner = macroResult.adjBanner;
   if(macroResult.ingrHtml) ingrHtml = macroResult.ingrHtml;
@@ -10438,17 +10471,9 @@ function buildMealCardHtml(s, person, day, other, mode){
   // Skip for same-day shared batches — the Shared tab owns the combined
   // view; individual tabs render per-serving.
   if(loInfo&&loInfo.crossPersonCook&&cardShowsCombinedHeader(loInfo)&&!wantsPerServing){
-    var cookBal=getBalancedSlotIngredients(person,day,s);
-    // Iterate loInfo.portions for the full combined batch. Each portion
-    // contributes its own per-serving balance × 1; totalServings = portions
-    // length. Works for any mix of cross-person + same-person leftovers.
-    var batchPortions=[];
-    if(loInfo.portions){
-      loInfo.portions.forEach(function(pt){
-        var bal=getBalancedSlotIngredients(pt.p,pt.d,pt.s);
-        if(bal)batchPortions.push({bal:bal});
-      });
-    }
+    // V294: arrays hoisted above the computeCardMacros call (banner basis).
+    var cookBal=_xpCookBal;
+    var batchPortions=_xpPortions||[];
     if(cookBal&&batchPortions.length>=2){
       displayServings=batchPortions.length;
       // V26 (2026-05-07): simplified label.
