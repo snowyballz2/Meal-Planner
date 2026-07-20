@@ -71,7 +71,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .mc-body{display:none;padding:0 12px 12px;border-top:1px solid var(--border)}
 .mc.open .mc-body{display:block}
 .mc.skipped .mc-top,.mc.skipped .mc-meta,.mc.skipped .mc-body{opacity:0.4}
-.mc.skipped .mc-meta,.mc.skipped .mc-body,.mc.skipped .meal-select{pointer-events:none}
+.mc.skipped .mc-meta,.mc.skipped .mc-body,.mc.skipped .meal-select,.mc.skipped .meal-title{pointer-events:none}
+.mc[onclick]{cursor:pointer}
+.meal-title{width:100%;box-sizing:border-box;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-weight:600;margin-top:4px;background:var(--bg-surface);color:var(--text)}
+.mfocus-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:center;justify-content:center}
+.mfocus{background:var(--bg);width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden}
+@media(min-width:640px){.mfocus{max-width:560px;height:auto;max-height:92vh;border:1px solid var(--border);border-radius:14px}}
+.mfocus-hdr{display:flex;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 10px;border-bottom:1px solid var(--border);flex:none}
+.mfocus-ctx{font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px}
+.mfocus-close{border:1px solid var(--border);background:var(--bg-surface);color:var(--text);font-size:15px;line-height:1;padding:6px 10px;border-radius:10px;cursor:pointer}
+.mfocus-body{overflow-y:auto;padding:12px 14px calc(env(safe-area-inset-bottom,0px) + 24px);-webkit-overflow-scrolling:touch}
+.mfocus-name{font-size:20px;font-weight:800;color:var(--text);margin:2px 0 8px;line-height:1.25}
+.mfocus-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.mfocus-body .step-list li{font-size:14px;line-height:1.55;margin-bottom:8px}
+.mfocus-change-btn{width:100%;margin-top:12px;padding:10px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text);font-size:13px;font-weight:600;border-radius:10px;cursor:pointer}
+.mfrow{padding:9px 10px;border-radius:8px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer}
+.mfrow.cur{background:rgba(96,165,250,.12)}
+.mfrow:active{background:var(--gray-light)}
+.mfsec{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 2px}
+body.mfocus-lock{overflow:hidden}
 .skip-summary{padding:6px 12px;font-size:11px;color:var(--text-mid);background:rgba(148,163,184,.08);border-top:1px solid var(--border)}
 .adj-target-cb{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--text);font-weight:600;cursor:pointer;margin-right:10px;vertical-align:middle}
 .adj-target-cb input{accent-color:var(--shop);margin:0;width:13px;height:13px;vertical-align:middle;position:relative;top:0}
@@ -3831,7 +3849,10 @@ function _schedGradBg(bg, dir, halfOnly){
     : 'linear-gradient(90deg,rgba('+rgb+',0) 45%,'+lo+' 60%,'+hi+')';
 }
 function openSchedMenu(type,d,s){
-  if(!_scheduleEditMode) return; // grid editing is edit-mode-only (V25)
+  // V287: CELL menus open outside edit mode too — view-only rows that
+  // open the meal focus overlay. Day/column bulk menus (and every state
+  // op) stay edit-mode-only per V25.
+  if(!_scheduleEditMode && type!=='cell') return;
   if(_paintMode) return;         // paint taps own the grid while painting
   _schedMenu={type:type,d:d||'',s:s||''};
   _schedMenuView='actions';
@@ -3841,6 +3862,15 @@ function closeSchedMenu(){
   _schedMenu=null;
   var el=document.getElementById('schedMenuOverlay');
   if(el) el.remove();
+}
+// V287: grid view row → navigate to that person/day and open the focus
+// overlay (navigation keeps changeMeal's module-global context correct).
+function schedMenuViewMeal(vp){
+  var m=_schedMenu; if(!m) return;
+  var vd=m.d, vs=m.s;
+  closeSchedMenu();
+  setPerson(vp); setDay(vd);
+  openMealFocus(vp,vd,vs);
 }
 function _schedMenuCells(){
   if(!_schedMenu) return [];
@@ -4166,19 +4196,34 @@ function _renderSchedMenu(){
     if(lkHm) html+=_smRow('schedMenuLinkPick(\'him\')','#60A5FA','Him — '+lkHm.label,false);
     if(lkHr) html+=_smRow('schedMenuLinkPick(\'her\')','#F472B6','Her — '+lkHr.label,false);
   } else {
-    var cells=_schedMenuCells();
-    var allShared=cells.every(function(c){return _schedCellShared(c.d,c.s);});
-    var allEoHim=cells.every(function(c){return _schedCellEO(c.d,c.s,'him');});
-    var allEoHer=cells.every(function(c){return _schedCellEO(c.d,c.s,'her');});
-    if(himOn&&herOn) html+=_smRow('schedMenuAction(\'shared\')','#34D399','Shared meal',allShared);
-    if(himOn) html+=_smRow('schedMenuAction(\'eo\',\'him\')','#EF4444','Him eats out',allEoHim);
-    if(herOn) html+=_smRow('schedMenuAction(\'eo\',\'her\')','#EF4444','Her eats out',allEoHer);
+    // V287: per-person VIEW rows first — tap a meal to open its focus
+    // overlay (navigates to that person/day). Cell menus only; outside
+    // edit mode these are the ONLY rows.
     if(m.type==='cell'){
-      html+=_smRow('schedMenuPickMeal()','#F59E0B','Pick meal…',false);
-      var linkMeal=getMealId('him',m.d,m.s)||getMealId('her',m.d,m.s);
-      if(linkMeal&&(m.s==='lunch'||m.s==='dinner')) html+=_smRow('schedMenuLink()','#F59E0B','Link leftovers…',false);
+      ['him','her'].forEach(function(vp){
+        if(vp==='him'?!himOn:!herOn) return;
+        var vk=sk(vp,m.d,m.s);
+        if(SKIPPED[vk]||EAT_OUT[vk]) return;
+        var vm=getMeal(getMealId(vp,m.d,m.s));
+        if(!vm) return;
+        html+=_smRow('schedMenuViewMeal(\''+vp+'\')',vp==='him'?'#60A5FA':'#F472B6',(vp==='him'?'Him — ':'Her — ')+_menuEsc(vm.label),false);
+      });
     }
-    html+=_smRow('schedMenuAction(\'clear\')','#969CA3','Clear',false);
+    if(_scheduleEditMode){
+      var cells=_schedMenuCells();
+      var allShared=cells.every(function(c){return _schedCellShared(c.d,c.s);});
+      var allEoHim=cells.every(function(c){return _schedCellEO(c.d,c.s,'him');});
+      var allEoHer=cells.every(function(c){return _schedCellEO(c.d,c.s,'her');});
+      if(himOn&&herOn) html+=_smRow('schedMenuAction(\'shared\')','#34D399','Shared meal',allShared);
+      if(himOn) html+=_smRow('schedMenuAction(\'eo\',\'him\')','#EF4444','Him eats out',allEoHim);
+      if(herOn) html+=_smRow('schedMenuAction(\'eo\',\'her\')','#EF4444','Her eats out',allEoHer);
+      if(m.type==='cell'){
+        html+=_smRow('schedMenuPickMeal()','#F59E0B','Pick meal…',false);
+        var linkMeal=getMealId('him',m.d,m.s)||getMealId('her',m.d,m.s);
+        if(linkMeal&&(m.s==='lunch'||m.s==='dinner')) html+=_smRow('schedMenuLink()','#F59E0B','Link leftovers…',false);
+      }
+      html+=_smRow('schedMenuAction(\'clear\')','#969CA3','Clear',false);
+    }
   }
   html+='</div></div>';
   document.body.insertAdjacentHTML('beforeend',html);
@@ -10197,22 +10242,19 @@ function cardShowsCombinedHeader(lo){
   return !lo.isLeftover && ((lo.servings>1) || lo.crossPersonCook);
 }
 
-function buildMealCardHtml(s, person, day, other){
+function buildMealCardHtml(s, person, day, other, mode){
   const slotMeals=getMealsForSlot(s).filter(function(m){return m[person]});
   if(!slotMeals.length)return '';
   const activeId=getMealId(person,day,s);
   const activeMeal=getMeal(activeId)||slotMeals[0];
   const port=activeMeal[person];if(!port)return '';
   const k=sk(person,day,s);
-  const isOpen=openCards[k]||false;
   // V53: Set pill now reads USER_EDITED (narrow display flag) instead of
   // MANUAL_SET (broad randomize-lock). Was over-broad pre-V53 because
   // setSchedule's shared/skip iteration stamped MANUAL_SET on every cell
   // in the schedule.
   const isManual=!!USER_EDITED[k];
   const setPill=isManual?'<span class="set-pill">Set</span>':'';
-
-  const opts=buildMealSelectOpts(slotMeals, activeId);
 
   const otherId=getMealId(other,day,s);
   const isSharedSlot=(otherId&&otherId===activeId);
@@ -10487,16 +10529,9 @@ function buildMealCardHtml(s, person, day, other){
     return buildEatOutFormHtml(person, day, s, k, eo, topRowPills, setPill);
   }
 
-  return '<div class="mc slot-'+s+(isOpen?' open':'')+(isSkipped?' skipped':'')+accCls+'" id="mc_'+k+'"'+accStyle+'>'
-    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+setPill+'</div>'+topRowPills+'</div>'
-    +'<select class="meal-select" onchange="changeMeal(\''+s+'\',this.value)">'+opts+'</select></div>'
-    +skipSummary
-    +'<div class="mc-meta" onclick="toggleCard(\''+k+'\')"><div><div class="mc-macros">'+macroLine+'</div>'
-    +macroBar(pm.kcal,pm.pro,mFat,mCarb,person)
-    +'</div><div class="expand-btn">⌄</div></div>'
-    +notePill
-    +'<div class="mc-body">'
-    +adjBanner
+  // V287: shared body sections (ingredients + steps). Rendered ONLY in the
+  // focus overlay now — the tile face carries name + macros + state accents.
+  const bodyHtml=adjBanner
     +'<div class="bsec"><div class="bsec-title ingr" style="display:flex;align-items:center;justify-content:space-between;text-decoration:none">'
       +'<span style="text-decoration:underline;text-underline-offset:3px">'+ingrSectionTitle+'</span>'
       +'<div style="display:flex;gap:6px;align-items:center">'
@@ -10506,8 +10541,48 @@ function buildMealCardHtml(s, person, day, other){
         +'<button title="Add ingredient" style="border:none;background:var(--shop);color:#000;font-size:13px;font-weight:700;line-height:1;padding:2px 8px;border-radius:10px;cursor:pointer" onclick="event.stopPropagation();addTempIngredient(\''+person+'\',\''+day+'\',\''+s+'\')">+</button>'
       +'</div>'
     +'</div>'+ingrHtml+'</div>'
-    +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'
-    +'</div></div>';
+    +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>';
+
+  if(mode==='focus'){
+    // Full-screen cook view (V287). openMealFocus guards skipped/eat-out;
+    // defensive early-outs keep a stale overlay from rendering nonsense.
+    if(isSkipped) return '';
+    // Change-meal tap list — protein-grouped exactly like the old select's
+    // optgroups (buildMealSelectOpts), rendered as rows instead of options.
+    const byProt={};
+    slotMeals.forEach(function(m){ const pk2=getPrimaryProtein(m,true); (byProt[pk2]=byProt[pk2]||[]).push(m); });
+    const protKeys=Object.keys(byProt).sort();
+    protKeys.forEach(function(pk2){ byProt[pk2].sort(function(a,b){return a.label<b.label?-1:1;}); });
+    let changeList='';
+    protKeys.forEach(function(pk2){
+      if(protKeys.length>1) changeList+='<div class="mfsec">'+_menuEsc(pk2)+'</div>';
+      byProt[pk2].forEach(function(m){
+        changeList+='<div class="mfrow'+(m.id===activeId?' cur':'')+'" onclick="_mfPickMeal(\''+s+'\',\''+m.id+'\')">'+_menuEsc(m.label)+(m.id===activeId?' ✓':'')+'</div>';
+      });
+    });
+    return '<div class="mfocus-name">'+_menuEsc(activeMeal.label)+setPill+'</div>'
+      +'<div class="mfocus-pills">'+topRowPills+'</div>'
+      +notePill
+      +'<div class="mc-macros" style="margin-bottom:4px">'+macroLine+'</div>'
+      +macroBar(pm.kcal,pm.pro,mFat,mCarb,person)
+      +bodyHtml
+      +'<button class="mfocus-change-btn" onclick="_mfToggleChange()">Change meal…</button>'
+      +'<div id="mfChangeList" style="display:none">'+changeList+'</div>';
+  }
+
+  // Tile face (V287): clean card — name replaces the meal-select dropdown,
+  // no expand chevron; tap anywhere opens the focus overlay. Pills stay in
+  // the DOM (the V249 collapsed-card CSS hides all but move-mode pills).
+  return '<div class="mc slot-'+s+(isSkipped?' skipped':'')+accCls+'" id="mc_'+k+'"'+accStyle
+    +(isSkipped?'':' onclick="openMealFocus(\''+person+'\',\''+day+'\',\''+s+'\')"')+'>'
+    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+setPill+'</div>'+topRowPills+'</div>'
+    +'<div class="meal-title">'+_menuEsc(activeMeal.label)+'</div></div>'
+    +skipSummary
+    +'<div class="mc-meta"><div><div class="mc-macros">'+macroLine+'</div>'
+    +macroBar(pm.kcal,pm.pro,mFat,mCarb,person)
+    +'</div></div>'
+    +notePill
+    +'</div>';
 }
 
 // 4. Late night snack section
@@ -11045,6 +11120,7 @@ function renderMeals(){
     const sharedScroll=window._scrollTopOnShared?0:scrollY;
     window._scrollTopOnShared=false;
     renderSharedView(day, sharedScroll, mealEl, html);
+    if(_mealFocus) _renderMealFocus(); // V287: keep the focus overlay live
     return;
   }
 
@@ -11059,6 +11135,7 @@ function renderMeals(){
   mealEl.innerHTML=html;
   window.scrollTo(0,scrollY);
   requestAnimationFrame(function(){window.scrollTo(0,scrollY);mealEl.style.minHeight='';});
+  if(_mealFocus) _renderMealFocus(); // V287: refresh (or auto-close) the focus overlay
 }
 
 function togglePerServing(p,d,s){
@@ -11069,6 +11146,9 @@ function togglePerServing(p,d,s){
   if(!perServingMode[k]) delete perServingMode[k];
   renderMeals();
 }
+// V287: tiles no longer wire toggleCard (in-place expansion moved to the
+// focus overlay); kept as harness/back-compat surface like the V253 grid
+// tap handlers.
 function toggleCard(k){
   openCards[k]=!openCards[k];
   const card=document.getElementById('mc_'+k);
@@ -11083,6 +11163,60 @@ function toggleCard(k){
     const otherCard=document.getElementById('mc_'+otherKey);
     if(otherCard)otherCard.classList.toggle('open',openCards[k]);
   }
+}
+// ── V287: meal focus overlay ─────────────────────────────────
+// Tap a meal tile (or a grid view row) → full-screen cook view: name,
+// pills, macros, balanced ingredients (same buildIngrEditRow rows — the
+// surgical-edit dropdowns and INV25's rendered labels are unchanged),
+// colorized steps, and a Change-meal tap list replacing the old select.
+var _mealFocus=null; // {p,d,s} — transient, dies on reload
+function openMealFocus(p,d,s){
+  var k=sk(p,d,s);
+  if(SKIPPED[k]||EAT_OUT[k]) return;
+  if(!getMealId(p,d,s)) return;
+  _mealFocus={p:p,d:d,s:s};
+  _renderMealFocus();
+}
+function closeMealFocus(){
+  _mealFocus=null;
+  var el=document.getElementById('mealFocusOverlay');
+  if(el) el.remove();
+  document.body.classList.remove('mfocus-lock');
+}
+function _renderMealFocus(){
+  var old=document.getElementById('mealFocusOverlay');
+  if(old) old.remove();
+  if(!_mealFocus) return;
+  var p=_mealFocus.p, d=_mealFocus.d, s=_mealFocus.s;
+  // Slot state changed underneath (skip/eat-out toggled from the overlay's
+  // own pills, meal gone, person disabled) → close instead of going stale.
+  if(SKIPPED[sk(p,d,s)]||EAT_OUT[sk(p,d,s)]||!getMealId(p,d,s)){ closeMealFocus(); return; }
+  // An armed move needs the tile list visible (destination "⤓ Here" taps
+  // happen there) — close the overlay whenever move mode is live.
+  if(_movePending){ closeMealFocus(); return; }
+  var inner=buildMealCardHtml(s,p,d,p==='him'?'her':'him','focus');
+  if(!inner){ closeMealFocus(); return; }
+  var html='<div class="mfocus-backdrop" id="mealFocusOverlay" onclick="closeMealFocus()">'
+    +'<div class="mfocus" onclick="event.stopPropagation()">'
+    +'<div class="mfocus-hdr"><div class="mfocus-ctx">'+d+' · '+SLOT_LABEL[s]+' · '+(p==='him'?'Him':'Her')+'</div>'
+    +'<button class="mfocus-close" onclick="closeMealFocus()">✕</button></div>'
+    +'<div class="mfocus-body">'+inner+'</div>'
+    +'</div></div>';
+  document.body.insertAdjacentHTML('beforeend',html);
+  document.body.classList.add('mfocus-lock');
+}
+function _mfToggleChange(){
+  var el=document.getElementById('mfChangeList');
+  if(el) el.style.display=el.style.display==='none'?'block':'none';
+}
+function _mfPickMeal(s,id){
+  if(!_mealFocus) return;
+  // changeMeal writes via the ACTIVE tab context (module person/day) —
+  // force it to the overlay's slot first (grid-opened overlays navigate
+  // on open, so this is normally a no-op).
+  if(person!==_mealFocus.p) setPerson(_mealFocus.p);
+  if(day!==_mealFocus.d) setDay(_mealFocus.d);
+  changeMeal(s,id);
 }
 function toggleSkip(p,d,s){
   // V34 (2026-05-07): when toggling Skip ON, also clear any pre-existing
