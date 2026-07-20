@@ -114,7 +114,6 @@ body.mfocus-lock{overflow:hidden}
 .ingr-ro-name{flex:1}
 .ingr-ro-cal{color:var(--text-dim);font-size:11px;white-space:nowrap}
 .ingr-lock{font-size:11px;color:var(--text-dim);font-weight:600;white-space:nowrap}
-.eb-desc{color:var(--text-mid)}
 .ingr-ro-grid{display:block;padding:2px 0}
 .ingr-ro-row,.sig-row[onclick]{cursor:pointer}
 .rowarn-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:450;display:flex;align-items:center;justify-content:center;padding:24px}
@@ -10933,8 +10932,8 @@ function renderMeals(){
       if(_scheduleEditMode){
         // V301: two plain lines — Edit Mode instruction + Apply note.
         schedHtml+='<div style="margin:6px 0;padding:10px 12px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.5);border-radius:8px;font-size:12px;line-height:1.5">'
-          +'<div style="color:#A78BFA;margin-bottom:6px"><b>Edit Mode</b> — tap any cell, day name, or column header for actions.</div>'
-          +'<div class="eb-desc" style="font-size:11px"><b>Apply</b> — saves changes and may attempt to re-roll adjacent meals to reduce waste</div>'
+          +'<div style="color:var(--text);margin-bottom:6px"><b>Edit Mode</b> — tap any cell, day name, or column header for actions.</div>'
+          +'<div style="font-size:11px;color:#A78BFA"><b>Apply</b> — saves changes and may attempt to re-roll adjacent meals to reduce waste</div>'
           +'</div>';
       } else {
         // Spacer between header buttons and grid
