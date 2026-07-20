@@ -14530,6 +14530,12 @@ function isBatchLeftoverEligible(d, s, mealId) {
         if (SKIPPED[prevKey] || EAT_OUT[prevKey]) continue;
         const lo = los[prevKey];
         if (lo && lo.isLeftover) continue; // leftover, not an anchor — skip
+        // V284: a FACT anchor's pot is already cooked at its recorded
+        // size — new portions can't join it (the past is fact, not plan;
+        // unify is forbidden on fact batches, so a join would certify a
+        // non-unified pot → INV7). Without the bypass, plain recency
+        // rejection stands and the meal can't be re-picked in-window.
+        if (_factKeys && _factKeys[prevKey]) continue;
         return true;
       }
     }
@@ -16489,8 +16495,13 @@ function runBalanceAdjusters(){
 var _factKeys=null, _factDays=null, _factRows=null;
 function randomizeWeek(target, seed, factOpts){
   sharedSchedOpen=false;
-  // V283: install fact locks for this run.
-  _factKeys=null; _factDays=null;
+  // V283: install fact locks for this run. ALL fact state resets at
+  // entry (incl. _factRows — V284 fix: it was missing from this line, so
+  // a non-fact randomize after a fact run kept imposing the OLD week's
+  // as-eaten rows on the fresh plan via the getDayBalancedIngredients
+  // tail: 32-62 hard fires; real path = randomizing 'next' week after a
+  // mid-week fact randomize, since cache keys aren't week-qualified).
+  _factKeys=null; _factDays=null; _factRows=null;
   var _factTempLocked=[];
   if(factOpts && factOpts.factKeys && Object.keys(factOpts.factKeys).length){
     _factKeys=Object.assign({}, factOpts.factKeys);
@@ -17982,6 +17993,13 @@ function _randomizeWeekCore(randTarget){
           if (mm.ingredients.some(function(i){ return DISCOURAGED_INGREDIENTS.indexOf(i.dbKey) >= 0; })) discouragedCount++;
         });
         var discouragedPenalty = discouragedCount * 3000;
+        // (V284 note: a Phase-1 "stranded-remainder push" bonus lived here
+        // briefly and was removed after A/B measurement — the retry
+        // selector's hardWaste term already counts fact-stranded residuals
+        // (_measuredTripWasteForPersons has no fact gating), so the bias
+        // had no headroom: flat 250/meal was neutral, residual-weighted
+        // was WORSE (11 vs 6 stranded lines / 6 seeds) and both variants
+        // shifted plan-space into fact-cornered freeze failures.)
         var score = calDiff + fatPenalty + proAbsPenalty + proPctPenalty + carbPctPenalty + discouragedPenalty;
 
         // Reject incomplete attempts (variety+used filter dead-end on
