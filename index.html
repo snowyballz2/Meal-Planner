@@ -10936,11 +10936,13 @@ function renderMeals(){
         // the mapping reads at a glance.
         schedHtml+='<div style="margin:6px 0;padding:10px 12px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.5);border-radius:8px;font-size:12px;line-height:1.45">'
           +'<div style="color:#A78BFA;margin-bottom:9px"><b>Edit Mode</b> — tap any cell, day name, or column header for actions.</div>'
-          +'<div style="display:grid;grid-template-columns:auto 1fr;gap:7px 12px;align-items:center">'
-          +'<span class="eb-chip eb-btn" onclick="event.stopPropagation();if(confirm(\'Reset the schedule grid to a blank slate? You can still Undo afterwards.\')){clearScheduleEdit();}">Reset</span><span class="eb-desc">wipes the grid</span>'
-          +'<span class="eb-chip eb-chip-apply eb-btn" onclick="event.stopPropagation();applyScheduleEdit()">Apply</span><span class="eb-desc">saves changes and may attempt to re-roll adjacent meals to reduce waste</span>'
-          +'<span class="eb-chip eb-btn" onclick="event.stopPropagation();undoScheduleEdit()">Undo</span><span class="eb-desc">reverts</span>'
-          +'</div></div>';
+          +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'
+          +'<span class="eb-chip eb-btn" onclick="event.stopPropagation();if(confirm(\'Reset the schedule grid to a blank slate? You can still Undo afterwards.\')){clearScheduleEdit();}">Reset</span>'
+          +'<span class="eb-chip eb-btn" onclick="event.stopPropagation();undoScheduleEdit()">Undo</span>'
+          +'<span class="eb-chip eb-chip-apply eb-btn" onclick="event.stopPropagation();applyScheduleEdit()">Apply</span>'
+          +'</div>'
+          +'<div class="eb-desc" style="font-size:11px"><b>Apply</b> saves changes and may attempt to re-roll adjacent meals to reduce waste</div>'
+          +'</div>';
       } else {
         // Spacer between header buttons and grid
         schedHtml+='<div style="height:5px"></div>';
