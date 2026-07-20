@@ -96,6 +96,16 @@ body.mfocus-lock{overflow:hidden}
 .sched-detail{margin-top:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:12px}
 .sched-detail-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
 .sched-detail-batch{font-size:12px;color:var(--text-dim);margin-bottom:8px}
+.hdr-sec-title{font-size:13px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.home-wrap{padding:26px 16px;max-width:520px;margin:0 auto}
+.home-title{font-size:30px;font-weight:800;color:var(--text);text-align:center;margin:26px 0 26px}
+.home-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.home-tile{border:1px solid var(--border);border-radius:16px;padding:26px 14px;display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;user-select:none;-webkit-user-select:none}
+.home-tile:active{filter:brightness(1.15)}
+.ht-ico{font-size:36px;line-height:1}
+.ht-lbl{font-size:14px;font-weight:700;color:var(--text)}
+.home-settings{margin-top:12px;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;background:linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.015) 45%,rgba(255,255,255,0) 72%),var(--bg-card);border:1px solid var(--border);border-radius:14px;font-weight:700;font-size:13px;color:var(--text-mid);cursor:pointer;user-select:none;-webkit-user-select:none}
+.home-settings:active{filter:brightness(1.15)}
 .skip-summary{padding:6px 12px;font-size:11px;color:var(--text-mid);background:rgba(148,163,184,.08);border-top:1px solid var(--border)}
 .adj-target-cb{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--text);font-weight:600;cursor:pointer;margin-right:10px;vertical-align:middle}
 .adj-target-cb input{accent-color:var(--shop);margin:0;width:13px;height:13px;vertical-align:middle;position:relative;top:0}
@@ -440,16 +450,13 @@ body.mfocus-lock{overflow:hidden}
 </head>
 <body>
 <div class="hdr">
+  <!-- V290: the tab row is GONE — sections are reached from the home
+       screen and get a back link instead of a persistent header. -->
   <div class="hdr-row">
-    <div class="hdr-title">Meal Planner</div>
+    <div class="sched-back" onclick="setTopTab('home')">‹ Home</div>
     <div id="weekBar" class="week-bar" style="flex:1;margin:0 6px;justify-content:center"></div>
-    <button class="sync-icon-btn" id="syncToggleBtn" onclick="toggleSyncPanel()">⚙️</button>
-  </div>
-  <div class="top-tabs">
-    <div class="top-tab on-meals" id="ttMeals" onclick="setTopTab('meals')">🍽️ Meals</div>
-    <div class="top-tab" id="ttShop" onclick="setTopTab('shop')">🛒 Shopping</div>
-    <div class="top-tab" id="ttShelf" onclick="setTopTab('shelf')">🧺 Shelf</div>
-    <div class="top-tab" id="ttRecipes" onclick="setTopTab('recipes')">✚ Recipes</div>
+    <div id="hdrSecTitle" class="hdr-sec-title" style="display:none;flex:1;text-align:center"></div>
+    <div class="sched-back" style="visibility:hidden">‹ Home</div>
   </div>
   <div id="mealHdrExtra">
     <div class="ptabs">
@@ -461,6 +468,7 @@ body.mfocus-lock{overflow:hidden}
   </div>
 </div>
 <div id="calPopupOverlay" style="display:none"></div>
+<div id="homeView" class="content" style="display:none"></div>
 <div id="mealView" class="content"></div>
 <div id="shopView" class="shop-view" style="display:none"></div>
 <div id="shelfView" class="content" style="display:none"></div>
@@ -4352,7 +4360,7 @@ function addToEatOutDB(entry){
   }
   saveEatOutDB();
 }
-let topTab='meals',person='him',day='Monday',shopTrip='cook1',shopPerson='both';
+let topTab='home',person='him',day='Monday',shopTrip='cook1',shopPerson='both'; // V290: boot to the home screen (pageState restores the last screen)
 
 // Get overrides for a specific meal slot
 function getOverrides(p,d,s){return OVERRIDES[sk(p,d,s)]||null;}
@@ -6349,11 +6357,9 @@ function restoreRecipeFormState(){
 }
 // ── V242 (2026-07-10): tab visibility + person toggles ──
 function applyTabPrefs(){
-  var m={shop:'ttShop', shelf:'ttShelf', recipes:'ttRecipes'};
-  Object.keys(m).forEach(function(t){
-    var el=document.getElementById(m[t]);
-    if(el) el.style.display = TAB_PREFS[t]===false?'none':'';
-  });
+  // V290: prefs hide HOME TILES now (renderHome reads TAB_PREFS directly);
+  // re-render the home screen if it's the visible view.
+  if(topTab==='home' && typeof renderHome==='function') renderHome();
   if((topTab==='shop'&&TAB_PREFS.shop===false)
    ||(topTab==='shelf'&&TAB_PREFS.shelf===false)
    ||(topTab==='recipes'&&TAB_PREFS.recipes===false)){
@@ -6413,39 +6419,57 @@ function setTopTab(t){
   // Save recipe form before leaving
   if(topTab==='recipes')saveRecipeFormState();
   topTab=t;
-  const mealsTab=document.getElementById('ttMeals');
-  mealsTab.className='top-tab'+(t==='meals'?' on-meals':'');
-  if(t==='meals'){
-    const col=person==='her'?'var(--her)':person==='shared'?'#34D399':'var(--his)';
-    mealsTab.style.color=col;mealsTab.style.borderBottomColor=col;
-  } else {
-    mealsTab.style.color='';mealsTab.style.borderBottomColor='';
-  }
-  document.getElementById('ttShop').className='top-tab'+(t==='shop'?' on-shop':'');
-  document.getElementById('ttShelf').className='top-tab'+(t==='shelf'?' on-shop':''); // V242: reuse shop accent
-  document.getElementById('ttRecipes').className='top-tab'+(t==='recipes'?' on-recipes':'');
+  // V290: header is state-driven — hidden on home; back link + week pills
+  // on week-scoped sections (meals/shop/shelf); back link + section title
+  // on recipes (and the settings panel).
+  var hdr=document.querySelector('.hdr');
+  if(hdr) hdr.style.display = t==='home' ? 'none' : '';
+  var weekScoped = t==='meals'||t==='shop'||t==='shelf';
+  var wb=document.getElementById('weekBar');
+  if(wb) wb.style.display = weekScoped ? '' : 'none';
+  var st=document.getElementById('hdrSecTitle');
+  if(st){ st.style.display = weekScoped ? 'none' : ''; st.textContent = t==='recipes' ? 'Recipes' : ''; }
   document.getElementById('mealHdrExtra').style.display=t==='meals'?'':'none';
+  document.getElementById('homeView').style.display=t==='home'?'':'none';
   document.getElementById('mealView').style.display=t==='meals'?'':'none';
   document.getElementById('shopView').style.display=t==='shop'?'':'none';
   document.getElementById('shelfView').style.display=t==='shelf'?'':'none';
   document.getElementById('syncView').style.display='none';
   document.getElementById('recipesView').style.display=t==='recipes'?'':'none';
   renderWeekBar();
+  if(t==='home')renderHome();
   if(t==='shop')renderShop();
   if(t==='shelf')renderShelf();
   if(t==='recipes'){renderRecipesView();restoreRecipeFormState();}
+}
+// V290: the home screen — big section tiles (V245 accent language) +
+// settings row. TAB_PREFS hides tiles like it used to hide tabs.
+function renderHome(){
+  var el=document.getElementById('homeView');
+  if(!el) return;
+  var tiles=[
+    {t:'meals',   ico:'🍽️', lbl:'Meals',    rgb:'96,165,250'},
+    {t:'shop',    ico:'🛒', lbl:'Shopping', rgb:'52,211,153'},
+    {t:'shelf',   ico:'🧺', lbl:'Shelf',    rgb:'245,158,11'},
+    {t:'recipes', ico:'✚',  lbl:'Recipes',  rgb:'167,139,250'}
+  ].filter(function(x){ return x.t==='meals' || TAB_PREFS[x.t]!==false; });
+  var html='<div class="home-wrap">'
+    +'<div class="home-title">Meal Planner</div>'
+    +'<div class="home-grid">'
+    +tiles.map(function(x){
+      return '<div class="home-tile" style="border-left:3px solid rgba('+x.rgb+',.9);background:linear-gradient(135deg,rgba('+x.rgb+',.16),rgba('+x.rgb+',.05) 45%,rgba('+x.rgb+',0) 72%),var(--bg-card)" onclick="setTopTab(\''+x.t+'\')">'
+        +'<div class="ht-ico">'+x.ico+'</div><div class="ht-lbl">'+x.lbl+'</div></div>';
+    }).join('')
+    +'</div>'
+    +'<div class="home-settings" onclick="toggleSyncPanel()">⚙️ Settings</div>'
+    +'</div>';
+  el.innerHTML=html;
 }
 function setPerson(p){
   person=p;
   document.querySelectorAll('.ptab').forEach(function(t){t.classList.remove('on')});
   const el=document.querySelector('.ptab.'+p);
   if(el)el.classList.add('on');
-  // Update Meals tab color to match person theme
-  const mealsTab=document.getElementById('ttMeals');
-  if(mealsTab&&mealsTab.className.indexOf('on-meals')>=0){
-    const col=p==='her'?'var(--her)':p==='shared'?'#34D399':'var(--his)';
-    mealsTab.style.color=col;mealsTab.style.borderBottomColor=col;
-  }
   if(p==='shared') window._scrollTopOnShared=true;
   renderWeekBar();renderDayTabs();renderMeals();
 }
@@ -20422,6 +20446,7 @@ function toggleSyncPanel(){
     setTopTab(topTab);
   } else {
     // Hide other views, show sync
+    document.getElementById('homeView').style.display='none'; // V290
     document.getElementById('mealView').style.display='none';
     document.getElementById('shopView').style.display='none';
     document.getElementById('shelfView').style.display='none'; // V244
@@ -20429,11 +20454,14 @@ function toggleSyncPanel(){
     document.getElementById('mealHdrExtra').style.display='none';
     sv.style.display='';
     renderSyncView();
-    // Deselect top tabs
-    document.getElementById('ttMeals').className='top-tab';
-    document.getElementById('ttShop').className='top-tab';
-    document.getElementById('ttShelf').className='top-tab'; // V244
-    document.getElementById('ttRecipes').className='top-tab';
+    // V290: header shows the back link + a Settings title while open
+    // (the close branch's setTopTab(topTab) restores everything).
+    var hdr=document.querySelector('.hdr');
+    if(hdr) hdr.style.display='';
+    var wb=document.getElementById('weekBar');
+    if(wb) wb.style.display='none';
+    var st=document.getElementById('hdrSecTitle');
+    if(st){ st.style.display=''; st.textContent='Settings'; }
   }
 }
 function renderSyncView(){
