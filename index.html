@@ -90,6 +90,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .mfrow:active{background:var(--gray-light)}
 .mfsec{font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 2px}
 body.mfocus-lock{overflow:hidden}
+.sfocus-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:260;display:flex;align-items:center;justify-content:center}
+.sfocus{background:var(--bg);width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden}
+@media(min-width:640px){.sfocus{max-width:640px;height:auto;max-height:92vh;border:1px solid var(--border);border-radius:14px}}
+.sfocus-body{overflow-y:auto;padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 20px);-webkit-overflow-scrolling:touch}
+body.sfocus-lock{overflow:hidden}
+.sched-open-aff{font-size:18px;color:var(--text-dim);font-weight:700;line-height:1}
 .skip-summary{padding:6px 12px;font-size:11px;color:var(--text-mid);background:rgba(148,163,184,.08);border-top:1px solid var(--border)}
 .adj-target-cb{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--text);font-weight:600;cursor:pointer;margin-right:10px;vertical-align:middle}
 .adj-target-cb input{accent-color:var(--shop);margin:0;width:13px;height:13px;vertical-align:middle;position:relative;top:0}
@@ -10661,63 +10667,72 @@ function renderMeals(){
     html+='<div class="week-banner next">Next Week — Planning Ahead</div>';
   }
   if(activeWeek!=='last'){
-    // Shared schedule panel
-    const ssIcon=sharedSchedOpen?'&#9662;':'&#9656;';
-    html+='<div class="sched-panel">';
-    // V29 (2026-05-07): in edit mode, header click is a no-op so the panel
-    // can't be collapsed while Apply/Undo/Reset are pending. Otherwise the
-    // user could accidentally collapse the panel mid-edit, lose access to
-    // the action buttons, and the edit-mode flag would silently linger.
-    html+='<div class="sched-hdr" onclick="if(!_scheduleEditMode){sharedSchedOpen=!sharedSchedOpen;renderMeals();}">';
-    html+='<div class="sched-title">'+ssIcon+' Schedule Meals</div>';
+    // V288 (user: "schedule meals should no longer have a dropdown either"):
+    // the panel no longer expands inline (the old drop-down disclosure) —
+    // this row is just the opener tile; the whole Schedule Meals UI
+    // (buttons, grid, legend, edit/paint mode) lives in a full-screen
+    // popup (_renderSchedFocus), the V287 focus-overlay language.
+    html+='<div class="sched-panel"><div class="sched-hdr" onclick="sharedSchedOpen=true;renderMeals();">'
+      +'<div class="sched-title">Schedule Meals</div>'
+      +'<div class="sched-open-aff">›</div>'
+      +'</div></div>';
+  }
+  // Popup content — built only when open; _renderSchedFocus at the exit
+  // paths mounts/unmounts it on <body>. The V29 rule carries over: the
+  // popup's ✕ is hidden in edit mode (Apply/Undo/Reset are the exits).
+  let schedHtml='';
+  if(activeWeek!=='last' && sharedSchedOpen){
+    schedHtml+='<div class="sched-panel" style="border:none;background:transparent;padding:0;margin:0">';
+    schedHtml+='<div class="sched-hdr">';
+    schedHtml+='<div></div>';
     if(sharedSchedOpen){
       if(_scheduleEditMode){
         // Edit mode: show Reset (wipe painting), Undo (revert), Apply (commit).
         // Inside-edit "Reset" wipes everything (SEL too) — start fresh.
         // Outside "Clear" wipes only user overrides (skips, eat-outs,
         // ingredient pins) — meals stay. Different scope, different label.
-        html+='<div style="display:flex;gap:6px">'
+        schedHtml+='<div style="display:flex;gap:6px">'
           +'<div class="sched-btn" onclick="event.stopPropagation();if(confirm(\'Reset the schedule grid to a blank slate? You can still Undo afterwards.\')){clearScheduleEdit();}">Reset</div>'
           +'<div class="sched-btn" onclick="event.stopPropagation();undoScheduleEdit()">Undo</div>'
           +'<div class="sched-btn sched-btn-set" onclick="event.stopPropagation();applyScheduleEdit()">Apply</div>'
           +'</div>';
       } else {
-        html+='<div style="display:flex;gap:6px">'
+        schedHtml+='<div style="display:flex;gap:6px">'
           +'<div class="sched-btn" onclick="event.stopPropagation();if(confirm(\'Clear all manually set meals?\')){clearWeek();}">Clear</div>'
           +'<div class="sched-btn sched-btn-set" onclick="event.stopPropagation();enterScheduleEditMode()">Edit</div>'
           +'<div class="sched-btn" style="border-color:'+(person==='her'?'rgba(244,114,182,.5)':person==='shared'?'rgba(52,211,153,.5)':'rgba(96,165,250,.5)')+';color:'+(person==='her'?'var(--her)':person==='shared'?'#34D399':'var(--his)')+'" onclick="event.stopPropagation();showRandomizePopup()">Create Plan</div>'
           +'</div>';
       }
     }
-    html+='</div>';
+    schedHtml+='</div>';
     if(sharedSchedOpen){
       // 2026-05-06+: Edit mode banner. Surfaces that taps are sandboxed
       // and explains the Apply/Undo flow.
       if(_scheduleEditMode){
-        html+='<div style="margin:6px 0;padding:8px 10px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.5);border-radius:8px;color:#A78BFA;font-size:12px;line-height:1.4">'
+        schedHtml+='<div style="margin:6px 0;padding:8px 10px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.5);border-radius:8px;color:#A78BFA;font-size:12px;line-height:1.4">'
           +'<b>Edit Mode</b> — tap any cell, day name, or column header for actions. '
           +'<b>Reset</b> wipes the grid · <b>Apply</b> commits + re-randomizes only what you changed · <b>Undo</b> reverts.'
           +'</div>';
       } else {
         // Spacer between header buttons and grid
-        html+='<div style="height:5px"></div>';
+        schedHtml+='<div style="height:5px"></div>';
       }
       // Grid header: Day + Breakfast + Lunch + Dinner. Snack column was
       // added briefly 2026-05-03 then removed — too wide for iPhone screens.
       // Snacks are still picked via the meal cards directly.
-      html+='<div class="sched-grid">';
-      html+='<div></div>';
+      schedHtml+='<div class="sched-grid">';
+      schedHtml+='<div></div>';
       ['breakfast','lunch','dinner'].forEach(function(ss){
         const _prId=ss==='breakfast'?'breakfasts':ss==='lunch'?'lunches':'dinners';
         // 2026-05-03: paint mode is now CROSS-COLUMN — all columns are equally
         // paintable, no dimming. Header still shows shared-preset zones.
         if(_paintMode){
-          html+='<div class="sched-slot-hdr" style="color:var(--gray)">'+SLOT_LABEL[ss]+'</div>';
+          schedHtml+='<div class="sched-slot-hdr" style="color:var(--gray)">'+SLOT_LABEL[ss]+'</div>';
         } else {
           // V253: header tap opens the column-scoped action menu (replaces
           // the invisible 3-zone preset areas — setSharedPreset* remain as
           // the underlying ops / harness surface).
-          html+='<div class="sched-slot-hdr" style="color:var(--gray);cursor:pointer" onclick="event.stopPropagation();openSchedMenu(\'col\',\'\',\''+ss+'\')">'+SLOT_LABEL[ss]+'</div>';
+          schedHtml+='<div class="sched-slot-hdr" style="color:var(--gray);cursor:pointer" onclick="event.stopPropagation();openSchedMenu(\'col\',\'\',\''+ss+'\')">'+SLOT_LABEL[ss]+'</div>';
         }
       });
       // Day rows
@@ -10744,11 +10759,11 @@ function renderMeals(){
         const dayCol=dayAllShared?'#34D399':dayAllSkip?'#EF4444':'var(--text)';
         const dde=dd.replace(/'/g,"\\'");
         if(_paintMode){
-          html+='<div class="sched-day dim">'+dd.slice(0,3)+'</div>';
+          schedHtml+='<div class="sched-day dim">'+dd.slice(0,3)+'</div>';
         } else {
           // V253: day tap opens the row-scoped action menu (was schedTapDay's
           // hidden shared→normal→eo cycle).
-          html+='<div class="sched-day" style="color:'+dayCol+';cursor:pointer" onclick="event.stopPropagation();openSchedMenu(\'day\',\''+dde+'\',\'\')">'+dd.slice(0,3)+'</div>';
+          schedHtml+='<div class="sched-day" style="color:'+dayCol+';cursor:pointer" onclick="event.stopPropagation();openSchedMenu(\'day\',\''+dde+'\',\'\')">'+dd.slice(0,3)+'</div>';
         }
         slots3.forEach(function(ss){
           const state=SHARED_SCHEDULE[dk(dd,ss)]||'normal';
@@ -11063,7 +11078,7 @@ function renderMeals(){
           if(_htM!==null)_tipLines.push('Him: '+_escTip(_htM));
           if(_hrM!==null)_tipLines.push('Her: '+_escTip(_hrM));
           const wrapTitle=isPaintCol?'':' data-tip="'+_tipLines.join('&#10;')+'"';
-          html+='<div class="sched-pill-wrap" style="'+dimStyle+(!isPaintCol&&_scheduleEditMode?';cursor:pointer':'')+'"'+wrapClick+wrapTitle+'>'
+          schedHtml+='<div class="sched-pill-wrap" style="'+dimStyle+(!isPaintCol&&_scheduleEditMode?';cursor:pointer':'')+'"'+wrapClick+wrapTitle+'>'
             +(_gHimOn?'<div class="sched-pill-half sched-pill-l" style="background:'+lBg+';color:'+lCol+'" '+lClick+'>'+lLabel+'</div>':'')
             +(_gHimOn&&_gHerOn?cenSeg:'')
             +(_gHerOn?'<div class="sched-pill-half sched-pill-r" style="background:'+rBg+';color:'+rCol+'" '+rClick+'>'+rLabel+'</div>':'')
@@ -11071,25 +11086,25 @@ function renderMeals(){
             +'</div>';
         });
       });
-      html+='</div>';
+      schedHtml+='</div>';
       // Meal painting UI
-      html+='<div class="paint-bar">';
+      schedHtml+='<div class="paint-bar">';
       if(_paintMode){
         const paintMeal=getMeal(_paintMealId);
         const editingExisting=!!getLinkGroupForMeal(_paintMealId);
         // 2026-05-03: paint mode now cross-column (any cell paintable). The
         // info line identifies the meal AND whether this is an edit.
-        html+='<div class="paint-info">'+(editingExisting?'Editing':'Assigning')+': '+((paintMeal||{}).label||'?')+'</div>';
+        schedHtml+='<div class="paint-info">'+(editingExisting?'Editing':'Assigning')+': '+((paintMeal||{}).label||'?')+'</div>';
         // V254: the hint now explains the cook/leftover rule the detector
         // applies — the #1 "how does this decide" confusion.
-        html+='<div class="paint-hint"><b>Earliest selected day cooks it; every later selected cell eats that cook\'s leftovers.</b> Tap cells to add/remove — left = Him, right = Her, ⚭ = both. Assign '+(editingExisting?'updates':'saves')+' the batch.</div>';
-        html+='<div style="display:flex;gap:6px">';
-        html+='<div class="sched-btn" onclick="event.stopPropagation();togglePaintMode()">Cancel</div>';
+        schedHtml+='<div class="paint-hint"><b>Earliest selected day cooks it; every later selected cell eats that cook\'s leftovers.</b> Tap cells to add/remove — left = Him, right = Her, ⚭ = both. Assign '+(editingExisting?'updates':'saves')+' the batch.</div>';
+        schedHtml+='<div style="display:flex;gap:6px">';
+        schedHtml+='<div class="sched-btn" onclick="event.stopPropagation();togglePaintMode()">Cancel</div>';
         if(editingExisting){
-          html+='<div class="sched-btn" style="border-color:rgba(239,68,68,.5);color:#EF4444" onclick="event.stopPropagation();deleteCurrentGroup()">Delete</div>';
+          schedHtml+='<div class="sched-btn" style="border-color:rgba(239,68,68,.5);color:#EF4444" onclick="event.stopPropagation();deleteCurrentGroup()">Delete</div>';
         }
-        html+='<div class="sched-btn" style="background:var(--shop);color:#000;font-weight:700;border-color:var(--shop)" onclick="event.stopPropagation();paintAccept()">Assign</div>';
-        html+='</div>';
+        schedHtml+='<div class="sched-btn" style="background:var(--shop);color:#000;font-weight:700;border-color:var(--shop)" onclick="event.stopPropagation();paintAccept()">Assign</div>';
+        schedHtml+='</div>';
       } else {
         // V253: the Category/Meal/Select picker row is gone — meal picking
         // and leftover-link painting live in the cell menu now (Pick meal… /
@@ -11100,7 +11115,7 @@ function renderMeals(){
         // V262: square swatches that MATCH the cell treatments — gradient
         // squares for wash states, a solid square for the cook day, the
         // actual ⚭ glyph for shared.
-        html+='<div class="sched-legend">'
+        schedHtml+='<div class="sched-legend">'
           +'<span><span style="color:rgba(52,211,153,1);font-size:12px">⚭</span> shared</span>'
           +'<span><span class="sched-leg-sq" style="background:linear-gradient(90deg,rgba(239,68,68,.8),rgba(239,68,68,.25) 50%,rgba(239,68,68,0) 75%)"></span>eat out</span>'
           +'<span><span style="display:inline-block;width:6px;height:12px;border:2px solid rgba(167,139,250,.95);border-right:none;border-radius:6px 0 0 6px;margin-right:3px;vertical-align:-2px"></span>set</span>'
@@ -11109,10 +11124,9 @@ function renderMeals(){
           +(_scheduleEditMode?'<span style="margin-left:auto">tap a cell, day, or column for actions</span>':'')
           +'</div>';
       }
-      html+='</div>';
+      schedHtml+='</div>';
     }
-    html+='</div>';
-    // Randomize button is now in the Schedule Meals header
+    schedHtml+='</div>';
   }
 
   // Shared view — render shared cards and return
@@ -11120,6 +11134,7 @@ function renderMeals(){
     const sharedScroll=window._scrollTopOnShared?0:scrollY;
     window._scrollTopOnShared=false;
     renderSharedView(day, sharedScroll, mealEl, html);
+    _renderSchedFocus(schedHtml); // V288: schedule popup
     if(_mealFocus) _renderMealFocus(); // V287: keep the focus overlay live
     return;
   }
@@ -11135,9 +11150,30 @@ function renderMeals(){
   mealEl.innerHTML=html;
   window.scrollTo(0,scrollY);
   requestAnimationFrame(function(){window.scrollTo(0,scrollY);mealEl.style.minHeight='';});
+  _renderSchedFocus(schedHtml); // V288: schedule popup
   if(_mealFocus) _renderMealFocus(); // V287: refresh (or auto-close) the focus overlay
 }
 
+// V288: Schedule Meals popup. Mounted on <body> so the grid, V253 cell
+// menus (z400), paint mode, Create Plan popup (z999), and the fact prompt
+// (z500) all stack above it (sfocus z260); the V287 meal-focus overlay
+// (z300) opened from grid view rows also sits above.
+function _renderSchedFocus(html){
+  var old=document.getElementById('schedFocusOverlay');
+  if(old) old.remove();
+  if(!html || !sharedSchedOpen){ document.body.classList.remove('sfocus-lock'); return; }
+  // V29 carried over: no close affordance while edit mode is pending —
+  // Apply/Undo/Reset are the exit paths (they collapse via their own flow).
+  var closeBtn=_scheduleEditMode?'':'<button class="mfocus-close" onclick="sharedSchedOpen=false;renderMeals()">✕</button>';
+  var wk=activeWeek==='next'?'Next Week':activeWeek==='last'?'Last Week':'This Week';
+  var out='<div class="sfocus-backdrop" id="schedFocusOverlay">'
+    +'<div class="sfocus" onclick="event.stopPropagation()">'
+    +'<div class="mfocus-hdr"><div class="mfocus-ctx">Schedule Meals · '+wk+'</div>'+closeBtn+'</div>'
+    +'<div class="sfocus-body">'+html+'</div>'
+    +'</div></div>';
+  document.body.insertAdjacentHTML('beforeend',out);
+  document.body.classList.add('sfocus-lock');
+}
 function togglePerServing(p,d,s){
   // 2026-05-06: flip Big Cook anchor card between combined batch view and
   // per-serving view. Pure render decision — no data mutation, no pipeline.
