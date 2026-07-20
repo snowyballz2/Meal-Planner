@@ -23605,20 +23605,36 @@ window.MPStress=(function(){
         return _SM_HARD_KEYS.some(function(k){return v.indexOf(k+' ')===0||v.indexOf(k+':')===0;})
           && v.indexOf('INV20Soft')!==0;
       });
-      // Stranded set for batch-reshaping swaps = {INV1, INV3, INV8, INV20}:
-      // verbatim rows are fractional kcal-prop splits, so a moved anchor row
-      // in a now-solo slot is off-grid (INV8), a re-derived batch can pair
-      // rows that were cross-person-different pre-swap (INV1), and trip
-      // totals leave their frozen boundaries (INV3-strict/INV20). All four
-      // observed empirically (battery run 3, seeds 12349/12357) and all
-      // re-certify on the recovery randomize. Everything ELSE — unify
-      // ratios (INV7), detector integrity (INV12), bounds (INV13), the
-      // display-sum family (INV2/5/17/23/25), state machine (INV24) — stays
-      // STRICT: those firing mid-mutation would mean real corruption.
+      // Stranded set for batch-reshaping swaps = {INV3, INV20} (TIGHTENED
+      // V285, user-directed): trip totals legitimately leave their frozen
+      // boundaries when a move carries demand across trips — inherent to
+      // moves, re-certified by the recovery randomize. INV1/INV8 were in
+      // the allowed set from V281 (verbatim kcal-prop rows judged under
+      // RE-DERIVED geometry — a dissolved batch's anchor rows landing in a
+      // solo slot off-grid, re-paired same-person rows unequal), but V282
+      // materialization preserves batch membership across moves, so that
+      // mechanism is defused; the instrumented battery confirms zero
+      // INV1/INV8 mid-swap fires. CAVEAT: the materialize palette-
+      // saturation fallback (allocator -1 → no group) can resurrect the
+      // old mechanism — the battery clears LEFTOVER_LINKS between ops and
+      // never exercises it (proven reachable only by targeted reproducer).
+      // Everything ELSE — unify ratios (INV7), detector integrity (INV12),
+      // bounds (INV13), the display-sum family (INV2/5/17/23/25), state
+      // machine (INV24) — stays STRICT: those firing mid-mutation would
+      // mean real corruption.
       var nonStranded=lines.filter(function(v){
-        return v.indexOf('INV3')!==0 && v.indexOf('INV20')!==0
-          && v.indexOf('INV1 ')!==0 && v.indexOf('INV1:')!==0
-          && v.indexOf('INV8 ')!==0 && v.indexOf('INV8:')!==0;
+        return v.indexOf('INV3')!==0 && v.indexOf('INV20')!==0;
+      });
+      // Instrumentation (additive, zero pass/fail impact): record every
+      // stranded-FAMILY line (all four V281 classes, incl. the now-strict
+      // INV1/INV8) that fires mid-swap, with the scenario id tuple.
+      lines.forEach(function(v){
+        var fam = v.indexOf('INV3')===0 || v.indexOf('INV20')===0
+          || v.indexOf('INV1 ')===0 || v.indexOf('INV1:')===0
+          || v.indexOf('INV8 ')===0 || v.indexOf('INV8:')===0;
+        if(!fam) return;
+        (window._smAllowedFireLog=window._smAllowedFireLog||[]).push(
+          {op:op, seed:seed, geometry:slot.geometry||null, slot:p+'/'+d+'/'+s, line:v});
       });
       add('hardInvNonStranded', nonStranded.length<=baseline.hardCount,
         'non-stranded hard fires introduced :: '+nonStranded.join(' | ').slice(0,400));
