@@ -6934,7 +6934,8 @@ function getDayBalancedIngredients(p,d){
   if(_factRows){
     SLOTS.forEach(function(_fs){
       var fk=sk(p,d,_fs);
-      if(_factRows[fk] && slots[_fs]) slots[_fs]=JSON.parse(JSON.stringify(_factRows[fk]));
+      var fe=_factRows[fk];
+      if(fe && slots[_fs] && fe.m===getMealId(p,d,_fs)) slots[_fs]=JSON.parse(JSON.stringify(fe.r));
     });
   }
   _dayBalancedCache[key]=slots;
@@ -9594,7 +9595,7 @@ function renderStatsBar(person, day){
 }
 
 // 2a. Shared card renderer (used inside renderSharedView)
-function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day, accCls){
+function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day, accCls, mode){
   // Build combined view from the batch's actual portions (lo.portions).
   // Each portion contributes its balanced per-serving amount directly —
   // sums to the real batch total. Him / Her single per-serving amounts
@@ -9709,76 +9710,110 @@ function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day, ac
   // V26 (2026-05-07): simplified label.
   const servesLabel='🥗 Ingredients (serves '+totalServings+')';
   const k='shared_'+day+'_'+s+(extraLabel||'');
-  const isOpen=openCards[k]||false;
-  return '<div class="mc slot-'+s+(isOpen?' open':'')+(accCls||'')+'" id="mc_'+k+'">'
-    +'<div class="mc-top"><div class="slot-label">'+SLOT_LABEL[s]+'</div>'
-    +'<div class="sv-meal-title">'+meal.label+' '+badges+'</div></div>'
-    +'<div class="mc-meta" onclick="toggleCard(\''+k.replace(/'/g,"\\'")+'\')"><div><div class="mc-macros">'+macroLine+'</div>'
+
+  // V304: the Shared tab joins the V287 design — tiles open a full-screen
+  // focus overlay; badges/ingredients/steps live there, not on the face.
+  if(mode==='focus'){
+    return '<div class="mfocus-name">'+_menuEsc(meal.label)+'</div>'
+      +(badges?'<div class="mfocus-pills">'+badges+'</div>':'')
+      +'<div class="mc-macros" style="margin-bottom:4px">'+macroLine+'</div>'
+      +macroBar(pm.kcal,pm.pro,pm.fat,pm.carb)
+      +'<div class="bsec"><div class="bsec-title ingr">'+servesLabel+'</div>'+ingrHtml+'</div>'
+      +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>';
+  }
+  return '<div class="mc slot-'+s+(accCls||'')+'" id="mc_'+k+'" onclick="openSharedFocus(\''+day+'\',\''+s+'\')">'
+    +'<div class="mc-top"><div class="mc-top-row"><div class="slot-label">'+SLOT_LABEL[s]+'</div></div>'
+    +'<div class="meal-title">'+_menuEsc(meal.label)+'</div></div>'
+    +'<div class="mc-meta"><div><div class="mc-macros">'+macroLine+'</div>'
     +macroBar(pm.kcal,pm.pro,pm.fat,pm.carb)
-    +'</div><div class="expand-btn">⌄</div></div>'
-    +'<div class="mc-body">'
-    +'<div class="bsec"><div class="bsec-title ingr">'+servesLabel+'</div>'+ingrHtml+'</div>'
-    +'<div class="bsec"><div class="bsec-title cook">👨‍🍳 How to make it</div><ol class="step-list">'+stepsHtml+'</ol></div>'
+    +'</div></div>'
+    +'</div>';
+}
+
+// V304: per-slot shared-card context (meal + badges + accent) — used by
+// the Shared view's loop AND the shared focus overlay so both derive the
+// same state (extracted verbatim from the old loop body).
+function _sharedCardCtx(day,s){
+  if(s==='snack'||s==='shake'||s==='late_snack') return null;
+  const hisId=getMealId('him',day,s);
+  const herId=getMealId('her',day,s);
+  if(!hisId||!herId||hisId!==herId) return null;
+  const meal=getMeal(hisId);
+  if(!meal||(!meal.him&&!meal.her)) return null;
+  if(s==='breakfast'&&meal.noLeftover) return null;
+  const leftovers=computeLeftovers();
+  const himLo=leftovers[sk('him',day,s)];
+  const herLo=leftovers[sk('her',day,s)];
+  const anchorLoSV = (himLo&&!himLo.isLeftover&&himLo.portions)?himLo:
+                    (herLo&&!herLo.isLeftover&&herLo.portions)?herLo:null;
+  const batchSize = anchorLoSV ? anchorLoSV.portions.length : 2;
+  let badges='';
+  if(himLo&&himLo.isLeftover&&!himLo.sameDayShared){
+    badges='<span class="mc-pill mc-pill-leftover on no-click" style="vertical-align:middle">Leftovers</span>'
+      +'<span class="mc-pill mc-pill-cook on no-click" style="margin-left:3px;vertical-align:middle;font-size:9px;padding:1px 6px">'+himLo.cookDay.slice(0,3)+'</span>';
+  } else if(batchSize>2){
+    // R14-M18 (2026-07-09): read THIS batch's authoritative portion list.
+    const loDayMap={};
+    (anchorLoSV ? anchorLoSV.portions : []).forEach(function(pt){
+      if(pt.d===day) return; // anchor + same-day shared portions: not leftover days
+      if(!loDayMap[pt.d])loDayMap[pt.d]=[];
+      if(loDayMap[pt.d].indexOf(pt.p)<0)loDayMap[pt.d].push(pt.p);
+    });
+    const feedsDays=Object.keys(loDayMap).map(function(d){
+      const who=loDayMap[d];
+      const col=who.length>1?'#34D399':who[0]==='him'?'var(--his)':'var(--her)';
+      const bg=who.length>1?'rgba(16,185,129,.15)':who[0]==='him'?'rgba(96,165,250,.15)':'rgba(244,114,182,.15)';
+      const bdr=who.length>1?'rgba(16,185,129,.3)':who[0]==='him'?'rgba(96,165,250,.3)':'rgba(244,114,182,.3)';
+      return '<span class="day-badge" style="background:'+bg+';color:'+col+';border:1.5px solid '+bdr+'">'+d.slice(0,3)+'</span>';
+    }).join('');
+    badges='<span class="mc-pill mc-pill-cook on no-click" style="vertical-align:middle">Big Cook</span>'
+      +feedsDays;
+  }
+  // V245: only informational states (leftover / big cook) get the accent.
+  const svAcc=(himLo&&himLo.isLeftover&&!himLo.sameDayShared)?' st-lo':(batchSize>2)?' st-cook':'';
+  return {meal:meal, badges:badges, accCls:svAcc};
+}
+
+// V304: shared focus overlay — the Shared tab's combined cook view.
+var _sharedFocus=null; // {d,s} — transient
+function openSharedFocus(d,s){ _sharedFocus={d:d,s:s}; _renderSharedMealFocus(); }
+function closeSharedFocus(){
+  _sharedFocus=null;
+  var el=document.getElementById('sharedFocusOverlay');
+  if(el) el.remove();
+  document.body.classList.remove('mfocus-lock');
+}
+function _renderSharedMealFocus(){
+  var old=document.getElementById('sharedFocusOverlay');
+  if(old) old.remove();
+  if(!_sharedFocus) return;
+  if(person!=='shared'){ closeSharedFocus(); return; }
+  var ctx=_sharedCardCtx(_sharedFocus.d,_sharedFocus.s);
+  if(!ctx){ closeSharedFocus(); return; }
+  var inner=renderSharedCard(ctx.meal,_sharedFocus.s,ctx.badges,1,1,'',_sharedFocus.d,ctx.accCls,'focus');
+  if(!inner){ closeSharedFocus(); return; }
+  var html='<div class="mfocus-backdrop" id="sharedFocusOverlay" onclick="closeSharedFocus()">'
+    +'<div class="mfocus" onclick="event.stopPropagation()">'
+    +'<div class="mfocus-hdr"><div class="mfocus-ctx">'+_sharedFocus.d+' · '+SLOT_LABEL[_sharedFocus.s]+' · Shared</div>'
+    +'<button class="mfocus-close" onclick="closeSharedFocus()">✕</button></div>'
+    +'<div class="mfocus-body">'+inner+'</div>'
     +'</div></div>';
+  document.body.insertAdjacentHTML('beforeend',html);
+  document.body.classList.add('mfocus-lock');
 }
 
 // 2b. Shared cooking view
 function renderSharedView(day, scrollY, mealEl, prefixHtml){
   let html=(prefixHtml||'')+'<div class="shared-intro">Shared cooking. Combined amounts for shopping & prep.</div>';
   let hasShared=false;
-  const leftovers=computeLeftovers();
 
-  // 1) Same-day shared meals (him & her have identical meal in same slot)
-  // Skip: snacks, shakes, late_snack, and yogurt breakfast (individual meals, not shared cooking)
+  // 1) Same-day shared meals — context derivation extracted to
+  // _sharedCardCtx (V304) so the focus overlay derives identical state.
   SLOTS.forEach(function(s){
-    if(s==='snack'||s==='shake'||s==='late_snack')return;
-    const hisId=getMealId('him',day,s);
-    const herId=getMealId('her',day,s);
-    if(!hisId||!herId||hisId!==herId)return;
-    const meal=getMeal(hisId);
-    if(!meal||(!meal.him&&!meal.her))return;
-    // Skip yogurt/no-cook breakfast items from shared view
-    if(s==='breakfast'&&meal.noLeftover)return;
+    const ctx=_sharedCardCtx(day,s);
+    if(!ctx) return;
     hasShared=true;
-    const himLo=leftovers[sk('him',day,s)];
-    const herLo=leftovers[sk('her',day,s)];
-    // Resolve the batch anchor — whichever side carries portions list.
-    const anchorLoSV = (himLo&&!himLo.isLeftover&&himLo.portions)?himLo:
-                      (herLo&&!herLo.isLeftover&&herLo.portions)?herLo:null;
-    const batchSize = anchorLoSV ? anchorLoSV.portions.length : 2;
-    let badges='';
-    if(himLo&&himLo.isLeftover&&!himLo.sameDayShared){
-      badges='<span class="mc-pill mc-pill-leftover on no-click" style="vertical-align:middle">Leftovers</span>'
-        +'<span class="mc-pill mc-pill-cook on no-click" style="margin-left:3px;vertical-align:middle;font-size:9px;padding:1px 6px">'+himLo.cookDay.slice(0,3)+'</span>';
-    } else if(batchSize>2){
-      // Find which days get leftovers and who eats them.
-      // R14-M18 (2026-07-09): read THIS batch's authoritative portion list.
-      // The old scan collected EVERY leftover in the week whose cookDay
-      // matched this day — an unrelated batch cooked the same day (e.g. a
-      // Monday LUNCH batch) donated phantom day-badges to the Monday DINNER
-      // shared card, and the sameDayShared portion (per contract a normal
-      // per-serving card, not a leftover) also showed as a feeds-day.
-      const loDayMap={};
-      (anchorLoSV ? anchorLoSV.portions : []).forEach(function(pt){
-        if(pt.d===day) return; // anchor + same-day shared portions: not leftover days
-        if(!loDayMap[pt.d])loDayMap[pt.d]=[];
-        if(loDayMap[pt.d].indexOf(pt.p)<0)loDayMap[pt.d].push(pt.p);
-      });
-      const feedsDays=Object.keys(loDayMap).map(function(d){
-        const who=loDayMap[d];
-        const col=who.length>1?'#34D399':who[0]==='him'?'var(--his)':'var(--her)';
-        const bg=who.length>1?'rgba(16,185,129,.15)':who[0]==='him'?'rgba(96,165,250,.15)':'rgba(244,114,182,.15)';
-        const bdr=who.length>1?'rgba(16,185,129,.3)':who[0]==='him'?'rgba(96,165,250,.3)':'rgba(244,114,182,.3)';
-        return '<span class="day-badge" style="background:'+bg+';color:'+col+';border:1.5px solid '+bdr+'">'+d.slice(0,3)+'</span>';
-      }).join('');
-      badges='<span class="mc-pill mc-pill-cook on no-click" style="vertical-align:middle">Big Cook</span>'
-        +feedsDays;
-    }
-    // V245: Shared-tab accent — every card here is shared, so green would
-    // be uniform noise; only the informational states (leftover / big cook)
-    // get the edge + wash.
-    const svAcc=(himLo&&himLo.isLeftover&&!himLo.sameDayShared)?' st-lo':(batchSize>2)?' st-cook':'';
-    html+=renderSharedCard(meal,s,badges,1,1,'',day,svAcc);
+    html+=renderSharedCard(ctx.meal,s,ctx.badges,1,1,'',day,ctx.accCls);
   });
 
   if(!hasShared)html+='<div class="empty-shop" style="padding:40px 20px;text-align:center;color:var(--gray)">No shared meals on '+day+'.</div>';
@@ -11401,6 +11436,7 @@ function renderMeals(){
     const sharedScroll=window._scrollTopOnShared?0:scrollY;
     window._scrollTopOnShared=false;
     renderSharedView(day, sharedScroll, mealEl, html);
+    if(_sharedFocus) _renderSharedMealFocus(); // V304
     if(_mealFocus) _renderMealFocus(); // V287: keep the focus overlay live
     return;
   }
@@ -11417,6 +11453,7 @@ function renderMeals(){
   mealEl.innerHTML=html;
   window.scrollTo(0,scrollY);
   requestAnimationFrame(function(){window.scrollTo(0,scrollY);mealEl.style.minHeight='';});
+  if(_sharedFocus) _renderSharedMealFocus(); // V304: closes itself off the Shared tab
   if(_mealFocus) _renderMealFocus(); // V287: refresh (or auto-close) the focus overlay
 }
 
@@ -16971,7 +17008,14 @@ function randomizeWeek(target, seed, factOpts){
     Object.keys(_factKeys).forEach(function(k){
       var kp=k.split('_');
       var b=getBalancedSlotIngredients(kp[0],kp[1],kp[2]);
-      if(b) _factRows[k]=JSON.parse(JSON.stringify(b));
+      // V304 fix: capture the MEAL IDENTITY with the rows. The imposition
+      // only applies while the slot still holds this meal — a manual meal
+      // change on a past day (allowed: "read-only to automation, not to
+      // manual changes") previously kept imposing the OLD meal's as-eaten
+      // rows under the new SEL (cross-meal INV1s; surfaced by the battery
+      // the first time it ran on a non-Monday, via applyScheduleEdit's
+      // date-aware fact locking).
+      if(b) _factRows[k]={m:getMealId(kp[0],kp[1],kp[2]), r:JSON.parse(JSON.stringify(b))};
     });
   }
   function _factCleanup(){
@@ -27385,6 +27429,13 @@ window.MPStress=(function(){
       // touchedSides), making preCount < postCount in editModeEnterUndo
       // and similar. The snapshot doesn't include edit-mode globals (they
       // aren't user-data), so we clear them explicitly between ops.
+      // V304: fact-model globals aren't user-data in the snapshot either —
+      // a prior op's date-aware applyScheduleEdit (V283) can leave
+      // _factKeys/_factDays/_factRows set, and the imposition + adjuster
+      // fact-skips would judge the RESTORED plan under another scenario's
+      // fact state. Invisible until the battery first ran on a non-Monday
+      // (todayIdx 0 locks nothing) — the date-surfaced 1444/1450.
+      _factKeys=null; _factDays=null; _factRows=null;
       _scheduleEditMode = false;
       _scheduleEditCleared = false;
       Object.keys(_scheduleEditTouchedCells).forEach(function(k){delete _scheduleEditTouchedCells[k];});
@@ -27598,6 +27649,8 @@ window.MPStress=(function(){
         if(typeof loadWeekState === 'function') loadWeekState('this');
       }
       restore(JSON.parse(JSON.stringify(snap)));
+      // V304: fact-state reset (see the scenario-runner's freshRestore).
+      _factKeys=null; _factDays=null; _factRows=null;
       // V156: same paint-mode + _autoLinkColorCache reset as the
       // scenario-runner. Sequential chains can leak paint/link state
       // between scenarios if an op throws.
