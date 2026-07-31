@@ -11950,35 +11950,32 @@ function _moveEligible(p,d,s){
   // first option as if selected and one change-event replaces the meal.
   if(srcMeal.slots&&srcMeal.slots.indexOf(s)<0) return false;
   if(dstMeal.slots&&dstMeal.slots.indexOf(src.s)<0) return false;
-  // V306 rule 3 ("leftovers can't precede their cook"): a LEFTOVER may not
-  // land earlier than its batch's cook — check BOTH sides of the swap
-  // against post-move positions. (The cook itself moving later is allowed;
-  // swapMeals orphans the members it leaves behind. An anchor can't be the
-  // other endpoint of this swap — same-meal swaps are blocked above.)
+  // V307 rule-3 UX (user revision): the SOURCE side is no longer blocked —
+  // moving a leftover before its cook PROMPTS to promote it to the new
+  // cook (completeMoveMeal). Only the DESTINATION side stays blocked: the
+  // swap's other meal landing before ITS cook would silently re-anchor a
+  // batch the user never chose to touch.
   var _r3los=computeLeftovers();
-  function _r3AnchorKey(pp,dd,ss){
-    var lo=_r3los[sk(pp,dd,ss)];
-    if(!lo||!lo.isLeftover) return null;
-    var aK=null;
-    Object.keys(_r3los).forEach(function(ak){
-      if(aK) return;
-      var a=_r3los[ak];
-      if(a.isLeftover||!a.portions) return;
-      if(a.portions.some(function(pt){return pt.p===pp&&pt.d===dd&&pt.s===ss;})) aK=ak;
-    });
-    return aK;
-  }
-  var srcAK=_r3AnchorKey(src.p,src.d,src.s);
-  if(srcAK){
-    var ap=srcAK.split('_');
-    if(_dayslotKey(d,s) < _dayslotKey(ap[1],ap[2])) return false;
-  }
-  var dstAK=_r3AnchorKey(p,d,s);
+  var dstAK=_r3AnchorKeyOf(p,d,s,_r3los);
   if(dstAK){
     var ap2=dstAK.split('_');
     if(_dayslotKey(src.d,src.s) < _dayslotKey(ap2[1],ap2[2])) return false;
   }
   return true;
+}
+// V307: walk to the batch anchor of a LEFTOVER slot (null for non-leftovers).
+function _r3AnchorKeyOf(pp,dd,ss,los){
+  los=los||computeLeftovers();
+  var lo=los[sk(pp,dd,ss)];
+  if(!lo||!lo.isLeftover) return null;
+  var aK=null;
+  Object.keys(los).forEach(function(ak){
+    if(aK) return;
+    var a=los[ak];
+    if(a.isLeftover||!a.portions) return;
+    if(a.portions.some(function(pt){return pt.p===pp&&pt.d===dd&&pt.s===ss;})) aK=ak;
+  });
+  return aK;
 }
 // V282: moving a batch member (anchor or leftover) converts the detector-
 // derived batch into a MANUAL group first, so the relationship survives
@@ -12049,6 +12046,12 @@ function _materializeBatchGroup(p,d,s){
 // rule-3 invalidation makes mid-swap invariant measurement the documented
 // bare-rebuild drift class).
 var _r3LastOrphanCount=0;
+// V307: the user's dialog choice for the CURRENT move ('clear' orphans the
+// preceding leftovers; null = keep everyone — the group's earliest-anchor
+// rule swaps cook/leftover roles emergently). Set by completeMoveMeal's
+// dialog, consumed+reset by swapMeals. Direct swapMeals calls (harness)
+// never orphan.
+var _r3MoveChoice=null;
 // V306 rule 3 toast — orphaned leftover slots fell open.
 function _orphanToast(n){
   var t=document.createElement('div');
@@ -12081,10 +12084,91 @@ function completeMoveMeal(p,d,s){
     _movePending=null; renderMeals();
     return;
   }
+  // V307 rule-3 UX (user revision): PROMPT instead of blocking/auto-acting.
+  if(_suppressR3MoveDialog){ _r3ExecMove(src,p,d,s,null); return; }
+  var los=computeLeftovers();
+  var srcLo=los[sk(src.p,src.d,src.s)];
+  var destKey=_dayslotKey(d,s);
+  // Case 1: a LEFTOVER moving before its cook → offer promotion to the
+  // new cook (the original cook becomes a leftover — emergent from the
+  // group's earliest-slot anchoring, nothing is deleted).
+  if(srcLo && srcLo.isLeftover){
+    var c1aK=_r3AnchorKeyOf(src.p,src.d,src.s,los);
+    if(c1aK){
+      var c1ap=c1aK.split('_');
+      if(destKey < _dayslotKey(c1ap[1],c1ap[2])){
+        _r3ShowMoveDialog({
+          title:'Move before the cook?',
+          msg:'This is a leftover of the '+c1ap[1].slice(0,3)+' '+SLOT_LABEL[c1ap[2]].toLowerCase()
+            +' cook. Moving it earlier makes THIS slot the new cook — the current cook becomes a leftover.',
+          buttons:[{label:'Make this the cook', choice:null}],
+          src:src, dest:{p:p,d:d,s:s}
+        });
+        return;
+      }
+    }
+  }
+  // Case 2: a COOK moving past some of its leftovers → swap roles (the
+  // earliest leftover becomes the cook) or clear the preceding leftovers.
+  if(srcLo && !srcLo.isLeftover && srcLo.portions && srcLo.portions.length>1){
+    var c2Pre=srcLo.portions.filter(function(pt){
+      if(pt.p===src.p&&pt.d===src.d&&pt.s===src.s) return false;
+      return _dayslotKey(pt.d,pt.s) < destKey;
+    });
+    if(c2Pre.length){
+      _r3ShowMoveDialog({
+        title:'Cook moving past its leftovers',
+        msg:c2Pre.length+' leftover slot'+(c2Pre.length>1?'s':'')+' would come before the cook\'s new spot.',
+        buttons:[
+          {label:'Swap roles — earliest leftover becomes the cook', choice:null},
+          {label:'Clear those leftovers', choice:'clear'}
+        ],
+        src:src, dest:{p:p,d:d,s:s}
+      });
+      return;
+    }
+  }
+  _r3ExecMove(src,p,d,s,null);
+}
+// V307: execute a (possibly dialog-confirmed) move.
+function _r3ExecMove(src,p,d,s,choice){
   _movePending=null;
+  _r3MoveChoice=choice;
   if(!swapMeals(src.p,src.d,src.s, p,d,s)){
     renderMeals(); // R15 m2: failed swap must still clear the armed pills
   }
+  _r3MoveChoice=null;
+}
+// V307: rule-3 move dialog (rowarn chrome). Backdrop/Cancel aborts the
+// move and disarms.
+var _r3Dlg=null;
+function _r3ShowMoveDialog(cfg){
+  var old=document.getElementById('r3MoveDlg');
+  if(old) old.remove();
+  _r3Dlg=cfg;
+  var btns=cfg.buttons.map(function(b,i){
+    return '<div style="margin-top:6px"><button class="rowarn-ok" onclick="_r3DlgAct('+i+')">'+b.label+'</button></div>';
+  }).join('');
+  document.body.insertAdjacentHTML('beforeend',
+    '<div class="rowarn-backdrop" id="r3MoveDlg" onclick="_r3DlgCancel()">'
+    +'<div class="rowarn" onclick="event.stopPropagation()">'
+    +'<div class="rowarn-title">'+cfg.title+'</div>'
+    +'<div class="rowarn-msg">'+cfg.msg+'</div>'
+    +btns
+    +'<div style="margin-top:10px"><button class="rowarn-ok" style="opacity:.65" onclick="_r3DlgCancel()">Cancel move</button></div>'
+    +'</div></div>');
+}
+function _r3DlgAct(i){
+  var cfg=_r3Dlg; _r3Dlg=null;
+  var el=document.getElementById('r3MoveDlg'); if(el) el.remove();
+  if(!cfg) return;
+  var b=cfg.buttons[i]; if(!b) return;
+  _r3ExecMove(cfg.src, cfg.dest.p, cfg.dest.d, cfg.dest.s, b.choice);
+}
+function _r3DlgCancel(){
+  _r3Dlg=null;
+  var el=document.getElementById('r3MoveDlg'); if(el) el.remove();
+  _movePending=null; renderMeals();
 }
 function swapMeals(aP,aD,aS, bP,bD,bS){
   var ka=sk(aP,aD,aS), kb=sk(bP,bD,bS);
@@ -12167,14 +12251,19 @@ function swapMeals(aP,aD,aS, bP,bD,bS){
   MANUAL_SET[ka]=true; MANUAL_SET[kb]=true;
   _markUserEdited(ka); _markUserEdited(kb);
   _bumpSlotTs(ka); _bumpSlotTs(kb);
-  // V306 rule 3: orphan members now EARLIER than their moved cook.
+  // V307 rule-3 UX: orphan ONLY when the user chose 'Clear those
+  // leftovers' in the move dialog. Otherwise everyone stays in the group
+  // and the detector's earliest-slot anchoring swaps the roles.
   _r3LastOrphanCount=0;
   var _r3Orphans=[];
-  _r3Pre.forEach(function(b){
-    b.members.forEach(function(pt){
-      if(_dayslotKey(pt.d,pt.s) < b.newKey) _r3Orphans.push(pt);
+  if(_r3MoveChoice==='clear'){
+    _r3Pre.forEach(function(b){
+      b.members.forEach(function(pt){
+        if(_dayslotKey(pt.d,pt.s) < b.newKey) _r3Orphans.push(pt);
+      });
     });
-  });
+  }
+  _r3MoveChoice=null;
   if(_r3Orphans.length){
     _r3LastOrphanCount=_r3Orphans.length;
     _r3Orphans.forEach(_r3ClearPortion);
@@ -15550,6 +15639,10 @@ function closeRandomizePopup(){
 // INV20 reports it). Harness runs never see the dialog (suppress flag set
 // by runSlotMod/…; MPStress calls randomizeWeek directly anyway).
 var _suppressPartnerWasteDialog = false;
+// V307: harness runs suppress the rule-3 move dialog too — completeMoveMeal
+// executes directly with the default (null) choice: group follows, never
+// orphans (same semantics as a direct swapMeals call).
+var _suppressR3MoveDialog = false;
 function _detectPartnerWasteFixables(randTarget){
   if(randTarget !== 'him' && randTarget !== 'her') return [];
   var out = [];
@@ -25035,21 +25128,11 @@ window.MPStress=(function(){
       add('mg_srcLeftGroup', !mgGroup.slots.some(function(sl){return sl.p===mgP&&sl.d===mgD&&sl.s===mgS;}), 'source slot still in group');
       _validateManualLinkGroups();
       var mgStill=LEFTOVER_LINKS.indexOf(mgGroup)>=0;
-      // V306 rule 3: the synthetic src+buddy pair IS a detector batch with
-      // the SOURCE as anchor. Moving the anchor to a destination AFTER the
-      // buddy orphans the buddy (falls open) — the group then correctly
-      // holds only the moved cook. Destination BEFORE the buddy keeps the
-      // 2-slot follow.
-      var mgDestAfterBuddy=_dayslotKey(mgDst.d,mgDst.s)>_dayslotKey(mgBuddy,mgS);
-      if(mgDestAfterBuddy){
-        add('mg_validatorKeeps', mgStill && mgGroup.slots.length===1,
-          'rule-3 orphan case: group should hold only the moved cook: len='+(mgStill?mgGroup.slots.length:'gone'));
-        add('mg_r3BuddyOrphaned', SEL[sk(mgP,mgBuddy,mgS)]===undefined && !MANUAL_SET[sk(mgP,mgBuddy,mgS)],
-          'buddy should have fallen open (SEL='+SEL[sk(mgP,mgBuddy,mgS)]+')');
-      } else {
-        add('mg_validatorKeeps', mgStill && mgGroup.slots.length===2,
-          'validator dropped/shrank the followed group: len='+(mgStill?mgGroup.slots.length:'gone'));
-      }
+      // V307: direct swapMeals calls never orphan (orphaning is the move
+      // dialog's opt-in 'clear' choice) — the group follows wholesale and
+      // the detector's earliest-slot anchoring handles role changes.
+      add('mg_validatorKeeps', mgStill && mgGroup.slots.length===2,
+        'validator dropped/shrank the followed group: len='+(mgStill?mgGroup.slots.length:'gone'));
       add('mg_colorKept', mgGroup.colorIdx===mgColor, 'palette color changed');
       // V282 battery fix (run 7 root-cause): NO mid-mutation invariant
       // measurement for THIS op — its synthetic setup (stampSel without the
@@ -27464,11 +27547,12 @@ window.MPStress=(function(){
     // V233: harness ops call applyScheduleEdit, which may pop the partner-
     // waste dialog on single-person targets — suppress for the whole run.
     _suppressPartnerWasteDialog = true;
+    _suppressR3MoveDialog = true;
     _runStateBegin('slotMod',nSeeds); // V276 liveness (progress = seeds scanned)
     var _rsmRes=null,_rsmErr=null;
     try{ _rsmRes=_runSlotModBody(); return _rsmRes; }
     catch(e){ _rsmErr=e; throw e; }
-    finally{ _suppressPartnerWasteDialog = false; _dismissPartnerWasteFix(); _runStateEnd(_rsmRes,_rsmErr); }
+    finally{ _suppressPartnerWasteDialog = false; _suppressR3MoveDialog = false; _dismissPartnerWasteFix(); _runStateEnd(_rsmRes,_rsmErr); }
     function _runSlotModBody(){
     // V195 INV26 (2026-05-22): the snapshot taken here is restored per scenario,
     // so a polluted initial snapshot taints every scenario. Audit R12 (2026-05-30):
@@ -27800,9 +27884,10 @@ window.MPStress=(function(){
     var nSeeds=opts.nSeeds||5;
     var baseSeed=opts.baseSeed||12345;
     var maxSeedScan=opts.maxSeedScan||(nSeeds*4);
-    // V233: same dialog suppression as runSlotMod.
+    // V233: same dialog suppression as runSlotMod. V307: rule-3 move dialog too.
     _suppressPartnerWasteDialog = true;
-    try{ return _runSeqBody(); }finally{ _suppressPartnerWasteDialog = false; _dismissPartnerWasteFix(); }
+    _suppressR3MoveDialog = true;
+    try{ return _runSeqBody(); }finally{ _suppressPartnerWasteDialog = false; _suppressR3MoveDialog = false; _dismissPartnerWasteFix(); }
     function _runSeqBody(){
     // Audit R12 (2026-05-30): self-clean at entry (same as runSlotMod /
     // runStandard) so the sequential chains start from a pristine, reproducible
@@ -28318,8 +28403,9 @@ window.MPStress=(function(){
   // meta-guard this very function runs under).
   function selfTestInvariants(){
     _suppressPartnerWasteDialog = true;
+    _suppressR3MoveDialog = true;
     try{ return _stiBody(); }
-    finally{ _suppressPartnerWasteDialog = false; }
+    finally{ _suppressPartnerWasteDialog = false; _suppressR3MoveDialog = false; }
     function _stiBody(){
     _clearAllState();
     _inv26Assert('selfTestInvariants.afterClearAllState', []);
