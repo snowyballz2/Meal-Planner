@@ -11950,6 +11950,34 @@ function _moveEligible(p,d,s){
   // first option as if selected and one change-event replaces the meal.
   if(srcMeal.slots&&srcMeal.slots.indexOf(s)<0) return false;
   if(dstMeal.slots&&dstMeal.slots.indexOf(src.s)<0) return false;
+  // V306 rule 3 ("leftovers can't precede their cook"): a LEFTOVER may not
+  // land earlier than its batch's cook — check BOTH sides of the swap
+  // against post-move positions. (The cook itself moving later is allowed;
+  // swapMeals orphans the members it leaves behind. An anchor can't be the
+  // other endpoint of this swap — same-meal swaps are blocked above.)
+  var _r3los=computeLeftovers();
+  function _r3AnchorKey(pp,dd,ss){
+    var lo=_r3los[sk(pp,dd,ss)];
+    if(!lo||!lo.isLeftover) return null;
+    var aK=null;
+    Object.keys(_r3los).forEach(function(ak){
+      if(aK) return;
+      var a=_r3los[ak];
+      if(a.isLeftover||!a.portions) return;
+      if(a.portions.some(function(pt){return pt.p===pp&&pt.d===dd&&pt.s===ss;})) aK=ak;
+    });
+    return aK;
+  }
+  var srcAK=_r3AnchorKey(src.p,src.d,src.s);
+  if(srcAK){
+    var ap=srcAK.split('_');
+    if(_dayslotKey(d,s) < _dayslotKey(ap[1],ap[2])) return false;
+  }
+  var dstAK=_r3AnchorKey(p,d,s);
+  if(dstAK){
+    var ap2=dstAK.split('_');
+    if(_dayslotKey(src.d,src.s) < _dayslotKey(ap2[1],ap2[2])) return false;
+  }
   return true;
 }
 // V282: moving a batch member (anchor or leftover) converts the detector-
@@ -11978,25 +12006,67 @@ function _materializeBatchGroup(p,d,s){
   if(!anchorLo||!anchorLo.portions||anchorLo.portions.length<2) return;
   var mealId=getMealId(p,d,s);
   if(!mealId) return;
-  var already=(LEFTOVER_LINKS||[]).some(function(g){
+  var existingG=(LEFTOVER_LINKS||[]).find(function(g){
     return g.meal===mealId&&(g.slots||[]).some(function(sl){return sk(sl.p,sl.d,sl.s)===anchorKey;});
   });
-  if(already) return; // l4 retargeting will carry the existing group
-  // V286 (user: no group stranded for lack of colors): palette exhausted →
-  // materialize UNCOLORED (colorIdx:-1, the paintAccept convention — Phase 0
-  // never reads color, all renderers guard colorIdx>=0). The relationship
-  // and the MANUAL_SET locks survive; the band appears when a color frees.
-  var color=_allocateLinkColor();
-  LEFTOVER_LINKS.push({
-    id:'mv_'+Date.now()+'_'+Math.floor(Math.random()*1e6),
-    meal:mealId,
-    slots:anchorLo.portions.map(function(pt){return {p:pt.p,d:pt.d,s:pt.s};}),
-    colorIdx:color
-  });
+  if(existingG){
+    // V306 (R15-l8 LOW): MERGE missing batch portions into the existing
+    // group instead of bailing — the old early return trusted l4
+    // retargeting, which only rewrites slots already IN the group, so a
+    // moved member outside it silently lost its membership (new-cook
+    // reclassification + shopping double-buy beyond the window).
+    anchorLo.portions.forEach(function(pt){
+      var pk2=sk(pt.p,pt.d,pt.s);
+      if(!(existingG.slots||[]).some(function(sl){return sk(sl.p,sl.d,sl.s)===pk2;})){
+        existingG.slots.push({p:pt.p,d:pt.d,s:pt.s});
+      }
+    });
+  } else {
+    // V286 (user: no group stranded for lack of colors): palette exhausted →
+    // materialize UNCOLORED (colorIdx:-1, the paintAccept convention — Phase 0
+    // never reads color, all renderers guard colorIdx>=0). The relationship
+    // and the MANUAL_SET locks survive; the band appears when a color frees.
+    var color=_allocateLinkColor();
+    LEFTOVER_LINKS.push({
+      id:'mv_'+Date.now()+'_'+Math.floor(Math.random()*1e6),
+      meal:mealId,
+      slots:anchorLo.portions.map(function(pt){return {p:pt.p,d:pt.d,s:pt.s};}),
+      colorIdx:color
+    });
+  }
   anchorLo.portions.forEach(function(pt){
     var k=sk(pt.p,pt.d,pt.s);
+    // V306 (R15-l8 LOW): DEFAULTS-backed portions get SEL stamped — the
+    // detector derived them via getMealId's DEFAULTS fallback, but the
+    // validator is SEL-strict and would splice them from the fresh group
+    // at the end-of-move render (never-randomized weeks only).
+    if(!SEL[k]) stampSel(k, mealId);
     MANUAL_SET[k]=true;
     if(typeof _bumpSlotTs==='function') _bumpSlotTs(k);
+  });
+}
+// V306: orphan count of the LAST swapMeals call (harness gating — the
+// rule-3 invalidation makes mid-swap invariant measurement the documented
+// bare-rebuild drift class).
+var _r3LastOrphanCount=0;
+// V306 rule 3 toast — orphaned leftover slots fell open.
+function _orphanToast(n){
+  var t=document.createElement('div');
+  t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid #FBBF24;border-radius:10px;padding:10px 16px;z-index:9999;font-size:13px;color:var(--text);max-width:90%';
+  t.textContent='🍲 '+n+' leftover slot'+(n>1?'s':'')+' cleared — they came before their cook. The next Randomize refills them.';
+  document.body.appendChild(t);
+  setTimeout(function(){ t.remove(); }, 5200);
+}
+// V306 rule 3 shared helper: clear an orphaned portion (fall OPEN — SEL,
+// locks, and overrides unset; skip/eat-out user states untouched; group
+// membership dropped so bands don't linger).
+function _r3ClearPortion(pt){
+  var ok2=sk(pt.p,pt.d,pt.s);
+  delete SEL[ok2]; delete MANUAL_SET[ok2]; delete USER_EDITED[ok2];
+  clearOverrides(pt.p,pt.d,pt.s);
+  if(typeof _bumpSlotTs==='function') _bumpSlotTs(ok2);
+  (LEFTOVER_LINKS||[]).forEach(function(g){
+    g.slots=(g.slots||[]).filter(function(sl){return !(sl.p===pt.p&&sl.d===pt.d&&sl.s===pt.s);});
   });
 }
 function startMoveMeal(p,d,s){ _movePending={p:p,d:d,s:s}; renderMeals(); }
@@ -12035,6 +12105,16 @@ function swapMeals(aP,aD,aS, bP,bD,bS){
   // slot, and detector Phase 0 keeps it a leftover beyond the window).
   _materializeBatchGroup(aP,aD,aS);
   _materializeBatchGroup(bP,bD,bS);
+  // V306 rule 3: capture each endpoint's batch shape pre-move. After the
+  // swap commits, any member left EARLIER than its moved cook falls OPEN.
+  var _r3Pre=[];
+  [[aP,aD,aS,bD,bS],[bP,bD,bS,aD,aS]].forEach(function(x){
+    var lo=computeLeftovers()[sk(x[0],x[1],x[2])];
+    if(lo && !lo.isLeftover && lo.portions && lo.portions.length>1){
+      _r3Pre.push({newKey:_dayslotKey(x[3],x[4]),
+                   members:lo.portions.filter(function(pt){return !(pt.p===x[0]&&pt.d===x[1]&&pt.s===x[2]);})});
+    }
+  });
   SEL[ka]=idB; SEL[kb]=idA;
   // Overrides travel with their meal (user pins, temp adds).
   // R15 l3 (V280): freeze/fat-boost pins do NOT travel — they were sized
@@ -12087,6 +12167,24 @@ function swapMeals(aP,aD,aS, bP,bD,bS){
   MANUAL_SET[ka]=true; MANUAL_SET[kb]=true;
   _markUserEdited(ka); _markUserEdited(kb);
   _bumpSlotTs(ka); _bumpSlotTs(kb);
+  // V306 rule 3: orphan members now EARLIER than their moved cook.
+  _r3LastOrphanCount=0;
+  var _r3Orphans=[];
+  _r3Pre.forEach(function(b){
+    b.members.forEach(function(pt){
+      if(_dayslotKey(pt.d,pt.s) < b.newKey) _r3Orphans.push(pt);
+    });
+  });
+  if(_r3Orphans.length){
+    _r3LastOrphanCount=_r3Orphans.length;
+    _r3Orphans.forEach(_r3ClearPortion);
+    // Orphaned slots' cached rows are the old meal's — full invalidate so
+    // they rebuild for their fallback meals (the endpoint verbatim-rows
+    // promise is move-time-only, l9; certification waits for the next
+    // randomize either way).
+    invalidateLeftoverCache();
+    _orphanToast(_r3Orphans.length);
+  }
   _leftoverCache=null; // detector re-derives; balanced cache kept verbatim
   renderMeals(); if(topTab==='shop')renderShop(); autoSaveWeek();
   return true;
@@ -12094,6 +12192,17 @@ function swapMeals(aP,aD,aS, bP,bD,bS){
 
 function changeMeal(slot,mealId){
   const selKey=sk(person,day,slot);
+  // V306 rule 3: changing the COOK's meal removes the cook — its
+  // time-shifted leftovers fall OPEN (the same-day shared portion
+  // survives: the other person can still cook their own serving).
+  var _r3cmOrph=[];
+  var _r3cmLo=(typeof computeLeftovers==='function')?computeLeftovers()[selKey]:null;
+  if(_r3cmLo && !_r3cmLo.isLeftover && _r3cmLo.portions && _r3cmLo.portions.length>1){
+    _r3cmLo.portions.forEach(function(pt){
+      if(pt.d===day && pt.s===slot) return; // anchor + same-day shared stay
+      _r3cmOrph.push(pt);
+    });
+  }
   // V169 (2026-05-19): capture user pins for ROUND_*_ITEMS that exist
   // in BOTH the current and new meal. Preserves the user's amount
   // preference for pkg items across meal change (e.g., "I want 1.5c
@@ -12138,6 +12247,11 @@ function changeMeal(slot,mealId){
   // Also clear undo for THIS slot's key (defensive — toggleShared
   // captures into the OTHER side's key, but be safe).
   if(SHARED_UNDO && SHARED_UNDO[selKey]) delete SHARED_UNDO[selKey];
+  // V306 rule 3: orphan the removed cook's time-shifted leftovers.
+  if(_r3cmOrph.length){
+    _r3cmOrph.forEach(_r3ClearPortion);
+    _orphanToast(_r3cmOrph.length);
+  }
   invalidateLeftoverCache();autoSaveWeek();renderMeals();if(topTab==='shop')renderShop();
 }
 // V161 (2026-05-19): per-week undo map for toggleShared. When user
@@ -24792,7 +24906,12 @@ window.MPStress=(function(){
       add('mb_inv11Delta', countInv11()<=mbInv11Before, 'swap raised countInv11: '+mbInv11Before+'->'+countInv11());
       // Post-swap: only stranded-geometry fires allowed, then prove the
       // next seeded randomize re-certifies to baseline (V243 contract).
-      checkInvStrandedOnly();
+      // V306: when rule 3 orphaned members, swapMeals ran a FULL cache
+      // invalidation — mid-swap measurement would then read the documented
+      // bare-rebuild drift (0->37 INV7 on plain randomize+invalidate, no
+      // groups involved), a measurement artifact, not move behavior. The
+      // recovery randomize below stays the certified gate either way.
+      if(!_r3LastOrphanCount) checkInvStrandedOnly();
       checkSchedEatOut();
       checkCoherence();
       randomizeWeek('shared', seed+500000);
@@ -24916,7 +25035,21 @@ window.MPStress=(function(){
       add('mg_srcLeftGroup', !mgGroup.slots.some(function(sl){return sl.p===mgP&&sl.d===mgD&&sl.s===mgS;}), 'source slot still in group');
       _validateManualLinkGroups();
       var mgStill=LEFTOVER_LINKS.indexOf(mgGroup)>=0;
-      add('mg_validatorKeeps', mgStill && mgGroup.slots.length===2, 'validator dropped/shrank the followed group: len='+(mgStill?mgGroup.slots.length:'gone'));
+      // V306 rule 3: the synthetic src+buddy pair IS a detector batch with
+      // the SOURCE as anchor. Moving the anchor to a destination AFTER the
+      // buddy orphans the buddy (falls open) — the group then correctly
+      // holds only the moved cook. Destination BEFORE the buddy keeps the
+      // 2-slot follow.
+      var mgDestAfterBuddy=_dayslotKey(mgDst.d,mgDst.s)>_dayslotKey(mgBuddy,mgS);
+      if(mgDestAfterBuddy){
+        add('mg_validatorKeeps', mgStill && mgGroup.slots.length===1,
+          'rule-3 orphan case: group should hold only the moved cook: len='+(mgStill?mgGroup.slots.length:'gone'));
+        add('mg_r3BuddyOrphaned', SEL[sk(mgP,mgBuddy,mgS)]===undefined && !MANUAL_SET[sk(mgP,mgBuddy,mgS)],
+          'buddy should have fallen open (SEL='+SEL[sk(mgP,mgBuddy,mgS)]+')');
+      } else {
+        add('mg_validatorKeeps', mgStill && mgGroup.slots.length===2,
+          'validator dropped/shrank the followed group: len='+(mgStill?mgGroup.slots.length:'gone'));
+      }
       add('mg_colorKept', mgGroup.colorIdx===mgColor, 'palette color changed');
       // V282 battery fix (run 7 root-cause): NO mid-mutation invariant
       // measurement for THIS op — its synthetic setup (stampSel without the
@@ -25024,12 +25157,19 @@ window.MPStress=(function(){
         return {checks:checks};
       }
       var newMealId=altMeals[0].id;
-      // Capture other batch portions' meal IDs (should remain unchanged)
-      var otherPortionMeals={};
-      if(slot.lo && slot.lo.portions){
-        slot.lo.portions.forEach(function(pt){
+      // V306 rule 3 contract: changing a batch ANCHOR's meal orphans its
+      // time-shifted leftovers (they fall OPEN); same-day portions stay.
+      // Non-anchor slots keep the old no-propagation expectation. Classify
+      // from the LIVE detector (slot.lo is harvest-time state).
+      var cmLoLive=computeLeftovers()[sk(p,d,s)];
+      var cmIsAnchor=!!(cmLoLive && !cmLoLive.isLeftover && cmLoLive.portions && cmLoLive.portions.length>1);
+      var otherPortionMeals={}, cmExpectOrphan={};
+      if(cmLoLive && cmLoLive.portions){
+        cmLoLive.portions.forEach(function(pt){
           if(pt.p===p && pt.d===d && pt.s===s) return;
-          otherPortionMeals[sk(pt.p,pt.d,pt.s)]=getMealId(pt.p,pt.d,pt.s);
+          var ok3=sk(pt.p,pt.d,pt.s);
+          if(cmIsAnchor && !(pt.d===d && pt.s===s)) cmExpectOrphan[ok3]=true;
+          else otherPortionMeals[ok3]=getMealId(pt.p,pt.d,pt.s);
         });
       }
       var prevPerson=person, prevDay=day;
@@ -25053,6 +25193,13 @@ window.MPStress=(function(){
       });
       add('cm_noPropagation', noPropagation,
         propProblem || '', null, Object.keys(otherPortionMeals).length===0 ? 'n/a (single-slot)' : 'ok');
+      var cmOrphOk=true, cmOrphProblem=null;
+      Object.keys(cmExpectOrphan).forEach(function(oK){
+        if(SEL[oK]!==undefined){ cmOrphOk=false; cmOrphProblem='orphan '+oK+' still has SEL '+SEL[oK]; }
+        if(MANUAL_SET[oK]){ cmOrphOk=false; cmOrphProblem='orphan '+oK+' still MANUAL_SET'; }
+      });
+      add('cm_r3_orphaned', cmOrphOk,
+        cmOrphProblem || '', null, Object.keys(cmExpectOrphan).length===0 ? 'n/a (not an anchor)' : 'ok');
       // hardInv NOT checked — changeMeal doesn't run full pipeline.
       checkSchedEatOut();
       checkCoherence();
