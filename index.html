@@ -9690,7 +9690,31 @@ function renderSharedCard(meal, s, badges, himMult, herMult, extraLabel, day, ac
       sMsg='Edit this batch in <b>'+(saP==='him'?'Him':'Her')+"'s Combined Ingredients view</b> — "
         +(saP==='him'?'his':'her')+' '+day.slice(0,3)+' '+SLOT_LABEL[s].toLowerCase()+' card.';
     } else {
-      sMsg="These are individual portions — edit them on <b>Him's and Her's own cards</b>.";
+      // V305 (confirmed on a both-leftovers shared card): no LOCAL anchor
+      // does NOT mean individual portions — walk to the batch's true
+      // anchor (the same walk the Him/Her lock hint does) and direct to
+      // its owner: the Shared tab's cook-day card when the cook is
+      // shared, the anchor person's combined view otherwise. The
+      // individual-portions fallback stays only for genuine non-batches.
+      let aK=null, aLo=null;
+      Object.keys(leftovers).forEach(function(ak){
+        if(aK) return;
+        var a=leftovers[ak];
+        if(a.isLeftover||!a.portions) return;
+        if(a.portions.some(function(pt){return pt.d===day&&pt.s===s&&(pt.p==='him'||pt.p==='her');})){ aK=ak; aLo=a; }
+      });
+      if(aK){
+        var akp=aK.split('_');
+        if(aLo.shared){
+          sMsg="These are leftovers of a shared cook — edit the batch on <b>the Shared tab's "
+            +akp[1].slice(0,3)+' '+SLOT_LABEL[akp[2]].toLowerCase()+" card</b>.";
+        } else {
+          sMsg='Edit this batch in <b>'+(akp[0]==='him'?'Him':'Her')+"'s Combined Ingredients view</b> — "
+            +(akp[0]==='him'?'his':'her')+' '+akp[1].slice(0,3)+' '+SLOT_LABEL[akp[2]].toLowerCase()+' card.';
+        }
+      } else {
+        sMsg="These are individual portions — edit them on <b>Him's and Her's own cards</b>.";
+      }
     }
     const sClick=' onclick="event.stopPropagation();_roEditWarn(\''+sMsg.replace(/'/g,"\\'")+'\')"';
     ingrHtml='<div class="shared-ingr-grid">';
